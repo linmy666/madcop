@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "madcop"
 version = "0.1.0"
 description = "madcop — the supply chain cop that goes mad for anomalies. Pluggable LangGraph framework: detect, diagnose, decide."
-readme = "ARCHITECTURE.md"
+readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
@@ -17,8 +17,10 @@ keywords = [
     "rca", "root-cause-analysis", "ai-pm",
 ]
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
@@ -27,10 +29,23 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Office/Business",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "build>=1.0",
+    "twine>=4.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/linmy666/madcop"
+Repository = "https://github.com/linmy666/madcop"
+Issues = "https://github.com/linmy666/madcop/issues"
 
 [tool.setuptools.packages.find]
 include = ["madcop*"]
