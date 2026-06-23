@@ -31,19 +31,32 @@ from .detector import AnomalyFinding, BaseRule, Detector
 
 
 # --------------------------------------------------------------------------- #
-# 1. Cold-chain temperature — instant rule
+# 1. Cold-chain temperature — instant rule (multi-zone)
 # --------------------------------------------------------------------------- #
 
 class ColdChainTemperatureRule(BaseRule):
-    """Fires when a WMS temperature reading exceeds the threshold.
+    """Fires when a WMS temperature reading leaves the configured band.
 
-    Severity scales with how far above the threshold the reading is.
+    v0.2 update: the rule is **band-aware**, not single-threshold. A reading
+    is in-spec when it sits inside `[band_low, band_high]`. Out-of-spec
+    means either too cold or too warm — both are anomalies, and a frozen
+    reading in a refrigerated zone is a *worse* anomaly than a warm one.
+
+    Severity scales with how far the reading is from the band edge, **not**
+    from a single threshold. A reading 5°C outside the band is worse than
+    one 0.5°C outside, regardless of which direction.
+
+    Backwards compatibility: if the event has no `band_c` attribute (v0.1
+    shipments), the rule falls back to the configured single threshold
+    `threshold_c`. This is so the W1 frozen demo and the W3 RCA demo still
+    work unchanged.
     """
 
     rule_id = "wms.coldchain.temperature_breach"
-    description = "Cold-chain temperature reading exceeds threshold"
+    description = "WMS temperature reading leaves configured band"
 
     def __init__(self, threshold_c: float = -15.0):
+        # Legacy single-threshold fallback (used when event has no band).
         self.threshold_c = threshold_c
 
     def evaluate(self, event: UnifiedEvent) -> AnomalyFinding | None:
@@ -53,10 +66,52 @@ class ColdChainTemperatureRule(BaseRule):
             return None
         if event.value is None:
             return None
+
+        # Prefer band-aware check; fall back to legacy threshold.
+        band = event.attributes.get("band_c") if isinstance(event.attributes, dict) else None
+        if band is not None:
+            low, high = float(band[0]), float(band[1])
+            value = event.value
+            if low <= value <= high:
+                return None
+            # how far outside?
+            if value < low:
+                delta = low - value
+                direction = "below"
+            else:
+                delta = value - high
+                direction = "above"
+            zone = event.attributes.get("zone", "unknown")
+            # severity by |delta|
+            if delta <= 1.0:
+                severity = 3
+            elif delta <= 3.0:
+                severity = 4
+            else:
+                severity = 5
+            return AnomalyFinding(
+                rule_id=self.rule_id,
+                subject_id=event.subject_id,
+                timestamp=event.timestamp,
+                severity=severity,
+                summary=(
+                    f"WMS [{zone}] temperature {value:.1f}°C is {delta:.1f}°C "
+                    f"{direction} band [{low}, {high}]°C"
+                ),
+                details={
+                    "reading_c": value,
+                    "band_low_c": low,
+                    "band_high_c": high,
+                    "delta_c": round(delta, 2),
+                    "direction": direction,
+                    "zone": zone,
+                },
+            )
+
+        # Legacy fallback
         if event.value <= self.threshold_c:
             return None
         delta = event.value - self.threshold_c
-        # ≤1°C over → sev3, ≤3°C over → sev4, else sev5
         if delta <= 1.0:
             severity = 3
         elif delta <= 3.0:
