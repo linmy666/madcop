@@ -12,6 +12,8 @@ import sys
 
 from .adapters.wms import WMSAdapter
 from .anomaly.rules import default_detector
+from .rca.graph import explain, trace
+from .rca.seed import build_coldchain_seed
 
 
 def _format_event(idx: int, total: int, ev) -> str:
@@ -57,6 +59,33 @@ def run_anomalies_coldchain() -> int:
     return 0
 
 
+def run_rca_coldchain() -> int:
+    """W3 demo: detect anomalies and trace each to a root-cause decision."""
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+    events = sorted(WMSAdapter().fetch(), key=lambda e: e.parsed_timestamp)
+    findings = list(default_detector().run(events))
+    g = build_coldchain_seed()
+
+    console.print(f"[bold]madcop RCA demo[/] — {len(findings)} finding(s) on {events[0].subject_id}\n")
+    if not findings:
+        console.print("  [dim](no findings to trace)[/]")
+        return 0
+    for i, f in enumerate(findings, 1):
+        console.print(f"[cyan]━━━ finding {i}/{len(findings)} ━━━[/]")
+        console.print(f"  rule:    [yellow]{f.rule_id}[/]")
+        console.print(f"  summary: {f.summary}")
+        chain = trace(f, g)
+        if not chain.steps:
+            console.print("  [dim](no causal chain — subject not in knowledge graph)[/]")
+            continue
+        console.print(f"  chain:   [bold]{len(chain.steps)}[/] step(s), root cause:")
+        console.print(Panel(explain(chain), title="root cause", border_style="red"))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="madcop",
@@ -69,12 +98,14 @@ def main(argv: list[str] | None = None) -> int:
     run_sub = run_p.add_subparsers(dest="scenario", required=True)
     run_sub.add_parser("coldchain", help="W1: print the cold-chain event stream")
     run_sub.add_parser("anomalies", help="W2: run anomaly detection on the cold-chain stream")
+    run_sub.add_parser("rca",       help="W3: detect anomalies and trace each to a root cause")
 
     # demo <scenario> — alias for `run`
     demo_p = sub.add_parser("demo", help="Alias for `run`")
     demo_sub = demo_p.add_subparsers(dest="scenario", required=True)
     demo_sub.add_parser("coldchain", help="W1: print the cold-chain event stream")
     demo_sub.add_parser("anomalies", help="W2: run anomaly detection on the cold-chain stream")
+    demo_sub.add_parser("rca",       help="W3: detect anomalies and trace each to a root cause")
 
     args = parser.parse_args(argv)
     if args.cmd in ("run", "demo"):
@@ -82,6 +113,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_coldchain()
         if args.scenario == "anomalies":
             return run_anomalies_coldchain()
+        if args.scenario == "rca":
+            return run_rca_coldchain()
     parser.print_help()
     return 2
 
