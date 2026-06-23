@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "madcop"
 version = "0.1.0"
-description = "madcop: pluggable supply chain anomaly orchestration. Detects, diagnoses, decides."
+description = "madcop — the supply chain cop that goes mad for anomalies. Pluggable LangGraph framework: detect, diagnose, decide."
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

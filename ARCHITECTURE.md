@@ -1,7 +1,8 @@
 # madcop
 
-> A pluggable LangGraph framework for supply chain anomaly orchestration —
-> from "detect" to "diagnose" to "decide", with self-evolution.
+> **mad** + **cop** — the supply chain cop that goes *mad* for anomalies.
+> Pluggable LangGraph framework: from "detect" to "diagnose" to "decide",
+> with self-evolution.
 
 ## What this is (today)
 
