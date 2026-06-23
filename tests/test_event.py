@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import pytest
 
-from nexus_supply.event import (
+from madcop.event import (
     EventType,
     SourceSystem,
     UnifiedEvent,
     make_event,
 )
-from nexus_supply.adapters.base import Action, BaseAdapter, UnsupportedActionError
-from nexus_supply.adapters.wms import WMSAdapter
+from madcop.adapters.base import Action, BaseAdapter, UnsupportedActionError
+from madcop.adapters.wms import WMSAdapter
 
 
 # --------------------------------------------------------------------------- #

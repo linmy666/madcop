@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nexus-supply"
+name = "madcop"
 version = "0.1.0"
-description = "A pluggable LangGraph framework for supply chain anomaly orchestration."
+description = "madcop: pluggable supply chain anomaly orchestration. Detects, diagnoses, decides."
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -30,10 +30,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/linmy666/nexus-supply"
+Homepage = "https://github.com/linmy666/madcop"
 
 [tool.setuptools.packages.find]
-include = ["nexus_supply*"]
+include = ["madcop*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

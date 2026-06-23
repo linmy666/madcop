@@ -5,13 +5,13 @@
 
 | Wk | Deliverable | Done = ... | Time |
 |----|-------------|------------|------|
-| **W1** | L1 — `UnifiedEvent` + 4 mock adapters + cold-chain scenario | `python -m nexus_supply run coldchain` prints a real timeline | 6-8h |
+| **W1** | L1 — `UnifiedEvent` + 4 mock adapters + cold-chain scenario | `python -m madcop run coldchain` prints a real timeline | 6-8h |
 | **W2** | L2 — Anomaly rules engine + 5 real rules | 5 unit tests pass; demo detects 3 anomaly types | 6-8h |
 | **W3** | L2 — `rca.py` causal trace | Demo traces 1 cold-chain delay back to a contract clause | 6-8h |
 | **W4** | **Push to GitHub (MVP)** | README + 1 demo output | 3h |
 | **W5** | L3 — LangGraph state machine (detect→diagnose→decide) | State graph rendered, demo runs end-to-end | 6-8h |
 | **W6** | L2 — `counterfactual.py` simulator | Demo: "supplier A vs B" with cost model | 6-8h |
-| **W7** | L4 — Strategy registry + feedback log + weekly report | `nexus report` outputs first weekly summary | 6-8h |
+| **W7** | L4 — Strategy registry + feedback log + weekly report | `madcop report` outputs first weekly summary | 6-8h |
 | **W8** | **Push to GitHub (v1.0)** | Roadmap done, v1.0 tag | 3h |
 
 ## What's NOT on this roadmap (deferred)

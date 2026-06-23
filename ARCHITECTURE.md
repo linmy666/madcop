@@ -1,4 +1,4 @@
-# nexus-supply
+# madcop
 
 > A pluggable LangGraph framework for supply chain anomaly orchestration —
 > from "detect" to "diagnose" to "decide", with self-evolution.
@@ -63,7 +63,7 @@ sequences: `detect → diagnose → decide → learn`.
 
 ### L4 — Strategy Router
 
-Strategies are **YAML** in `nexus_supply/strategy/policies/`. A policy is
+Strategies are **YAML** in `madcop/strategy/policies/`. A policy is
 `(trigger, action)`. The router picks one per anomaly, and humans rate the
 result on a 1-5 scale. Ratings feed the `PolicyRegistry`, which ranks
 strategies by their rolling effectiveness.

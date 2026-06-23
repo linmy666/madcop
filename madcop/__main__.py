@@ -4,7 +4,7 @@ This is the W1 "done" condition. If this prints a sensible timeline, the
 unified event layer works and the WMS adapter shape is right.
 
 Run with:
-    python -m nexus_supply run coldchain
+    python -m madcop run coldchain
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def run_coldchain() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="nexus-supply",
+        prog="madcop",
         description="Pluggable LangGraph framework for supply chain anomaly orchestration.",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
