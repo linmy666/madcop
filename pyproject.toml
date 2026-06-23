@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexus-supply"
+version = "0.1.0"
+description = "A pluggable LangGraph framework for supply chain anomaly orchestration."
+readme = "ARCHITECTURE.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Lin Ruihan", email = "chuiniu@me.com" },
+]
+keywords = [
+    "supply-chain", "langgraph", "agent", "anomaly-detection",
+    "rca", "root-cause-analysis", "ai-pm",
+]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business",
+]
+
+[project.urls]
+Homepage = "https://github.com/linmy666/nexus-supply"
+
+[tool.setuptools.packages.find]
+include = ["nexus_supply*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
