@@ -27,6 +27,7 @@ from datetime import datetime, timedelta
 from typing import Deque
 
 from ..event import EventType, SourceSystem, UnifiedEvent
+from .cusum import CUSUMTracker, baseline_for
 from .detector import AnomalyFinding, BaseRule, Detector
 
 
@@ -227,84 +228,107 @@ class ColdChainDurationRule(BaseRule):
 
 
 # --------------------------------------------------------------------------- #
-# 3. OMS order-cancel spike — rolling-window rule
+# 3. OMS order-cancel spike — CUSUM change-point detector
 # --------------------------------------------------------------------------- #
 
 class OMSOrderCancelSpikeRule(BaseRule):
-    """Fires when the cancellation rate over the last `window_min` minutes
-    is more than `spike_multiplier`× the prior `baseline_min` window.
+    """Fires when the CUSUM-detected cancellation rate exceeds the in-control
+    baseline for a category.
+
+    v0.2 update: this rule no longer uses a fixed 30% threshold. It runs
+    a one-sided CUSUM (Page 1954) per (subject_id, category) and fires
+    when the cumulative positive deviation of the observed cancel rate
+    from the category-specific baseline crosses a threshold `h`. The
+    threshold is set so that under the null (rate = baseline), the
+    average run length until a false alarm is ~1000 events — a standard
+    industrial SPC target (ARL0 = 1000, Montgomery §9.4).
+
+    Why this beats the v0.1 fixed-threshold approach:
+    - A 30% rate from 10 orders is noise; from 1,000 orders is a signal.
+      CUSUM accumulates, so it correctly differentiates.
+    - Different categories have different baselines (apparel = 30% is
+      normal, dairy = 30% is a crisis). CUSUM uses each category's
+      baseline so a fashion spike doesn't fire as if it were a food
+      emergency.
+    - A small but persistent shift (e.g. baseline +2pp for 50 orders in
+      a row) is detectable. The fixed-threshold rule would miss it.
     """
 
     rule_id = "oms.cancellation.spike"
-    description = "Order cancellation rate spikes vs. baseline"
+    description = "Order cancellation rate spikes vs. category baseline (CUSUM)"
 
     def __init__(
         self,
-        window_min: int = 60,
-        baseline_min: int = 240,
-        spike_multiplier: float = 3.0,
+        arl0: float = 1000.0,
+        k: float = 0.02,
+        category_attribute: str = "category",
     ):
-        self.window_min = window_min
-        self.baseline_min = baseline_min
-        self.spike_multiplier = spike_multiplier
-        self._placed: Deque[datetime] = deque()
-        self._cancelled: Deque[datetime] = deque()
-        self._last_emit_at: datetime | None = None
-        self._cooldown = timedelta(minutes=window_min)
+        self.arl0 = arl0
+        self.k = k
+        self.category_attribute = category_attribute
+        # subject_id (a store/channel) → category → tracker
+        self._trackers: dict[tuple[str, str], "CUSUMTracker"] = {}
 
-    def _trim(self, now: datetime) -> None:
-        # We don't know the global event horizon, so we trim relative to `now`.
-        window_cutoff = now - timedelta(minutes=self.window_min)
-        while self._placed and self._placed[0] < window_cutoff:
-            self._placed.popleft()
-        while self._cancelled and self._cancelled[0] < window_cutoff:
-            self._cancelled.popleft()
+    def _tracker_for(self, subject_id: str, category: str) -> "CUSUMTracker":
+        from .cusum import CUSUMTracker, baseline_for
+        key = (subject_id, category)
+        t = self._trackers.get(key)
+        if t is None:
+            t = CUSUMTracker(
+                category=category,
+                p0=baseline_for(category),
+                k=self.k,
+                arl0=self.arl0,
+            )
+            self._trackers[key] = t
+        return t
 
     def evaluate(self, event: UnifiedEvent) -> AnomalyFinding | None:
+        from .cusum import CUSUMTracker  # local import for clarity
         if event.source_system != SourceSystem.OMS:
             return None
-        ts = event.parsed_timestamp
-        self._trim(ts)
-        if event.event_type == EventType.ORDER_PLACED:
-            self._placed.append(ts)
+        if event.event_type not in (EventType.ORDER_PLACED, EventType.ORDER_CANCELLED):
             return None
-        if event.event_type != EventType.ORDER_CANCELLED:
+        # value is the event's numeric payload; for OMS we use 1=cancel, 0=placed
+        # if the upstream adapter doesn't set it, fall back to the event type
+        if event.event_type == EventType.ORDER_CANCELLED:
+            observed = 1.0
+        else:
+            observed = 0.0
+        category = (
+            event.attributes.get(self.category_attribute)
+            if isinstance(event.attributes, dict) else None
+        ) or "default"
+        subject_id = event.subject_id or "OMS_GLOBAL"
+        tracker = self._tracker_for(subject_id, category)
+        new_cusum = tracker.update(observed)
+        if new_cusum < tracker.h:
             return None
-        self._cancelled.append(ts)
-        # need at least a few orders to make a rate meaningful
-        if len(self._placed) < 5:
-            return None
-        current_rate = len(self._cancelled) / max(len(self._placed), 1)
-        # baseline: cancellation count in a 4× window, excluding the current 1×
-        # We approximate by using a longer deque reference. For W2, we compute
-        # baseline as cancellations observed in the last 4 hours, not in the
-        # current window. Since this rule has no access to older history, we
-        # bias toward early detection: the first time we see ≥3× the recent
-        # rate, we fire. This is conservative and will be tightened in W6.
-        baseline_rate = current_rate / self.spike_multiplier
-        # heuristic: fire if current_rate is at least 0.3 (i.e. ≥30% cancels)
-        # AND we have not fired in the last window.
-        if current_rate < 0.3:
-            return None
-        if self._last_emit_at and (ts - self._last_emit_at) < self._cooldown:
-            return None
-        self._last_emit_at = ts
+        # Fire and reset (standard "CUSUM with reset after signal")
+        tracker.reset()
+        # Severity: scale with how far past h the CUSUM was at the moment
+        # of signal. Past-h is at most one observation's worth (s ≤ 1),
+        # so we grade by category baseline shift: higher-p0 categories
+        # get lower severity by default.
+        severity = 4 if tracker.p0 < 0.10 else 3
         return AnomalyFinding(
             rule_id=self.rule_id,
-            subject_id="OMS_GLOBAL",
+            subject_id=subject_id,
             timestamp=event.timestamp,
-            severity=4,
+            severity=severity,
             summary=(
-                f"Order cancellation spike: {current_rate:.0%} rate over "
-                f"last {self.window_min} min ({len(self._cancelled)} cancels / "
-                f"{len(self._placed)} orders)"
+                f"Cancellation spike (CUSUM) on {subject_id}/{category}: "
+                f"cusum crossed h={tracker.h:.2f} at observation #{tracker.n_updates} "
+                f"(baseline rate {tracker.p0:.0%})"
             ),
             details={
-                "window_min": self.window_min,
-                "cancel_count": len(self._cancelled),
-                "place_count": len(self._placed),
-                "rate": round(current_rate, 3),
-                "baseline_rate_used": round(baseline_rate, 3),
+                "category": category,
+                "baseline_p0": tracker.p0,
+                "cusum_threshold_h": round(tracker.h, 2),
+                "cusum_at_signal": round(new_cusum, 3),
+                "observation_index": tracker.n_updates,
+                "arl0_target": self.arl0,
+                "k_allowance": self.k,
             },
         )
 

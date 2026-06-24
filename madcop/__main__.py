@@ -1,8 +1,10 @@
 """madcop CLI entry point.
 
-Two demo scenarios today:
+Three demo scenarios today:
   python -m madcop run coldchain              # W1 — print the event stream
   python -m madcop run anomalies coldchain    # W2 — run anomaly detection
+  python -m madcop run rca                    # W3 — RCA on cold-chain stream
+  python -m madcop run counterfactual         # W6 — cost-simulate interventions
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import sys
 
 from .adapters.wms import WMSAdapter
 from .anomaly.rules import default_detector
+from .counterfactual import compare_all
 from .rca.graph import explain, trace
 from .rca.seed import build_coldchain_seed
 
@@ -86,6 +89,78 @@ def run_rca_coldchain() -> int:
     return 0
 
 
+def run_counterfactual() -> int:
+    """W6 demo: cost-simulate interventions for TMS-related anomalies.
+
+    The WMSAdapter demo only emits WMS events (no TMS data), so we
+    construct a small synthetic TMS finding + OMS order stream here.
+    This keeps the WMSAdapter focused on WMS and gives the counterfactual
+    demo a meaningful scenario to cost.
+    """
+    from rich.console import Console
+    from rich.table import Table
+
+    from .anomaly.detector import AnomalyFinding
+    from .event import (
+        EventType, SourceSystem, make_event,
+    )
+
+    console = Console()
+
+    # Synthetic scenario: shipment SHIP-X was supposed to arrive by 10:00.
+    # 12 OMS orders in the next 4h depend on it. The rule fired sev=4
+    # (60-min overrun expected) at 10:00.
+    f = AnomalyFinding(
+        rule_id="tms.leadtime.overrun",
+        subject_id="SHIP-X",
+        timestamp="2026-06-15T10:00:00Z",
+        severity=4,
+        summary="Shipment SHIP-X took 6.0h vs. planned 4.0h (+50%)",
+        details={"actual_hours": 6.0, "planned_hours": 4.0, "overrun_ratio": 0.5},
+    )
+    # 12 orders, one every 20 minutes
+    oms_events = [
+        make_event(
+            timestamp=f"2026-06-15T{10 + (i // 3):02d}:{(i % 3) * 20:02d}:00Z",
+            source_system=SourceSystem.OMS,
+            event_type=EventType.ORDER_PLACED,
+            subject_id="STORE-A",
+            attributes={"category": "dairy"},
+        )
+        for i in range(12)
+    ]
+
+    console.print(f"[bold]madcop counterfactual demo[/] — synthetic TMS finding\n")
+    console.print(f"  rule:    [yellow]{f.rule_id}[/]  sev={f.severity}")
+    console.print(f"  summary: {f.summary}")
+    console.print(f"  orders:  12 OMS orders in 4h window\n")
+
+    outcomes = compare_all(f, oms_events)
+    tbl = Table(title="intervention cost comparison", show_lines=False)
+    tbl.add_column("intervention", style="bold")
+    tbl.add_column("cost ¥", justify="right")
+    tbl.add_column("Δ vs baseline ¥", justify="right")
+    tbl.add_column("verdict")
+    baseline = outcomes[0].baseline_total_yuan
+    for o in outcomes:
+        delta = o.intervention_total_yuan - baseline
+        verdict = o.recommend().split(":")[0]
+        tbl.add_row(
+            o.intervention.kind.value,
+            f"{o.intervention_total_yuan:,.0f}",
+            f"{delta:+,.0f}",
+            verdict,
+        )
+    console.print(tbl)
+    best = outcomes[0]
+    console.print(
+        f"\n[green]→ best action:[/] [bold]{best.intervention.kind.value}[/] "
+        f"@ ¥{best.intervention_total_yuan:,.0f} "
+        f"(saves ¥{abs(best.delta_yuan):,.0f} vs. baseline)"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="madcop",
@@ -99,6 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     run_sub.add_parser("coldchain", help="W1: print the cold-chain event stream")
     run_sub.add_parser("anomalies", help="W2: run anomaly detection on the cold-chain stream")
     run_sub.add_parser("rca",       help="W3: detect anomalies and trace each to a root cause")
+    run_sub.add_parser("counterfactual", help="W6: cost-simulate interventions for each TMS anomaly")
 
     # demo <scenario> — alias for `run`
     demo_p = sub.add_parser("demo", help="Alias for `run`")
@@ -106,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     demo_sub.add_parser("coldchain", help="W1: print the cold-chain event stream")
     demo_sub.add_parser("anomalies", help="W2: run anomaly detection on the cold-chain stream")
     demo_sub.add_parser("rca",       help="W3: detect anomalies and trace each to a root cause")
+    demo_sub.add_parser("counterfactual", help="W6: cost-simulate interventions for each TMS anomaly")
 
     args = parser.parse_args(argv)
     if args.cmd in ("run", "demo"):
@@ -115,6 +192,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_anomalies_coldchain()
         if args.scenario == "rca":
             return run_rca_coldchain()
+        if args.scenario == "counterfactual":
+            return run_counterfactual()
     parser.print_help()
     return 2
 

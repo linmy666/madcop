@@ -153,42 +153,64 @@ def test_coldchain_duration_does_not_refire_on_same_window() -> None:
 # Rule 3: OMSOrderCancelSpikeRule
 # --------------------------------------------------------------------------- #
 
-def test_oms_cancel_spike_fires_when_rate_high() -> None:
-    rule = OMSOrderCancelSpikeRule()
-    # 10 orders placed over an hour, then 5 cancels
-    base_ts = "2026-06-15T10:"
-    for i in range(10):
+def test_oms_cancel_spike_fires_on_persistent_shift_above_baseline() -> None:
+    """Under CUSUM, a persistent shift above baseline crosses h after
+    enough observations. pharma baseline = 0.02; we feed 25 cancels in
+    a row (no placements) — that's a 100% rate, well above baseline.
+    CUSUM h for ARL0=200 with k=0.02 is ~3.2, so it fires fast.
+    """
+    rule = OMSOrderCancelSpikeRule(arl0=200.0, k=0.02)
+    fired = None
+    for i in range(30):
+        # Use second-level timestamps to avoid :60+ being invalid
         e = make_event(
-            timestamp=f"{base_ts}{i:02d}:00Z", source_system=SourceSystem.OMS,
-            event_type=EventType.ORDER_PLACED, subject_id=f"O{i}",
-        )
-        rule.evaluate(e)
-    for i in range(5):
-        e = make_event(
-            timestamp=f"{base_ts}{i:02d}:30Z", source_system=SourceSystem.OMS,
-            event_type=EventType.ORDER_CANCELLED, subject_id=f"O{i}",
+            timestamp=f"2026-06-15T10:00:{i:02d}Z", source_system=SourceSystem.OMS,
+            event_type=EventType.ORDER_CANCELLED, subject_id="STORE-1",
+            attributes={"category": "pharma"},
         )
         result = rule.evaluate(e)
         if result is not None:
-            assert result.severity == 4
-            return
-    # If we never got a result, fail
-    raise AssertionError("expected cancel spike to fire")
+            fired = result
+            break
+    assert fired is not None, "CUSUM should have fired within 30 obs"
+    assert fired.severity in (3, 4, 5)
+    assert "pharma" in fired.summary
 
 
-def test_oms_cancel_spike_silent_on_low_volume() -> None:
-    rule = OMSOrderCancelSpikeRule()
-    for i in range(3):
+def test_oms_cancel_spike_quiet_on_baseline_apparel() -> None:
+    """Apparel baseline is 30% — feeding 30% cancels should NOT fire
+    (this is the in-control state)."""
+    rule = OMSOrderCancelSpikeRule(arl0=1000.0, k=0.02)
+    import random
+    random.seed(0)
+    # 100 orders, 30% cancel rate — the in-control state for apparel
+    fired = None
+    for i in range(100):
+        is_cancel = random.random() < 0.30
         e = make_event(
-            timestamp=f"2026-06-15T10:0{i}:00Z", source_system=SourceSystem.OMS,
-            event_type=EventType.ORDER_PLACED, subject_id=f"O{i}",
+            timestamp=f"2026-06-15T10:{(i // 60) + 1:02d}:{i % 60:02d}Z",
+            source_system=SourceSystem.OMS,
+            event_type=EventType.ORDER_CANCELLED if is_cancel else EventType.ORDER_PLACED,
+            subject_id="STORE-A",
+            attributes={"category": "apparel"},
         )
-        rule.evaluate(e)
+        result = rule.evaluate(e)
+        if result is not None:
+            fired = result
+            break
+    # In-control 30% rate for apparel should not produce many false alarms.
+    # CUSUM may fire occasionally even under H0, but with ARL0=1000
+    # it should not fire in 100 obs.
+    assert fired is None, f"CUSUM fired too early under in-control: {fired.summary if fired else None}"
+
+
+def test_oms_cancel_spike_silent_on_non_oms() -> None:
+    rule = OMSOrderCancelSpikeRule()
     e = make_event(
-        timestamp="2026-06-15T10:01:00Z", source_system=SourceSystem.OMS,
-        event_type=EventType.ORDER_CANCELLED, subject_id="O0",
+        timestamp="2026-06-15T10:01:00Z", source_system=SourceSystem.WMS,
+        event_type=EventType.TEMPERATURE_READING, subject_id="S1", value=99.0,
     )
-    assert rule.evaluate(e) is None  # < 5 orders, no rate
+    assert rule.evaluate(e) is None
 
 
 # --------------------------------------------------------------------------- #
