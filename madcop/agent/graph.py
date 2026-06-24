@@ -23,7 +23,7 @@ default keeps madcop installable and runnable in air-gapped environments.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Annotated, Sequence, TypedDict
+from typing import Annotated, Any, Sequence, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -61,6 +61,9 @@ class MadcopState(TypedDict, total=False):
 
     # Populated by `counterfactual`
     counterfactual_results: list[CounterfactualOutcome]
+
+    # Populated by `decision_diff_node` (only when decision log is provided)
+    decision_diff_report: Any  # DecisionDiffReport | None
 
     # Populated by `summarise`
     summary: str
@@ -162,7 +165,32 @@ def summarise(state: MadcopState) -> MadcopState:
             f"@ ¥{best.intervention_total_yuan:,.0f} "
             f"(saves ¥{abs(best.delta_yuan):,.0f})."
         )
+
+    # If the decision diff flagged ignored recommendations, surface them too
+    diff_report = state.get("decision_diff_report")
+    if diff_report is not None and diff_report.ignored_recommendations:
+        top = diff_report.ignored_recommendations[0]
+        parts.append(
+            f"Operator-fatigue signal: {top.signature} "
+            f"recommended {top.n_occurrences}× but accepted "
+            f"only {top.n_accepted}× ({top.ignore_rate:.0%} ignored)."
+        )
+
     return {"summary": " ".join(parts)}
+
+
+def decision_diff_node(
+    state: MadcopState,
+    decision_log=None,
+) -> MadcopState:
+    """If a decision log is provided, compute a DecisionDiffReport and add
+    it to state. The diff tells us which recommendations humans keep ignoring.
+    """
+    if decision_log is None or len(decision_log) == 0:
+        return {"decision_diff_report": None}
+    from ..decision import DecisionDiff
+    report = DecisionDiff(min_ignore_rate=0.5, min_occurrences=2).run(decision_log)
+    return {"decision_diff_report": report}
 
 
 # --------------------------------------------------------------------------- #
@@ -172,8 +200,16 @@ def summarise(state: MadcopState) -> MadcopState:
 def build_graph(
     detector: Detector,
     engine: CounterfactualEngine | None = None,
+    decision_log=None,
 ):
     """Compile the madcop agent graph. Returns a runnable CompiledGraph.
+
+    Args:
+        detector:      Anomaly detector.
+        engine:        Counterfactual cost engine.
+        decision_log:  Optional DecisionLog. When provided, the graph also
+                       computes an operator-fatigue diff and surfaces it
+                       in the summary.
 
     Usage:
         graph = build_graph(default_detector())
@@ -193,17 +229,22 @@ def build_graph(
     def _counterfactual(state: MadcopState) -> MadcopState:
         return counterfactual_node(state, engine)
 
+    def _decision_diff(state: MadcopState) -> MadcopState:
+        return decision_diff_node(state, decision_log)
+
     g.add_node("ingest_events", ingest_events)
     g.add_node("detect", _detect)
     g.add_node("maybe_replan", maybe_replan)
     g.add_node("counterfactual", _counterfactual)
+    g.add_node("decision_diff", _decision_diff)
     g.add_node("summarise", summarise)
 
     g.add_edge(START, "ingest_events")
     g.add_edge("ingest_events", "detect")
     g.add_edge("detect", "maybe_replan")
     g.add_edge("maybe_replan", "counterfactual")
-    g.add_edge("counterfactual", "summarise")
+    g.add_edge("counterfactual", "decision_diff")
+    g.add_edge("decision_diff", "summarise")
     g.add_edge("summarise", END)
 
     return g.compile()
@@ -217,7 +258,8 @@ def run_agent(
     events: Sequence[UnifiedEvent],
     detector: Detector,
     engine: CounterfactualEngine | None = None,
+    decision_log=None,
 ) -> MadcopState:
     """One-call helper: build the graph, invoke it, return the final state."""
-    graph = build_graph(detector, engine)
+    graph = build_graph(detector, engine, decision_log)
     return graph.invoke({"events": list(events)})

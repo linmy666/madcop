@@ -1,11 +1,13 @@
 """madcop CLI entry point.
 
-Five demo scenarios today:
+Six demo scenarios today:
   python -m madcop run coldchain              # W1 — print the event stream
   python -m madcop run anomalies coldchain    # W2 — run anomaly detection
   python -m madcop run rca                    # W3 — RCA on cold-chain stream
   python -m madcop run counterfactual         # W6 — cost-simulate interventions
   python -m madcop run agent                  # v0.3 — LangGraph orchestration
+  python -m madcop replay <file.json>         # v0.4 — anomaly replay + ROI
+  python -m madcop decisions <file.jsonl>     # v0.4 — operator-fatigue diff
 """
 
 from __future__ import annotations
@@ -17,6 +19,8 @@ from .adapters.wms import WMSAdapter
 from .agent import run_agent
 from .anomaly.rules import default_detector
 from .counterfactual import compare_all
+from .decision import DecisionDiff, load_decision_log
+from .replay import ReplayEngine, load_events_from_json
 from .rca.graph import explain, trace
 from .rca.seed import build_coldchain_seed
 
@@ -199,6 +203,119 @@ def run_agent_demo() -> int:
     return 0
 
 
+def run_replay(json_path: str) -> int:
+    """v0.4 demo: replay a historical event file and quantify the ROI of
+    adopting every madcop recommendation.
+    """
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    try:
+        events = load_events_from_json(json_path)
+    except FileNotFoundError:
+        console.print(f"[red]file not found:[/] {json_path}")
+        return 2
+    except (ValueError, KeyError) as e:
+        console.print(f"[red]invalid event file:[/] {e}")
+        return 2
+
+    console.print(f"[bold]madcop replay[/] — {len(events)} events from [cyan]{json_path}[/]\n")
+
+    engine = ReplayEngine(default_detector())
+    report = engine.run(events)
+
+    console.print(
+        f"[cyan]━━━ ROI summary ━━━[/]\n"
+        f"  anomalies:  {report.n_findings}\n"
+        f"  actual loss (do-nothing):   [red]¥{report.total_actual_loss_yuan:,.0f}[/]\n"
+        f"  simulated loss (adopt rec): [green]¥{report.total_simulated_loss_yuan:,.0f}[/]\n"
+        f"  POTENTIAL SAVINGS:          [bold green]¥{report.total_savings_yuan:,.0f}[/] "
+        f"({report.savings_pct:.1%})\n"
+    )
+
+    if report.n_findings == 0:
+        console.print("  [dim](no actionable findings in this stream)[/]")
+        return 0
+
+    tbl = Table(title="per-finding recommendations", show_lines=False)
+    tbl.add_column("rule", style="bold")
+    tbl.add_column("subject")
+    tbl.add_column("sev", justify="center")
+    tbl.add_column("recommendation", style="green")
+    tbl.add_column("saves ¥", justify="right")
+    tbl.add_column("saves %", justify="right")
+    for fr in report.findings:
+        tbl.add_row(
+            fr.finding.rule_id,
+            fr.finding.subject_id,
+            str(fr.finding.severity),
+            fr.recommendation.value,
+            f"{fr.savings_yuan:,.0f}",
+            f"{fr.savings_pct:.0%}",
+        )
+    console.print(tbl)
+    return 0
+
+
+def run_decisions(jsonl_path: str) -> int:
+    """v0.4 demo: compute operator-fatigue diff over a decision log.
+
+    Each line of the JSONL file is a `DecisionRecord`. The output surfaces
+    the cases where madcop keeps recommending the same action but humans
+    keep rejecting/ignoring it.
+    """
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    try:
+        log = load_decision_log(jsonl_path)
+    except FileNotFoundError:
+        console.print(f"[red]file not found:[/] {jsonl_path}")
+        return 2
+    except (ValueError, KeyError) as e:
+        console.print(f"[red]invalid decision log:[/] {e}")
+        return 2
+
+    console.print(f"[bold]madcop decisions[/] — {len(log)} record(s) from [cyan]{jsonl_path}[/]\n")
+    if len(log) == 0:
+        console.print("  [dim](empty log)[/]")
+        return 0
+
+    rep = DecisionDiff(min_ignore_rate=0.5, min_occurrences=2).run(log)
+
+    tbl = Table(title="all (rule, subject) groups", show_lines=False)
+    tbl.add_column("signature", style="bold")
+    tbl.add_column("occurrences", justify="right")
+    tbl.add_column("accepted", justify="right")
+    tbl.add_column("ignored", justify="right")
+    tbl.add_column("ignore rate", justify="right")
+    tbl.add_column("last seen")
+    for r in rep.rows:
+        ignored = r.n_occurrences - r.n_accepted
+        tbl.add_row(
+            r.signature,
+            str(r.n_occurrences),
+            str(r.n_accepted),
+            str(ignored),
+            f"{r.ignore_rate:.0%}",
+            r.last_seen_at,
+        )
+    console.print(tbl)
+
+    if rep.ignored_recommendations:
+        console.print(f"\n[bold yellow]⚠ operator-fatigue signals ({len(rep.ignored_recommendations)}):[/]")
+        for r in rep.ignored_recommendations[:5]:
+            console.print(
+                f"  • [bold]{r.signature}[/] — madcop recommended {r.n_occurrences}× "
+                f"but operators accepted only {r.n_accepted}× ({r.ignore_rate:.0%} ignored)"
+            )
+    else:
+        console.print("\n[green]✓ no operator-fatigue signals[/] (all recommendations followed)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="madcop",
@@ -224,7 +341,19 @@ def main(argv: list[str] | None = None) -> int:
     demo_sub.add_parser("counterfactual", help="W6: cost-simulate interventions for each TMS anomaly")
     demo_sub.add_parser("agent",     help="v0.3: run the full LangGraph agent end-to-end")
 
+    # replay <file.json> — v0.4 anomaly replay + ROI
+    replay_p = sub.add_parser("replay", help="v0.4: replay a historical event file and quantify ROI")
+    replay_p.add_argument("file", help="JSON file of events (see README for format)")
+
+    # decisions <file.jsonl> — v0.4 operator-fatigue diff
+    dec_p = sub.add_parser("decisions", help="v0.4: diff a decision log and surface operator-fatigue signals")
+    dec_p.add_argument("file", help="JSONL file of decision records (timestamp, rule_id, ...)")
+
     args = parser.parse_args(argv)
+    if args.cmd == "replay":
+        return run_replay(args.file)
+    if args.cmd == "decisions":
+        return run_decisions(args.file)
     if args.cmd in ("run", "demo"):
         if args.scenario == "coldchain":
             return run_coldchain()
