@@ -1,10 +1,11 @@
 """madcop CLI entry point.
 
-Three demo scenarios today:
+Five demo scenarios today:
   python -m madcop run coldchain              # W1 — print the event stream
   python -m madcop run anomalies coldchain    # W2 — run anomaly detection
   python -m madcop run rca                    # W3 — RCA on cold-chain stream
   python -m madcop run counterfactual         # W6 — cost-simulate interventions
+  python -m madcop run agent                  # v0.3 — LangGraph orchestration
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import argparse
 import sys
 
 from .adapters.wms import WMSAdapter
+from .agent import run_agent
 from .anomaly.rules import default_detector
 from .counterfactual import compare_all
 from .rca.graph import explain, trace
@@ -161,6 +163,42 @@ def run_counterfactual() -> int:
     return 0
 
 
+def run_agent_demo() -> int:
+    """v0.3 demo: run the full LangGraph agent on the WMS cold-chain stream.
+
+    This exercises every layer end-to-end:
+    ingest_events → detect → maybe_replan → counterfactual → summarise
+    """
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+    events = sorted(WMSAdapter().fetch(), key=lambda e: e.parsed_timestamp)
+    console.print(f"[bold]madcop agent demo[/] — {len(events)} events from WMSAdapter\n")
+
+    state = run_agent(events, default_detector())
+
+    # Step-by-step trace
+    console.print("[cyan]━━━ graph execution ━━━[/]")
+    console.print(f"  ingest_events:    sorted {len(events)} events")
+    console.print(f"  detect:           {len(state.get('findings', []))} finding(s)")
+    console.print(
+        f"  maybe_replan:     triggered={state.get('replan_triggered', False)}"
+        + (
+            f", new SS={state.get('new_safety_stock', 0):.1f} units "
+            f"for {state.get('new_safety_stock_sku', '')}"
+            if state.get("replan_triggered")
+            else ""
+        )
+    )
+    console.print(f"  counterfactual:   {len(state.get('counterfactual_results', []))} outcome(s)")
+    console.print(f"  summarise:        1 paragraph")
+
+    console.print()
+    console.print(Panel(state.get("summary", ""), title="agent summary", border_style="green"))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="madcop",
@@ -175,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
     run_sub.add_parser("anomalies", help="W2: run anomaly detection on the cold-chain stream")
     run_sub.add_parser("rca",       help="W3: detect anomalies and trace each to a root cause")
     run_sub.add_parser("counterfactual", help="W6: cost-simulate interventions for each TMS anomaly")
+    run_sub.add_parser("agent",     help="v0.3: run the full LangGraph agent end-to-end")
 
     # demo <scenario> — alias for `run`
     demo_p = sub.add_parser("demo", help="Alias for `run`")
@@ -183,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
     demo_sub.add_parser("anomalies", help="W2: run anomaly detection on the cold-chain stream")
     demo_sub.add_parser("rca",       help="W3: detect anomalies and trace each to a root cause")
     demo_sub.add_parser("counterfactual", help="W6: cost-simulate interventions for each TMS anomaly")
+    demo_sub.add_parser("agent",     help="v0.3: run the full LangGraph agent end-to-end")
 
     args = parser.parse_args(argv)
     if args.cmd in ("run", "demo"):
@@ -194,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_rca_coldchain()
         if args.scenario == "counterfactual":
             return run_counterfactual()
+        if args.scenario == "agent":
+            return run_agent_demo()
     parser.print_help()
     return 2
 
