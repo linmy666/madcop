@@ -16,3 +16,6 @@ __pycache__/
 *.db
 .venv/
 venv/
+
+# screenshot intermediate artifacts (keep .png, ignore .html)
+docs/img/_html/
