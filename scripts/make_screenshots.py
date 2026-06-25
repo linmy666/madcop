@@ -194,7 +194,7 @@ def render_html(ansi_text: str, title: str = "madcop") -> str:
 """
 
 
-def html_to_png(html_path: Path, png_path: Path, width: int = 960) -> bool:
+def html_to_png(html_path: Path, png_path: Path, width: int = 1280) -> bool:
     """Drive cloakbrowser's chromium headless to screenshot the HTML."""
     if not CHROMIUM.exists():
         print(f"  ! chromium not found at {CHROMIUM}", file=sys.stderr)
@@ -206,7 +206,7 @@ def html_to_png(html_path: Path, png_path: Path, width: int = 960) -> bool:
         "--no-sandbox",
         "--hide-scrollbars",
         "--force-device-scale-factor=2",   # 2x retina
-        f"--window-size={width},900",
+        f"--window-size={width},1400",
         f"--screenshot={png_path}",
         f"file://{html_path}",
     ]
@@ -224,6 +224,7 @@ DEMOS = [
     ("agent",          ["python3", "-m", "madcop", "run", "agent"]),
     ("replay",         ["python3", "-m", "madcop", "replay", "examples/replay_sample.json"]),
     ("decisions",      ["python3", "-m", "madcop", "decisions", "examples/decisions_sample.jsonl"]),
+    ("banner",         ["python3", "-m", "madcop"]),
 ]
 
 

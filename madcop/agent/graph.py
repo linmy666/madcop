@@ -142,8 +142,33 @@ def counterfactual_node(state: MadcopState, engine: "CounterfactualEngine | None
     return {"counterfactual_results": out}
 
 
-def summarise(state: MadcopState) -> MadcopState:
-    """One-paragraph human summary. Pure Python, no LLM."""
+def summarise(
+    state: MadcopState,
+    chat_client=None,
+    use_llm: bool = False,
+) -> MadcopState:
+    """One-paragraph human summary. Pure Python by default; optionally
+    LLM-driven when `chat_client` and `use_llm=True` are passed.
+
+    LLM mode prepends a system prompt from `madcop.llm.prompts`, then
+    sends the deterministic summary plus a USER_SUMMARISE wrapper. The
+    LLM is expected to rewrite it as a tighter operator briefing.
+    """
+    deterministic = _deterministic_summary(state)
+    if not use_llm or chat_client is None:
+        return {"summary": deterministic}
+    # LLM path: ask the model to rewrite the deterministic draft
+    from ..llm import Message
+    from ..llm.prompts import SYSTEM_AGENT, USER_SUMMARISE
+    response = chat_client.chat([
+        Message("system", SYSTEM_AGENT),
+        Message("user", USER_SUMMARISE.format(report=deterministic)),
+    ])
+    return {"summary": response.content.strip() or deterministic}
+
+
+def _deterministic_summary(state: MadcopState) -> str:
+    """The non-LLM summary. Pure Python, always works, no API key."""
     findings = state.get("findings", [])
     replan = state.get("replan_triggered", False)
     cf_results = state.get("counterfactual_results", [])
@@ -176,7 +201,7 @@ def summarise(state: MadcopState) -> MadcopState:
             f"only {top.n_accepted}× ({top.ignore_rate:.0%} ignored)."
         )
 
-    return {"summary": " ".join(parts)}
+    return " ".join(parts)
 
 
 def decision_diff_node(
@@ -201,6 +226,8 @@ def build_graph(
     detector: Detector,
     engine: CounterfactualEngine | None = None,
     decision_log=None,
+    chat_client=None,
+    use_llm: bool = False,
 ):
     """Compile the madcop agent graph. Returns a runnable CompiledGraph.
 
@@ -210,6 +237,10 @@ def build_graph(
         decision_log:  Optional DecisionLog. When provided, the graph also
                        computes an operator-fatigue diff and surfaces it
                        in the summary.
+        chat_client:   Optional ChatClient. When provided and use_llm=True,
+                       the summarise node will rewrite the deterministic
+                       draft into a tighter LLM-generated operator briefing.
+        use_llm:       Enable LLM-driven summary. Requires chat_client.
 
     Usage:
         graph = build_graph(default_detector())
@@ -232,12 +263,15 @@ def build_graph(
     def _decision_diff(state: MadcopState) -> MadcopState:
         return decision_diff_node(state, decision_log)
 
+    def _summarise(state: MadcopState) -> MadcopState:
+        return summarise(state, chat_client=chat_client, use_llm=use_llm)
+
     g.add_node("ingest_events", ingest_events)
     g.add_node("detect", _detect)
     g.add_node("maybe_replan", maybe_replan)
     g.add_node("counterfactual", _counterfactual)
     g.add_node("decision_diff", _decision_diff)
-    g.add_node("summarise", summarise)
+    g.add_node("summarise", _summarise)
 
     g.add_edge(START, "ingest_events")
     g.add_edge("ingest_events", "detect")
@@ -259,7 +293,9 @@ def run_agent(
     detector: Detector,
     engine: CounterfactualEngine | None = None,
     decision_log=None,
+    chat_client=None,
+    use_llm: bool = False,
 ) -> MadcopState:
     """One-call helper: build the graph, invoke it, return the final state."""
-    graph = build_graph(detector, engine, decision_log)
+    graph = build_graph(detector, engine, decision_log, chat_client, use_llm)
     return graph.invoke({"events": list(events)})

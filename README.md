@@ -10,6 +10,8 @@
 
 ## What is madcop?
 
+![welcome banner](docs/img/banner.png)
+
 **madcop** is a pluggable supply chain anomaly framework. It turns raw
 telemetry (orders, shipments, warehouse readings, contracts) into
 **decision prompts** with full causal chains. Where most tools stop at

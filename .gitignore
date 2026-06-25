@@ -19,3 +19,4 @@ venv/
 
 # screenshot intermediate artifacts (keep .png, ignore .html)
 docs/img/_html/
+docs/img/*.html

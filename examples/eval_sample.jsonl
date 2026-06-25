@@ -1,0 +1,3 @@
+{"name": "mentions_anomaly_count", "prompt": "summarise", "scorer": "regex", "pattern": "\\d+ anomaly"}
+{"name": "mentions_severity", "prompt": "summarise", "scorer": "regex", "pattern": "sev[345]"}
+{"name": "brief", "prompt": "summarise", "scorer": "max_length", "max_length": 600}
