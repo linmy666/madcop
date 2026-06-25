@@ -3,14 +3,14 @@
 > **mad** + **cop** — the supply chain cop that goes *mad* for anomalies.
 > Pluggable LangGraph framework: from "detect" to "diagnose" to "decide", with self-evolution.
 
-[![Tests](https://img.shields.io/badge/tests-149%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-382%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/pypi/v/madcop)](https://pypi.org/project/madcop/)
 
-## What is madcop?
-
-![welcome banner](docs/img/banner.png)
+|  |  |
+|--|--|
+| ![welcome banner](docs/img/banner.png) | ![v0.6.0 mascot](docs/img/characters/madcop-mascot-v0.6.0.png) |
 
 **madcop** is a pluggable supply chain anomaly framework. It turns raw
 telemetry (orders, shipments, warehouse readings, contracts) into
@@ -21,6 +21,74 @@ that made the anomaly possible.
 The name is short for **mad cop** — a cop that goes mad for anomalies. Not
 in a punitive sense, but in the sense of "won't let a single anomaly go
 untraced to its source".
+
+## What's new in v0.6.0
+
+| v0.5.0 | v0.6.0 |
+|--------|--------|
+| Fixed linear graph (ingest → detect → counterfactual → decision → summarise) | **Plan-execute-replan loop** with 4 modes (flash / standard / pro / ultra) |
+| Single LLM call per session | **Multi-model orchestration** — auto router picks T1/T2/T3 per step, manual override in `~/.madcop/config.yaml` |
+| Single LLM provider (OpenAI-compat) | **5 default providers** registered (nvidia_nim, nvidia_glm, zhipu, openai, deepseek) + custom add |
+| 2-layer memory (working + episodic) | **4-layer memory** — L1 working / L2 episodic / L3 semantic / L4 reflective + cross-layer retriever with time-decay |
+| No self-growth | **3-mechanism 成长 engine** — episodic→semantic distillation, feedback reflection, meta-pattern mining |
+| Ad-hoc eval | **EvalRunner v2** — `EvalTrend` (cross-run regression), `RobustnessProbe` (4 input perturbations), `AdversarialChecker` (safety smoke tests) |
+| 214 tests | **382 tests** |
+| No scratchpad / compactor | **`Scratchpad`** (cross-step state on disk) + **`ContextCompactor`** (sliding window + summarization) |
+| No cost tracking | **`CostTracker`** (per-call + per-run cost) with token estimation for CJK + ASCII |
+
+### Quick taste (v0.6.0)
+
+```python
+from madcop.agent import PlanExecuteLoop, TrivialPlanner, FnStepExecutor, ExecutionMode
+from madcop.strategy import ModelRouter, ProviderRegistry
+from madcop.memory import MemoryStore, EpisodicMemory, SemanticMemory, ReflectiveMemory, GrowthEngine
+
+# 1. Plan-execute-replan loop (DeerFlow-style, but 90 lines not 9000)
+loop = PlanExecuteLoop(
+    planner=TrivialPlanner(),
+    executor=my_executor,           # you provide one
+    config=PlanExecuteConfig(mode=ExecutionMode.PRO),
+)
+result = loop.run("diagnose OMS cancel spike")
+print(result.final_output)         # multi-step report
+print(f"cost: ${result.total_cost_usd:.4f}")
+
+# 2. Multi-model router (auto + manual)
+router = ModelRouter(ProviderRegistry.default(), mode="auto")
+tier = router.classify(task_signals)  # T1 reasoning / T2 balanced / T3 fast
+
+# 3. 4-layer memory + 3-mechanism growth
+store = MemoryStore(path="~/.madcop/memory.db")
+epi = EpisodicMemory(store); sem = SemanticMemory(store); ref = ReflectiveMemory(store)
+engine = GrowthEngine(epi, sem, ref, my_llm)
+facts = engine.distill_episode(my_episode)         # M1
+refl  = engine.record_feedback(epi, rating=5)      # M2
+metas = engine.mine_meta_patterns()                # M3
+```
+
+### v0.6.0 vs DeerFlow 2.0 — what we copy, what we don't
+
+We studied [DeerFlow 2.0](https://github.com/bytedance/deer-flow) (bytedance, ~75k stars) before
+designing v0.6.0. We **borrowed the architecture**, not the code:
+
+| Dimension | DeerFlow 2.0 | madcop v0.6.0 | Notes |
+|-----------|--------------|----------------|-------|
+| **Harness concept** | "Super Agent Harness" (14 middleware + sub-agents) | "Personal AI Agent" (1 plan-execute loop, optional sub-agents v0.7.0) | DeerFlow is server-grade (4-8 vCPU, Docker Compose). madcop is single-process, runs on a laptop. |
+| **Execution modes** | flash / standard / pro / ultra | flash / standard / pro / ultra (same names) | Names inspired by DeerFlow; implementation is 90 lines, not 9000. |
+| **Memory** | 3 layers (context / history / facts) | **4 layers** (working / episodic / semantic / reflective) | madcop adds reflective (user prefs + meta-strategies). |
+| **Self-growth** | ❌ (no auto memory consolidation) | ✅ 3 mechanisms (distillation + feedback + meta-mining) | madcop's unique selling point. |
+| **Sub-agents** | ✅ full (concurrency 3, isolated context) | v0.7.0 | Skipped in v0.6.0 to keep complexity low. |
+| **Sandbox** | ✅ Docker container per task | v0.7.0 (LocalSandboxProvider first) | Personal project, no untrusted code. |
+| **Skills loading** | Deferred tool catalog + `select:` syntax | v0.7.0 | v0.6.0 loads whole `SKILL.md` per call. |
+| **Cost-aware routing** | ❌ | ✅ auto + manual (T1/T2/T3) | madcop is the only OSS framework (we know of) that routes by cost. |
+| **IM channels** | ✅ 6 channels (Telegram / Slack / Feishu / WeCom / DingTalk / WeChat) | v0.7.0 | Personal project, single-user CLI. |
+| **Tracing** | Langfuse + LangSmith (cloud) | Local JSONL trends + AdversarialChecker | madcop is **local-first**, no cloud dependency. |
+| **Deployment** | Docker Compose (gateway + frontend + nginx) | `pip install madcop` | madcop is a Python package. |
+| **TUI** | Built-in terminal UI | Python CLI (`python -m madcop`) | v0.6.0 has CLI; v0.7.0 may add TUI. |
+| **Models recommended** | Doubao-Seed-2.0-Code / DeepSeek v3.2 / Kimi 2.5 | Anything OpenAI-compat (NVIDIA NIM / GLM / Zhipu / OpenAI / DeepSeek) | madcop is **model-agnostic**; defaults are open-weight friendly. |
+
+**One-line positioning**: DeerFlow is a research-grade super agent harness for teams;
+madcop is a personal single-process AI agent that grows with you.
 
 ## What madcop actually does
 

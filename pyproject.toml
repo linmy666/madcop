@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "madcop"
-version = "0.5.0"
+version = "0.6.0"
 description = "madcop — the supply chain cop that goes mad for anomalies. Pluggable LangGraph framework: detect, diagnose, decide."
 readme = "README.md"
 requires-python = ">=3.10"

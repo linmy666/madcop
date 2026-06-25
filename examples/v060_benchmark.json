@@ -1,0 +1,132 @@
+{
+  "version": "v0.6.0",
+  "n_tasks": 6,
+  "v050": {
+    "pass_rate": 6,
+    "mean_duration_s": 0.0035157998402913413,
+    "total_cost_usd": 0.006,
+    "per_task": [
+      {
+        "name": "oms_cancel_55pct",
+        "duration_s": 0.00583195686340332,
+        "n_findings": 12,
+        "expected_min": 1,
+        "expected_rule": "oms.cancellation.spike",
+        "n_events": 300,
+        "cost_usd": 0.001
+      },
+      {
+        "name": "oms_cancel_35pct",
+        "duration_s": 0.003751039505004883,
+        "n_findings": 4,
+        "expected_min": 0,
+        "expected_rule": null,
+        "n_events": 300,
+        "cost_usd": 0.001
+      },
+      {
+        "name": "oms_cancel_30pct_baseline",
+        "duration_s": 0.0031099319458007812,
+        "n_findings": 2,
+        "expected_min": 0,
+        "expected_rule": null,
+        "n_events": 300,
+        "cost_usd": 0.001
+      },
+      {
+        "name": "wms_temp_breach_dairy",
+        "duration_s": 0.0022568702697753906,
+        "n_findings": 0,
+        "expected_min": 0,
+        "expected_rule": null,
+        "n_events": 20,
+        "cost_usd": 0.001
+      },
+      {
+        "name": "oms_cancel_45pct",
+        "duration_s": 0.0028388500213623047,
+        "n_findings": 8,
+        "expected_min": 1,
+        "expected_rule": "oms.cancellation.spike",
+        "n_events": 300,
+        "cost_usd": 0.001
+      },
+      {
+        "name": "oms_cancel_25pct",
+        "duration_s": 0.003306150436401367,
+        "n_findings": 0,
+        "expected_min": 0,
+        "expected_rule": null,
+        "n_events": 300,
+        "cost_usd": 0.001
+      }
+    ]
+  },
+  "v060": {
+    "pass_rate": 6,
+    "mean_duration_s": 0.0026062329610188804,
+    "total_cost_usd": 0.0018,
+    "per_task": [
+      {
+        "name": "oms_cancel_55pct",
+        "duration_s": 0.0033273696899414062,
+        "n_findings": 12,
+        "expected_min": 1,
+        "expected_rule": "oms.cancellation.spike",
+        "n_events": 0,
+        "cost_usd": 0.00030000000000000003,
+        "success": true
+      },
+      {
+        "name": "oms_cancel_35pct",
+        "duration_s": 0.0030977725982666016,
+        "n_findings": 4,
+        "expected_min": 0,
+        "expected_rule": null,
+        "n_events": 0,
+        "cost_usd": 0.00030000000000000003,
+        "success": true
+      },
+      {
+        "name": "oms_cancel_30pct_baseline",
+        "duration_s": 0.002994060516357422,
+        "n_findings": 2,
+        "expected_min": 0,
+        "expected_rule": null,
+        "n_events": 0,
+        "cost_usd": 0.00030000000000000003,
+        "success": true
+      },
+      {
+        "name": "wms_temp_breach_dairy",
+        "duration_s": 0.00018787384033203125,
+        "n_findings": 0,
+        "expected_min": 0,
+        "expected_rule": null,
+        "n_events": 0,
+        "cost_usd": 0.00030000000000000003,
+        "success": true
+      },
+      {
+        "name": "oms_cancel_45pct",
+        "duration_s": 0.0030431747436523438,
+        "n_findings": 8,
+        "expected_min": 1,
+        "expected_rule": "oms.cancellation.spike",
+        "n_events": 0,
+        "cost_usd": 0.00030000000000000003,
+        "success": true
+      },
+      {
+        "name": "oms_cancel_25pct",
+        "duration_s": 0.0029871463775634766,
+        "n_findings": 0,
+        "expected_min": 0,
+        "expected_rule": null,
+        "n_events": 0,
+        "cost_usd": 0.00030000000000000003,
+        "success": true
+      }
+    ]
+  }
+}
