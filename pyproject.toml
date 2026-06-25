@@ -41,6 +41,7 @@ dev = [
     "pytest>=7.0",
     "build>=1.0",
     "twine>=4.0",
+    "openai>=1.0",  # OpenAICompatClient tests + LLM-driven madcop run agent --llm
 ]
 
 [project.urls]
