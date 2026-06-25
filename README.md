@@ -26,24 +26,24 @@ untraced to its source".
 
 | v0.5.0 | v0.6.0 |
 |--------|--------|
-| Fixed linear graph (ingest → detect → counterfactual → decision → summarise) | **Plan-execute-replan loop** with 4 modes (flash / standard / pro / ultra) |
-| Single LLM call per session | **Multi-model orchestration** — auto router picks T1/T2/T3 per step, manual override in `~/.madcop/config.yaml` |
-| Single LLM provider (OpenAI-compat) | **5 default providers** registered (nvidia_nim, nvidia_glm, zhipu, openai, deepseek) + custom add |
-| 2-layer memory (working + episodic) | **4-layer memory** — L1 working / L2 episodic / L3 semantic / L4 reflective + cross-layer retriever with time-decay |
-| No self-growth | **3-mechanism 成长 engine** — episodic→semantic distillation, feedback reflection, meta-pattern mining |
-| Ad-hoc eval | **EvalRunner v2** — `EvalTrend` (cross-run regression), `RobustnessProbe` (4 input perturbations), `AdversarialChecker` (safety smoke tests) |
-| 214 tests | **382 tests** |
-| No scratchpad / compactor | **`Scratchpad`** (cross-step state on disk) + **`ContextCompactor`** (sliding window + summarization) |
-| No cost tracking | **`CostTracker`** (per-call + per-run cost) with token estimation for CJK + ASCII |
+| Fixed linear graph (ingest → detect → counterfactual → decision → summarise) | Plan-execute-replan loop with 4 modes (flash / standard / pro / ultra) |
+| Single LLM call per session | Multi-model orchestration — auto router picks T1/T2/T3 per step, manual override in `~/.madcop/config.yaml` |
+| Single LLM provider (OpenAI-compat) | 5 default providers registered (nvidia_nim, nvidia_glm, zhipu, openai, deepseek) + custom add |
+| 2-layer memory (working + episodic) | 4-layer memory — L1 working / L2 episodic / L3 semantic / L4 reflective + cross-layer retriever with time-decay |
+| No self-growth | 3-mechanism 成长 engine — episodic→semantic distillation, feedback reflection, meta-pattern mining |
+| Ad-hoc eval | EvalRunner v2 — `EvalTrend` (cross-run regression), `RobustnessProbe` (4 input perturbations), `AdversarialChecker` (safety smoke tests) |
+| 214 tests | 382 tests |
+| No scratchpad / compactor | `Scratchpad` (cross-step state on disk) + `ContextCompactor` (sliding window + summarization) |
+| No cost tracking | `CostTracker` (per-call + per-run cost) with token estimation for CJK + ASCII |
 
-### Quick taste (v0.6.0)
+### Quick taste
 
 ```python
 from madcop.agent import PlanExecuteLoop, TrivialPlanner, FnStepExecutor, ExecutionMode
 from madcop.strategy import ModelRouter, ProviderRegistry
 from madcop.memory import MemoryStore, EpisodicMemory, SemanticMemory, ReflectiveMemory, GrowthEngine
 
-# 1. Plan-execute-replan loop (DeerFlow-style, but 90 lines not 9000)
+# 1. Plan-execute-replan loop
 loop = PlanExecuteLoop(
     planner=TrivialPlanner(),
     executor=my_executor,           # you provide one
@@ -66,29 +66,40 @@ refl  = engine.record_feedback(epi, rating=5)      # M2
 metas = engine.mine_meta_patterns()                # M3
 ```
 
-### v0.6.0 vs DeerFlow 2.0 — what we copy, what we don't
+### Design philosophy (v0.6.0)
 
-We studied [DeerFlow 2.0](https://github.com/bytedance/deer-flow) (bytedance, ~75k stars) before
-designing v0.6.0. We **borrowed the architecture**, not the code:
+Five principles shaped v0.6.0. They're not features — they're decisions
+about what kind of software madcop wants to be.
 
-| Dimension | DeerFlow 2.0 | madcop v0.6.0 | Notes |
-|-----------|--------------|----------------|-------|
-| **Harness concept** | "Super Agent Harness" (14 middleware + sub-agents) | "Personal AI Agent" (1 plan-execute loop, optional sub-agents v0.7.0) | DeerFlow is server-grade (4-8 vCPU, Docker Compose). madcop is single-process, runs on a laptop. |
-| **Execution modes** | flash / standard / pro / ultra | flash / standard / pro / ultra (same names) | Names inspired by DeerFlow; implementation is 90 lines, not 9000. |
-| **Memory** | 3 layers (context / history / facts) | **4 layers** (working / episodic / semantic / reflective) | madcop adds reflective (user prefs + meta-strategies). |
-| **Self-growth** | ❌ (no auto memory consolidation) | ✅ 3 mechanisms (distillation + feedback + meta-mining) | madcop's unique selling point. |
-| **Sub-agents** | ✅ full (concurrency 3, isolated context) | v0.7.0 | Skipped in v0.6.0 to keep complexity low. |
-| **Sandbox** | ✅ Docker container per task | v0.7.0 (LocalSandboxProvider first) | Personal project, no untrusted code. |
-| **Skills loading** | Deferred tool catalog + `select:` syntax | v0.7.0 | v0.6.0 loads whole `SKILL.md` per call. |
-| **Cost-aware routing** | ❌ | ✅ auto + manual (T1/T2/T3) | madcop is the only OSS framework (we know of) that routes by cost. |
-| **IM channels** | ✅ 6 channels (Telegram / Slack / Feishu / WeCom / DingTalk / WeChat) | v0.7.0 | Personal project, single-user CLI. |
-| **Tracing** | Langfuse + LangSmith (cloud) | Local JSONL trends + AdversarialChecker | madcop is **local-first**, no cloud dependency. |
-| **Deployment** | Docker Compose (gateway + frontend + nginx) | `pip install madcop` | madcop is a Python package. |
-| **TUI** | Built-in terminal UI | Python CLI (`python -m madcop`) | v0.6.0 has CLI; v0.7.0 may add TUI. |
-| **Models recommended** | Doubao-Seed-2.0-Code / DeepSeek v3.2 / Kimi 2.5 | Anything OpenAI-compat (NVIDIA NIM / GLM / Zhipu / OpenAI / DeepSeek) | madcop is **model-agnostic**; defaults are open-weight friendly. |
+**1. Personal-first, not team-first.** madcop runs on a laptop. One
+process, one SQLite file, one operator. No gateway, no Redis, no
+Kubernetes. If you need a multi-tenant agent platform, you're looking
+for the wrong tool — and that's fine, those exist.
 
-**One-line positioning**: DeerFlow is a research-grade super agent harness for teams;
-madcop is a personal single-process AI agent that grows with you.
+**2. Local-first, no cloud lock-in.** Memory is a SQLite file at
+`~/.madcop/memory.db`. Trends are a JSONL file. Eval results are
+JSON. You can `cat` everything, `grep` everything, and back up
+everything with `rsync`. There is no Langfuse or LangSmith to log
+into.
+
+**3. Self-growth over time.** madcop is the only mainstream AI agent
+framework (that we know of) where the memory layer is the *primary*
+deliverable, not an afterthought. The 3-mechanism 成长 engine means
+that the longer you use madcop, the more it knows about your domain,
+your preferences, and your meta-strategies. New here, not as a
+checkbox.
+
+**4. Cost-aware routing as a first-class concern.** Every step of
+every run can pick a different model. The auto router scores each
+step on 4 signals (structural / domain / context / user) and picks
+T1 (reasoning) / T2 (balanced) / T3 (fast). Manual override per
+provider in `~/.madcop/config.yaml`. Built because shipping
+"always-call-gpt-4" demos is a lie.
+
+**5. The harness is small enough to read in one sitting.** The whole
+plan-execute-replan loop is ~90 lines. The router is ~300 lines. The
+memory layer is 6 modules averaging 200 lines each. We picked this
+deliberately — every line of indirection is a line you can't debug.
 
 ## What madcop actually does
 
