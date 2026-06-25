@@ -92,13 +92,18 @@ class GrowthEngine:
 
         # Call LLM (T1 by default — distillation is reasoning)
         try:
+            from ..llm import Message as _Message
             response = self._llm.chat([
-                {"role": "system", "content": _DISTILL_SYSTEM},
-                {"role": "user", "content": prompt},
+                _Message(role="system", content=_DISTILL_SYSTEM),
+                _Message(role="user", content=prompt),
             ])
             content = response.content if hasattr(response, "content") else str(response)
         except Exception:
             return []
+
+        # Some reasoning models emit `<think>...</think>` blocks — strip them.
+        if isinstance(content, str) and "<think>" in content and "</think>" in content:
+            content = content.split("</think>", 1)[-1].strip()
 
         # Parse JSON list of facts
         facts_data = self._parse_json_list(content)
@@ -158,13 +163,18 @@ class GrowthEngine:
 
         # Call LLM
         try:
+            from ..llm import Message as _Message
             response = self._llm.chat([
-                {"role": "system", "content": _FEEDBACK_SYSTEM},
-                {"role": "user", "content": prompt},
+                _Message(role="system", content=_FEEDBACK_SYSTEM),
+                _Message(role="user", content=prompt),
             ])
             content = response.content if hasattr(response, "content") else str(response)
         except Exception:
             return None
+
+        # Strip reasoning-model `` blocks
+        if isinstance(content, str) and "<think>" in content and "</think>" in content:
+            content = content.split("</think>", 1)[-1].strip()
 
         # Parse JSON reflection
         ref_data = self._parse_json_object(content)
@@ -214,13 +224,17 @@ class GrowthEngine:
         prompt = self._meta_prompt(episodes)
 
         try:
+            from ..llm import Message as _Message
             response = self._llm.chat([
-                {"role": "system", "content": _META_SYSTEM},
-                {"role": "user", "content": prompt},
+                _Message(role="system", content=_META_SYSTEM),
+                _Message(role="user", content=prompt),
             ])
             content = response.content if hasattr(response, "content") else str(response)
         except Exception:
             return []
+
+        if isinstance(content, str) and "<think>" in content and "</think>" in content:
+            content = content.split("</think>", 1)[-1].strip()
 
         patterns = self._parse_json_list(content)
         if not patterns:

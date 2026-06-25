@@ -1,0 +1,41 @@
+[
+  {
+    "name": "oms_cancel_55pct",
+    "success": true,
+    "elapsed_s": 11.565622091293335,
+    "total_cost_usd": 0.005,
+    "n_findings": 9,
+    "expected_min": 1,
+    "expected_max": 100,
+    "findings_ok": true,
+    "quality_score": 3,
+    "quality_max": 3,
+    "final_output": "[OK] detect: 9 findings\n[OK] diagnose: **Diagnosis: Confirmed CUSUM spike in the apparel category.**\n\nWith 115 of 200 orders (57%) cancelled in the last 24 hours and CUSUM registering 9 anomaly hits against a 30% apparel baseline, this represents a sustained upward shift of ~25 percentage points \u2014 w"
+  },
+  {
+    "name": "oms_cancel_30pct_baseline",
+    "success": true,
+    "elapsed_s": 4.7222301959991455,
+    "total_cost_usd": 0.005,
+    "n_findings": 1,
+    "expected_min": 0,
+    "expected_max": 2,
+    "findings_ok": true,
+    "quality_score": 0,
+    "quality_max": 2,
+    "final_output": "[OK] detect: 1 findings\n[OK] diagnose: "
+  },
+  {
+    "name": "oms_cancel_45pct",
+    "success": true,
+    "elapsed_s": 5.420020818710327,
+    "total_cost_usd": 0.005,
+    "n_findings": 6,
+    "expected_min": 1,
+    "expected_max": 50,
+    "findings_ok": true,
+    "quality_score": 1,
+    "quality_max": 2,
+    "final_output": "[OK] detect: 6 findings\n[OK] diagnose: **Diagnosis:** The CUSUM detector's 6 anomaly hits on the apparel category align with a sustained upward shift from the 30% baseline to a 45% observed cancel rate\u2014a 15-point drift that, while mild in absolute terms, exceeds the cumulative sum threshold designed"
+  }
+]

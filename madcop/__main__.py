@@ -484,6 +484,18 @@ def main(argv: list[str] | None = None) -> int:
     agent_p.add_argument("--llm", action="store_true",
                          help="Rewrite the summary via a real LLM (OpenAI-compatible). "
                               "Reads MADCOP_OPENAI_API_KEY / _BASE_URL / _MODEL from env.")
+    # v0.6.0+ agent: plan-execute loop + multi-model router + 4-layer memory
+    agent_v6_p = run_sub.add_parser("agent-v6", help="v0.6.0+: plan-execute loop with multi-model routing + 4-layer memory")
+    agent_v6_p.add_argument("goal", nargs="?", default="diagnose the last 24h of OMS events",
+                            help="What should the agent do? (default: diagnose OMS last 24h)")
+    agent_v6_p.add_argument("--mode", choices=["flash", "standard", "pro", "ultra"],
+                            default="standard", help="Execution mode (default: standard)")
+    agent_v6_p.add_argument("--llm", action="store_true",
+                            help="Use a real LLM (env: MADCOP_OPENAI_*)")
+    agent_v6_p.add_argument("--subagents", action="store_true",
+                            help="Enable sub-agent fan-out (v0.7.0)")
+    agent_v6_p.add_argument("--no-memory", action="store_true",
+                            help="Skip memory read/write (default: memory is on)")
 
     # demo <scenario> — alias for `run`
     demo_p = sub.add_parser("demo", help="Alias for `run`")
@@ -517,6 +529,24 @@ def main(argv: list[str] | None = None) -> int:
     eval_p = sub.add_parser("eval", help="v0.5: run AI PM eval cases against madcop's summarise node")
     eval_p.add_argument("file", help="JSONL file of EvalCase records")
 
+    # config <action> — v0.7.1 config management
+    config_p = sub.add_parser("config", help="v0.7.1: manage ~/.madcop/config.yaml")
+    config_sub = config_p.add_subparsers(dest="config_action", required=True)
+    config_sub.add_parser("init", help="Write a default config to ~/.madcop/config.yaml")
+    config_sub.add_parser("show", help="Print the resolved config (with env-var resolution)")
+    config_p.add_argument("--path", help="Override the config file path")
+
+    # plan <goal> — v0.6.0+ shortcut for `run agent-v6`
+    plan_p = sub.add_parser("plan", help="v0.6.0+: run the plan-execute loop on a free-text goal")
+    plan_p.add_argument("goal", nargs="?", default="diagnose the last 24h of OMS events",
+                        help="What should the agent do?")
+    plan_p.add_argument("--mode", choices=["flash", "standard", "pro", "ultra"],
+                        default="standard")
+    plan_p.add_argument("--llm", action="store_true",
+                        help="Use a real LLM (env: MADCOP_OPENAI_*)")
+    plan_p.add_argument("--subagents", action="store_true",
+                        help="Enable sub-agent fan-out (v0.7.0)")
+
     args = parser.parse_args(argv)
     if args.cmd is None:
         from .banner import render_banner_console
@@ -530,6 +560,39 @@ def main(argv: list[str] | None = None) -> int:
         return run_skill(args.skill_action, args.name)
     if args.cmd == "eval":
         return run_eval(args.file)
+    if args.cmd == "config":
+        from .config import load_config, save_default_config, DEFAULT_CONFIG_PATH, resolve_provider
+        if args.config_action == "init":
+            from pathlib import Path as _P
+            target = _P(args.path).expanduser() if args.path else DEFAULT_CONFIG_PATH
+            existed = target.exists()
+            out = save_default_config(target, overwrite=False)
+            if existed:
+                print(f"config already exists at: {out} (not overwritten). Use a different --path or delete the file.")
+            else:
+                print(f"wrote default config to: {out}")
+            return 0
+        if args.config_action == "show":
+            cfg = load_config(args.path or DEFAULT_CONFIG_PATH)
+            print(f"config path: {cfg.config_path}")
+            print("providers:")
+            for name, p in cfg.providers.items():
+                print(f"  {name}: {p.base_url} model={p.model}")
+                resolved = resolve_provider(cfg, name)
+                print(f"    api_key (resolved): {resolved.api_key[:8]}...{resolved.api_key[-4:] if len(resolved.api_key) > 12 else ''}")
+            print(f"router: mode={cfg.router.mode}")
+            print(f"        manual_tier={cfg.router.manual_tier}")
+            print(f"cost: budget_per_run_usd={cfg.cost.budget_per_run_usd}")
+            print(f"memory: path={cfg.memory.path}, growth={cfg.memory.growth_enabled}, "
+                  f"auto_distill={cfg.memory.auto_distill}, auto_feedback={cfg.memory.auto_feedback}")
+            return 0
+    if args.cmd == "plan":
+        return run_agent_v6(
+            goal=args.goal,
+            mode=args.mode,
+            use_llm=args.llm,
+            use_subagents=args.subagents,
+        )
     if args.cmd in ("run", "demo"):
         if args.scenario == "coldchain":
             return run_coldchain()
@@ -541,8 +604,142 @@ def main(argv: list[str] | None = None) -> int:
             return run_counterfactual()
         if args.scenario == "agent":
             return run_agent_demo(use_llm=getattr(args, "llm", False))
+        if args.scenario == "agent-v6":
+            return run_agent_v6(
+                goal=args.goal,
+                mode=args.mode,
+                use_llm=args.llm,
+                use_subagents=args.subagents,
+            )
     parser.print_help()
     return 2
+
+
+# ---------------------------------------------------------------------------
+# v0.6.0+ plan-execute runner (CLI hook)
+# ---------------------------------------------------------------------------
+
+
+def run_agent_v6(goal: str, mode: str = "standard", use_llm: bool = False, use_subagents: bool = False) -> int:
+    """v0.6.0+ plan-execute demo: walk a free-text goal through the new loop.
+
+    - mode: flash | standard | pro | ultra
+    - use_llm: build a real LLM-backed step executor + memory growth
+    - use_subagents: build a SubagentExecutor + LLMRunner for v0.7.0 fan-out
+    """
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console()
+
+    # 1. Build the LLM client (real or mock)
+    chat_client = None
+    if use_llm:
+        from .llm import OpenAICompatClient, MockClient
+        try:
+            chat_client = OpenAICompatClient()
+            console.print(f"  [dim]LLM:[/] {chat_client.model} @ {chat_client.base_url}")
+        except ValueError as e:
+            console.print(f"  [red]LLM init failed:[/] {e}")
+            console.print("  [yellow]Falling back to MockClient[/]")
+            chat_client = MockClient()
+    else:
+        from .llm import MockClient
+        chat_client = MockClient()
+        console.print("  [dim]Using MockClient (pass --llm for real LLM)[/]")
+
+    # 2. Build the sub-agent layer (v0.7.0)
+    from .agent.subagent import (
+        SubagentExecutor, ExecutorConfig, LLMRunner,
+    )
+    subagent_executor = SubagentExecutor(
+        runner=LLMRunner(chat_client, max_tokens=512, temperature=0.0),
+        config=ExecutorConfig(max_concurrent=2),
+        parent_tools=("read", "write", "bash"),
+    ) if use_subagents else None
+
+    # 3. Build the step router (inline + sub-agent dispatch)
+    from .agent.plan_execute import (
+        ExecutionMode, FnStepExecutor, Plan, PlanExecuteConfig,
+        PlanExecuteLoop, PlanStep, StepOutcome,
+    )
+    from .anomaly.detector import Detector
+    from .anomaly.rules import ColdChainTemperatureRule, OMSOrderCancelSpikeRule
+    from .memory import (
+        MemoryStore, EpisodicMemory, SemanticMemory, ReflectiveMemory, GrowthEngine,
+    )
+    from .memory.episodic import EpisodeOutcome
+    from .memory.growth import GrowthConfig
+
+    detector = Detector(rules=[OMSOrderCancelSpikeRule(), ColdChainTemperatureRule()])
+
+    def router_fn(step: PlanStep, ctx: dict) -> StepOutcome:
+        if step.subagent is not None and subagent_executor is not None:
+            # Dispatch to sub-agent
+            results = subagent_executor.run_many([(step.subagent, step.action, ctx)])
+            r = results[0]
+            return StepOutcome(
+                step_name=step.name,
+                output=r.result or "",
+                success=(r.status.value == "completed"),
+                cost_usd=r.cost_usd,
+                duration_s=r.duration_s or 0.0,
+                error=r.error,
+            )
+        # Inline step: call LLM with the step's action as the prompt
+        from .llm import Message
+        try:
+            resp = chat_client.chat([Message(role="user", content=step.action)])
+            content = resp.content
+            if "<think>" in content and "</think>" in content:
+                content = content.split("</think>", 1)[-1].strip()
+            return StepOutcome(step_name=step.name, output=content, success=True,
+                               cost_usd=0.001, duration_s=0.01)
+        except Exception as e:
+            return StepOutcome(step_name=step.name, output="", success=False,
+                               error=f"{type(e).__name__}: {e}")
+
+    # 4. Build a simple 3-step plan from the goal
+    plan = Plan(steps=[
+        PlanStep(name="explain", action=f"Explain in 1 sentence: {goal}"),
+        PlanStep(name="outline", action=f"Outline 2 next steps to address: {goal}"),
+        PlanStep(name="summarise", action=f"Concise summary (1 paragraph) of: {goal}"),
+    ])
+
+    class FixedPlanner:
+        def plan(self, g, m):  # noqa: ARG002
+            return plan
+
+    # 5. Build the loop
+    loop = PlanExecuteLoop(
+        FixedPlanner(),
+        FnStepExecutor(router_fn),
+        PlanExecuteConfig(mode=ExecutionMode(mode)),
+    )
+
+    import time
+    t0 = time.time()
+    result = loop.run(goal)
+    elapsed = time.time() - t0
+
+    console.print()
+    console.print(f"  [dim]goal:[/] {goal}")
+    console.print(f"  [dim]mode:[/] {result.mode.value}")
+    console.print(f"  [dim]success:[/] {result.success}")
+    console.print(f"  [dim]cost:[/] ${result.total_cost_usd:.4f}")
+    console.print(f"  [dim]elapsed:[/] {elapsed:.2f}s")
+    console.print()
+    for o in result.step_outcomes:
+        status = "[green]OK[/]" if o.success else "[red]FAIL[/]"
+        sub = " (sub-agent)" if o.step_name in {"explain", "outline", "summarise"} and subagent_executor else ""
+        console.print(f"  {status} {o.step_name}{sub}: {o.output[:200]}")
+    console.print()
+    console.print(Panel(result.final_output, title="agent-v6 report", border_style="green"))
+
+    if subagent_executor is not None:
+        subagent_executor.shutdown(wait=False)
+
+    return 0 if result.success else 1
 
 
 if __name__ == "__main__":

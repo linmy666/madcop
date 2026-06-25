@@ -38,6 +38,7 @@ from .executor import (
     Runner,
     SubagentExecutor,
 )
+from .llm_runner import LLMRunner
 
 __all__ = [
     # spec
@@ -55,6 +56,7 @@ __all__ = [
     "SubagentExecutor",
     "Runner",
     "FnRunner",
+    "LLMRunner",
     "MIN_CONCURRENT",
     "MAX_CONCURRENT",
     "DEFAULT_CONCURRENT",
