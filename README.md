@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-453%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-467%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -44,10 +44,10 @@ but they're no longer the only thing it does.
 | 2-layer memory (working + episodic) | 4-layer memory: L1 working / L2 episodic / L3 semantic / L4 reflective, cross-layer retriever with time-decay, 3-mechanism self-growth engine |
 | No self-growth | M1 distillation + M2 feedback reflection + M3 meta-pattern mining — the agent gets smarter with use |
 | No CLI for free-text goals | `madcop plan "..." --llm` runs the new loop end-to-end with a real LLM |
-| No sub-agents | Lead agent dispatches plan steps to `general-purpose` or `bash` sub-agents in parallel (capped 3), with context isolation and race-safe state machine |
+| No sub-agents | Lead agent dispatches plan steps to `general-purpose` or `bash` sub-agents in parallel (capped 3), with context isolation and race-safe state machine. **v0.7.2**: `RoutingStepExecutor` lets you write `PlanStep(subagent="general-purpose")` and the main loop dispatches for you — no more 20-line router_fn hack. |
 | No config file | `madcop config init` writes a default `~/.madcop/config.yaml`; `madcop config show` resolves it |
 | Ad-hoc eval | EvalRunner v2: cross-run trend tracking, robustness probing, adversarial safety checks |
-| 214 tests | **453 tests** |
+| 214 tests | **467 tests** |
 
 ### Quick taste
 
@@ -251,7 +251,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-**453 tests, all passing** (Python 3.10–3.12, macOS / Linux). CI runs
+**467 tests, all passing** (Python 3.10–3.12, macOS / Linux). CI runs
 on every push via GitHub Actions. Coverage:
 
 - L1 event contract (UTC validation, event type / source consistency)
@@ -263,6 +263,7 @@ on every push via GitHub Actions. Coverage:
 - L4 memory (4 layers, FTS5 search, time-decay retriever, growth engine)
 - L5 plan-execute (4 modes, replan, step outcomes, aggregation)
 - L5 sub-agent (spec, race-safe state, builtins, executor, LLMRunner)
+- L5 routing executor (mixed inline + sub-agent plan dispatch)
 - L6 eval (cases, trend, robustness, adversarial, integration)
 - L6 config (loader, env-var resolution, defaults, malformed handling)
 

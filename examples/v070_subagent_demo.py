@@ -34,6 +34,7 @@ from madcop.agent.plan_execute import (
     PlanStep,
     StepOutcome,
 )
+from madcop.agent import RoutingStepExecutor
 from madcop.agent.subagent import (
     ExecutorConfig,
     FnRunner,
@@ -145,8 +146,9 @@ def main() -> int:
         rationale="Fan out step 2 + 3 to sub-agents in parallel",
     )
 
-    # The lead agent's executor only handles inline steps; sub-agent
-    # steps are routed by a small wrapper that calls SubagentExecutor.
+    # Build the routing executor: inline for the first step, sub-agents
+    # for the rest. RoutingStepExecutor (v0.7.2) handles the dispatch
+    # automatically based on step.subagent.
     detector = Detector(rules=[OMSOrderCancelSpikeRule(), ColdChainTemperatureRule()])
     subagent_runner = _make_subagent_runner(detector)
     subagent_executor = SubagentExecutor(
@@ -154,21 +156,8 @@ def main() -> int:
         config=ExecutorConfig(max_concurrent=2),  # 2 sub-agents fit
         parent_tools=("read", "write", "bash", "task"),
     )
-
-    def router_fn(step: PlanStep, ctx: dict) -> StepOutcome:
-        if step.subagent is None:
-            return _inline_step(step, ctx)
-        # Dispatch to sub-agent
-        results = subagent_executor.run_many([(step.subagent, step.action, ctx)])
-        r = results[0]
-        return StepOutcome(
-            step_name=step.name,
-            output=r.result or "",
-            success=(r.status.value == "completed"),
-            cost_usd=r.cost_usd,
-            duration_s=r.duration_s or 0.0,
-            error=r.error,
-        )
+    inline = FnStepExecutor(_inline_step)
+    router = RoutingStepExecutor(inline=inline, subagent=subagent_executor)
 
     class FixedPlanner:
         def plan(self, goal: str, mode: ExecutionMode):  # noqa: ARG002
@@ -176,7 +165,7 @@ def main() -> int:
 
     loop = PlanExecuteLoop(
         FixedPlanner(),
-        FnStepExecutor(router_fn),
+        router,  # RoutingStepExecutor is a StepExecutor (Protocol)
         PlanExecuteConfig(mode=ExecutionMode.STANDARD),
     )
 
