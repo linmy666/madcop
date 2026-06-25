@@ -3,7 +3,7 @@
 > **mad** + **cop** — the supply chain cop that goes *mad* for anomalies.
 > Pluggable LangGraph framework: from "detect" to "diagnose" to "decide", with self-evolution.
 
-[![Tests](https://img.shields.io/badge/tests-382%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-421%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -100,6 +100,72 @@ provider in `~/.madcop/config.yaml`. Built because shipping
 plan-execute-replan loop is ~90 lines. The router is ~300 lines. The
 memory layer is 6 modules averaging 200 lines each. We picked this
 deliberately — every line of indirection is a line you can't debug.
+
+## What's new in v0.7.0
+
+v0.7.0 adds a **sub-agent layer** to the v0.6.0 plan-execute loop. The
+lead agent can now dispatch steps to specialised sub-agents that run
+in parallel, in isolated contexts, and cannot recursively spawn more
+sub-agents.
+
+The pieces:
+
+- `SubagentSpec` — a frozen dataclass describing a sub-agent (name,
+  description, system_prompt, tools, disallowed_tools, max_turns,
+  timeout). Two ships with v0.7.0: `general-purpose` (multi-step
+  reasoning, inherits parent tools) and `bash` (shell command
+  execution, tools = `("bash",)`).
+- `SubagentResult` + `SubagentStatus` — race-safe state machine with
+  `try_set_terminal()`. The first writer of a terminal status wins;
+  late writes are no-ops. The four terminal states are `COMPLETED`,
+  `FAILED`, `CANCELLED`, `TIMED_OUT`.
+- `SubagentExecutor` — runs sub-agents on a `ThreadPoolExecutor`
+  capped at 3 (clamped to `[1, 4]`). Each sub-agent gets a deep
+  copy of the parent's context (no leakage back). Cancellation is
+  cooperative: set `holder.cancel_event`, the runner checks it
+  between LLM calls.
+- `PlanStep.subagent` — set this on any plan step to dispatch the
+  step to a sub-agent instead of running it inline. The lead agent's
+  plan-execute loop routes sub-agent steps through the executor;
+  inline steps go through the v0.6.0 path.
+
+Three things we deliberately did not do:
+
+- Sub-agents cannot spawn sub-agents. The `task` tool is hard-coded
+  as disallowed; this prevents recursive explosions.
+- We did not implement custom sub-agents from user config. That's
+  v0.7.1.
+- We did not build an async executor. The thread pool is enough
+  for personal use; if you need asyncio, open an issue.
+
+```python
+from madcop.agent import PlanExecuteLoop, PlanStep, Plan, ExecutionMode
+from madcop.agent.subagent import SubagentExecutor, FnRunner, ExecutorConfig
+
+# 1. Build a runner — real impl wraps your LLM client; here we use a
+#    function for tests + simple integrations.
+runner = FnRunner(lambda **kw: f"[{kw['agent'].name}] {kw['prompt']}")
+
+# 2. Build the executor. max_concurrent caps the thread pool.
+executor = SubagentExecutor(runner=runner, config=ExecutorConfig(max_concurrent=3))
+
+# 3. Write a plan that mixes inline + sub-agent steps.
+plan = Plan(steps=[
+    PlanStep(name="ingest", action="gather data"),               # inline
+    PlanStep(name="analyse", action="classify findings",         # sub-agent
+             subagent="general-purpose"),
+    PlanStep(name="report",  action="build CSV",                 # sub-agent
+             subagent="bash"),
+])
+
+# 4. Run the loop. Sub-agent steps are dispatched in parallel where
+#    the plan allows; inline steps run sequentially.
+loop = PlanExecuteLoop(my_planner, my_inline_executor)
+result = loop.run("diagnose something")
+```
+
+Run the demo: `python examples/v070_subagent_demo.py`. It dispatches
+two sub-agents in parallel and merges the results into one report.
 
 ## What madcop actually does
 

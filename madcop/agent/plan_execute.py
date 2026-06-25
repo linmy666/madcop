@@ -54,9 +54,13 @@ MAX_REPLANS: dict[ExecutionMode, int] = {
 class PlanStep:
     """One step in a plan. Kept small — the executor does the heavy lifting."""
     name: str
-    action: str                   # free-form instruction for the executor
-    parallel: bool = False        # v0.7.0 ultra mode
-    depends_on: tuple[str, ...] = ()  # step names that must finish first
+    action: str                          # free-form instruction for the executor
+    parallel: bool = False               # v0.7.0 ultra mode
+    depends_on: tuple[str, ...] = ()     # step names that must finish first
+    # v0.7.0: if set, this step is dispatched to the named sub-agent
+    # instead of being executed inline. subagent takes precedence
+    # over the loop's normal executor.
+    subagent: str | None = None
 
 
 @dataclass
