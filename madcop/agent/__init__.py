@@ -78,6 +78,18 @@ from .outcome import (
     format_lessons_with_outcome,
     lesson_outcome_score,
 )
+from .crystallize import (
+    CRYSTALLIZED_SAVED_BY,
+    CRYSTALLIZED_SOURCE,
+    CRYSTALLIZED_TAG,
+    DEFAULT_MIN_CLUSTER_SIZE,
+    DEFAULT_PREFIX_SPLIT,
+    SkillCrystallizer,
+    aggregate_outcome,
+    cluster_topics,
+    crystallize_skills,
+    render_skill_body,
+)
 
 __all__ = [
     # v0.5.0
@@ -116,4 +128,9 @@ __all__ = [
     "OUTCOME_SUCCESS", "OUTCOME_FAILURE", "OUTCOME_UNKNOWN",
     "OutcomePrioritizer", "boost_outcome", "format_lessons_with_outcome",
     "lesson_outcome_score",
+    # v1.3.0-rc.3 skill crystallization (L4)
+    "CRYSTALLIZED_SAVED_BY", "CRYSTALLIZED_SOURCE", "CRYSTALLIZED_TAG",
+    "DEFAULT_MIN_CLUSTER_SIZE", "DEFAULT_PREFIX_SPLIT",
+    "SkillCrystallizer", "aggregate_outcome", "cluster_topics",
+    "crystallize_skills", "render_skill_body",
 ]

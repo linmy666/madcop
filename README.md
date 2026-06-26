@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-901%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-928%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -619,6 +619,100 @@ mapping), `ReflectionMiddleware` outcome stamp on success
 brains with no outcome stamps still produce the same order.
 
 Total: **901 tests, all passing**.
+
+## What's new in v1.3.0-rc.3 (Skill crystallization — L4)
+
+v1.3.0-rc.1 wrote each reflection as a single skill page. After a
+few hundred plan-execute runs, the brain is full of small pages
+with `topic:` values that share a prefix — `rate-limit-retry`,
+`rate-limit-burst`, `rate-limit-headers` are all telling the same
+underlying story. The brain needs a **cluster head** to compress
+many small pages into one named skill.
+
+v1.3.0-rc.3 adds the L4 layer:
+
+```
+HOOK_PLAN_START  →  RetrievalMiddleware         (rc.1)
+HOOK_PLAN_START  →  OutcomePrioritizer          (rc.2)
+HOOK_PLAN_END    →  ReflectionMiddleware        (rc.1)
+HOOK_PLAN_END    →  SkillCrystallizer           (rc.3 NEW, opt-in)
+```
+
+When 3+ skill pages share a topic-prefix, `crystallize_skills`
+writes **one cluster-head page** that:
+
+- has `type=skill` (so the rest of the system treats it identically)
+- has a new `topic:` value equal to the common prefix
+- lists the cluster members under `## Member reflections`
+- carries the cluster's **aggregated outcome** (`success` /
+  `failure` / `unknown`) as its own outcome, so L3 ranking
+  benefits from cluster-level evidence
+- gets a `crystallized` tag so callers can tell heads from
+  leaves
+
+### Quick start
+
+The L4 layer is opt-in. The recommended way to use it is on a
+schedule (cron / manual), not on every plan:
+
+```python
+from madcop.agent.crystallize import crystallize_skills
+from madcop.brain.store import PageDB
+
+db = PageDB("~/.madcop/brain.db")
+new_slugs = crystallize_skills(db, min_cluster_size=3)
+# Returns the slugs of cluster-heads that were just created or
+# refreshed. Idempotent: re-running with no new reflections is
+# a no-op.
+```
+
+The middleware form runs the same function at HOOK_PLAN_END:
+
+```python
+from madcop.agent import MiddlewareChain, SkillCrystallizer
+
+chain = MiddlewareChain([
+    SkillCrystallizer(db, enabled=True),   # opt-in
+])
+```
+
+The middleware is **disabled by default** (`enabled=False`).
+Crystallization is a batch operation, not a hot-path one — most
+users will run it on a cron or on demand.
+
+### Why "delete + insert" on refresh
+
+If a cluster's member set changes (a new reflection joins), the
+crystallizer refreshes the head. The brain's `pages_touch` SQLite
+trigger fires on `UPDATE pages` when `updated_at` is unchanged,
+which on SQLite 3.40.x trips a "database disk image is malformed"
+error when re-saving the same slug. The crystallizer works around
+this by `db.delete(slug)` then `db.save(slug, ...)` — a delete
+followed by an INSERT, which is the safe path. Idempotent for
+callers; one extra row in `ingest_log`.
+
+### Defaults
+
+- `min_cluster_size = 3` — three reflections is the smallest
+  pattern size that suggests a real recurring shape.
+- `prefix_split = "-"` — topics are slug-shaped by convention.
+- `crystallized_skills` (the new tag) — call `db.search(..., tags=["crystallized"])`
+  to retrieve just the cluster heads.
+
+### Tests
+
+27 new tests in `tests/agent/test_crystallize.py` cover:
+`cluster_topics` (grouping, prefix split, sort order, including/
+excluding crystallized inputs), `aggregate_outcome` (majority,
+tie, empty), `render_skill_body` (frontmatter, member list,
+aggregated outcome), `crystallize_skills` (full E2E on a real
+`PageDB`, idempotency, new-member refresh, outcome aggregation,
+non-skill page filtering), `SkillCrystallizer` middleware
+(disabled-by-default, enabled run, hook gating, silent failure),
+and a **full L1 → L4 chain** (3 `ReflectionMiddleware` writes
+followed by one `crystallize_skills` call).
+
+Total: **928 tests, all passing**.
 
 ## What madcop actually does
 

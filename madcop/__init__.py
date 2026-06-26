@@ -29,7 +29,7 @@ Install:
 Quick start:
     from madcop import __version__
     print(__version__)
-    # -> 1.3.0rc2
+    # -> 1.3.0rc3
 
     from madcop.agent.middleware import (
         MiddlewareChain, QianControlMiddleware, LoggingMiddleware,
@@ -38,7 +38,7 @@ Quick start:
 """
 from __future__ import annotations
 
-__version__ = "1.3.0rc2"
+__version__ = "1.3.0rc3"
 
 # Public API surface. Listed here as a stability signal — anything
 # not in this list may change between minor versions.
