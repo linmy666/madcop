@@ -466,6 +466,142 @@ def run_eval(jsonl_path: str) -> int:
     return 0 if report.all_passed else 1
 
 
+def _default_brain_path() -> str:
+    """Return the default brain DB path (~/.madcop/brain.db)."""
+    return os.path.expanduser("~/.madcop/brain.db")
+
+
+def run_brain(args) -> int:
+    """v1.4.0: brain CLI — search, list, show, stats, tag, history, audit."""
+    from pathlib import Path as _P
+    from .brain.store import PageDB
+
+    db_path = _P(_default_brain_path())
+    if not db_path.exists() and args.brain_action not in ("stats",):
+        # Still allow stats on a non-existent brain (it'll show 0s after init)
+        pass
+
+    db = PageDB(db_path)
+
+    try:
+        if args.brain_action == "search":
+            hits = db.search(
+                args.query,
+                types=args.type,
+                tags=args.tag,
+                limit=args.limit,
+            )
+            if not hits:
+                print(f"No results for '{args.query}'")
+                return 0
+            print(f"Found {len(hits)} result(s) for '{args.query}':\n")
+            for i, h in enumerate(hits, 1):
+                p = h.page
+                tags_str = f" [{', '.join(p.tags)}]" if p.tags else ""
+                print(f"  [{i}] {p.slug} ({p.type}){tags_str}")
+                print(f"      {p.title}")
+                # Show snippet (clean up FTS5 <<>> markers)
+                snippet = h.snippet.replace("<<", "\033[1m").replace(">>", "\033[0m")
+                print(f"      {snippet}")
+                print()
+            return 0
+
+        if args.brain_action == "stats":
+            stats = db.stats()
+            print("madcop brain — statistics\n")
+            for key in ("pages", "versions", "links", "timeline_entries",
+                        "tags", "review_queue", "ingest_log"):
+                print(f"  {key:20s}: {stats.get(key, '?')}")
+            print(f"  {'schema_version':20s}: {stats.get('schema_version', '?')}")
+            print(f"\n  database: {db_path}")
+            print(f"  size:     {db_path.stat().st_size / 1024:.1f} KB")
+            return 0
+
+        if args.brain_action == "list":
+            if args.type:
+                pages = db.list_by_type(args.type)
+            elif args.tag:
+                pages = db.pages_with_tag(args.tag)
+            else:
+                pages = db.list_all(limit=args.limit)
+
+            pages = pages[: args.limit]
+            if not pages:
+                print("(brain is empty or no matching pages)")
+                return 0
+            print(f"{'slug':40s} {'type':10s} {'title':30s} tags")
+            print("-" * 100)
+            for p in pages:
+                tags_str = ", ".join(p.tags[:5]) if p.tags else ""
+                print(f"{p.slug:40s} {p.type:10s} {p.title[:30]:30s} {tags_str}")
+            print(f"\n{len(pages)} page(s)")
+            return 0
+
+        if args.brain_action == "show":
+            p = db.get(args.slug)
+            if p is None:
+                print(f"Page '{args.slug}' not found")
+                return 1
+            print(f"slug:    {p.slug}")
+            print(f"type:    {p.type}")
+            print(f"title:   {p.title}")
+            print(f"created: {p.created_at}")
+            print(f"updated: {p.updated_at}")
+            if p.last_accessed_at:
+                print(f"accessed: {p.last_accessed_at}")
+            if p.tags:
+                print(f"tags:    {', '.join(p.tags)}")
+            import json
+            if p.frontmatter and p.frontmatter != {}:
+                print(f"frontmatter:")
+                for k, v in p.frontmatter.items():
+                    print(f"  {k}: {v}")
+            print(f"\n--- compiled_truth ---\n{p.compiled_truth}")
+            if p.timeline:
+                print(f"\n--- timeline ---\n{p.timeline}")
+            return 0
+
+        if args.brain_action == "history":
+            versions = db.history(args.slug)
+            if not versions:
+                print(f"No version history for '{args.slug}'")
+                return 1
+            print(f"Version history for '{args.slug}' ({len(versions)} version(s)):\n")
+            for v in versions:
+                print(f"  v{v['version_no']:>2}  {v['saved_at']}  "
+                      f"by {v['saved_by']:20s}  hash={v['content_hash'][:12]}...")
+            return 0
+
+        if args.brain_action == "tag":
+            page = db.get(args.slug)
+            if page is None:
+                print(f"Page '{args.slug}' not found")
+                return 1
+            added = db.add_tags(args.slug, args.tags)
+            print(f"Added {added} tag(s) to '{args.slug}': {', '.join(args.tags)}")
+            return 0
+
+        if args.brain_action == "audit":
+            # Show recent ingest_log entries
+            rows = db._conn.execute(
+                "SELECT slug, operation, source, created_at, detail "
+                "FROM ingest_log ORDER BY created_at DESC LIMIT 20"
+            ).fetchall()
+            if not rows:
+                print("(audit log is empty)")
+                return 0
+            print(f"Recent audit-log entries (last 20):\n")
+            for r in rows:
+                print(f"  {r['created_at'][:19]}  {r['operation']:12s}  "
+                      f"{r['slug']:40s}  src={r['source']}")
+            return 0
+
+    finally:
+        db.close()
+
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="madcop",
@@ -564,6 +700,33 @@ def main(argv: list[str] | None = None) -> int:
     doctor_p.add_argument("--json", action="store_true",
                           help="Output the report as JSON instead of pretty text")
 
+    # v1.4.0: brain CLI — search/save/list/show/stats/tag the knowledge brain
+    brain_p = sub.add_parser(
+        "brain", help="v1.4.0: query and manage the knowledge brain"
+    )
+    brain_sub = brain_p.add_subparsers(dest="brain_action", required=True)
+    brain_search = brain_sub.add_parser("search", help="Full-text search the brain")
+    brain_search.add_argument("query", help="Search query")
+    brain_search.add_argument("--type", "-t", action="append", default=None,
+                              help="Filter by page type (person/project/concept/skill/event)")
+    brain_search.add_argument("--tag", action="append", default=None,
+                              help="Filter by tag")
+    brain_search.add_argument("--limit", "-n", type=int, default=10)
+    brain_sub.add_parser("stats", help="Show brain statistics (page counts, version count, etc.)")
+    brain_list = brain_sub.add_parser("list", help="List pages (optionally by type)")
+    brain_list.add_argument("--type", "-t", default=None,
+                            help="Filter by page type")
+    brain_list.add_argument("--limit", "-n", type=int, default=20)
+    brain_list.add_argument("--tag", default=None, help="Filter by tag")
+    brain_show = brain_sub.add_parser("show", help="Show a single page by slug")
+    brain_show.add_argument("slug", help="Page slug (e.g. 'alice', 'skill-rate-limit')")
+    brain_history = brain_sub.add_parser("history", help="Show version history for a page")
+    brain_history.add_argument("slug", help="Page slug")
+    brain_tag = brain_sub.add_parser("tag", help="Add tags to a page")
+    brain_tag.add_argument("slug", help="Page slug")
+    brain_tag.add_argument("tags", nargs="+", help="Tags to add")
+    brain_sub.add_parser("audit", help="Show recent audit-log entries")
+
     args = parser.parse_args(argv)
     if args.cmd is None:
         from .banner import render_banner_console
@@ -614,6 +777,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.cmd == "doctor":
         return run_doctor(strict=args.strict, as_json=args.json)
+    if args.cmd == "brain":
+        return run_brain(args)
     if args.cmd in ("run", "demo"):
         if args.scenario == "coldchain":
             return run_coldchain()
