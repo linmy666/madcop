@@ -47,7 +47,7 @@ but they're no longer the only thing it does.
 | No sub-agents | Lead agent dispatches plan steps to `general-purpose` or `bash` sub-agents in parallel (capped 3), with context isolation and race-safe state machine. **v0.7.2**: `RoutingStepExecutor` lets you write `PlanStep(subagent="general-purpose")` and the main loop dispatches for you — no more 20-line router_fn hack. |
 | No config file | `madcop config init` writes a default `~/.madcop/config.yaml`; `madcop config show` resolves it |
 | Ad-hoc eval | EvalRunner v2: cross-run trend tracking, robustness probing, adversarial safety checks |
-| 214 tests | **467 tests** |
+| 214 tests | **556 tests** |
 
 ### Quick taste
 
@@ -251,7 +251,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-**467 tests, all passing** (Python 3.10–3.12, macOS / Linux). CI runs
+**556 tests, all passing** (Python 3.10–3.12, macOS / Linux). CI runs
 on every push via GitHub Actions. Coverage:
 
 - L1 event contract (UTC validation, event type / source consistency)

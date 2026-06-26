@@ -41,6 +41,13 @@ from .scratchpad import (
     ScratchpadState,
     StepRecord,
 )
+from .wal import (
+    WAL,
+    Replay,
+    StartRecord,
+    WALStepRecord,
+    FinishRecord,
+)
 from .context_compactor import (
     ContextCompactor,
     CompactionResult,
@@ -51,5 +58,6 @@ __all__ = [
     "ProviderRegistry", "ProviderSpec", "register_default_providers",
     "CostTracker", "RunCost", "CallCost",
     "Scratchpad", "ScratchpadState", "StepRecord",
+    "WAL", "Replay", "StartRecord", "WALStepRecord", "FinishRecord",
     "ContextCompactor", "CompactionResult",
 ]

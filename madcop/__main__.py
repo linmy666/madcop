@@ -547,6 +547,15 @@ def main(argv: list[str] | None = None) -> int:
     plan_p.add_argument("--subagents", action="store_true",
                         help="Enable sub-agent fan-out (v0.7.0)")
 
+    # v0.8.0: self-check CLI
+    doctor_p = sub.add_parser(
+        "doctor", help="v0.8.0: run a self-check (env, LLM, scratchpad, sub-agents)"
+    )
+    doctor_p.add_argument("--strict", action="store_true",
+                          help="Treat missing LLM env vars as a fail (not a warn)")
+    doctor_p.add_argument("--json", action="store_true",
+                          help="Output the report as JSON instead of pretty text")
+
     args = parser.parse_args(argv)
     if args.cmd is None:
         from .banner import render_banner_console
@@ -593,6 +602,8 @@ def main(argv: list[str] | None = None) -> int:
             use_llm=args.llm,
             use_subagents=args.subagents,
         )
+    if args.cmd == "doctor":
+        return run_doctor(strict=args.strict, as_json=args.json)
     if args.cmd in ("run", "demo"):
         if args.scenario == "coldchain":
             return run_coldchain()
@@ -615,9 +626,33 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
-# ---------------------------------------------------------------------------
+def run_doctor(strict: bool = False, as_json: bool = False) -> int:
+    """v0.8.0: self-check CLI — print the report, return 0/1."""
+    from .doctor import run_all_checks
+    from rich.console import Console
+
+    report = run_all_checks(strict=strict)
+    if as_json:
+        import json
+        print(json.dumps(
+            {"passed": report.passed,
+             "failures": report.failure_count,
+             "warnings": report.warn_count,
+             "checks": [{"name": c.name, "status": c.status,
+                         "detail": c.detail, "fix": c.fix}
+                        for c in report.checks]},
+            indent=2, ensure_ascii=False,
+        ))
+    else:
+        console = Console()
+        for line in report.to_text().splitlines():
+            console.print(line)
+    return 0 if report.passed else 1
+
+
+# --------------------------------------------------------------------------- #
 # v0.6.0+ plan-execute runner (CLI hook)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
 
 
 def run_agent_v6(goal: str, mode: str = "standard", use_llm: bool = False, use_subagents: bool = False) -> int:

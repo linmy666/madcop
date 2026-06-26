@@ -39,6 +39,12 @@ from .executor import (
     SubagentExecutor,
 )
 from .llm_runner import LLMRunner
+from .loader import load_subagent_specs
+from .async_executor import (
+    AsyncFnRunner,
+    AsyncRunner,
+    AsyncSubagentExecutor,
+)
 
 __all__ = [
     # spec
@@ -60,4 +66,10 @@ __all__ = [
     "MIN_CONCURRENT",
     "MAX_CONCURRENT",
     "DEFAULT_CONCURRENT",
+    # v0.8.0 async
+    "AsyncRunner",
+    "AsyncSubagentExecutor",
+    "AsyncFnRunner",
+    # v0.8.0 loader
+    "load_subagent_specs",
 ]
