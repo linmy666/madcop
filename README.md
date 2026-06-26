@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-1048%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-1078%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -978,6 +978,60 @@ Both middlewares compose with the existing chain (tracing, reflection,
 retrieval, loop detection).
 
 Total: **1048 tests, all passing**.
+
+## What's new in v1.8.0 (Channels + Config hot-reload)
+
+v1.8.0 turns madcop into a **product** — it can now run as a
+daemon and talk to users over Telegram and Discord, with config
+that reloads live.
+
+### Channels
+
+`ChannelBase` is the abstract interface. `TelegramChannel` and
+`DiscordChannel` ship in v1.8.
+
+```python
+import os
+from madcop.channels import TelegramChannel, DiscordChannel
+
+# Telegram: long-polling bot
+tg = TelegramChannel(token=os.environ["MADCOP_TELEGRAM_BOT_TOKEN"])
+
+# Discord: webhook + bot API
+dc = DiscordChannel(
+    bot_token=os.environ["MADCOP_DISCORD_BOT_TOKEN"],
+    webhook_port=8765,
+)
+
+def on_msg(channel, msg):
+    response = f"You said: {msg.text}"
+    channel.send_message(msg.user_id, response)
+
+tg.on_message(on_msg)
+tg.start()
+```
+
+Both channels:
+  - Run a background daemon thread (`start()` / `stop()`)
+  - Enforce per-user rate limiting
+  - Isolate handler errors (one bad message doesn't crash the loop)
+  - Support user/channel allowlists
+
+### Config hot-reload
+
+`ConfigWatcher` polls mtime and calls your callback on change.
+`HotConfig` wraps your config class for one-line setup.
+
+```python
+from madcop.config.hotreload import HotConfig
+
+hot = HotConfig("~/.madcop/config.yaml", MyConfig)
+hot.start()
+# hot.config is always up-to-date — edit the file, see the change
+# within 2 seconds. No restart required.
+```
+
+Total: **1078 tests, all passing**.
 
 ## What madcop actually does
 
