@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-1029%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-1048%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -930,6 +930,54 @@ All three tool families register as standard `Tool` subclasses — the
 agent's tool-use loop (v0.9.0) can call them alongside any other tool.
 
 Total: **1029 tests, all passing**.
+
+## What's new in v1.7.0 (Streaming + Summarization)
+
+v1.7.0 adds two middlewares that improve the agent's real-time
+observability and long-run context management.
+
+### Streaming middleware
+
+`StreamStepMiddleware` pushes live events to a callback at every hook
+point — no changes to the core plan-execute loop.
+
+```python
+from madcop.agent import StreamStepMiddleware, MiddlewareChain
+
+def on_stream(event_type: str, data: dict):
+    if event_type == "step_end":
+        print(f"  {data['step_name']}: {data['output'][:80]}")
+
+chain = MiddlewareChain([
+    StreamStepMiddleware(on_stream, fmt="text"),  # or "raw" for JSON
+])
+```
+
+Events: `plan_start`, `step_start`, `step_end`, `plan_end`.
+Text format outputs human-readable lines with ✓/✗ markers.
+
+### Summarization middleware
+
+`SummarizationMiddleware` monitors accumulated step outputs. When
+total tokens exceed a budget (default 30K), it asks the LLM to produce
+one-sentence summaries of the oldest steps, keeping the most recent N
+verbatim.
+
+```python
+from madcop.agent import SummarizationMiddleware
+
+chain = MiddlewareChain([
+    SummarizationMiddleware(client, max_tokens=30_000, keep_recent=3),
+])
+```
+
+Token estimation uses the same CJK/ASCII heuristic as the context
+compactor. Compaction events are logged for debugging.
+
+Both middlewares compose with the existing chain (tracing, reflection,
+retrieval, loop detection).
+
+Total: **1048 tests, all passing**.
 
 ## What madcop actually does
 
