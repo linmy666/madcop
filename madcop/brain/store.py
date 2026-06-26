@@ -408,11 +408,35 @@ class PageDB:
         """
         if not query or not query.strip():
             return []
-        # FTS5 query format. Strip quoting hazards; let porter/unicode61 tokenise.
+        # FTS5 query format. We join tokens with OR so that a
+        # natural-language query ("Handle rate limit on API") can
+        # match documents containing *any* of the words, not requiring
+        # all of them. Quoted phrases are preserved for exact-match.
+        # Stopwords are filtered to reduce false positives in OR mode.
         q = query.replace('"', ' ').strip()
         if not q:
             return []
-        fts_query = f'"{q}"'
+        _STOPWORDS = frozenset(
+            "a an the on in at to of for and or not is it its "
+            "be by do if so as my we us our you your this that "
+            "with from into onto over under up down out off "
+            "how why what when where who which whom whose "
+            "am are was were been being has have had did does "
+            "will would could should might can may must shall "
+            "i me him her them they he she his hers their "
+            "no yes more most some any all each every other "
+            "than then too very just only also here there "
+            "about above below between among through during "
+            "after before since until while because though "
+            "although unless whereas whether".split()
+        )
+        tokens = [t for t in q.split() if len(t) > 1 and t.lower() not in _STOPWORDS]
+        if not tokens:
+            return []
+        if len(tokens) == 1:
+            fts_query = f'"{tokens[0]}"'
+        else:
+            fts_query = " OR ".join(f'"{t}"' for t in tokens)
 
         sql = [
             "SELECT p.*, bm25(page_fts) AS score, ",
