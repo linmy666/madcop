@@ -9,6 +9,8 @@ from .registry import (
     ToolRegistry,
     ToolResult,
 )
+from .sandbox import BashTool, SandboxResult, SubprocessSandbox
+from .deferred import DeferredToolCatalog, ToolEntry
 
 __all__ = [
     "EchoTool",
@@ -18,4 +20,9 @@ __all__ = [
     "ToolCall",
     "ToolRegistry",
     "ToolResult",
+    "BashTool",
+    "SandboxResult",
+    "SubprocessSandbox",
+    "DeferredToolCatalog",
+    "ToolEntry",
 ]

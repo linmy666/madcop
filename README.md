@@ -47,7 +47,7 @@ but they're no longer the only thing it does.
 | No sub-agents | Lead agent dispatches plan steps to `general-purpose` or `bash` sub-agents in parallel (capped 3), with context isolation and race-safe state machine. **v0.7.2**: `RoutingStepExecutor` lets you write `PlanStep(subagent="general-purpose")` and the main loop dispatches for you — no more 20-line router_fn hack. |
 | No config file | `madcop config init` writes a default `~/.madcop/config.yaml`; `madcop config show` resolves it |
 | Ad-hoc eval | EvalRunner v2: cross-run trend tracking, robustness probing, adversarial safety checks |
-| 214 tests | **634 tests** |
+| 214 tests | **674 tests** |
 
 ### Quick taste
 
@@ -226,6 +226,72 @@ chain = MiddlewareChain([MyMiddleware()])
 For a full example (with `ctx.directives.append(Directive(kind='HALT', ...))`
 to stop the run), see `tests/agent/test_middleware.py`.
 
+## What's new in v1.1.0-rc.1 (Sandbox + Deferred loading)
+
+v1.1.0 adds two infrastructure pieces that are easy to bolt on after
+the middleware chain is in place:
+
+### SubprocessSandbox + BashTool
+
+A safe-ish way to run shell commands without a full Docker container.
+Defenses (cheap, no container needed):
+
+- **Timeout** — every command has a hard wall-clock cap
+- **Working-directory allowlist** — `cwd` must be inside `allowed_dirs`
+- **Environment filter** — only vars in `allowed_env_vars` pass through
+- **No shell=True by default** — argv is split via shlex
+- **Output size cap** — stdout/stderr truncated to `max_output_chars`
+
+```python
+from pathlib import Path
+from madcop.tools import SubprocessSandbox, BashTool
+
+sandbox = SubprocessSandbox(
+    allowed_dirs=[Path.home() / "projects"],
+    default_timeout_s=30,
+    max_output_chars=50_000,
+)
+tool = BashTool(sandbox)
+# The LLM can now call bash(command="ls -la", cwd="~/projects")
+```
+
+22 tests in `tests/tools/test_sandbox.py` cover happy path, timeout,
+truncation, env filter, cwd restriction, and the BashTool wrapper.
+
+For real production isolation, use a Docker container. The sandbox
+is enough for personal/local use.
+
+### DeferredToolCatalog
+
+When you have 100+ tools, putting them all in the LLM prompt at once
+bloats tokens and confuses the model. The `DeferredToolCatalog`
+solves this with a "load on demand" pattern:
+
+```python
+from madcop.tools import DeferredToolCatalog, EchoTool
+
+catalog = DeferredToolCatalog()
+catalog.register(EchoTool(), category="demo", description="echoes text")
+catalog.register(ReadFileTool(), category="filesystem", description="read a file")
+catalog.register(HttpGetTool(), category="network", description="fetch URL")
+
+# The LLM starts with an EMPTY registry. It asks the catalog
+# to search for what it needs:
+matches = catalog.search("read a file")
+# → [("filesystem", ["read_file"])]
+
+# Then load the category:
+catalog.load_category("filesystem")
+# Now catalog.registry contains ReadFileTool.
+```
+
+Search is cheap (string match on names + descriptions, no LLM call).
+Loaded categories are tracked so you can see what the agent
+actually used in a run.
+
+18 tests in `tests/tools/test_deferred.py` cover registration, search
+scoring, load semantics, and integration with the LLM tool-call flow.
+
 ## What madcop actually does
 
 Five end-to-end demos ship with the repo. Run them with `python -m madcop ...`
@@ -317,7 +383,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-**634 tests, all passing** (Python 3.10–3.12, macOS / Linux). CI runs
+**674 tests, all passing** (Python 3.10–3.12, macOS / Linux). CI runs
 on every push via GitHub Actions. Coverage:
 
 - L1 event contract (UTC validation, event type / source consistency)
