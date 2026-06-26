@@ -29,6 +29,15 @@ from .computer import ComputerUseTool, ActionLogEntry
 from .web import WebSearchTool, WebFetchTool
 from .files import ReadFileTool, WriteFileTool, EditFileTool
 from .cron import CronJob, CronStore, CronScheduler, parse_cron, should_run
+from .docker_sandbox import DockerSandbox, DockerConfig, DEFAULT_IMAGE as DEFAULT_DOCKER_IMAGE
+from .eventbus import (
+    Event,
+    EventBus,
+    WebhookSub,
+    EventCallback,
+    get_default_bus,
+    emit,
+)
 
 __all__ = [
     "EchoTool",
@@ -67,4 +76,14 @@ __all__ = [
     "CronScheduler",
     "parse_cron",
     "should_run",
+    # v1.9.0
+    "DockerSandbox",
+    "DockerConfig",
+    "DEFAULT_DOCKER_IMAGE",
+    "Event",
+    "EventBus",
+    "WebhookSub",
+    "EventCallback",
+    "get_default_bus",
+    "emit",
 ]

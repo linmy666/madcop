@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-1078%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-1104%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -1032,6 +1032,58 @@ hot.start()
 ```
 
 Total: **1078 tests, all passing**.
+
+## What's new in v1.9.0 (Docker sandbox + Event bus)
+
+v1.9.0 adds two infrastructure pieces that close the gap with
+DeerFlow and OpenClaw.
+
+### Docker sandbox
+
+`DockerSandbox` runs agent commands in isolated containers via the
+`docker` CLI. Falls back to `SubprocessSandbox` when Docker is
+unavailable (Qian: 稳定性 wins).
+
+```python
+from madcop.tools import DockerSandbox, DockerConfig
+
+sandbox = DockerSandbox(
+    config=DockerConfig(
+        image="alpine:3.19",
+        network_disabled=True,   # no internet
+        memory_limit="256m",
+        read_only_root=True,
+    ),
+)
+result = sandbox.run(["ls", "-la"], cwd="/work", timeout=30)
+print(result.stdout)
+```
+
+Each run uses a fresh container (`--rm`), no network by default,
+and configurable memory/CPU limits.
+
+### Event bus + webhooks
+
+A pub/sub event bus with sync, async, and webhook delivery. External
+services can subscribe to madcop events and get HTTP POSTs.
+
+```python
+from madcop.tools import EventBus, WebhookSub, emit
+
+bus = EventBus()
+bus.add_webhook(WebhookSub(
+    url="https://my-dashboard.example.com/madcop-events",
+    event_types={"plan_started", "plan_ended", "lesson_written"},
+))
+
+# Anywhere in madcop:
+emit("plan_started", {"goal": "diagnose OMS", "mode": "standard"})
+```
+
+History is kept in memory (default 1000 events). Subscribers can
+be sync (in emitter's thread) or async (in the thread pool).
+
+Total: **1104 tests, all passing**.
 
 ## What madcop actually does
 
