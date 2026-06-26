@@ -18,6 +18,14 @@ from .mcp import (
     MCPError,
     MCPTimeoutError,
 )
+from .permissions import (
+    ActionLevel,
+    PermissionManager,
+    Permission,
+    level_for_action,
+    level_for_computer_action,
+)
+from .computer import ComputerUseTool, ActionLogEntry
 
 __all__ = [
     "EchoTool",
@@ -37,4 +45,11 @@ __all__ = [
     "MCPError",
     "MCPTimeoutError",
     "MCP_PROTOCOL_VERSION",
+    # v1.5.0
+    "ActionLevel",
+    "ActionLogEntry",
+    "ComputerUseTool",
+    "Permission",
+    "PermissionManager",
+    "level_for_action",
 ]
