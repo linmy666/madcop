@@ -194,16 +194,16 @@ TRIGGERS_DDL = [
       VALUES (new.id, new.title, new.compiled_truth, new.timeline);
     END;
     """,
-    # Touch updated_at whenever a row changes.
-    """
-    CREATE TRIGGER IF NOT EXISTS pages_touch AFTER UPDATE ON pages
-    FOR EACH ROW WHEN new.updated_at = old.updated_at
-    BEGIN
-      UPDATE pages
-      SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-      WHERE id = new.id;
-    END;
-    """,
+    # NOTE: The pages_touch trigger was removed in v1.2.1.
+    #
+    # On SQLite 3.40.x the combination of FTS5 external-content
+    # triggers (pages_au) and an AFTER UPDATE trigger that itself
+    # UPDATEs the same row causes a "database disk image is malformed"
+    # error.  The trigger body fires pages_au a second time while the
+    # FTS5 shadow tables still have the first delta pending, corrupting
+    # the internal b-tree.
+    #
+    # Application code now sets updated_at explicitly on every UPDATE.
 ]
 
 

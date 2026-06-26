@@ -141,6 +141,52 @@ def test_save_bumps_version_on_content_change(db):
     assert len(db.history("alice")) == 2
 
 
+def test_save_double_save_long_body_with_unicode(db):
+    """Regression: SQLite 3.40.x pages_touch trigger bug.
+
+    Re-saving the same slug with a different *long* body (with
+    multi-byte UTF-8 like em-dash and section headers) used to trip
+    a "database disk image is malformed" error on the inner UPDATE
+    in the ``pages_touch`` AFTER UPDATE trigger. The fix is in
+    ``db.save()``: the outer UPDATE now explicitly sets
+    ``updated_at = strftime(...)`` so the trigger's WHEN-guard is
+    always false and the trigger body never runs.
+
+    This test exercises the exact pattern that crystallize_skills
+    hit: 600+ byte body with em-dash and backticks.
+    """
+    long_body_1 = (
+        "---\n"
+        "type: skill\n"
+        "topic: rate-limit\n"
+        "applies_to: all\n"
+        "outcome: success\n"
+        "---\n\n"
+        "## Cluster topic\n\n`rate-limit`\n\n"
+        "## Member reflections\n\n"
+        "- **rate-limit-retry** (success, `all`) \u2014 `reflection-rate-limit-retry`\n"
+        "- **rate-limit-burst** (success, `all`) \u2014 `reflection-rate-limit-burst`\n"
+    )
+    long_body_2 = long_body_1 + "- **rate-limit-headers** (success, `all`) \u2014 `reflection-rate-limit-headers`\n"
+    db.save(slug="skill-rate-limit", title="rate-limit", page_type="skill",
+            compiled_truth=long_body_1,
+            frontmatter={"topic": "rate-limit", "members": ["a", "b"]},
+            tags=["crystallized", "topic:rate-limit", "members:2"])
+    # 2nd save: same slug, longer body, larger members list. This
+    # is the exact pattern that triggered the bug.
+    db.save(slug="skill-rate-limit", title="rate-limit", page_type="skill",
+            compiled_truth=long_body_2,
+            frontmatter={"topic": "rate-limit", "members": ["a", "b", "c"]},
+            tags=["crystallized", "topic:rate-limit", "members:3"])
+    # 3rd save to be sure: same slug, different body.
+    db.save(slug="skill-rate-limit", title="rate-limit", page_type="skill",
+            compiled_truth=long_body_2 + "\nextra line",
+            frontmatter={"topic": "rate-limit", "members": ["a", "b", "c", "d"]},
+            tags=["crystallized", "topic:rate-limit", "members:4"])
+    versions = db.history("skill-rate-limit")
+    assert len(versions) == 3
+
+
 def test_get_returns_none_for_missing(db):
     assert db.get("ghost") is None
 

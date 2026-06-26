@@ -282,20 +282,6 @@ def crystallize_skills(
             current_member_slugs = sorted(m.slug for m in members)
             if existing_member_slugs == current_member_slugs:
                 continue
-            # Member set changed: delete the old crystallized page
-            # and re-insert from scratch. We can't just `db.save()` it
-            # because the brain's `pages_touch` trigger + an UPDATE
-            # of the same slug trips a "database disk image is
-            # malformed" error on SQLite 3.40.x — see the note in
-            # `crystallize_skills` for details. Delete + insert is
-            # safe and idempotent.
-            try:
-                db.delete(slug=slug, source=source)
-            except Exception as exc:
-                logger.warning(
-                    "crystallize_skills: failed to delete stale %s: %s",
-                    slug, exc,
-                )
         aggregate = aggregate_outcome(members)
         body = render_skill_body(prefix, members, aggregate=aggregate)
         member_topics = sorted(_topic_of(m) for m in members)

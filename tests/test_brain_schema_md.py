@@ -52,7 +52,7 @@ def test_init_db_creates_triggers():
         "SELECT name FROM sqlite_master WHERE type='trigger'"
     ).fetchall()
     names = {r[0] for r in rows}
-    assert {"pages_ai", "pages_ad", "pages_au", "pages_touch"}.issubset(names)
+    assert {"pages_ai", "pages_ad", "pages_au"}.issubset(names)
 
 
 def test_init_db_is_idempotent():

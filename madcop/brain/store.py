@@ -235,11 +235,15 @@ class PageDB:
                     (page_id,),
                 ).fetchone()
                 prev_hash = row["content_hash"] if row else ""
+                # Explicitly set updated_at — the pages_touch trigger
+                # was removed in v1.2.1 (see schema.py) so we manage
+                # timestamps in application code.
                 conn.execute(
                     """
                     UPDATE pages
                        SET type=?, title=?, compiled_truth=?, timeline=?,
-                           frontmatter=?
+                           frontmatter=?,
+                           updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
                      WHERE id=?
                     """,
                     (page_type, title, compiled_truth, timeline, fm_json, page_id),
