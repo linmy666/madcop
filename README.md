@@ -10,9 +10,10 @@
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
 
-|  |  |
-|--|--|
-| ![welcome banner](docs/img/banner.png) | ![v0.6.0 mascot](docs/img/characters/madcop-mascot-v0.6.0.png) |
+
+<p align="center">
+  <img src="docs/img/characters/madcop-mascot.png" alt="madcop mascot" width="320">
+</p>
 
 ## What is madcop?
 
@@ -61,6 +62,10 @@ pip install madcop
 madcop config init
 madcop plan "Why did OMS cancellations spike in the last 24 hours?" --llm --mode pro
 ```
+
+<p align="center">
+  <img src="docs/img/banner.png" alt="madcop CLI welcome" width="720">
+</p>
 
 Sub-agent fan-out (v0.7.0) — dispatch a plan to a sub-agent:
 
