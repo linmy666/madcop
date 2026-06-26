@@ -246,19 +246,19 @@ def test_search_finds_title_word(db):
 
 def test_search_filters_by_type(db):
     db.save(slug="alice", title="Alice", page_type="person",
-            compiled_truth="a")
+            compiled_truth="engineer")
     db.save(slug="proj", title="Project", page_type="project",
-            compiled_truth="a")
-    hits = db.search("a", types=["person"])
+            compiled_truth="engineer")
+    hits = db.search("engineer", types=["person"])
     assert all(h.page.type == "person" for h in hits)
 
 
 def test_search_filters_by_tag(db):
     db.save(slug="alice", title="Alice", page_type="person",
-            compiled_truth="a", tags=["team-a"])
+            compiled_truth="engineer", tags=["team-a"])
     db.save(slug="bob", title="Bob", page_type="person",
-            compiled_truth="a", tags=["team-b"])
-    hits = db.search("a", tags=["team-a"])
+            compiled_truth="engineer", tags=["team-b"])
+    hits = db.search("engineer", tags=["team-a"])
     assert {h.page.slug for h in hits} == {"alice"}
 
 
@@ -270,7 +270,7 @@ def test_search_empty_query_returns_empty(db):
 
 def test_search_invalid_types_returns_empty(db):
     db.save(slug="alice", title="Alice", page_type="person")
-    assert db.search("a", types=["bogus"]) == []
+    assert db.search("engineer", types=["bogus"]) == []
 
 
 def test_search_no_match_returns_empty(db):
