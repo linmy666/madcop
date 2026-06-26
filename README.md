@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-934%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-974%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -801,6 +801,79 @@ API key needed (uses a scripted client):
   FTS5 sync triggers caused intermittent corruption on SQLite 3.40.x.
 
 Total: **934 tests, all passing**.
+
+## What's new in v1.5.0 (Computer Use + Permission System)
+
+v1.5.0 adds a **ComputerUseTool** that lets the agent see and control
+the screen — with a four-tier **permission system** that keeps it safe.
+
+### Permission levels
+
+Every action is classified by danger level:
+
+| Level | Actions | Default | Example |
+|-------|---------|---------|---------|
+| **READ** | screenshot, get clipboard | **always allowed** | Agent captures the screen |
+| **NAVIGATE** | click, scroll, arrow keys, tab, escape | **ask once** | Agent clicks a button |
+| **INPUT** | type text, paste, hotkeys, enter, F-keys | **ask once** | Agent types into a field |
+| **DESTRUCTIVE** | kill app, close window, cmd+Q | **denied** | Agent must be explicitly granted |
+
+### Grant scopes
+
+When the agent requests permission, the user can choose:
+
+- **once** — allow this one time (ask again next time)
+- **session** — allow for the rest of this process
+- **always** — allow forever (persisted to `~/.madcop/permissions.json`)
+- **no** (deny) — refuse
+
+### Dynamic key classification
+
+The `key` action is dynamically classified based on the key pressed:
+
+```python
+key="enter"    → INPUT
+key="tab"      → NAVIGATE
+key="escape"   → NAVIGATE
+key="cmd+c"    → INPUT
+key="cmd+q"    → DESTRUCTIVE
+key="cmd+w"    → DESTRUCTIVE
+```
+
+### Safety rails
+
+- **Screen bounds checking** — clicks outside `[0, width) × [0, height)` are rejected
+- **Allowed-apps whitelist** — optionally restrict to specific apps
+- **Dry-run mode** — screenshot-only, no input injection
+- **Action log** — every action (executed or denied) is recorded for audit
+
+### Usage
+
+```python
+from madcop.tools import ComputerUseTool, PermissionManager, ToolRegistry
+
+perms = PermissionManager(store_path="~/.madcop/permissions.json")
+tool = ComputerUseTool(perms=perms, dry_run=False)
+
+registry = ToolRegistry()
+registry.register(tool)
+
+# The agent can now call: screenshot, click, type, key, scroll
+# Each call passes through the permission system first.
+result = tool(action="screenshot")
+# → {"status": "ok", "screenshot_path": "/tmp/madcop_screenshot_...", ...}
+```
+
+### Demo
+
+```bash
+python examples/v150_computer_use_demo.py
+```
+
+Shows the full permission lifecycle: screenshot → click → type → key →
+destructive denial → action log — all in dry-run mode.
+
+Total: **974 tests, all passing**.
 
 ## What madcop actually does
 
