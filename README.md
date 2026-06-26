@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-467%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-825%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -296,6 +296,131 @@ actually used in a run.
 
 18 tests in `tests/tools/test_deferred.py` cover registration, search
 scoring, load semantics, and integration with the LLM tool-call flow.
+
+## What's new in v1.2.0-rc.1 (MCP client + Tracing + Knowledge brain)
+
+v1.2.0 closes the local-first loop: the agent can now **talk to external
+tool servers** (MCP), **trace what it did** (JSONL), and **remember
+what it learned** (knowledge brain). Together they make a multi-session
+agent that can grow without re-explaining itself.
+
+### MCP client (stdio transport)
+
+A minimal Model-Context-Protocol client that lets the agent load
+tools from a local stdio MCP server. JSON-RPC 2.0 over the server's
+stdin/stdout, framed by newlines. The server is a separate process;
+madcop spawns it, sends `initialize`, lists tools, and invokes them.
+
+```python
+import asyncio
+from madcop.tools import MCPClient
+
+async def main():
+    client = MCPClient(command=["python3", "my_mcp_server.py"])
+    await client.start()
+    tools = await client.list_tools()
+    result = await client.call_tool("search_docs", {"query": "madcop"})
+    await client.stop()
+
+asyncio.run(main())
+```
+
+The client surfaces `mcp://server/...` as one tool namespace so
+callers can mix MCP tools with local tools without re-plumbing
+their tool-use loop. Stdio only in v1.2.0; HTTP/SSE is on the
+v1.3.0 roadmap.
+
+15 tests in `tests/tools/test_mcp.py` cover server lifecycle, tool
+listing, tool invocation, error propagation, and crash recovery
+(orphan process reaped on `stop()`).
+
+### Tracing (JSONL dump + viewer)
+
+Every plan-execute run can now write a JSONL trace to disk. Each
+event (`plan_start`, `step_start`, `step_end`, `llm_call`, `tool_call`,
+`directive`, `halt`, `error`, `plan_end`) is one line. The trace is
+the input to offline analysis (you can `jq` it, load it in pandas,
+or stream it to a viewer):
+
+```python
+from pathlib import Path
+from madcop.agent import Tracer, TraceMiddleware, MiddlewareChain, QianControlMiddleware
+
+chain = MiddlewareChain([
+    QianControlMiddleware(),
+    TraceMiddleware(Tracer(Path("~/.madcop/trace.jsonl").expanduser())),
+])
+```
+
+For a single-run summary, `print_summary(read_traces(path))` gives
+event counts, duration, and step order. The `Tracer` is thread-safe
+(lock + per-line flush) so a tool that fires from a sub-agent
+won't lose events.
+
+15 tests in `tests/agent/test_tracing.py` cover file creation,
+concurrent writes, lifecycle hooks, torn-line tolerance, and
+summary printing.
+
+### Knowledge brain (PageDB + Dream consolidation)
+
+The brain is madcop's long-term memory. It lives in a single SQLite
+file (8 tables, FTS5 indexed, versioned, audit-logged), survives
+across sessions, and is searchable by full-text query. Inspired by
+the Qian-control idea of "closed-loop feedback" — the agent's
+plans write back to its own memory, and next session can read
+what last session wrote.
+
+```python
+from madcop.brain import PageDB, parse, scan, BrainMiddleware
+from madcop.agent import MiddlewareChain, QianControlMiddleware
+
+db = PageDB("~/.madcop/brain.db")
+parsed = parse("---\ntitle: My lesson\ntype: skill\n---\n\n## Body\nX")
+db.save(slug=parsed.slug, title=parsed.title, page_type=parsed.type,
+        compiled_truth=parsed.compiled_truth, timeline=parsed.timeline,
+        frontmatter=parsed.frontmatter, tags=parsed.frontmatter.get("tags"))
+
+# Search later
+hits = db.search("lesson")
+
+# Pre-screen before saving (catches API keys, JWTs, PEM blocks, etc.)
+if scan(body):
+    db.review_queue  # queued for human review
+else:
+    db.save(...)
+```
+
+#### Prescreen (sensitive-content guard)
+
+18 regex patterns catch the secrets we never want in the brain:
+AWS keys (`AKIA...`), OpenAI / Anthropic / GitHub / PyPI / HuggingFace
+tokens, JWTs, PEM private keys, database connection strings, internal
+IPs, Chinese mobile numbers, and `.env`-style `KEY=VALUE` pairs.
+Hits route to `review_queue` instead of `pages`, so the brain stays
+clean even when the agent is careless.
+
+#### Dream consolidation
+
+A `Dream` pass periodically:
+- dedups pages by content hash (older is the survivor; tags and
+  timeline entries are merged in; links are repointed)
+- prunes orphan links (defensive; CASCADE handles most)
+- marks pages stale by `last_accessed_at`
+
+It's a report, not a silent mutator. `dry_run=True` shows what
+*would* have happened; real runs write one `ingest_log` row with
+`operation='consolidate'` and a JSON detail blob for audit.
+
+#### BrainMiddleware
+
+`BrainMiddleware` plugs into the v1.0 middleware chain. The
+agent opts in to memory by writing `learn:`-prefixed notes in a
+step outcome — the middleware parses them, slugifies, and writes
+to the brain. Auto-record with intent, not by accident.
+
+122 tests across `tests/test_brain_*.py` cover schema, markdown
+parser, FTS5 search, links, tags, timeline, prescreen, dedup,
+orphan pruning, staleness, and middleware round-trips.
 
 ## What madcop actually does
 

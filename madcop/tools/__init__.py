@@ -11,6 +11,13 @@ from .registry import (
 )
 from .sandbox import BashTool, SandboxResult, SubprocessSandbox
 from .deferred import DeferredToolCatalog, ToolEntry
+from .mcp import (
+    MCP_PROTOCOL_VERSION,
+    MCPClient,
+    MCPClientManager,
+    MCPError,
+    MCPTimeoutError,
+)
 
 __all__ = [
     "EchoTool",
@@ -25,4 +32,9 @@ __all__ = [
     "SubprocessSandbox",
     "DeferredToolCatalog",
     "ToolEntry",
+    "MCPClient",
+    "MCPClientManager",
+    "MCPError",
+    "MCPTimeoutError",
+    "MCP_PROTOCOL_VERSION",
 ]
