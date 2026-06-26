@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-878%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-901%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -513,6 +513,112 @@ HOOK_PLAN_END    →  ReflectionMiddleware
 (empty / malformed / wrong shape), 1-3 cap, slug normalisation,
 silent failure paths, tag filter, recency rerank, custom inject key,
 and the OpenAI response-shape normaliser (dict / object / string).
+
+## What's new in v1.3.0-rc.2 (Outcome-aware L3)
+
+v1.3.0-rc.1 stored every reflection as if it were equally true. In
+practice some reflections paid off and some did not. v1.3.0-rc.2
+adds an **outcome-aware re-rank layer** that closes the second half
+of the loop: each reflection is stamped with `outcome: success |
+failure` at write time, and the retrieval layer re-ranks lessons
+accordingly before the planner sees them.
+
+The change is **additive and rc.1-clean**: the rc.1 retrieval
+contract is bit-identical for any brain whose pages lack the new
+`outcome:` field. Old skills / old tests / old chains keep working.
+
+### What changes at write time (L1 side)
+
+`ReflectionMiddleware` now stamps every skill page it writes with:
+
+```yaml
+---
+type: skill
+applies_to: ...
+topic: ...
+outcome: success|failure  # ← new
+---
+```
+
+The outcome is computed from the plan-success flag (`success` if
+every step succeeded, `failure` otherwise). The page also gets a
+new tag `outcome:success` or `outcome:failure` for tag-filter
+retrieval. The runtime exposes the same value on
+`ctx.shared["reflection_outcome"]` so the chain can read it.
+
+### What changes at read time (L3 side)
+
+A new sibling module `madcop.agent.outcome` ships three things:
+
+```python
+from madcop.agent.outcome import (
+    OutcomePrioritizer,           # the L3 middleware
+    boost_outcome,                # pure additive rerank
+    format_lessons_with_outcome,  # prompt-block helper
+)
+```
+
+`boost_outcome` is a pure function: it re-orders a list of
+`PriorLesson` (or `SearchHit`) by a small additive delta
+
+    score += outcome_weight * outcome_numeric * recency_factor
+
+where `outcome_numeric ∈ {-1, 0, +1}` for `failure / unknown /
+success`, and `recency_factor` decays with a 60-day half-life so
+old `failure` tags fade as the world changes.
+
+`OutcomePrioritizer` is a middleware that hooks at `HOOK_PLAN_START`,
+runs after `RetrievalMiddleware`, and rewrites
+`ctx.shared["prior_lessons"]` in place. It also has a
+`strategy="filter"` mode that drops `outcome:failure` lessons
+entirely (use sparingly).
+
+```python
+chain = MiddlewareChain([
+    RetrievalMiddleware(db=db),                    # L2 — writes prior_lessons
+    OutcomePrioritizer(outcome_weight=0.4),        # L3 — re-ranks them
+    QianControlMiddleware(),
+])
+```
+
+For the prompt side, `format_lessons_with_outcome(lessons)` renders
+a `## Prior lessons (outcome-tagged)` block that annotates each
+line with `✓` / `✗` / `?` so the planner can weight them visually
+without a second LLM call.
+
+### Why this matters
+
+The Q&A loop in rc.1 was *open* on the outcome side: every
+reflection looked equally credible. The planner could not tell
+"this recipe worked 3 times" from "this recipe never worked".
+After a few real runs, the brain accumulates outcome signals,
+and `OutcomePrioritizer` brings them to the surface — `success`
+lessons float, `failure` lessons sink. No fine-tuning, no
+embedding service, no schema migration.
+
+### Defaults
+
+- `outcome_weight = 0.4` — small enough to preserve strong FTS5
+  hits, large enough to reorder ties.
+- `outcome_half_life_days = 60.0` — a 60-day-old `failure` tag
+  carries ~50% weight; a 1-year-old tag carries ~3%.
+- `strategy = "boost"` (default) — additive rerank, never
+  destructive. `"filter"` is opt-in and discards `failure` lessons.
+
+### Tests
+
+23 new tests in `tests/agent/test_outcome.py` cover: pure
+`boost_outcome` (empty / zero-weight / promotions / stability /
+recency decay / SearchHit shape), `OutcomePrioritizer` (hook
+gating, in-place reorder, custom inject key, filter strategy,
+silent failure), `format_lessons_with_outcome` (empty, glyph
+annotation, body truncation), `lesson_outcome_score` (label
+mapping), `ReflectionMiddleware` outcome stamp on success
+*and* failure paths, full end-to-end
+`Retrieval → OutcomePrioritizer`, **backward-compat**: rc.1
+brains with no outcome stamps still produce the same order.
+
+Total: **901 tests, all passing**.
 
 ## What madcop actually does
 

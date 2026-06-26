@@ -76,17 +76,26 @@ DEFAULT_MIN_BM25 = 0.0
 
 @dataclass
 class PriorLesson:
-    """A brain hit ready for injection into a planner prompt."""
+    """A brain hit ready for injection into a planner prompt.
+
+    v1.3.0-rc.2 adds ``outcome`` (``success`` / ``failure`` / ``unknown``)
+    so the planner can weight lessons by whether the prior run that
+    wrote this lesson actually succeeded. ``None`` until
+    ``RetrievalMiddleware`` populates it.
+    """
     topic: str
     applies_to: str
     body: str  # the compiled_truth or a short summary
     score: float
     last_accessed_at: str | None
     slug: str
+    outcome: str | None = None  # 'success' / 'failure' / 'unknown' / None
 
     def to_prompt_line(self) -> str:
         """Format as one line: '- topic (applies_to): body'."""
-        body = self.body if len(self.body) <= 200 else self.body[:197] + "..."
+        body = self.body
+        if len(body) > 200:
+            body = body[:197] + "..."
         applies = self.applies_to or "all"
         return f"- **{self.topic}** (`{applies}`): {body}"
 
@@ -142,13 +151,25 @@ def rerank(
 
 
 def _hit_to_lesson(hit: SearchHit) -> PriorLesson:
-    """Turn a SearchHit into a PriorLesson."""
+    """Turn a SearchHit into a PriorLesson.
+
+    v1.3.0-rc.2: also carries the ``outcome:`` frontmatter value so
+    the planner (or the L3 ``OutcomePrioritizer``) can bias on it.
+    """
     fm = hit.page.frontmatter or {}
     topic = (
         str(fm.get("topic") or "")
         or str(fm.get("title") or hit.page.title)
         or hit.page.slug
     )
+    # Default to 'unknown' when frontmatter doesn't carry it (rc.1
+    # pages and pages written before v1.3.0-rc.2).
+    raw_outcome = fm.get("outcome")
+    outcome = None
+    if isinstance(raw_outcome, str):
+        s = raw_outcome.strip().lower()
+        if s in ("success", "failure", "unknown"):
+            outcome = s
     return PriorLesson(
         topic=topic,
         applies_to=str(fm.get("applies_to") or "all"),
@@ -156,6 +177,7 @@ def _hit_to_lesson(hit: SearchHit) -> PriorLesson:
         score=float(hit.score),
         last_accessed_at=hit.page.last_accessed_at,
         slug=hit.page.slug,
+        outcome=outcome,
     )
 
 

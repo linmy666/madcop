@@ -67,6 +67,17 @@ from .reflection import (
     parse_reflections,
     summarize_plan,
 )
+from .outcome import (
+    DEFAULT_OUTCOME_HALF_LIFE_DAYS,
+    DEFAULT_OUTCOME_WEIGHT,
+    OUTCOME_FAILURE,
+    OUTCOME_SUCCESS,
+    OUTCOME_UNKNOWN,
+    OutcomePrioritizer,
+    boost_outcome,
+    format_lessons_with_outcome,
+    lesson_outcome_score,
+)
 
 __all__ = [
     # v0.5.0
@@ -100,4 +111,9 @@ __all__ = [
     "rerank",
     "DEFAULT_REFLECTION_PROMPT", "ReflectionMiddleware", "parse_reflections",
     "summarize_plan",
+    # v1.3.0-rc.2 outcome-aware rerank (L3)
+    "DEFAULT_OUTCOME_WEIGHT", "DEFAULT_OUTCOME_HALF_LIFE_DAYS",
+    "OUTCOME_SUCCESS", "OUTCOME_FAILURE", "OUTCOME_UNKNOWN",
+    "OutcomePrioritizer", "boost_outcome", "format_lessons_with_outcome",
+    "lesson_outcome_score",
 ]

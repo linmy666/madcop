@@ -273,33 +273,39 @@ def _slug_for_reflection(topic: str) -> str:
     return f"reflection-{base}"[:128]
 
 
-def _reflection_to_markdown(refl: dict[str, str]) -> str:
+def _reflection_to_markdown(refl: dict[str, str], *, outcome: str = "unknown") -> str:
     """Render a reflection dict as a markdown body the brain can store.
 
     Frontmatter `type: skill` makes it retrievable as a lesson at next
-    plan-start. `applies_to` becomes a tag.
+    plan-start. `applies_to`, `topic`, and (v1.3.0-rc.2) `outcome` become
+    tags. `outcome` is one of `success` / `failure` / `unknown`,
+    computed from the plan-success flag at write time. v1.3.0-rc.2's
+    `OutcomePrioritizer` uses it to bias reranking on future runs.
     """
     topic = refl["topic"]
     lesson = refl["lesson"]
     applies = refl["applies_to"]
     evidence = refl.get("evidence_step", "")
+    outcome = outcome if outcome in ("success", "failure") else "unknown"
     fm = (
         "---\n"
         "type: skill\n"
         f"applies_to: {applies}\n"
         f"topic: {topic}\n"
+        f"outcome: {outcome}\n"
         "---\n\n"
     )
     body = (
         f"## Lesson\n\n{lesson}\n\n"
         f"## Applies to\n\n`{applies}`\n\n"
+        f"## Outcome\n\n`{outcome}`\n\n"
     )
     if evidence:
         body += f"## Evidence step\n\n`{evidence}`\n\n"
     body += (
         "## Why this matters\n\n"
         "Auto-extracted by `ReflectionMiddleware` from a prior plan-execute run. "
-        "Retrievable by `db.search(topic)` or by `applies_to` tag.\n"
+        "Retrievable by `db.search(topic)`, by `applies_to` tag, or by `outcome:` tag.\n"
     )
     return fm + body
 
@@ -367,9 +373,11 @@ class ReflectionMiddleware:
             return
         # Write each reflection as a skill page in the brain.
         written = 0
+        plan_success = bool(summary.get("plan_success"))
+        outcome = "success" if plan_success else "failure"
         for refl in reflections[: self._max_reflections]:
             try:
-                self._write_reflection(refl)
+                self._write_reflection(refl, outcome=outcome)
                 written += 1
             except Exception as exc:
                 logger.warning(
@@ -379,6 +387,7 @@ class ReflectionMiddleware:
                 )
         ctx.shared["reflections_written"] = written
         ctx.shared["reflection_topics"] = [r["topic"] for r in reflections[: self._max_reflections]]
+        ctx.shared["reflection_outcome"] = outcome
 
     # ---- LLM call -------------------------------------------------------
 
@@ -409,14 +418,16 @@ class ReflectionMiddleware:
 
     # ---- brain write ----------------------------------------------------
 
-    def _write_reflection(self, refl: dict[str, str]) -> None:
+    def _write_reflection(self, refl: dict[str, str], *, outcome: str = "unknown") -> None:
         slug = _slug_for_reflection(refl["topic"])
-        body = _reflection_to_markdown(refl)
+        body = _reflection_to_markdown(refl, outcome=outcome)
+        outcome = outcome if outcome in ("success", "failure") else "unknown"
         # type=skill (validated in PageDB.save)
         tags = [
             "reflection",
             f"applies:{refl['applies_to']}",
             f"topic:{refl['topic']}",
+            f"outcome:{outcome}",
         ]
         # Note: PageDB.save's `tags=` is REPLACE; we want a real
         # append-friendly approach. For now we use a fresh slug per
@@ -431,6 +442,7 @@ class ReflectionMiddleware:
                 "type": "skill",
                 "applies_to": refl["applies_to"],
                 "topic": refl["topic"],
+                "outcome": outcome,
             },
             tags=tags,
             source=self._source,
