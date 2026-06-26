@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from .middleware import (
+from madcop.agent.middleware import (
     HOOK_PLAN_END,
     HOOK_PLAN_START,
     HOOK_REPLAN,
