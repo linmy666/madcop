@@ -38,7 +38,7 @@ Quick start:
 """
 from __future__ import annotations
 
-__version__ = "1.3.0rc3"
+__version__ = "1.3.0"
 
 # Public API surface. Listed here as a stability signal — anything
 # not in this list may change between minor versions.

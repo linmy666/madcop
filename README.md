@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-928%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-934%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -713,6 +713,37 @@ and a **full L1 → L4 chain** (3 `ReflectionMiddleware` writes
 followed by one `crystallize_skills` call).
 
 Total: **928 tests, all passing**.
+
+## What's new in v1.3.0 (stable release)
+
+v1.3.0 promotes the three release candidates to stable. The four
+loop-engineering layers — L1 reflection, L2 retrieval, L3 outcome-aware
+retrieval, L4 skill crystallization — are now verified end-to-end.
+
+### New in the stable release
+
+1. **FTS5 search now uses OR semantics + stopword filtering** —
+   previously a natural-language query ("Handle rate limit on API")
+   was wrapped in quotes as an exact phrase, which almost never
+   matched. Now tokens are OR-joined with English stopwords filtered,
+   so retrieval actually surfaces relevant lessons.
+
+2. **Removed the `pages_touch` trigger** — this trigger's recursive
+   interaction with the FTS5 external-content sync trigger
+   (`pages_au`) caused intermittent "database disk image is malformed"
+   corruption on SQLite 3.40.x. All `updated_at` management is now
+   in application code.
+
+3. **5 end-to-end integration tests** (`tests/agent/test_loop_e2e.py`)
+   proving the full closed-loop circuit:
+   - Run 1 fails → reflection writes lesson → Run 2 retrieves it
+   - 3 reflections on same topic → crystallize → 1 skill page
+   - Middleware chain composition (retrieval + reflection fire at
+     correct hooks)
+   - Topic isolation (rate-limit lesson does NOT surface for cooking)
+   - Empty brain → retrieval is a no-op, not a crash
+
+Total: **934 tests, all passing**.
 
 ## What madcop actually does
 
