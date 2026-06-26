@@ -745,6 +745,63 @@ retrieval, L4 skill crystallization — are now verified end-to-end.
 
 Total: **934 tests, all passing**.
 
+## What's new in v1.4.0 (Brain CLI + Growing Agent demo)
+
+v1.4.0 makes the knowledge brain **interactive** from the command
+line, and ships a demo that proves the four-layer loop is real.
+
+### Brain CLI
+
+```bash
+# Full-text search the brain
+madcop brain search "rate limit API" --type skill
+
+# Show stats
+madcop brain stats
+
+# List all pages
+madcop brain list --type person
+
+# Show a single page (with frontmatter + compiled_truth)
+madcop brain show alice
+
+# Version history
+madcop brain history skill-rate-limit
+
+# Add tags
+madcop brain tag alice engineer friend
+
+# Recent audit log
+madcop brain audit
+```
+
+### Growing Agent demo
+
+```bash
+python examples/v140_growing_agent_demo.py
+```
+
+This demo shows the full closed-loop circuit in action — no real LLM
+API key needed (uses a scripted client):
+
+1. **Run 1** fails at calling a rate-limited API → ReflectionMiddleware
+   writes a lesson to the brain.
+2. **Run 2** retries a similar task → RetrievalMiddleware finds the
+   lesson and injects it into the planner context.
+3. **Runs 3+4** produce two more related lessons (same topic-prefix).
+4. **Crystallize** clusters the 3 lessons into one named skill page.
+5. **Final retrieval** surfaces the crystallized skill.
+
+### Improvements
+
+- **FTS5 search** now uses OR semantics + English stopword filtering,
+  so natural-language queries actually match (previously was exact
+  phrase match that almost never hit).
+- **Removed `pages_touch` trigger** — its recursive interaction with
+  FTS5 sync triggers caused intermittent corruption on SQLite 3.40.x.
+
+Total: **934 tests, all passing**.
+
 ## What madcop actually does
 
 Five end-to-end demos ship with the repo. Run them with `python -m madcop ...`
