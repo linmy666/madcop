@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-974%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-1029%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -874,6 +874,62 @@ Shows the full permission lifecycle: screenshot → click → type → key →
 destructive denial → action log — all in dry-run mode.
 
 Total: **974 tests, all passing**.
+
+## What's new in v1.6.0 (Web + Files + Cron)
+
+v1.6.0 makes the agent **useful** — it can now search the web, read
+and write files, and schedule recurring tasks.
+
+### Web tools
+
+```python
+from madcop.tools import WebSearchTool, WebFetchTool, ToolRegistry
+
+registry = ToolRegistry()
+registry.register(WebSearchTool())   # search via DuckDuckGo (no API key)
+registry.register(WebFetchTool())    # fetch URL → cleaned text
+
+# The agent can now:
+# web_search("latest OMS cancel rate benchmarks") → [{title, url, snippet}, ...]
+# web_fetch("https://example.com/article") → {content, chars, truncated}
+```
+
+### File tools
+
+```python
+from madcop.tools import ReadFileTool, WriteFileTool, EditFileTool
+
+registry.register(ReadFileTool(allowed_dirs=["~/projects"]))
+registry.register(WriteFileTool(allowed_dirs=["~/projects"]))
+registry.register(EditFileTool(allowed_dirs=["~/projects"]))
+
+# The agent can now read, write, and edit files — scoped to allowed dirs.
+# read_file("report.md") → {content, lines, total_lines}
+# write_file("output.txt", "generated content") → {bytes, status}
+# edit_file("config.yaml", old_text="debug: true", new_text="debug: false") → {status}
+```
+
+### Cron scheduler
+
+```python
+from madcop.tools import CronJob, CronStore, CronScheduler
+
+store = CronStore("~/.madcop/cron.db")
+store.add(CronJob(
+    id="daily-report",
+    goal="Generate today's supply chain diagnostic report",
+    schedule="0 9 * * *",   # every day at 9 AM
+    mode="standard",
+))
+
+scheduler = CronScheduler(store, on_fire=run_plan_execute)
+scheduler.start()  # background daemon thread
+```
+
+All three tool families register as standard `Tool` subclasses — the
+agent's tool-use loop (v0.9.0) can call them alongside any other tool.
+
+Total: **1029 tests, all passing**.
 
 ## What madcop actually does
 

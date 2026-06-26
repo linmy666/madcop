@@ -26,6 +26,9 @@ from .permissions import (
     level_for_computer_action,
 )
 from .computer import ComputerUseTool, ActionLogEntry
+from .web import WebSearchTool, WebFetchTool
+from .files import ReadFileTool, WriteFileTool, EditFileTool
+from .cron import CronJob, CronStore, CronScheduler, parse_cron, should_run
 
 __all__ = [
     "EchoTool",
@@ -52,4 +55,16 @@ __all__ = [
     "Permission",
     "PermissionManager",
     "level_for_action",
+    "level_for_computer_action",
+    # v1.6.0
+    "WebSearchTool",
+    "WebFetchTool",
+    "ReadFileTool",
+    "WriteFileTool",
+    "EditFileTool",
+    "CronJob",
+    "CronStore",
+    "CronScheduler",
+    "parse_cron",
+    "should_run",
 ]
