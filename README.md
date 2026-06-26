@@ -47,7 +47,7 @@ but they're no longer the only thing it does.
 | No sub-agents | Lead agent dispatches plan steps to `general-purpose` or `bash` sub-agents in parallel (capped 3), with context isolation and race-safe state machine. **v0.7.2**: `RoutingStepExecutor` lets you write `PlanStep(subagent="general-purpose")` and the main loop dispatches for you — no more 20-line router_fn hack. |
 | No config file | `madcop config init` writes a default `~/.madcop/config.yaml`; `madcop config show` resolves it |
 | Ad-hoc eval | EvalRunner v2: cross-run trend tracking, robustness probing, adversarial safety checks |
-| 214 tests | **564 tests** |
+| 214 tests | **634 tests** |
 
 ### Quick taste
 
@@ -160,6 +160,72 @@ Three things we deliberately did not do:
 - We did not build an async executor. The thread pool is enough
   for personal use; if you need asyncio, open an issue.
 
+## What's new in v1.0.0-rc.1 (Middleware chain)
+
+madcop v1.0.0 introduces a **middleware chain** — an extension point
+in the plan-execute loop where you can observe, mutate, and halt runs
+at five well-defined hook points:
+
+  - `plan_start`  — before the planner runs
+  - `step_start`  — before each step's executor runs
+  - `step_end`    — after each step's executor returns
+  - `replan`      — before a new plan is installed
+  - `plan_end`    — after the final outcome is collected
+
+This is inspired by the middleware pattern in production agent
+frameworks, but kept small and local-first. The whole chain
+infrastructure is ~150 lines; the four included middlewares
+are ~600 lines total.
+
+### v1.0.0 design philosophy: Qian control theory
+
+Each middleware must respect three invariants from Qian Xuesen's
+engineering cybernetics:
+
+  1. **Closed-loop feedback** — every step outcome is observed
+     before the next one starts
+  2. **Early correction** — if a step is clearly broken (3 identical
+     retries, rate-limit error repeated 3x), the middleware halts
+     before the next iteration burns more compute
+  3. **Controllability** — progress is logged every N steps, so
+     the user can see what the loop is doing without tracing
+
+The included `QianControlMiddleware` enforces these. Every other
+middleware should follow the same pattern.
+
+### v1.0.0 included middlewares
+
+| Middleware | Purpose | LOC | Tests |
+|-----------|---------|-----|-------|
+| `MiddlewareChain` | The chain itself — composition + ordering + halt semantics | ~80 | — |
+| `LoggingMiddleware` | Logs every hook at DEBUG | ~15 | — |
+| `QianControlMiddleware` | The invariants: closed-loop, early correction, progress | ~80 | 11 |
+| `TodoMiddleware` | Lets the LLM write its own plan via a `todo_update` tool call | ~180 | 17 |
+| `LoopDetectionMiddleware` | Halts after N identical consecutive steps (or K-of-M duplicate outputs) | ~110 | 11 |
+| `ClarificationMiddleware` | Asks the user when the goal is too short / too vague | ~150 | 20 |
+
+Total v1.0.0-rc.1: 5 new modules, 70 new tests, 634 total.
+
+### Writing your own middleware
+
+A middleware is just a callable with a name:
+
+```python
+from madcop.agent.middleware import HookContext, HOOK_STEP_END, MiddlewareChain
+
+class MyMiddleware:
+    name = "my_mw"
+
+    def __call__(self, ctx: HookContext) -> None:
+        if ctx.hook == HOOK_STEP_END and ctx.outcome and not ctx.outcome.success:
+            print(f"step {ctx.step.name} failed: {ctx.outcome.error}")
+
+chain = MiddlewareChain([MyMiddleware()])
+```
+
+For a full example (with `ctx.directives.append(Directive(kind='HALT', ...))`
+to stop the run), see `tests/agent/test_middleware.py`.
+
 ## What madcop actually does
 
 Five end-to-end demos ship with the repo. Run them with `python -m madcop ...`
@@ -251,7 +317,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-**564 tests, all passing** (Python 3.10–3.12, macOS / Linux). CI runs
+**634 tests, all passing** (Python 3.10–3.12, macOS / Linux). CI runs
 on every push via GitHub Actions. Coverage:
 
 - L1 event contract (UTC validation, event type / source consistency)
