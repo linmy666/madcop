@@ -50,6 +50,23 @@ from .clarification import ClarificationMiddleware, ClarificationRequested
 from .loop_detection import LoopDetectionMiddleware
 from .todo_middleware import TodoMiddleware, TodoPlan, TodoStep
 from .tracing import Tracer, TraceMiddleware, print_summary, read_traces
+from .retrieval import (
+    DEFAULT_TOP_K,
+    DEFAULT_RECENCY_WEIGHT,
+    DEFAULT_RECENCY_HALF_LIFE_DAYS,
+    DEFAULT_MIN_BM25,
+    PriorLesson,
+    RetrievalMiddleware,
+    filter_hits,
+    format_lessons,
+    rerank,
+)
+from .reflection import (
+    DEFAULT_REFLECTION_PROMPT,
+    ReflectionMiddleware,
+    parse_reflections,
+    summarize_plan,
+)
 
 __all__ = [
     # v0.5.0
@@ -76,4 +93,11 @@ __all__ = [
     "TodoMiddleware", "TodoPlan", "TodoStep",
     # v1.2.0 tracing
     "Tracer", "TraceMiddleware", "read_traces", "print_summary",
+    # v1.3.0 loop engineering (L2 retrieval + L1 reflection)
+    "DEFAULT_TOP_K", "DEFAULT_RECENCY_WEIGHT",
+    "DEFAULT_RECENCY_HALF_LIFE_DAYS", "DEFAULT_MIN_BM25",
+    "PriorLesson", "RetrievalMiddleware", "filter_hits", "format_lessons",
+    "rerank",
+    "DEFAULT_REFLECTION_PROMPT", "ReflectionMiddleware", "parse_reflections",
+    "summarize_plan",
 ]

@@ -5,7 +5,7 @@
 > Runs in one process. Stores everything locally. No cloud, no team,
 > no platform.
 
-[![Tests](https://img.shields.io/badge/tests-825%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-878%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 [![PyPI](https://img.shields.io/badge/pypi/v/madcop)](https://pypi.org/project/madcop/)
@@ -421,6 +421,98 @@ to the brain. Auto-record with intent, not by accident.
 122 tests across `tests/test_brain_*.py` cover schema, markdown
 parser, FTS5 search, links, tags, timeline, prescreen, dedup,
 orphan pruning, staleness, and middleware round-trips.
+
+## What's new in v1.3.0-rc.1 (Loop engineering: L1 reflection + L2 retrieval)
+
+v1.3.0 closes the agent's **closed-loop feedback** circuit. After
+every plan-execute run, the agent writes 1-3 *actionable* lessons to
+the brain. Before the next run, the agent retrieves up to 3 lessons
+relevant to the new goal and injects them into the planner's context.
+Failure today becomes a retrievable, durable lesson tomorrow — no
+fine-tuning, no vector DB, no extra infra.
+
+The two pieces are independent middlewares, designed to compose with
+the rest of the v1.0 chain:
+
+### L1 — ReflectionMiddleware (HOOK_PLAN_END)
+
+At the end of every plan-execute run, this middleware calls the LLM
+once with a structured prompt and asks for 1-3 JSON reflections. Each
+reflection becomes a `type=skill` page in the brain with `applies_to`
+and `topic` tags.
+
+```python
+from madcop.llm import OpenAICompatClient
+from madcop.brain import PageDB
+from madcop.agent import ReflectionMiddleware, MiddlewareChain, QianControlMiddleware
+
+chain = MiddlewareChain([
+    QianControlMiddleware(),
+    ReflectionMiddleware(
+        client=OpenAICompatClient(),
+        db=PageDB("~/.madcop/brain.db"),
+        max_reflections=3,
+    ),
+])
+```
+
+The prompt is the one we shipped with v1.3.0-rc.1; you can override
+it via the `prompt_template=` argument. The middleware is silent
+on LLM failure — the agent never crashes because reflection failed.
+You can read the parsed reflections off `ctx.shared["reflections_written"]`
+and `ctx.shared["reflection_topics"]`.
+
+### L2 — RetrievalMiddleware (HOOK_PLAN_START)
+
+Before the planner runs, this middleware queries the brain with the
+goal as the FTS5 query, re-ranks hits with a small recency bonus, and
+publishes the top-3 to `ctx.shared["prior_lessons"]`. The planner
+can then inject them under a `## Prior lessons` heading.
+
+```python
+from madcop.agent import RetrievalMiddleware, format_lessons
+
+chain = MiddlewareChain([
+    RetrievalMiddleware(
+        db=PageDB("~/.madcop/brain.db"),
+        top_k=3,
+        recency_weight=0.3,
+    ),
+    QianControlMiddleware(),
+])
+
+# After plan_start, get the lessons:
+lessons = ctx.shared["prior_lessons"]
+prompt_block = format_lessons(lessons)
+# → "## Prior lessons\n\n- **rate-limit-retry** (`tool:http`): Retry once on 5xx..."
+```
+
+Tunables:
+- `top_k` (default 3) — how many lessons to inject
+- `recency_weight` (default 0.3) — bonus for recent pages (0 disables)
+- `half_life_days` (default 30) — recency half-life
+- `min_bm25` (default 0.0) — drop weak FTS5 hits
+- `tags=[...]` — restrict to specific `applies_to:` tags
+
+### The closed loop
+
+```
+HOOK_PLAN_START  →  RetrievalMiddleware
+                     inject ctx.shared["prior_lessons"]
+                          ↓
+                  (planner reads & uses them)
+                          ↓
+HOOK_PLAN_END    →  ReflectionMiddleware
+                     1 LLM call → 1-3 skill pages in brain
+                          ↓
+                  next run:  RetrievalMiddleware finds them ↑
+```
+
+53 tests across `tests/agent/test_reflection.py` and
+`tests/agent/test_retrieval.py` cover: JSON parsing edge cases
+(empty / malformed / wrong shape), 1-3 cap, slug normalisation,
+silent failure paths, tag filter, recency rerank, custom inject key,
+and the OpenAI response-shape normaliser (dict / object / string).
 
 ## What madcop actually does
 
