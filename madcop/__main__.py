@@ -510,6 +510,14 @@ def main(argv: list[str] | None = None) -> int:
     replay_p = sub.add_parser("replay", help="v0.4: replay a historical event file and quantify ROI")
     replay_p.add_argument("file", help="JSON file of events (see README for format)")
 
+    # resume <scratchpad-path> — v0.9.0: resume a crashed run from its WAL
+    resume_p = sub.add_parser(
+        "resume", help="v0.9.0: resume a crashed plan-execute run from its WAL"
+    )
+    resume_p.add_argument("scratchpad", help="Path to the scratchpad JSON file")
+    resume_p.add_argument("--goal", default=None,
+                          help="Goal to re-run (default: read from the scratchpad)")
+
     # decisions <file.jsonl> — v0.4 operator-fatigue diff
     dec_p = sub.add_parser("decisions", help="v0.4: diff a decision log and surface operator-fatigue signals")
     dec_p.add_argument("file", help="JSONL file of decision records (timestamp, rule_id, ...)")
@@ -563,6 +571,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "replay":
         return run_replay(args.file)
+    if args.cmd == "resume":
+        return run_resume(args.scratchpad, goal=args.goal)
     if args.cmd == "decisions":
         return run_decisions(args.file)
     if args.cmd == "skill":
@@ -648,6 +658,90 @@ def run_doctor(strict: bool = False, as_json: bool = False) -> int:
         for line in report.to_text().splitlines():
             console.print(line)
     return 0 if report.passed else 1
+
+
+def run_resume(scratchpad_path: str, goal: str | None = None) -> int:
+    """v0.9.0: diagnose a crashed run from its WAL.
+
+    The user passes the path to a scratchpad JSON file. We:
+    1. Load the scratchpad to find the goal + plan (if any).
+    2. Load the matching WAL (path + '.wal.jsonl') and replay it.
+    3. Print a report: which steps are done, which are pending,
+       whether the run finished cleanly, how to recover.
+
+    We do NOT auto re-execute the plan — that's a user decision
+    because the executor may be stateful (LLM client, sub-agents,
+    etc.) and we don't want to surprise the user with network calls
+    from a "diagnose" command.
+    """
+    from pathlib import Path as _P
+    from rich.console import Console
+    from rich.table import Table
+
+    from .strategy import Scratchpad, WAL
+
+    console = Console()
+    sp_path = _P(scratchpad_path).expanduser()
+    if not sp_path.exists():
+        console.print(f"[red]scratchpad not found:[/] {sp_path}")
+        return 2
+
+    try:
+        sp = Scratchpad.load(sp_path)
+    except (OSError, KeyError, ValueError) as e:
+        console.print(f"[red]failed to load scratchpad:[/] {e}")
+        return 2
+
+    wal_path = sp_path.with_name(sp_path.name + ".wal.jsonl")
+    if not wal_path.exists():
+        console.print(f"[yellow]no WAL found at {wal_path}[/]")
+        console.print("  this run wasn't using crash recovery — nothing to resume.")
+        return 0
+
+    wal = WAL(wal_path)
+    replay = wal.replay()
+
+    console.print(f"[bold]madcop resume[/] — {sp_path}\n")
+    console.print(f"  run_id:        {sp.run_id}")
+    console.print(f"  goal:          {sp.state.goal}")
+    console.print(f"  started_at:    {sp.state.started_at}")
+    console.print(f"  updated_at:    {sp.state.updated_at}")
+    console.print(f"  WAL path:      {wal_path}")
+    console.print(f"  WAL started:   {'yes' if replay.started else 'no'}")
+    console.print(f"  WAL finished:  {'yes' if replay.is_finished else 'no'}")
+    console.print(f"  steps done:    {replay.step_count} of {len(sp.state.steps)}")
+
+    if replay.is_finished:
+        console.print("\n[green]✓ this run finished cleanly — no resume needed[/]")
+        return 0
+
+    if not replay.started:
+        console.print("\n[yellow]WAL has no start record — cannot resume.[/]")
+        return 1
+
+    # Show the step table
+    tbl = Table(title="step status", show_lines=False)
+    tbl.add_column("step", style="bold")
+    tbl.add_column("status")
+    tbl.add_column("error", style="red")
+    for s in sp.state.steps:
+        status = s.status or "?"
+        err = s.error or ""
+        tbl.add_row(s.step_name, status, err[:50])
+    console.print(tbl)
+
+    pending = replay.next_pending([s.step_name for s in sp.state.steps])
+    if not pending:
+        console.print("\n[green]all steps done in WAL — the run just didn't write a finish record.[/]")
+        console.print("  to mark it finished, run: `madcop doctor` to verify nothing else is broken.")
+        return 0
+
+    console.print(f"\n[bold yellow]{len(pending)} step(s) pending:[/] {pending}")
+    console.print("\nto re-run from here, the simplest path is to:")
+    console.print("  1. delete the WAL: rm " + str(wal_path))
+    console.print("  2. re-run with the same goal: `madcop run plan`")
+    console.print("  3. (or, programmatically: build a PlanExecuteLoop(wal=wal) — the loop will skip done steps)")
+    return 0
 
 
 # --------------------------------------------------------------------------- #

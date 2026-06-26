@@ -195,15 +195,50 @@ class PlanExecuteLoop:
         planner: Planner,
         executor: StepExecutor,
         config: PlanExecuteConfig | None = None,
+        *,
+        wal: Any = None,  # madcop.strategy.wal.WAL — kept as Any to avoid import cycle
     ):
         self._planner = planner
         self._executor = executor
         self._config = config or PlanExecuteConfig()
+        # Optional crash-recovery WAL. If set:
+        # - On run start, skip steps already marked completed in the WAL.
+        # - After each step, append a step record.
+        # - On run end, append a finish record.
+        # See madcop.strategy.wal for the on-disk format.
+        self._wal = wal
 
     def run(self, goal: str) -> PlanExecuteResult:
         mode = self._config.mode
         t0 = time.time()
         plan = self._planner.plan(goal, mode)
+
+        # WAL resume: if a WAL was provided and it has a plan matching
+        # the new one, skip the steps already marked complete.
+        resume_from = 0
+        all_done = False
+        if self._wal is not None:
+            replay = self._wal.replay()
+            plan_names = [getattr(s, "name", s.get("name") if isinstance(s, dict) else str(s))
+                          for s in plan.steps]
+            if replay.started and not replay.is_finished:
+                # Resuming: skip already-done steps.
+                pending = replay.next_pending(plan_names)
+                if pending:
+                    resume_from = plan_names.index(pending[0])
+                else:
+                    # All plan steps already done; short-circuit.
+                    all_done = True
+            # Always append a fresh start record. Replay will treat
+            # the latest start as the "current attempt" — completed
+            # steps that already had records stay in the WAL.
+            self._wal.append_start(
+                run_id=str(getattr(self, "_run_id", "loop")),
+                goal=goal,
+                plan=[{"name": n, "action": getattr(s, "action", "")}
+                      for n, s in zip(plan_names, plan.steps)],
+            )
+
         outcomes: list[StepOutcome] = []
         replan_count = 0
         max_replans = (
@@ -218,7 +253,10 @@ class PlanExecuteLoop:
         # can chain (s2 fails → replan → s2 fails again → replan again).
         current_plan = plan
         outcomes: list[StepOutcome] = []
-        step_index = 0  # tracks progress through current_plan
+        step_index = resume_from  # tracks progress through current_plan
+        if all_done:
+            # WAL said every step is done; skip the executor entirely.
+            step_index = len(current_plan.steps)
         while step_index < len(current_plan.steps):
             step = current_plan.steps[step_index]
             outcome = self._executor.execute(step, context)
@@ -226,6 +264,13 @@ class PlanExecuteLoop:
             context["results"][step.name] = outcome.output
             if self._config.on_step_complete is not None:
                 self._config.on_step_complete(outcome, context)
+            # WAL: record this step as committed
+            if self._wal is not None:
+                self._wal.append_step(
+                    step.name,
+                    "ok" if outcome.success else "failed",
+                    error=outcome.error,
+                )
             step_index += 1
 
             # Replan on failure (only if more replans allowed AND there are
@@ -247,6 +292,10 @@ class PlanExecuteLoop:
         total_cost = sum(o.cost_usd for o in outcomes)
         total_duration = time.time() - t0
         success = all(o.success for o in outcomes) and len(outcomes) > 0
+
+        # WAL: mark the run finished
+        if self._wal is not None:
+            self._wal.append_finish(final_output or "(no output)")
 
         return PlanExecuteResult(
             goal=goal,
