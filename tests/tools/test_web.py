@@ -28,14 +28,10 @@ class TestWebSearchTool:
     def test_search_returns_results_with_mock(self):
         """Mock the HTTP call and verify parsing."""
         mock_html = """
-        <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fpage">
-          Example Page
-        </a>
-        <a class="result__snippet" href="#">This is a snippet about example content.</a>
-        <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Ftest.org">
-          Test Site
-        </a>
-        <a class="result__snippet" href="#">Another snippet here.</a>
+        <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fpage" class='result-link'>Example Page</a>
+        <td class='result-snippet'>This is a snippet about example content.</td>
+        <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Ftest.org" class='result-link'>Test Site</a>
+        <td class='result-snippet'>Another snippet here.</td>
         """
         tool = WebSearchTool()
         with patch("madcop.tools.web._http_get", return_value=mock_html.encode()):
@@ -57,7 +53,7 @@ class TestWebSearchTool:
         """Build 10 fake results, ask for 3."""
         blocks = ""
         for i in range(10):
-            blocks += f'''<a class="result__a" href="//duckduckgo.com/l/?uddg=https://r{i}.com">Result {i}</a><a class="result__snippet">Snippet {i}</a>'''
+            blocks += f'''<a rel="nofollow" href="//duckduckgo.com/l/?uddg=https://r{i}.com" class='result-link'>Result {i}</a><td class='result-snippet'>Snippet {i}</td>'''
         tool = WebSearchTool()
         with patch("madcop.tools.web._http_get", return_value=blocks.encode()):
             results = tool(query="test", max_results=3)

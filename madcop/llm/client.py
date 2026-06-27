@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 
 # --------------------------------------------------------------------------- #
@@ -33,6 +33,7 @@ class Message:
     content: str
     name: str | None = None
     tool_call_id: str | None = None     # for role="tool"
+    tool_calls: tuple[ToolCall, ...] = ()  # for role="assistant" with tool use
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"role": self.role, "content": self.content}
@@ -40,6 +41,19 @@ class Message:
             d["name"] = self.name
         if self.tool_call_id is not None:
             d["tool_call_id"] = self.tool_call_id
+        if self.tool_calls:
+            import json as _json
+            d["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": _json.dumps(tc.arguments, ensure_ascii=False),
+                    },
+                }
+                for tc in self.tool_calls
+            ]
         return d
 
 
@@ -49,6 +63,22 @@ class ToolCall:
     id: str
     name: str
     arguments: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class StreamChunk:
+    """One piece from a streaming chat completion.
+
+    `text` is the incremental content for this chunk (may be empty
+    when the chunk carries only a finish_reason or tool_calls).
+    `reasoning` carries reasoning-model thinking tokens (e.g. MiniMax
+    M2.7, DeepSeek R1) — optional, separate from final answer text.
+    `finish_reason` is non-None on the final chunk.
+    """
+    text: str = ""
+    reasoning: str = ""
+    finish_reason: str | None = None
+    model: str = ""
 
 
 @dataclass(frozen=True)
@@ -79,6 +109,30 @@ class ChatClient(ABC):
     ) -> ChatResponse:
         """Send messages, return one ChatResponse."""
         raise NotImplementedError
+
+    def stream(
+        self,
+        messages: Iterable[Message],
+        *,
+        model: str | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Iterator[StreamChunk]:
+        """Stream chat completion as a sequence of StreamChunks.
+
+        Default implementation just calls `chat()` and yields one
+        chunk with the full content + finish_reason='stop'. Subclasses
+        that support real streaming override this.
+        """
+        resp = self.chat(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=tools,
+        )
+        yield StreamChunk(text=resp.content, finish_reason="stop", model=resp.model or "")
 
 
 # --------------------------------------------------------------------------- #
@@ -127,6 +181,39 @@ class MockClient(ChatClient):
             usage={"prompt_tokens": 0, "completion_tokens": len(response)},
             model=model or self.model,
         )
+
+    def stream(
+        self,
+        messages: Iterable[Message],
+        *,
+        model: str | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Iterator[StreamChunk]:
+        """Word-level streaming of the scripted/default response.
+
+        Records the call (telemetry), pulls the canned response the
+        same way `chat()` does, then yields one chunk per token plus
+        a final stop chunk. Useful for SSE end-to-end tests without
+        hitting the network.
+        """
+        msgs = list(messages)
+        self.calls.append(msgs)
+        if self._script_idx < len(self.script):
+            response = self.script[self._script_idx]
+            self._script_idx += 1
+        else:
+            response = self.default_response
+        mod = model or self.model
+        # Split on whitespace, keep the whitespace as part of the token
+        # so downstream rendering matches the original spacing.
+        tokens = response.split(" ")
+        for i, tok in enumerate(tokens):
+            # Re-insert leading space for everything except the first token.
+            text = tok if i == 0 else " " + tok
+            yield StreamChunk(text=text, model=mod)
+        yield StreamChunk(finish_reason="stop", model=mod)
 
 
 # --------------------------------------------------------------------------- #
@@ -212,11 +299,72 @@ class OpenAICompatClient(ChatClient):
                 "total_tokens": resp.usage.total_tokens,
             }
         return ChatResponse(
-            content=msg.content or "",
+            content=msg.content or getattr(msg, "reasoning_content", "") or "",
             tool_calls=tuple(tool_calls),
             usage=usage,
             model=resp.model,
         )
+
+    def stream(
+        self,
+        messages: Iterable[Message],
+        *,
+        model: str | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Iterator[StreamChunk]:
+        """Real token-level streaming via the OpenAI SDK.
+
+        Uses `client.chat.completions.create(stream=True)`, which
+        returns an iterator of ChatCompletionChunk. Each chunk's
+        `delta.content` is yielded as one StreamChunk. The final
+        chunk carries `finish_reason='stop'` from the last delta
+        (or 'length' if the model hit max_tokens).
+        """
+        payload = [m.to_dict() for m in messages]
+        kwargs: dict[str, Any] = {
+            "model": model or self.model,
+            "messages": payload,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        if tools:
+            kwargs["tools"] = tools
+        # `stream=True` makes the SDK return a Stream iterator rather
+        # than a single ChatCompletion.
+        stream_obj = self._client.chat.completions.create(**kwargs)
+        emitted_model = ""
+        saw_finish = False
+        for event in stream_obj:
+            # Newer SDK (>=1.50) yields ChatCompletionChunk objects.
+            # Each has .choices[0].delta with .content and a model id.
+            try:
+                choice = event.choices[0]
+                delta = choice.delta
+            except (AttributeError, IndexError):
+                # Malformed chunk — skip it but keep streaming.
+                continue
+            text = getattr(delta, "content", None) or ""
+            reasoning = getattr(delta, "reasoning_content", None) or ""
+            finish = getattr(choice, "finish_reason", None)
+            model_name = getattr(event, "model", "") or ""
+            if model_name and not emitted_model:
+                emitted_model = model_name
+            if finish:
+                saw_finish = True
+            yield StreamChunk(
+                text=text,
+                reasoning=reasoning,
+                finish_reason=finish,
+                model=emitted_model,
+            )
+        # Defensive: if the provider forgot to emit a finish_reason,
+        # synthesise one so downstream consumers can finalise.
+        if not saw_finish:  # pragma: no cover
+            yield StreamChunk(finish_reason="stop", model=emitted_model)
 
 
 # --------------------------------------------------------------------------- #

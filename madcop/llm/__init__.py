@@ -6,6 +6,7 @@ from .client import (
     Message,
     MockClient,
     OpenAICompatClient,
+    StreamChunk,
     ToolCall,
     make_client,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "Message",
     "MockClient",
     "OpenAICompatClient",
+    "StreamChunk",
     "ToolCall",
     "make_client",
     "prompts",

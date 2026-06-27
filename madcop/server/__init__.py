@@ -1,0 +1,1 @@
+"""madcop.server package."""

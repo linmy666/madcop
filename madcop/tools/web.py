@@ -37,6 +37,13 @@ _MAX_CONTENT_BYTES = 200_000  # 200 KB cap — LLMs don't need more
 _MAX_RESULTS = 8
 _USER_AGENT = "madcop/1.6 (+https://github.com/linmy666/madcop)"
 
+# macOS Python sometimes lacks certs; create a fallback SSL context.
+import ssl as _ssl
+_ssl_ctx = _ssl.create_default_context()
+_ssl_ctx_fallback = _ssl.create_default_context()
+_ssl_ctx_fallback.check_hostname = False
+_ssl_ctx_fallback.verify_mode = _ssl.CERT_NONE
+
 
 def _http_get(url: str, timeout: int = _DEFAULT_TIMEOUT) -> bytes:
     """Fetch a URL with a timeout. Returns raw bytes."""
@@ -44,8 +51,8 @@ def _http_get(url: str, timeout: int = _DEFAULT_TIMEOUT) -> bytes:
         url,
         headers={"User-Agent": _USER_AGENT},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        # Read at most _MAX_CONTENT_BYTES to prevent memory bombs
+    # Use unverified SSL context — macOS Python often lacks certs.
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx_fallback) as resp:
         return resp.read(_MAX_CONTENT_BYTES)
 
 
@@ -101,39 +108,48 @@ class WebSearchTool(Tool):
             return [{"error": f"{type(e).__name__}: {e}"}]
 
     def _search_ddg(self, query: str, max_results: int) -> list[dict[str, str]]:
-        """Search DuckDuckGo HTML endpoint."""
-        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+        """Search DuckDuckGo lite endpoint (more bot-resistant than html)."""
+        url = f"https://lite.duckduckgo.com/lite/?q={urllib.parse.quote(query)}"
         html = _http_get(url).decode("utf-8", errors="replace")
 
-        results = []
-        # Parse result blocks from DuckDuckGo HTML
-        # Results are in <a class="result__a" href="...">title</a>
-        # Snippets in <a class="result__snippet" ...>text</a>
-        result_blocks = re.findall(
-            r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>'
-            r'.*?<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
-            html, re.DOTALL,
+        results: list[dict[str, str]] = []
+
+        # lite.duckduckgo.com structure:
+        #   <a rel="nofollow" href="//duckduckgo.com/l/?uddg=<url>" class='result-link'>Title</a>
+        #   <td class='result-snippet'>Snippet text</td>
+        #
+        # Parse title+url pairs first, then match with snippets.
+        link_pattern = re.compile(
+            r"<a[^>]*href=\"([^\"]+)\"[^>]*class='result-link'[^>]*>(.*?)</a>",
+            re.DOTALL,
+        )
+        snippet_pattern = re.compile(
+            r"<td[^>]*class='result-snippet'[^>]*>(.*?)</td>",
+            re.DOTALL,
         )
 
-        for raw_url, raw_title, raw_snippet in result_blocks[:max_results]:
-            # DuckDuckGo wraps URLs in a redirect
-            # //duckduckgo.com/l/?uddg=<encoded_url>
+        links = link_pattern.findall(html)
+        snippets = snippet_pattern.findall(html)
+
+        for i, (raw_url, raw_title) in enumerate(links[:max_results]):
+            # DuckDuckGo wraps URLs in a redirect: //duckduckgo.com/l/?uddg=<encoded>
+            clean_url = raw_url
             if "uddg=" in raw_url:
                 parsed = urllib.parse.parse_qs(
                     urllib.parse.urlparse(raw_url).query
                 )
                 clean_url = parsed.get("uddg", [raw_url])[0]
-            else:
-                clean_url = raw_url
 
             title = re.sub(r"<[^>]+>", "", raw_title).strip()
-            snippet = re.sub(r"<[^>]+>", "", raw_snippet).strip()
+            snippet = ""
+            if i < len(snippets):
+                snippet = re.sub(r"<[^>]+>", "", snippets[i]).strip()
 
             if title and clean_url:
                 results.append({
                     "title": title,
                     "url": clean_url,
-                    "snippet": snippet[:200],
+                    "snippet": snippet,
                 })
 
         return results
