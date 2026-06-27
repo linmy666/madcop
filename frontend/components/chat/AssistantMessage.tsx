@@ -1,98 +1,138 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Copy } from 'lucide-react';
-import type { Message } from '@/types/chat';
+import { Check, Copy, RotateCcw, Loader2 } from 'lucide-react';
+import { useLocale } from '@/hooks/useTranslation';
+import { BRAND } from '@/lib/i18n';
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import ThinkingBlock from './ThinkingBlock';
 import ToolCallGroup from './ToolCallGroup';
 
-import { useLocale } from '@/hooks/useTranslation';
-import { BRAND } from '@/lib/i18n';
-
 const MASCOT_URL = 'http://127.0.0.1:8765/static/mascot.png';
 
-interface AssistantMessageProps {
-  message: Message;
-  /** true while this message is actively receiving streamed tokens. */
+interface Props {
+  message: any; // intentionally loose; we read several fields
   isStreaming?: boolean;
 }
 
-export default function AssistantMessage({
-  message,
-  isStreaming = false,
-}: AssistantMessageProps) {
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+export default function AssistantMessage({ message, isStreaming = false }: Props) {
+  const [locale] = useLocale();
+  const brand = BRAND[locale];
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(message.content).then(() => {
+    navigator.clipboard.writeText(message.content || '').then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
   };
 
-  const hasContent = message.content && message.content.length > 0;
-  const hasReasoning = message.reasoning && message.reasoning.length > 0;
-  const hasToolCalls = message.toolCalls && message.toolCalls.length > 0;
+  const hasReasoning = !!(message.reasoning && message.reasoning.length > 0);
+  const hasToolCalls = !!(message.toolCalls && message.toolCalls.length > 0);
 
   return (
-    <div className="group flex gap-2.5 animate-slide-up">
-      {/* Avatar */}
-      <div className="flex-shrink-0 pt-0.5">
+    <div
+      data-message-shell="assistant"
+      className="group animate-slide-up"
+    >
+      {/* Header bar — like cc-haha */}
+      <div className="flex items-center gap-2 mb-1">
         <img
           src={MASCOT_URL}
-          alt={BRAND[useLocale()[0]].name}
-          width={28}
-          height={28}
-          className="h-7 w-7 rounded-full border border-[var(--border)] object-cover"
+          alt={brand.name}
+          width={18}
+          height={18}
+          className="rounded-full object-cover"
         />
+        <span
+          className="text-[12px] font-semibold"
+          style={{ color: 'var(--text)' }}
+        >
+          {brand.name}
+        </span>
+        {message.model && (
+          <span
+            className="text-[10px] mono"
+            style={{ color: 'var(--text-faint)' }}
+          >
+            {message.model}
+          </span>
+        )}
+        {message.timestamp && (
+          <span
+            className="text-[10px] ml-1"
+            style={{ color: 'var(--text-faint)' }}
+          >
+            {formatTime(message.timestamp)}
+          </span>
+        )}
+
+        {/* Action bar — only on hover */}
+        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {isStreaming ? (
+            <span
+              className="flex items-center gap-1 text-[10px] animate-pulse"
+              style={{ color: 'var(--accent)' }}
+            >
+              <Loader2 size={11} className="animate-spin" />
+              generating
+            </span>
+          ) : (
+            <>
+              <button
+                onClick={() => {/* TODO: rewind */}}
+                className="h-6 w-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--surface-hover)]"
+                style={{ color: 'var(--text-3)' }}
+                title="Rewind to here"
+              >
+                <RotateCcw size={11} />
+              </button>
+              <button
+                onClick={handleCopy}
+                className="h-6 w-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--surface-hover)]"
+                style={{ color: copied ? 'var(--ok)' : 'var(--text-3)' }}
+                title="Copy"
+              >
+                {copied ? <Check size={11} /> : <Copy size={11} />}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Content column */}
-      <div className="min-w-0 flex-1">
-        {/* Name label */}
-        <div className="mb-0.5 flex items-center gap-1.5">
-          <span className="text-[13px] font-semibold text-[var(--text)]">{BRAND[useLocale()[0]].name}</span>
-          {message.model && (
-            <span className="text-[11px] text-[var(--text-3)]">{message.model}</span>
-          )}
-          {/* Copy button on hover */}
-          <button
-            onClick={handleCopy}
-            className="ml-auto flex items-center gap-1 rounded p-1 text-[var(--text-3)] opacity-0 transition-all hover:bg-[var(--surface-2)] hover:text-[var(--text)] group-hover:opacity-100"
-            title="复制"
-          >
-            {copied ? <Check size={13} /> : <Copy size={13} />}
-          </button>
-        </div>
-
-        {/* Reasoning / thinking */}
+      {/* Body — left-aligned with subtle indent */}
+      <div
+        className="pl-7 text-[14px]"
+        style={{ color: 'var(--text)' }}
+      >
+        {/* Thinking */}
         {hasReasoning && (
           <ThinkingBlock
-            content={message.reasoning!}
-            isStreaming={isStreaming && !hasContent}
+            content={message.reasoning}
+            isStreaming={isStreaming && !message.content}
           />
         )}
 
         {/* Tool calls */}
-        {hasToolCalls && <ToolCallGroup calls={message.toolCalls!} />}
+        {hasToolCalls && (
+          <ToolCallGroup toolCalls={message.toolCalls} />
+        )}
 
         {/* Main content */}
-        {hasContent ? (
-          <div className="text-[var(--text)]">
+        {message.content ? (
+          <div className="md-content">
             <MarkdownRenderer content={message.content} />
           </div>
-        ) : isStreaming && !hasReasoning && !hasToolCalls ? (
-          /* Shimmer "思考中" placeholder */
-          <div className="py-1">
-            <span className="shimmer-text text-[14px] font-medium">思考中</span>
+        ) : isStreaming ? (
+          <div className="text-[12px] shimmer-text italic">
+            thinking
           </div>
         ) : null}
-
-        {/* Streaming cursor */}
-        {isStreaming && hasContent && (
-          <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-[var(--accent)] align-middle" />
-        )}
       </div>
     </div>
   );

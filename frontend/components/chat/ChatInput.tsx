@@ -9,38 +9,30 @@ import {
   type KeyboardEvent,
 } from 'react';
 import {
-  ArrowUp,
   Paperclip,
   Mic,
   Square,
+  ArrowUp,
   Thermometer,
   X,
+  Image as ImageIcon,
 } from 'lucide-react';
 import type { Attachment } from '@/types/chat';
 import { useT } from '@/hooks/useTranslation';
+import { shouldSubmitOnEnter } from '@/lib/sendShortcut';
 import { SlashCommandMenu } from './SlashCommandMenu';
 
-const MASCOT_URL = 'http://127.0.0.1:8765/static/mascot.png';
-
 interface ChatInputProps {
-  onSend: (
-    text: string,
-    attachments: Attachment[],
-    temperature: number,
-  ) => void;
+  onSend: (text: string, attachments: Attachment[], temperature: number) => void;
   disabled?: boolean;
-  /** Controlled streaming state — when true, show Stop button. */
   isStreaming?: boolean;
   onStop?: () => void;
-  /** Optional initial temperature (defaults to 0.7). */
   initialTemperature?: number;
 }
 
-// ── Strength (temperature) presets ─────────────────────────────
 const STRENGTH_VALUES = [0.3, 0.7, 1.0] as const;
 const STRENGTH_KEYS = ['composer.strength.low', 'composer.strength.medium', 'composer.strength.high'] as const;
 
-// ── File → base64 Attachment helper ────────────────────────────
 function readFileAsAttachment(file: File): Promise<Attachment> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -58,7 +50,6 @@ function readFileAsAttachment(file: File): Promise<Attachment> {
   });
 }
 
-// ── Component ──────────────────────────────────────────────────
 export default function ChatInput({
   onSend,
   disabled = false,
@@ -66,265 +57,291 @@ export default function ChatInput({
   onStop,
   initialTemperature = 0.7,
 }: ChatInputProps) {
+  const t = useT();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [temperature, setTemperature] = useState(initialTemperature);
   const [isRecording, setIsRecording] = useState(false);
-  const t = useT();
+  const [showSlash, setShowSlash] = useState(false);
+  const [sendBehavior] = useState<'enter' | 'modifierEnter'>('enter');
+  const [dragOver, setDragOver] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  // ── Auto-grow textarea ──────────────────────────────────────
+  // Auto-grow textarea
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, [text]);
 
-  // ── File handling ───────────────────────────────────────────
-  const handleFileSelect = useCallback(async () => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const handleFileChange = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || []);
-      const newAtts = await Promise.all(files.map(readFileAsAttachment));
-      setAttachments((prev) => [...prev, ...newAtts].slice(0, 8));
-      // Reset input so selecting the same file again still fires change
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    },
-    [],
-  );
-
-  const removeAttachment = (idx: number) => {
-    setAttachments((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  // ── Send ────────────────────────────────────────────────────
-  const canSend = text.trim().length > 0 && !disabled;
+  const canSend = !disabled && (text.trim().length > 0 || attachments.length > 0);
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
-    onSend(text.trim(), attachments, temperature);
+    onSend(text, attachments, temperature);
     setText('');
     setAttachments([]);
+    setShowSlash(false);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    }, 0);
   }, [canSend, text, attachments, temperature, onSend]);
 
-  // ── Key handler: Enter=send, Shift+Enter=newline, "/" = slash menu ──
-  const [showSlash, setShowSlash] = useState(false);
-
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Slash command menu
-    if (showSlash) return; // let SlashCommandMenu handle keys
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (showSlash) return;
+    if (e.nativeEvent.isComposing) return;
+    if (shouldSubmitOnEnter(e.nativeEvent, sendBehavior)) {
       e.preventDefault();
       handleSend();
     }
   };
 
-  // ── Voice (Web Speech API) ──────────────────────────────────
-  const toggleVoice = useCallback(() => {
-    if (isRecording) {
-      recognitionRef.current?.stop();
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const newAttachments = await Promise.all(
+      files.map((f) => readFileAsAttachment(f)),
+    );
+    setAttachments((prev) => [...prev, ...newAttachments].slice(0, 8));
+    e.target.value = '';
+  };
+
+  // Drag & drop files onto the composer
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+  const handleDragLeave = () => setDragOver(false);
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    const newAttachments = await Promise.all(
+      files.map((f) => readFileAsAttachment(f)),
+    );
+    setAttachments((prev) => [...prev, ...newAttachments].slice(0, 8));
+  };
+
+  const toggleVoice = () => {
+    const btn = document.getElementById('voiceBtn');
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
       setIsRecording(false);
       return;
     }
-
-    const SR =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+    const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      alert('当前浏览器不支持语音输入');
+      alert(t('composer.voiceUnsupported'));
       return;
     }
-
     const recognition = new SR();
     recognition.lang = 'zh-CN';
     recognition.continuous = false;
     recognition.interimResults = true;
-
-    recognition.onresult = (event: any) => {
-      const transcript = Array.from(event.results)
-        .map((r: any) => r[0].transcript)
-        .join('');
-      setText(transcript);
+    recognition.onresult = (ev: any) => {
+      let text = '';
+      for (let i = 0; i < ev.results.length; i++) text += ev.results[i][0].transcript;
+      setText(text);
     };
-    recognition.onerror = () => setIsRecording(false);
-    recognition.onend = () => setIsRecording(false);
-
-    recognitionRef.current = recognition;
+    recognition.onend = () => {
+      setIsRecording(false);
+      recognitionRef.current = null;
+    };
     recognition.start();
+    recognitionRef.current = recognition;
     setIsRecording(true);
-  }, [isRecording]);
+  };
 
   return (
-    <div className="px-4 pb-3 pt-1">
+    <div
+      className="px-4 pb-3 pt-1"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drop overlay */}
+      {dragOver && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none animate-fade-in"
+          style={{ background: 'var(--accent-dim)' }}
+        >
+          <div
+            className="px-6 py-3 rounded-lg border-2"
+            style={{
+              background: 'var(--surface)',
+              borderColor: 'var(--accent)',
+              color: 'var(--text)',
+            }}
+          >
+            {t('composer.drop')}
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-3xl relative">
-        {/* Slash command menu */}
         <SlashCommandMenu
           visible={showSlash}
           onSelect={() => { setShowSlash(false); setText(''); }}
           onClose={() => { setShowSlash(false); setText(''); }}
         />
-        {/* Attachment thumbnails */}
+
+        {/* Attachments preview */}
         {attachments.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-2 animate-fade-in">
+          <div className="mb-2 flex flex-wrap gap-1.5 animate-fade-in">
             {attachments.map((att, i) => (
               <div
                 key={i}
-                className="group/att relative rounded-lg border border-[var(--border)] p-1"
-                style={{ background: 'var(--surface)' }}
+                className="group/att relative flex items-center gap-1.5 rounded-lg border px-1.5 py-1"
+                style={{ background: 'var(--surface-1)', borderColor: 'var(--border)' }}
               >
                 {att.isImage ? (
                   <img
                     src={att.data}
                     alt={att.name}
-                    className="h-14 w-14 rounded object-cover"
+                    className="h-7 w-7 rounded object-cover"
                   />
                 ) : (
-                  <div className="flex h-14 w-14 flex-col items-center justify-center text-[10px] text-[var(--text-2)]">
-                    <Paperclip size={16} />
-                    <span className="mt-1 max-w-[3rem] truncate">
-                      {att.name}
-                    </span>
-                  </div>
+                  <Paperclip size={11} style={{ color: 'var(--text-3)' }} />
                 )}
+                <span className="text-[10px] truncate max-w-[80px]" style={{ color: 'var(--text-2)' }}>
+                  {att.name}
+                </span>
                 <button
-                  onClick={() => removeAttachment(i)}
-                  className="absolute -right-1.5 -top-1.5 rounded-full border border-[var(--border)] p-0.5 text-[var(--text-2)] opacity-0 transition-opacity group-hover/att:opacity-100 hover:text-[var(--danger)]"
-                  style={{ background: 'var(--surface-2)' }}
+                  onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                  className="ml-0.5 p-0.5 rounded hover:bg-[var(--surface-hover)]"
+                  style={{ color: 'var(--text-3)' }}
                 >
-                  <X size={11} />
+                  <X size={10} />
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        {/* Input row */}
+        {/* Composer box */}
         <div
-          className="flex items-end gap-2 rounded-2xl border border-[var(--border)] px-3 py-2 transition-colors focus-within:border-[var(--accent)]"
+          className="rounded-2xl border transition-colors"
           style={{
             background: 'var(--surface)',
-            boxShadow: 'var(--shadow)',
+            borderColor: 'var(--border)',
+            boxShadow: 'var(--shadow-sm)',
           }}
         >
-          {/* Attach button */}
-          <button
-            onClick={handleFileSelect}
-            disabled={disabled}
-            className="flex-shrink-0 rounded-lg p-1.5 text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)] disabled:opacity-40"
-            title={t('composer.attach')}
-          >
-            <Paperclip size={18} />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,.pdf,.txt,.md,.json,.csv,.py,.js,.ts,.tsx,.jsx"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-
-          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={text}
             onChange={(e) => {
               setText(e.target.value);
-              setShowSlash(e.target.value === '/' || e.target.value.startsWith('/'));
+              setShowSlash(e.target.value === '/' || e.target.value.startsWith('/ '));
             }}
             onKeyDown={handleKeyDown}
             placeholder={t('composer.placeholder')}
             rows={1}
             disabled={disabled}
-            className="flex-1 resize-none bg-transparent py-1.5 text-[14px] leading-6 text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-none disabled:opacity-50"
-            style={{ maxHeight: '200px' }}
+            className="w-full bg-transparent px-4 pt-3 pb-1.5 text-[14px] leading-6 outline-none placeholder:text-[var(--text-faint)] resize-none disabled:opacity-50"
+            style={{ maxHeight: '200px', color: 'var(--text)' }}
           />
 
-          {/* Voice button */}
-          <button
-            onClick={toggleVoice}
-            disabled={disabled}
-            className={`flex-shrink-0 rounded-lg p-1.5 transition-colors hover:bg-[var(--surface-2)] disabled:opacity-40 ${
-              isRecording ? 'text-[var(--danger)]' : 'text-[var(--text-3)]'
-            }`}
-            title={t('composer.voice')}
-          >
-            <Mic size={18} className={isRecording ? 'animate-pulse' : ''} />
-          </button>
-
-          {/* Send / Stop button */}
-          {isStreaming && onStop ? (
+          {/* Bottom row: tools + send */}
+          <div className="flex items-center gap-1 px-2 pb-2">
+            {/* Attach button */}
             <button
-              onClick={onStop}
-              className="flex-shrink-0 rounded-lg p-1.5 text-white transition-opacity hover:opacity-90"
-              style={{ background: 'var(--danger)' }}
-              title={t('composer.stop')}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled}
+              className="h-7 w-7 flex items-center justify-center rounded transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-40"
+              style={{ color: 'var(--text-3)' }}
+              title={t('composer.attach')}
             >
-              <Square size={16} fill="currentColor" />
+              <Paperclip size={15} />
             </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!canSend}
-              className="flex-shrink-0 rounded-lg p-1.5 text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
-              style={{ background: 'var(--accent)' }}
-              title={t('composer.send')}
-            >
-              <ArrowUp size={18} strokeWidth={2.5} />
-            </button>
-          )}
-        </div>
-
-        {/* Bottom row: strength selector */}
-        <div className="mt-2 flex items-center gap-3 px-1">
-          <div className="flex items-center gap-1.5">
-            <Thermometer
-              size={13}
-              className="text-[var(--text-3)]"
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.txt,.md,.json,.csv,.py,.js,.ts,.tsx,.jsx"
+              onChange={handleFileChange}
+              className="hidden"
             />
-            <span className="text-[11px] text-[var(--text-3)]">{t('composer.strengthHint')}</span>
-            <div className="flex items-center gap-0.5">
+
+            {/* Voice button */}
+            <button
+              id="voiceBtn"
+              onClick={toggleVoice}
+              disabled={disabled}
+              className={`h-7 w-7 flex items-center justify-center rounded transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-40 ${
+                isRecording ? 'animate-pulse' : ''
+              }`}
+              style={{
+                color: isRecording ? 'var(--danger)' : 'var(--text-3)',
+                background: isRecording ? 'rgba(220,38,38,.1)' : 'transparent',
+              }}
+              title={t('composer.voice')}
+            >
+              <Mic size={15} />
+            </button>
+
+            <div className="flex-1" />
+
+            {/* Strength selector */}
+            <div
+              className="flex items-center gap-0.5 rounded-md p-0.5"
+              style={{ background: 'var(--surface-1)' }}
+            >
+              <Thermometer
+                size={11}
+                className="mx-1"
+                style={{ color: 'var(--text-3)' }}
+              />
               {STRENGTH_VALUES.map((v, i) => {
                 const active = temperature === v;
                 return (
                   <button
                     key={v}
                     onClick={() => setTemperature(v)}
-                    className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                      active
-                        ? 'text-white'
-                        : 'text-[var(--text-3)] hover:bg-[var(--surface-2)]'
-                    }`}
-                    style={
-                      active
-                        ? { background: 'var(--accent)' }
-                        : undefined
-                    }
+                    className="px-2 py-0.5 text-[10px] rounded transition-colors"
+                    style={{
+                      background: active ? 'var(--accent)' : 'transparent',
+                      color: active ? 'var(--accent-text)' : 'var(--text-3)',
+                    }}
                   >
                     {t(STRENGTH_KEYS[i])}
                   </button>
                 );
               })}
             </div>
-          </div>
 
-          <div className="ml-auto flex items-center gap-1.5 text-[11px] text-[var(--text-faint)]">
-            <img
-              src={MASCOT_URL}
-              alt=""
-              width={16}
-              height={16}
-              className="rounded-sm opacity-60"
-            />
-            <span>MadCop Agent</span>
+            {/* Send / Stop button */}
+            {isStreaming && onStop ? (
+              <button
+                onClick={onStop}
+                className="h-7 w-7 flex items-center justify-center rounded transition-opacity hover:opacity-90"
+                style={{ background: 'var(--danger)', color: '#ffffff' }}
+                title="Stop"
+              >
+                <Square size={12} fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!canSend}
+                className="h-7 w-7 flex items-center justify-center rounded transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
+                title={t('composer.send')}
+              >
+                <ArrowUp size={14} strokeWidth={2.5} />
+              </button>
+            )}
           </div>
+        </div>
+
+        <div className="mt-1.5 text-center text-[10px]" style={{ color: 'var(--text-faint)' }}>
+          {t('composer.strengthHint')} · {sendBehavior === 'enter' ? 'Enter' : '⌘+Enter'}
         </div>
       </div>
     </div>

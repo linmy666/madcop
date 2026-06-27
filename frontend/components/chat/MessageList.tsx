@@ -11,54 +11,65 @@ const MASCOT_URL = 'http://127.0.0.1:8765/static/mascot.png';
 
 interface MessageListProps {
   messages: Message[];
-  /** ID of the message currently being streamed (if any). */
   streamingId?: string | null;
 }
-
-// Locale-keyed suggestion chips
-const SUGGESTIONS = {
-  en: [
-    'Analyse this code for me',
-    'What is the weather today?',
-    'Write a Python sort script',
-    'Explain quantum computing',
-  ],
-  zh: [
-    '帮我分析一下这段代码',
-    '今天的天气怎么样？',
-    '写一个 Python 排序脚本',
-    '解释一下量子计算',
-  ],
-} as const;
 
 function EmptyState() {
   const t = useT();
   const [locale] = useLocale();
   const brand = BRAND[locale];
-  const suggestions = SUGGESTIONS[locale];
+  const suggestions =
+    locale === 'zh'
+      ? [
+          '如何写一个 Python 测试函数？',
+          '上海今天天气怎么样？',
+          '解释一下 JWT 鉴权原理',
+          '帮我写一个 SQL 优化建议',
+        ]
+      : [
+          'How to write a Python test function?',
+          "What's the weather in Shanghai today?",
+          'Explain JWT authentication',
+          'Suggest a SQL optimization',
+        ];
+
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 animate-fade-in">
+    <div className="flex h-full flex-col items-center justify-center gap-6 animate-fade-in px-6">
       <img
         src={MASCOT_URL}
         alt={brand.name}
-        width={72}
-        height={72}
-        className="rounded-2xl border border-[var(--border)] shadow-lg"
+        width={88}
+        height={88}
+        className="rounded-full"
         style={{ boxShadow: 'var(--shadow-lg)' }}
       />
-      <div className="text-center">
-        <h2 className="text-lg font-bold text-[var(--text)]">{brand.name}</h2>
-        <p className="mt-1 text-[11px] italic" style={{ color: 'var(--text-faint)' }}>{brand.slogan}</p>
-        <p className="mt-3 text-[13px] text-[var(--text-2)]">
+      <div className="text-center max-w-md">
+        <h2 className="text-xl font-semibold" style={{ color: 'var(--text)' }}>
+          {brand.name}
+        </h2>
+        <p
+          className="mt-1.5 text-[12px] italic"
+          style={{ color: 'var(--text-faint)' }}
+        >
+          {brand.slogan}
+        </p>
+        <p className="mt-5 text-[13px]" style={{ color: 'var(--text-2)' }}>
           {t('welcome.title')}
         </p>
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+          {t('welcome.subtitle')}
+        </p>
       </div>
-      <div className="flex flex-wrap justify-center gap-2 max-w-md">
+      <div className="flex flex-wrap justify-center gap-2 max-w-lg">
         {suggestions.map((s) => (
           <span
             key={s}
-            className="cursor-default rounded-full border border-[var(--border)] px-3 py-1 text-[12px] text-[var(--text-2)] transition-colors hover:bg-[var(--surface-2)]"
-            style={{ background: 'var(--surface)' }}
+            className="px-3 py-1.5 text-[12px] rounded-full border cursor-default transition-colors hover:bg-[var(--surface-hover)]"
+            style={{
+              background: 'var(--surface)',
+              borderColor: 'var(--border)',
+              color: 'var(--text-2)',
+            }}
           >
             {s}
           </span>
@@ -78,18 +89,15 @@ export default function MessageList({ messages, streamingId }: MessageListProps)
 
   if (!messages || messages.length === 0) {
     return (
-      <div
-        ref={scrollRef}
-        className="h-full overflow-y-auto px-4 py-6"
-      >
+      <div ref={scrollRef} className="h-full overflow-y-auto">
         <EmptyState />
       </div>
     );
   }
 
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto px-4 py-4">
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+    <div ref={scrollRef} className="h-full overflow-y-auto py-4">
+      <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4">
         {messages.map((msg) => {
           if (msg.role === 'user') {
             return <UserMessage key={msg.id} message={msg} />;

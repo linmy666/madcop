@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, RotateCcw } from 'lucide-react';
 
 type Props = {
   text: string;
@@ -26,36 +26,33 @@ export function MessageActionBar({ text, timestamp, align = 'start' }: Props) {
 
   return (
     <div
-      className={`pointer-events-none mt-1.5 flex h-6 items-center gap-2 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 ${
+      className={`pointer-events-none mt-1 flex h-6 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 ${
         align === 'end' ? 'justify-end' : 'justify-start'
       }`}
     >
       {timestamp && (
-        <span className="text-[10px] select-none" style={{ color: 'var(--text-faint)' }}>
+        <span
+          className="text-[10px] select-none"
+          style={{ color: 'var(--text-faint)' }}
+        >
           {formatTime(timestamp)}
         </span>
       )}
-      {text && (
-        <button
-          onClick={handleCopy}
-          className="flex h-6 w-6 items-center justify-center rounded-full transition-colors"
-          style={{ color: 'var(--text-3)' }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--surface-2)';
-            e.currentTarget.style.color = 'var(--text)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'var(--text-3)';
-          }}
-        >
-          {copied ? (
-            <Check size={12} style={{ color: 'var(--accent)' }} />
-          ) : (
-            <Copy size={12} />
-          )}
-        </button>
-      )}
+      <button
+        onClick={handleCopy}
+        className="h-6 w-6 flex items-center justify-center rounded transition-colors"
+        style={{ color: copied ? 'var(--ok)' : 'var(--text-3)' }}
+        title="Copy"
+      >
+        {copied ? <Check size={11} /> : <Copy size={11} />}
+      </button>
+      <button
+        className="h-6 w-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--surface-hover)]"
+        style={{ color: 'var(--text-3)' }}
+        title="Rewind"
+      >
+        <RotateCcw size={11} />
+      </button>
     </div>
   );
 }

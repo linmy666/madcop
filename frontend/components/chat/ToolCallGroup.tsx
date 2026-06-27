@@ -1,141 +1,132 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  ChevronDown,
-  ChevronRight,
-  Wrench,
-  CheckCircle2,
-  Loader2,
-} from 'lucide-react';
-import type { ToolCall } from '@/types/chat';
+import { ChevronRight, Loader2, Check, X, FileText, Search, Globe, Calculator, Box, Edit3, BookOpen, Cpu } from 'lucide-react';
 
-// ── Single tool call ───────────────────────────────────────────
-function ToolCallBlock({ call }: { call: ToolCall }) {
+interface ToolCall {
+  id: string;
+  name: string;
+  args?: Record<string, unknown>;
+  result?: string | null;
+}
+
+const ICONS: Record<string, any> = {
+  web_search: Globe,
+  get_weather: Globe,
+  web_fetch: Globe,
+  read_file: FileText,
+  write_file: Edit3,
+  edit_file: Edit3,
+  bash: Cpu,
+  search: Search,
+  math: Calculator,
+  default: Box,
+};
+
+const LABELS: Record<string, string> = {
+  web_search: 'Web Search',
+  get_weather: 'Weather',
+  web_fetch: 'Web Fetch',
+  read_file: 'Read File',
+  write_file: 'Write File',
+  edit_file: 'Edit File',
+  bash: 'Bash',
+};
+
+interface Props {
+  toolCalls: ToolCall[];
+}
+
+export default function ToolCallGroup({ toolCalls }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const hasResult = call.result !== undefined && call.result !== null;
+
+  if (toolCalls.length === 0) return null;
+  if (toolCalls.length === 1) {
+    return <ToolCallRow call={toolCalls[0]} />;
+  }
 
   return (
     <div
-      className="rounded-lg border border-[var(--border)] overflow-hidden"
-      style={{ background: 'var(--surface)' }}
+      className="mb-2 rounded-lg border overflow-hidden"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--surface-1)',
+      }}
     >
-      {/* Header */}
       <button
-        onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-[var(--surface-hover)] transition-colors"
       >
-        {expanded ? (
-          <ChevronDown size={14} className="text-[var(--text-3)]" />
-        ) : (
-          <ChevronRight size={14} className="text-[var(--text-3)]" />
-        )}
-        <Wrench size={13} style={{ color: 'var(--accent)' }} />
-        <span className="font-mono font-medium" style={{ color: 'var(--accent)' }}>
-          {call.name}
+        <ChevronRight
+          size={12}
+          className={expanded ? 'rotate-90' : ''}
+          style={{ color: 'var(--text-3)', transition: 'transform .15s' }}
+        />
+        <span
+          className="font-medium"
+          style={{ color: 'var(--text-2)' }}
+        >
+          {toolCalls.length} tool calls
         </span>
-        {hasResult ? (
-          <CheckCircle2 size={13} className="text-[var(--accent)]" />
-        ) : (
-          <Loader2 size={13} className="animate-spin text-[var(--text-3)]" />
-        )}
-        {!expanded && call.args && (
-          <span className="ml-1 truncate font-mono text-[11px] text-[var(--text-3)]">
-            {JSON.stringify(call.args).slice(0, 80)}
-          </span>
-        )}
       </button>
-
-      {/* Expanded detail */}
       {expanded && (
-        <div className="border-t border-[var(--border)] px-3 py-2 space-y-2">
-          {/* Arguments */}
-          {call.args && Object.keys(call.args).length > 0 && (
-            <div>
-              <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--text-3)]">
-                参数
-              </div>
-              <pre
-                className="overflow-x-auto rounded p-2 text-[12px] font-mono"
-                style={{ background: 'var(--code-bg)', color: 'var(--code-fg)' }}
-              >
-                {JSON.stringify(call.args, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {/* Result */}
-          {hasResult && (
-            <div>
-              <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--text-3)]">
-                结果
-              </div>
-              <pre
-                className="overflow-x-auto rounded p-2 text-[12px] font-mono max-h-[200px] overflow-y-auto"
-                style={{ background: 'var(--code-bg)', color: 'var(--code-fg)' }}
-              >
-                {call.result}
-              </pre>
-            </div>
-          )}
+        <div className="border-t" style={{ borderColor: 'var(--border)' }}>
+          {toolCalls.map((c) => (
+            <ToolCallRow key={c.id} call={c} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-// ── Group wrapper ──────────────────────────────────────────────
-interface ToolCallGroupProps {
-  calls: ToolCall[];
-}
-
-export default function ToolCallGroup({ calls }: ToolCallGroupProps) {
+function ToolCallRow({ call }: { call: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
-
-  if (!calls || calls.length === 0) return null;
-
-  // Single call: render directly without group wrapper
-  if (calls.length === 1) {
-    return (
-      <div className="my-2">
-        <ToolCallBlock call={calls[0]} />
-      </div>
-    );
-  }
-
-  // Multiple calls: collapse into summary
-  const allDone = calls.every((c) => c.result !== undefined && c.result !== null);
+  const Icon = ICONS[call.name] || ICONS.default;
+  const label = LABELS[call.name] || call.name;
+  const isDone = call.result !== undefined && call.result !== null;
+  const argsStr = call.args ? JSON.stringify(call.args) : '';
+  const argsShort = argsStr.length > 100 ? argsStr.slice(0, 100) + '...' : argsStr;
 
   return (
-    <div className="my-2">
-      {/* Summary line */}
+    <div
+      className="border-b last:border-b-0"
+      style={{ borderColor: 'var(--border)' }}
+    >
       <button
-        onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-[13px] transition-colors hover:bg-[var(--surface-2)]"
-        style={{ background: 'var(--surface)' }}
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-[var(--surface-hover)] transition-colors"
       >
-        {expanded ? (
-          <ChevronDown size={14} className="text-[var(--text-3)]" />
-        ) : (
-          <ChevronRight size={14} className="text-[var(--text-3)]" />
-        )}
-        <Wrench size={13} style={{ color: 'var(--accent)' }} />
-        <span className="text-[var(--text-2)]">
-          调用了 <strong style={{ color: 'var(--accent)' }}>{calls.length}</strong> 个工具
+        <Icon size={12} style={{ color: 'var(--text-2)' }} />
+        <span className="font-medium" style={{ color: 'var(--text-2)' }}>
+          {label}
         </span>
-        {allDone ? (
-          <CheckCircle2 size={13} className="ml-auto text-[var(--accent)]" />
-        ) : (
-          <Loader2 size={13} className="ml-auto animate-spin text-[var(--text-3)]" />
+        {argsShort && (
+          <span
+            className="flex-1 truncate font-mono text-[10px]"
+            style={{ color: 'var(--text-3)' }}
+          >
+            {argsShort}
+          </span>
         )}
+        <span className="flex-shrink-0">
+          {isDone ? (
+            <Check size={11} style={{ color: 'var(--ok)' }} />
+          ) : (
+            <Loader2 size={11} className="animate-spin" style={{ color: 'var(--accent)' }} />
+          )}
+        </span>
       </button>
-
-      {/* Expanded individual calls */}
-      {expanded && (
-        <div className="mt-1.5 space-y-1.5 animate-slide-up">
-          {calls.map((call) => (
-            <ToolCallBlock key={call.id} call={call} />
-          ))}
+      {expanded && call.result && (
+        <div
+          className="px-3 py-2 text-[11px] border-t font-mono whitespace-pre-wrap max-h-40 overflow-y-auto"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--surface-code)',
+            color: 'var(--text-2)',
+          }}
+        >
+          {call.result.length > 600 ? call.result.slice(0, 600) + '...' : call.result}
         </div>
       )}
     </div>

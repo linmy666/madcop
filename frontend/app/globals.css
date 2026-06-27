@@ -1,104 +1,143 @@
 @import "tailwindcss";
 
-/* ─── Fonts ──────────────────────────────────────────────────── */
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: local('Inter');
-}
+/* ============================================================
+   MadCop Agent — Design System
+   - Two themes: light + dark
+   - Pure CSS variables (no Material Symbols, no external icon fonts)
+   - All copy from cc-haha patterns but renamed + recolored
+   ============================================================ */
 
-/* ─── Theme tokens ───────────────────────────────────────────── */
 :root,
 [data-theme="light"] {
+  /* Base */
   --bg: #ffffff;
-  --surface: #f9f9f9;
-  --surface-2: #f0f0f0;
-  --surface-3: #e8e8e8;
-  --surface-user-msg: #e3f2fd;
-  --border: #e0e0e0;
-  --text: #1a1a1a;
-  --text-2: #555;
-  --text-3: #888;
-  --text-faint: #aaa;
+  --surface: #fafafa;
+  --surface-1: #f4f4f5;
+  --surface-2: #e8e8eb;
+  --surface-3: #d4d4d8;
+  --surface-active: #e4e4e7;
+
+  /* Surfaces for specific roles */
+  --surface-user: #dbeafe;
+  --surface-assistant: transparent;
+  --surface-code: #f6f8fa;
+  --surface-hover: rgba(0, 0, 0, 0.04);
+
+  /* Borders */
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+
+  /* Text */
+  --text: #18181b;
+  --text-2: #52525b;
+  --text-3: #a1a1aa;
+  --text-faint: #d4d4d8;
+
+  /* Accent (green, like ChatGPT) */
   --accent: #10a37f;
   --accent-hover: #0d8a6a;
-  --accent-dim: rgba(16,163,127,.08);
-  --moon: #8b5cf6;
-  --moon-dim: #a78bfa;
-  --moon-bg: rgba(139,92,246,.05);
-  --reasoning-bg: rgba(0,0,0,.03);
+  --accent-dim: rgba(16, 163, 127, 0.10);
+  --accent-text: #ffffff;
+
+  /* Reasoning block — subtle grey */
+  --reasoning-bg: rgba(0, 0, 0, 0.025);
   --reasoning-border: var(--border);
-  --danger: #ef4444;
-  --warn: #f59e0b;
-  --code-bg: #f6f8fa;
+
+  /* Semantic */
+  --danger: #dc2626;
+  --warn: #d97706;
+  --ok: #16a34a;
+
+  /* Code syntax (warm) */
   --code-fg: #24292f;
   --code-comment: #6e7781;
   --code-string: #0a3069;
   --code-keyword: #cf222e;
   --code-fn: #8250df;
   --code-number: #0550ae;
-  --diff-added: #dcfce7;
-  --diff-removed: #fee2e2;
-  --radius: 10px;
+  --code-type: #953800;
+
+  /* Diff */
+  --diff-add-bg: #dcfce7;
+  --diff-remove-bg: #fee2e2;
+
+  /* Geometry */
+  --radius: 12px;
   --radius-sm: 8px;
-  --shadow: 0 1px 3px rgba(0,0,0,.06);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,.08);
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
 }
 
 [data-theme="dark"] {
   --bg: #0d0d0d;
-  --surface: #171717;
-  --surface-2: #212121;
-  --surface-3: #2a2a2a;
-  --surface-user-msg: #1e3a5f;
-  --border: #2e2e2e;
+  --surface: #161616;
+  --surface-1: #1c1c1c;
+  --surface-2: #242424;
+  --surface-3: #2c2c2c;
+  --surface-active: #303030;
+
+  --surface-user: #1e3a5f;
+  --surface-assistant: transparent;
+  --surface-code: #0d1117;
+  --surface-hover: rgba(255, 255, 255, 0.04);
+
+  --border: #2a2a2a;
+  --border-strong: #3a3a3a;
+
   --text: #ececec;
-  --text-2: #aaa;
-  --text-3: #777;
-  --text-faint: #555;
+  --text-2: #a1a1aa;
+  --text-3: #6b6b72;
+  --text-faint: #404045;
+
   --accent: #10a37f;
   --accent-hover: #1ab892;
-  --accent-dim: rgba(16,163,127,.12);
-  --moon: #c084fc;
-  --moon-dim: #7c5fa8;
-  --moon-bg: rgba(192,132,252,.06);
-  --reasoning-bg: rgba(255,255,255,.025);
+  --accent-dim: rgba(16, 163, 127, 0.12);
+  --accent-text: #ffffff;
+
+  --reasoning-bg: rgba(255, 255, 255, 0.025);
   --reasoning-border: var(--border);
+
   --danger: #f87171;
   --warn: #fbbf24;
-  --code-bg: #0d1117;
+  --ok: #4ade80;
+
   --code-fg: #c9d1d9;
   --code-comment: #8b949e;
   --code-string: #7ee787;
   --code-keyword: #ff7b72;
   --code-fn: #d2a8ff;
   --code-number: #79c0ff;
-  --diff-added: rgba(46,160,67,.15);
-  --diff-removed: rgba(248,81,81,.1);
-  --shadow: 0 1px 3px rgba(0,0,0,.3);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,.4);
+  --code-type: #ffa657;
+
+  --diff-add-bg: rgba(46, 160, 67, 0.18);
+  --diff-remove-bg: rgba(248, 81, 81, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-/* ─── Base ───────────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 
 html, body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg);
   color: var(--text);
   height: 100vh;
   margin: 0;
-  padding: 0;
-  overflow: hidden;
-  -webkit-font-smoothing: antialiased;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
 
 code, pre, .mono {
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: var(--font-mono);
 }
 
 a { color: var(--accent); text-decoration: none; }
@@ -106,10 +145,13 @@ a:hover { text-decoration: underline; }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
-/* ─── Animations ─────────────────────────────────────────────── */
+/* ============================================================
+   Animations
+   ============================================================ */
+
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
@@ -130,10 +172,15 @@ a:hover { text-decoration: underline; }
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .animate-fade-in { animation: fade-in .25s ease; }
 .animate-slide-up { animation: slide-up .2s ease; }
+.animate-spin { animation: spin 1s linear infinite; }
 
-/* Thinking dots — accent green pulse */
+/* Thinking dots */
 .thinking-dots::after {
   content: '';
   display: inline-block;
@@ -142,14 +189,26 @@ a:hover { text-decoration: underline; }
   animation: dots 1.4s infinite;
 }
 @keyframes dots {
-  0% { content: ''; }
+  0%, 100% { content: ''; }
   25% { content: '.'; }
   50% { content: '..'; }
   75% { content: '...'; }
-  100% { content: ''; }
 }
 
-/* Markdown content inside .md-content */
+/* Shimmer text — accent green */
+.shimmer-text {
+  background: linear-gradient(90deg, var(--text-faint) 0%, var(--accent) 50%, var(--text-faint) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 2s linear infinite;
+}
+
+/* ============================================================
+   Markdown content
+   ============================================================ */
+
 .md-content h1 { font-size: 1.5rem; font-weight: 600; margin: 1rem 0 .5rem; }
 .md-content h2 { font-size: 1.25rem; font-weight: 600; margin: 1rem 0 .5rem; }
 .md-content h3 { font-size: 1.1rem; font-weight: 600; margin: .8rem 0 .4rem; }
@@ -168,37 +227,16 @@ a:hover { text-decoration: underline; }
   color: var(--text-2);
 }
 .md-content hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
-.md-content a { color: var(--accent); text-decoration: none; }
-.md-content a:hover { text-decoration: underline; }
 .md-content .inline-code {
   background: var(--surface-2);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: .85em;
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
 }
-.md-content table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: .5rem 0;
-  font-size: .85rem;
-}
-.md-content th, .md-content td {
-  border: 1px solid var(--border);
-  padding: 6px 10px;
-  text-align: left;
-}
+.md-content table { border-collapse: collapse; width: 100%; margin: .5rem 0; font-size: .85rem; }
+.md-content th, .md-content td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
 .md-content th { background: var(--surface-2); font-weight: 600; }
 .md-content img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
 .md-content strong { font-weight: 600; }
 .md-content em { font-style: italic; }
-
-/* Shimmer text — uses accent green, not purple */
-.shimmer-text {
-  background: linear-gradient(90deg, var(--text-faint) 0%, var(--accent) 50%, var(--text-faint) 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: shimmer 2s linear infinite;
-}
