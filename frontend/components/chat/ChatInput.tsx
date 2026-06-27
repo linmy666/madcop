@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { Attachment } from '@/types/chat';
 import { useT } from '@/hooks/useTranslation';
+import { SlashCommandMenu } from './SlashCommandMenu';
 
 const MASCOT_URL = 'http://127.0.0.1:8765/static/mascot.png';
 
@@ -113,8 +114,12 @@ export default function ChatInput({
     setAttachments([]);
   }, [canSend, text, attachments, temperature, onSend]);
 
-  // ── Key handler: Enter=send, Shift+Enter=newline ────────────
+  // ── Key handler: Enter=send, Shift+Enter=newline, "/" = slash menu ──
+  const [showSlash, setShowSlash] = useState(false);
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Slash command menu
+    if (showSlash) return; // let SlashCommandMenu handle keys
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
@@ -158,7 +163,13 @@ export default function ChatInput({
 
   return (
     <div className="px-4 pb-3 pt-1">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-3xl relative">
+        {/* Slash command menu */}
+        <SlashCommandMenu
+          visible={showSlash}
+          onSelect={() => { setShowSlash(false); setText(''); }}
+          onClose={() => { setShowSlash(false); setText(''); }}
+        />
         {/* Attachment thumbnails */}
         {attachments.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2 animate-fade-in">
@@ -224,7 +235,10 @@ export default function ChatInput({
           <textarea
             ref={textareaRef}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setShowSlash(e.target.value === '/' || e.target.value.startsWith('/'));
+            }}
             onKeyDown={handleKeyDown}
             placeholder={t('composer.placeholder')}
             rows={1}

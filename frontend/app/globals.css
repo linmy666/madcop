@@ -145,6 +145,50 @@ a:hover { text-decoration: underline; }
   100% { content: ''; }
 }
 
+/* Markdown content inside .md-content */
+.md-content h1 { font-size: 1.5rem; font-weight: 600; margin: 1rem 0 .5rem; }
+.md-content h2 { font-size: 1.25rem; font-weight: 600; margin: 1rem 0 .5rem; }
+.md-content h3 { font-size: 1.1rem; font-weight: 600; margin: .8rem 0 .4rem; }
+.md-content h4 { font-size: .9rem; font-weight: 600; margin: .6rem 0 .3rem; color: var(--text-2); }
+.md-content p { margin: .5rem 0; }
+.md-content ul, .md-content ol { margin: .5rem 0; padding-left: 1.5rem; }
+.md-content li { margin: .25rem 0; }
+.md-content ul li { list-style: disc; }
+.md-content ol li { list-style: decimal; }
+.md-content blockquote {
+  border-left: 3px solid var(--accent);
+  padding: .3rem .8rem;
+  margin: .5rem 0;
+  background: var(--accent-dim);
+  border-radius: 0 6px 6px 0;
+  color: var(--text-2);
+}
+.md-content hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+.md-content a { color: var(--accent); text-decoration: none; }
+.md-content a:hover { text-decoration: underline; }
+.md-content .inline-code {
+  background: var(--surface-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: .85em;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.md-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: .5rem 0;
+  font-size: .85rem;
+}
+.md-content th, .md-content td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.md-content th { background: var(--surface-2); font-weight: 600; }
+.md-content img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+.md-content strong { font-weight: 600; }
+.md-content em { font-style: italic; }
+
 /* Shimmer text */
 .shimmer-text {
   background: linear-gradient(90deg, var(--text-faint) 0%, var(--text-2) 50%, var(--text-faint) 100%);
