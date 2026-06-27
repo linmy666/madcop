@@ -60,6 +60,7 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     model: str | None = None
     temperature: float = 0.7
+    conversation_id: str | None = None  # optional id for trace persistence
 
 
 class SetActiveRequest(BaseModel):
@@ -487,8 +488,32 @@ def create_app() -> FastAPI:
         tool_schemas = registry.openai_schemas()
 
         async def event_stream() -> AsyncIterator[str]:
+            # -- Create trace root node ------------------------------ #
+            from madcop.agent.trace import get_trace_store, TraceStatus
+            trace_store = get_trace_store()
+            # Stable conversation id from request (so trace persists across reloads)
+            conv_id = body.conversation_id or "default"
+            trace_root = trace_store.create_node(
+                conversation_id=conv_id,
+                node_type="user_input",
+                label=body.messages[-1].content[:60] if body.messages else "",
+                input_data={"messages": len(body.messages), "temperature": body.temperature},
+            )
+            trace_store.mark_running(trace_root.id)
+            yield f"data: {json.dumps({'type': 'trace', 'node': trace_root.to_dict()}, ensure_ascii=False)}\n\n"
+
             try:
                 # -- Phase 1: initial call with tools ------------------ #
+                # Create a child LLM-call node under the root
+                phase1_node = trace_store.create_node(
+                    conversation_id=conv_id,
+                    parent_id=trace_root.id,
+                    node_type="llm_call",
+                    label="Initial LLM call (with tools)",
+                )
+                trace_store.mark_running(phase1_node.id)
+                yield f"data: {json.dumps({'type': 'trace', 'node': phase1_node.to_dict()}, ensure_ascii=False)}\n\n"
+
                 # Use non-streaming chat() for the first call so we can
                 # inspect tool_calls before deciding how to proceed.
                 resp = client.chat(
@@ -497,6 +522,12 @@ def create_app() -> FastAPI:
                     temperature=body.temperature,
                     tools=tool_schemas,
                 )
+
+                # Mark phase 1 done
+                p1 = trace_store.get(phase1_node.id)
+                if p1:
+                    trace_store.mark_done(phase1_node.id, output=str(len(resp.tool_calls or [])) + " tool calls")
+                    yield f"data: {json.dumps({'type': 'trace', 'node': p1.to_dict()}, ensure_ascii=False)}\n\n"
 
                 # No tool calls? Stream the text content normally.
                 if not resp.tool_calls:
@@ -510,6 +541,27 @@ def create_app() -> FastAPI:
                         schedule_extraction(messages)
                     except Exception:
                         pass
+                    # -- Auto-create skill from "how-to" conversations --- #
+                    try:
+                        from madcop.agent.skills import get_skill_store, auto_create_skill_from_conversation
+                        user_msg = body.messages[-1].content if body.messages else ""
+                        # Reconstruct assistant text from SSE — easier: we don't have it here.
+                        # We'll just call the heuristic with a partial signal.
+                        full_assistant = resp.content or ""
+                        if full_assistant:
+                            auto_create_skill_from_conversation(
+                                get_skill_store(),
+                                user_msg,
+                                full_assistant,
+                                tool_calls=[],
+                            )
+                    except Exception:
+                        pass
+                    # Mark root done
+                    tr = trace_store.get(trace_root.id)
+                    if tr:
+                        trace_store.mark_done(trace_root.id, output="completed")
+                        yield f"data: {json.dumps({'type': 'trace', 'node': tr.to_dict()}, ensure_ascii=False)}\n\n"
                     return
 
                 # Has tool calls — execute them, then do a second call.
@@ -524,11 +576,28 @@ def create_app() -> FastAPI:
 
                 # Execute each tool call and collect results.
                 for call in resp.tool_calls:
+                    # Create a tool_call trace node
+                    tool_node = trace_store.create_node(
+                        conversation_id=conv_id,
+                        parent_id=phase1_node.id,
+                        node_type="tool_call",
+                        label=call.name,
+                        input_data={"args": call.arguments},
+                    )
+                    trace_store.mark_running(tool_node.id)
+                    yield f"data: {json.dumps({'type': 'trace', 'node': tool_node.to_dict()}, ensure_ascii=False)}\n\n"
+
                     yield f"data: {json.dumps({'type': 'tool', 'name': call.name, 'args': call.arguments}, ensure_ascii=False)}\n\n"
                     result = registry.dispatch(call)
                     result_str = result.to_message_content()
+                    # Mark tool done
+                    trace_store.mark_done(tool_node.id, output=result_str[:200])
                     # Emit the tool result as an SSE event
                     yield f"data: {json.dumps({'type': 'tool_result', 'name': call.name, 'result': result_str}, ensure_ascii=False)}\n\n"
+                    # Emit trace update
+                    tn = trace_store.get(tool_node.id)
+                    if tn:
+                        yield f"data: {json.dumps({'type': 'trace', 'node': tn.to_dict()}, ensure_ascii=False)}\n\n"
                     # Append tool result to the conversation for the second call
                     messages.append(Message(
                         role="tool",
@@ -538,9 +607,25 @@ def create_app() -> FastAPI:
                     ))
 
                 # -- Phase 2: second call with tool results ------------ #
+                # Create phase 2 trace node
+                phase2_node = trace_store.create_node(
+                    conversation_id=conv_id,
+                    parent_id=phase1_node.id,
+                    node_type="llm_call",
+                    label="Second LLM call (with tool results)",
+                )
+                trace_store.mark_running(phase2_node.id)
+                yield f"data: {json.dumps({'type': 'trace', 'node': phase2_node.to_dict()}, ensure_ascii=False)}\n\n"
+
                 # Stream the final response normally.
                 for sse in _stream_chunks(client, messages, body):
                     yield sse
+
+                # Mark phase 2 done
+                p2 = trace_store.get(phase2_node.id)
+                if p2:
+                    trace_store.mark_done(phase2_node.id, output="completed")
+                    yield f"data: {json.dumps({'type': 'trace', 'node': p2.to_dict()}, ensure_ascii=False)}\n\n"
 
                 # -- Memory extraction (async, debounced) ----------------- #
                 try:
@@ -548,6 +633,26 @@ def create_app() -> FastAPI:
                     schedule_extraction(messages)
                 except Exception:
                     pass
+
+                # -- Auto-create skill from "how-to" conversations --------- #
+                try:
+                    from madcop.agent.skills import get_skill_store, auto_create_skill_from_conversation
+                    user_msg = body.messages[-1].content if body.messages else ""
+                    assistant_text = "".join(m.content for m in messages if m.role == "assistant")
+                    auto_create_skill_from_conversation(
+                        get_skill_store(),
+                        user_msg,
+                        assistant_text,
+                        tool_calls=[{"name": c.name, "args": c.arguments} for c in resp.tool_calls],
+                    )
+                except Exception:
+                    pass
+
+                # Mark root done
+                tr2 = trace_store.get(trace_root.id)
+                if tr2:
+                    trace_store.mark_done(trace_root.id, output="completed")
+                    yield f"data: {json.dumps({'type': 'trace', 'node': tr2.to_dict()}, ensure_ascii=False)}\n\n"
 
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -655,6 +760,93 @@ def create_app() -> FastAPI:
                 for r in records
             ],
         }
+
+    # ------------------------------------------------------------------- #
+    # Trace API (Flowtrace)
+    # ------------------------------------------------------------------- #
+
+    @app.get("/api/trace/{conversation_id}")
+    async def get_trace(conversation_id: str) -> dict[str, Any]:
+        """Get the trace DAG for a conversation."""
+        from madcop.agent.trace import get_trace_store
+        store = get_trace_store()
+        nodes = store.get_conversation_trace(conversation_id)
+        return {
+            "conversation_id": conversation_id,
+            "nodes": [n.to_dict() for n in nodes],
+            "total": len(nodes),
+        }
+
+    @app.post("/api/trace/{conversation_id}/resume")
+    async def resume_from_node(conversation_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Mark all downstream nodes of the given node as superseded.
+
+        The client can then re-run from the given node_id.
+        """
+        from madcop.agent.trace import get_trace_store
+        node_id = body.get("node_id", "")
+        if not node_id:
+            raise HTTPException(400, "node_id is required")
+        store = get_trace_store()
+        superseded = store.reset_downstream(node_id)
+        return {
+            "conversation_id": conversation_id,
+            "resumed_from": node_id,
+            "superseded_nodes": superseded,
+            "count": len(superseded),
+        }
+
+    # ------------------------------------------------------------------- #
+    # Skills API (auto-sediment)
+    # ------------------------------------------------------------------- #
+
+    @app.get("/api/skills")
+    async def list_skills() -> dict[str, Any]:
+        """List all skills."""
+        from madcop.agent.skills import get_skill_store
+        store = get_skill_store()
+        skills = store.list_skills()
+        return {"skills": skills, "total": len(skills)}
+
+    @app.get("/api/skills/{name}")
+    async def get_skill(name: str) -> dict[str, Any]:
+        """Get a single skill by name."""
+        from madcop.agent.skills import get_skill_store
+        store = get_skill_store()
+        skill = store.get_skill(name)
+        if not skill:
+            raise HTTPException(404, f"Skill '{name}' not found")
+        return skill
+
+    @app.post("/api/skills")
+    async def create_skill(body: dict[str, Any]) -> dict[str, Any]:
+        """Manually create a skill."""
+        from madcop.agent.skills import get_skill_store
+        store = get_skill_store()
+        path = store.create_skill(
+            name=body.get("name", "unnamed"),
+            description=body.get("description", ""),
+            body=body.get("body", ""),
+            triggers=body.get("triggers", []),
+            source=body.get("source", "manual"),
+        )
+        return {"path": path, "created": True}
+
+    @app.delete("/api/skills/{name}")
+    async def delete_skill(name: str) -> dict[str, Any]:
+        from madcop.agent.skills import get_skill_store
+        store = get_skill_store()
+        ok = store.delete_skill(name)
+        if not ok:
+            raise HTTPException(404, f"Skill '{name}' not found")
+        return {"deleted": True, "name": name}
+
+    @app.get("/api/skills/search")
+    async def search_skills(q: str = "") -> dict[str, Any]:
+        from madcop.agent.skills import get_skill_store
+        store = get_skill_store()
+        results = store.search_skills(q) if q else store.list_skills()
+        return {"results": results, "total": len(results)}
 
     # ------------------------------------------------------------------- #
     # WebUI (static HTML at /)

@@ -24,11 +24,12 @@ export async function api<T = unknown>(
 export async function* streamChat(
   messages: Array<{ role: string; content: string | unknown[] }>,
   temperature: number,
+  conversation_id?: string,
 ): AsyncGenerator<unknown, void, unknown> {
   const res = await fetch(`${BASE}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, temperature }),
+    body: JSON.stringify({ messages, temperature, conversation_id }),
   });
 
   const reader = res.body!.getReader();
@@ -130,4 +131,67 @@ export const apiClient = {
 
   searchMemory: (q: string) =>
     api(`/api/memory/search?q=${encodeURIComponent(q)}`),
+
+  // Trace (Flowtrace)
+  getTrace: async (conversationId: string) => {
+    const data = await api<{
+      conversation_id: string;
+      nodes: Array<{
+        id: string;
+        parent_id: string | null;
+        node_type: string;
+        status: string;
+        label: string;
+        input: string;
+        output: string;
+        created_at: number;
+        completed_at: number | null;
+        depth: number;
+      }>;
+      total: number;
+    }>(`/api/trace/${encodeURIComponent(conversationId)}`);
+    // Fill in conversation_id for nodes that don't have it
+    data.nodes = data.nodes.map((n) => ({ ...n, conversation_id: data.conversation_id }));
+    return data;
+  },
+
+  resumeFromNode: (conversationId: string, nodeId: string) =>
+    api<{
+      conversation_id: string;
+      resumed_from: string;
+      superseded_nodes: string[];
+      count: number;
+    }>(`/api/trace/${encodeURIComponent(conversationId)}/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ node_id: nodeId }),
+    }),
+
+  // Skills
+  listSkills: () =>
+    api<{
+      skills: Array<{
+        name: string;
+        description: string;
+        triggers: string[];
+        source: string;
+        created_at: string;
+        path: string;
+        body_preview: string;
+      }>;
+      total: number;
+    }>('/api/skills'),
+
+  getSkill: (name: string) =>
+    api<{
+      name: string;
+      description: string;
+      triggers: string[];
+      source: string;
+      body: string;
+    }>(`/api/skills/${encodeURIComponent(name)}`),
+
+  deleteSkill: (name: string) =>
+    api<{ deleted: boolean; name: string }>(`/api/skills/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }),
 };

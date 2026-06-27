@@ -1,21 +1,32 @@
 'use client';
 
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import MessageList from '@/components/chat/MessageList';
 import ChatInput from '@/components/chat/ChatInput';
 import { useChatStore } from '@/stores/chatStore';
 import { streamChat } from '@/lib/api';
-import { useCallback, useRef } from 'react';
 import type { Message, SSEEvent } from '@/types/chat';
+import type { TraceNode } from '@/types/chat';
+import { TracePanel } from '@/components/chat/TracePanel';
+import { useT } from '@/hooks/useTranslation';
+import { Activity } from 'lucide-react';
 
 export default function ChatPage() {
   const conversations = useChatStore((s) => s.conversations);
   const activeId = useChatStore((s) => s.activeId);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const temperature = useChatStore((s) => s.temperature);
+  const t = useT();
+
+  const [traceOpen, setTraceOpen] = useState(false);
+  const [latestTraceNode, setLatestTraceNode] = useState<TraceNode | null>(null);
+  const startTimeRef = useRef<number>(0);
+
+  // Persisted conversation id (used as trace id)
+  const convId = activeId || 'default';
 
   const conv = conversations.find((c) => c.id === activeId);
-  const startTimeRef = useRef<number>(0);
 
   const handleSend = useCallback(
     async (
@@ -96,7 +107,7 @@ export default function ChatPage() {
             return { role: m.role, content: m.content };
           });
 
-        for await (const raw of streamChat(histMessages, temperature)) {
+        for await (const raw of streamChat(histMessages, temperature, convId)) {
           const evt = raw as SSEEvent;
           const s = useChatStore.getState();
           const current = s.conversations
@@ -104,7 +115,11 @@ export default function ChatPage() {
             ?.messages.find((m) => m.id === assistantId);
           if (!current) break;
 
-          if (evt.type === 'reasoning') {
+          if (evt.type === 'trace' && evt.node) {
+            setLatestTraceNode(evt.node);
+            // Auto-open trace panel on first trace event
+            if (!traceOpen) setTraceOpen(true);
+          } else if (evt.type === 'reasoning') {
             s.updateMessage(convId, assistantId, {
               reasoning: (current.reasoning || '') + (evt.content || ''),
             });
@@ -157,14 +172,38 @@ export default function ChatPage() {
   return (
     <AppShell>
       <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-hidden">
-          <MessageList messages={conv?.messages || []} />
+        <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Trace toggle button */}
+            <div className="px-4 pt-2 flex justify-end">
+              <button
+                onClick={() => setTraceOpen((o) => !o)}
+                className="flex items-center gap-1 px-2 py-1 text-[11px] rounded transition-colors"
+                style={{
+                  background: traceOpen ? 'var(--accent-dim)' : 'transparent',
+                  color: traceOpen ? 'var(--accent)' : 'var(--text-3)',
+                }}
+              >
+                <Activity size={11} />
+                {t('trace.title')}
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <MessageList messages={conv?.messages || []} />
+            </div>
+            <ChatInput
+              onSend={(text, attachments) => handleSend(text, attachments)}
+              disabled={isStreaming}
+              isStreaming={isStreaming}
+            />
+          </div>
+          <TracePanel
+            conversationId={convId}
+            open={traceOpen}
+            onClose={() => setTraceOpen(false)}
+            latestNode={latestTraceNode}
+          />
         </div>
-        <ChatInput
-          onSend={(text, attachments) => handleSend(text, attachments)}
-          disabled={isStreaming}
-          isStreaming={isStreaming}
-        />
       </div>
     </AppShell>
   );

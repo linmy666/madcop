@@ -45,6 +45,7 @@ const en: Dict = {
   'sidebar.nav.chat': 'Chat',
   'sidebar.nav.memory': 'Memory',
   'sidebar.nav.tasks': 'Tasks',
+  'sidebar.nav.skills': 'Skills',
   'sidebar.nav.settings': 'Settings',
   'sidebar.themeToggle': 'Toggle theme',
   'sidebar.emptyConversations': 'No conversations yet',
@@ -126,6 +127,27 @@ const en: Dict = {
 
   // Memory bar / rage
   'rage.tooltip': 'Context window usage (怒氣值)',
+
+  // Trace panel
+  'trace.title': 'Execution Trace',
+  'trace.loading': 'Loading trace...',
+  'trace.empty': 'No trace yet. Send a message to start.',
+  'trace.resume': 'Rerun from here',
+  'trace.resumeConfirm': 'Rerun all downstream steps from this node? Earlier steps will be marked as superseded.',
+
+  // Skills page
+  'skills.title': 'Skills',
+  'skills.subtitle': 'Auto-extracted reusable patterns from your conversations. MadCop Agent watches how you solve problems and writes SKILL.md files for the future.',
+  'skills.saved': 'Saved skills ({count})',
+  'skills.empty': 'No skills yet. Skills are auto-created when you ask how-to questions.',
+  'skills.delete': 'Delete',
+  'skills.add': 'Add manually',
+  'skills.placeholder': 'Skill name',
+  'skills.body': 'Body (markdown)',
+  'skills.addSuccess': 'Created',
+  'skills.addFail': 'Create failed',
+  'skills.sourceAuto': 'auto',
+  'skills.sourceManual': 'manual',
 };
 
 const zh: Dict = {
@@ -135,6 +157,7 @@ const zh: Dict = {
   'sidebar.nav.chat': '对话',
   'sidebar.nav.memory': '记忆',
   'sidebar.nav.tasks': '任务',
+  'sidebar.nav.skills': '技能',
   'sidebar.nav.settings': '设置',
   'sidebar.themeToggle': '切换主题',
   'sidebar.emptyConversations': '还没有对话',
@@ -216,6 +239,27 @@ const zh: Dict = {
 
   // Memory bar / rage
   'rage.tooltip': '上下文使用率（怒气值）',
+
+  // Trace panel
+  'trace.title': '执行追踪',
+  'trace.loading': '加载中...',
+  'trace.empty': '暂无追踪记录。发送消息开始。',
+  'trace.resume': '从这里重跑',
+  'trace.resumeConfirm': '从这个节点重跑所有下游步骤？上游节点会标记为已替代。',
+
+  // Skills page
+  'skills.title': '技能',
+  'skills.subtitle': '从对话中自动提炼的可复用模式。周巡会观察你如何解决问题，并生成 SKILL.md 供未来使用。',
+  'skills.saved': '已保存技能 ({count})',
+  'skills.empty': '暂无技能。当您问"如何..."类问题时，技能会自动生成。',
+  'skills.delete': '删除',
+  'skills.add': '手动添加',
+  'skills.placeholder': '技能名称',
+  'skills.body': '正文（Markdown）',
+  'skills.addSuccess': '已创建',
+  'skills.addFail': '创建失败',
+  'skills.sourceAuto': '自动',
+  'skills.sourceManual': '手动',
 };
 
 const dicts: Record<Locale, Dict> = { en, zh };

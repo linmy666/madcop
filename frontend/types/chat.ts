@@ -59,7 +59,7 @@ export interface MemoryEntry {
 }
 
 export interface SSEEvent {
-  type: 'text' | 'reasoning' | 'tool' | 'tool_result' | 'done' | 'error';
+  type: 'text' | 'reasoning' | 'tool' | 'tool_result' | 'done' | 'error' | 'trace';
   content?: string;
   name?: string;
   args?: Record<string, unknown>;
@@ -67,4 +67,19 @@ export interface SSEEvent {
   model?: string;
   finish_reason?: string;
   message?: string;
+  node?: TraceNode;
+}
+
+export interface TraceNode {
+  id: string;
+  conversation_id: string;
+  parent_id: string | null;
+  node_type: 'llm_call' | 'tool_call' | 'user_input' | 'stream_chunk';
+  status: 'pending' | 'running' | 'done' | 'error' | 'superseded';
+  label: string;
+  input: string;
+  output: string;
+  created_at: number;
+  completed_at: number | null;
+  depth: number;
 }

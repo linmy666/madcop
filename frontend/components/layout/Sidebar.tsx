@@ -9,6 +9,7 @@ import {
   Brain,
   Clock,
   Search,
+  BookOpen,
 } from 'lucide-react';
 import { useState } from 'react';
 import ContextUsageIndicator from '@/components/chat/ContextUsageIndicator';
@@ -129,6 +130,7 @@ export function Sidebar() {
         <NavLink href="/chat" icon={<MessageSquarePlus size={15} />} label={t('sidebar.nav.chat')} active={pathname === '/chat'} />
         <NavLink href="/memory" icon={<Brain size={15} />} label={t('sidebar.nav.memory')} active={pathname === '/memory'} />
         <NavLink href="/tasks" icon={<Clock size={15} />} label={t('sidebar.nav.tasks')} active={pathname === '/tasks'} />
+        <NavLink href="/skills" icon={<BookOpen size={15} />} label={t('sidebar.nav.skills')} active={pathname === '/skills'} />
         <NavLink href="/settings" icon={<Settings size={15} />} label={t('sidebar.nav.settings')} active={pathname === '/settings'} />
       </div>
     </aside>
