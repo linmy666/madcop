@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "madcop"
-version = "1.9.0"
+version = "2.2.0"
 description = "madcop — the supply chain cop that goes mad for anomalies. Pluggable LangGraph framework: detect, diagnose, decide."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,6 +34,14 @@ classifiers = [
 dependencies = [
     "rich>=13.0",
     "langgraph>=0.2,<1.0",
+    # Web server (v2.1+)
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "sse-starlette>=2.0",
+    "cryptography>=42.0",  # Fernet for settings encryption (v2.1+)
+    "httpx>=0.27",
+    # LLM client
+    "openai>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -41,7 +49,6 @@ dev = [
     "pytest>=7.0",
     "build>=1.0",
     "twine>=4.0",
-    "openai>=1.0",  # OpenAICompatClient tests + LLM-driven madcop run agent --llm
     "pyyaml>=6.0",  # v0.8.0 subagent config loader (YAML format)
     "tomli>=2.0; python_version < '3.11'",  # v0.8.0 TOML on Python 3.10
 ]
