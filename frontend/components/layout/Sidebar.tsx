@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import ContextUsageIndicator from '@/components/chat/ContextUsageIndicator';
+import { useT, useLocale } from '@/hooks/useTranslation';
+import { BRAND } from '@/lib/i18n';
 
 const MASCOT_URL = 'http://127.0.0.1:8765/static/mascot.png';
 
@@ -19,6 +21,9 @@ export function Sidebar() {
   const { conversations, activeId, setActive, deleteConversation, newConversation, sidebarOpen, toggleSidebar, theme, toggleTheme } = useChatStore();
   const pathname = usePathname();
   const [search, setSearch] = useState('');
+  const t = useT();
+  const [locale] = useLocale();
+  const brand = BRAND[locale];
 
   const filtered = search
     ? conversations.filter(
@@ -40,14 +45,16 @@ export function Sidebar() {
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
-        <img src={MASCOT_URL} alt="madcop" className="w-7 h-7 rounded-full" />
-        <span className="font-semibold text-sm">madcop</span>
-        <span className="text-xs" style={{ color: 'var(--text-faint)' }}>v2.2</span>
+        <img src={MASCOT_URL} alt={brand.name} className="w-7 h-7 rounded-full" />
+        <div className="flex flex-col leading-tight min-w-0">
+          <span className="font-semibold text-sm truncate">{brand.name}</span>
+          <span className="text-[10px] truncate" style={{ color: 'var(--text-faint)' }}>{brand.slogan}</span>
+        </div>
         <div className="ml-auto flex gap-1">
           <button
             onClick={toggleTheme}
             className="p-1.5 rounded-md transition-colors hover:bg-[var(--surface-3)]"
-            title="切换主题"
+            title={t('sidebar.themeToggle')}
           >
             {theme === 'dark' ? '☀' : '☾'}
           </button>
@@ -61,7 +68,7 @@ export function Sidebar() {
         style={{ borderColor: 'var(--border)' }}
       >
         <MessageSquarePlus size={15} className="opacity-60" />
-        新对话
+        {t('sidebar.newChat')}
       </button>
 
       {/* Search */}
@@ -69,7 +76,7 @@ export function Sidebar() {
         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 opacity-40" />
         <input
           type="text"
-          placeholder="搜索历史会话..."
+          placeholder={t('sidebar.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg outline-none border"
@@ -105,19 +112,24 @@ export function Sidebar() {
             </button>
           </div>
         ))}
+        {!filtered.length && (
+          <div className="text-center text-xs py-4" style={{ color: 'var(--text-faint)' }}>
+            {t('sidebar.emptyConversations')}
+          </div>
+        )}
       </div>
 
-      {/* Footer: rage bar + nav */}
+      {/* Footer: rage bar */}
       <div className="px-3 py-2 flex items-center gap-2" style={{ borderTop: '1px solid var(--border)' }}>
         <ContextUsageIndicator />
       </div>
 
       {/* Navigation links */}
       <div className="px-2.5 pb-2 flex flex-col gap-0.5">
-        <NavLink href="/chat" icon={<MessageSquarePlus size={15} />} label="对话" active={pathname === '/chat'} />
-        <NavLink href="/memory" icon={<Brain size={15} />} label="记忆" active={pathname === '/memory'} />
-        <NavLink href="/tasks" icon={<Clock size={15} />} label="任务" active={pathname === '/tasks'} />
-        <NavLink href="/settings" icon={<Settings size={15} />} label="设置" active={pathname === '/settings'} />
+        <NavLink href="/chat" icon={<MessageSquarePlus size={15} />} label={t('sidebar.nav.chat')} active={pathname === '/chat'} />
+        <NavLink href="/memory" icon={<Brain size={15} />} label={t('sidebar.nav.memory')} active={pathname === '/memory'} />
+        <NavLink href="/tasks" icon={<Clock size={15} />} label={t('sidebar.nav.tasks')} active={pathname === '/tasks'} />
+        <NavLink href="/settings" icon={<Settings size={15} />} label={t('sidebar.nav.settings')} active={pathname === '/settings'} />
       </div>
     </aside>
   );

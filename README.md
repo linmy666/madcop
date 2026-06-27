@@ -1,5 +1,7 @@
-# madcop
+# MadCop Agent (周巡)
 
+> **周思万虑，巡行无疆** — Infinite Minds, Boundless Strides
+>
 > A local-first AI agent with a 4-layer growing memory, tool-use, streaming
 > web UI, and a plan-execute-replan loop. Runs in one process. Stores
 > everything locally. No cloud, no platform.
@@ -7,7 +9,7 @@
 [![Tests](https://img.shields.io/badge/tests-1272%20passing-brightgreen)](#tests)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
-[![Version](https://img.shields.io/badge/version-2.2.0-purple)](#changelog)
+[![Version](https://img.shields.io/badge/version-2.3.0-purple)](#changelog)
 
 <p align="center">
   <img src="web/mascot.png" alt="madcop" width="200">

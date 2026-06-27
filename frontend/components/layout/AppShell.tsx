@@ -4,9 +4,13 @@ import { useEffect } from 'react';
 import { useChatStore } from '@/stores/chatStore';
 import { Sidebar } from './Sidebar';
 import { Menu, X } from 'lucide-react';
+import { useLocale } from '@/hooks/useTranslation';
+import { BRAND } from '@/lib/i18n';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { theme, sidebarOpen, toggleSidebar } = useChatStore();
+  const [locale] = useLocale();
+  const brand = BRAND[locale];
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -40,10 +44,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-2)' }}>
             <img
               src="http://127.0.0.1:8765/static/mascot.png"
-              alt="madcop"
+              alt={brand.name}
               className="w-5 h-5 rounded-full"
             />
-            <span className="font-medium">madcop</span>
+            <span className="font-medium">{brand.name}</span>
           </div>
         </header>
 

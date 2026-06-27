@@ -7,6 +7,9 @@ import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import ThinkingBlock from './ThinkingBlock';
 import ToolCallGroup from './ToolCallGroup';
 
+import { useLocale } from '@/hooks/useTranslation';
+import { BRAND } from '@/lib/i18n';
+
 const MASCOT_URL = 'http://127.0.0.1:8765/static/mascot.png';
 
 interface AssistantMessageProps {
@@ -38,7 +41,7 @@ export default function AssistantMessage({
       <div className="flex-shrink-0 pt-0.5">
         <img
           src={MASCOT_URL}
-          alt="madcop"
+          alt={BRAND[useLocale()[0]].name}
           width={28}
           height={28}
           className="h-7 w-7 rounded-full border border-[var(--border)] object-cover"
@@ -49,7 +52,7 @@ export default function AssistantMessage({
       <div className="min-w-0 flex-1">
         {/* Name label */}
         <div className="mb-0.5 flex items-center gap-1.5">
-          <span className="text-[13px] font-semibold text-[var(--text)]">madcop</span>
+          <span className="text-[13px] font-semibold text-[var(--text)]">{BRAND[useLocale()[0]].name}</span>
           {message.model && (
             <span className="text-[11px] text-[var(--text-3)]">{message.model}</span>
           )}

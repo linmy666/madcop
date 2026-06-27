@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { apiClient } from '@/lib/api';
 import { Trash2, Plus } from 'lucide-react';
+import { useT, useLocale } from '@/hooks/useTranslation';
+import { BRAND } from '@/lib/i18n';
 
 interface MemItem {
   id: string;
@@ -16,6 +18,8 @@ interface MemItem {
 export default function MemoryPage() {
   const [items, setItems] = useState<MemItem[]>([]);
   const [newMemory, setNewMemory] = useState('');
+  const t = useT();
+  const [locale] = useLocale();
 
   const load = async () => {
     try {
@@ -29,9 +33,13 @@ export default function MemoryPage() {
 
   const handleAdd = async () => {
     if (!newMemory.trim()) return;
-    await apiClient.addMemory({ kind: 'semantic', title: newMemory.slice(0, 30), content: newMemory, tags: ['manual', 'user-profile'] });
-    setNewMemory('');
-    load();
+    try {
+      await apiClient.addMemory({ kind: 'semantic', title: newMemory.slice(0, 30), content: newMemory, tags: ['manual', 'user-profile'] });
+      setNewMemory('');
+      load();
+    } catch {
+      alert(t('memory.addFail'));
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -39,22 +47,30 @@ export default function MemoryPage() {
     load();
   };
 
-  const layerLabel = (kind: string) => ({ semantic: '知识', episodic: '事件', reflective: '偏好' }[kind] || kind);
+  const layerLabel = (kind: string) => {
+    const labels: Record<string, Record<typeof locale, string>> = {
+      semantic: { en: 'Knowledge', zh: '知识' },
+      episodic: { en: 'Event', zh: '事件' },
+      reflective: { en: 'Preference', zh: '偏好' },
+    };
+    return labels[kind]?.[locale] || kind;
+  };
+
+  // Personalise the subtitle so the user sees their assistant name
+  const subtitle = t('memory.subtitle').replace('MadCop Agent', BRAND[locale].name);
 
   return (
     <AppShell>
       <div className="max-w-2xl mx-auto p-8 overflow-y-auto h-full">
-        <h1 className="text-xl font-semibold mb-2">记忆</h1>
-        <p className="text-sm mb-6" style={{ color: 'var(--text-2)' }}>
-          madcop 会自动记住你的身份、偏好和重要信息。你也可以手动添加或删除记忆。
-        </p>
+        <h1 className="text-xl font-semibold mb-2">{t('memory.title')}</h1>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-2)' }}>{subtitle}</p>
 
         <div className="flex gap-2 mb-6">
           <input
             value={newMemory}
             onChange={(e) => setNewMemory(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
-            placeholder="例: 用户喜欢吃火锅"
+            placeholder={t('memory.addPlaceholder')}
             className="flex-1 px-3 py-2 text-sm rounded-lg border outline-none"
             style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
           />
@@ -63,12 +79,12 @@ export default function MemoryPage() {
             className="px-4 py-2 text-sm rounded-lg font-medium text-white flex items-center gap-1"
             style={{ background: 'var(--accent)' }}
           >
-            <Plus size={15} /> 添加
+            <Plus size={15} /> {t('memory.add')}
           </button>
         </div>
 
         <h2 className="text-xs uppercase tracking-wide mb-3" style={{ color: 'var(--text-2)' }}>
-          已有记忆 ({items.length})
+          {t('memory.saved', { count: items.length })}
         </h2>
         <div className="space-y-2">
           {items.map((m) => (
@@ -81,13 +97,13 @@ export default function MemoryPage() {
                   </div>
                   <div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>{m.content}</div>
                 </div>
-                <button onClick={() => handleDelete(m.id)} className="ml-2 p-1 rounded hover:bg-[var(--surface-3)]" style={{ color: 'var(--danger)' }}>
+                <button onClick={() => handleDelete(m.id)} className="ml-2 p-1 rounded hover:bg-[var(--surface-3)]" title={t('memory.delete')} style={{ color: 'var(--danger)' }}>
                   <Trash2 size={14} />
                 </button>
               </div>
             </div>
           ))}
-          {!items.length && <p className="text-sm" style={{ color: 'var(--text-2)' }}>还没有任何记忆。开始对话或手动添加。</p>}
+          {!items.length && <p className="text-sm" style={{ color: 'var(--text-2)' }}>{t('memory.empty')}</p>}
         </div>
       </div>
     </AppShell>

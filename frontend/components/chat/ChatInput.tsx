@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Attachment } from '@/types/chat';
+import { useT } from '@/hooks/useTranslation';
 
 const MASCOT_URL = 'http://127.0.0.1:8765/static/mascot.png';
 
@@ -35,11 +36,8 @@ interface ChatInputProps {
 }
 
 // ── Strength (temperature) presets ─────────────────────────────
-const STRENGTHS = [
-  { label: '低', value: 0.3 },
-  { label: '中', value: 0.7 },
-  { label: '高', value: 1.0 },
-] as const;
+const STRENGTH_VALUES = [0.3, 0.7, 1.0] as const;
+const STRENGTH_KEYS = ['composer.strength.low', 'composer.strength.medium', 'composer.strength.high'] as const;
 
 // ── File → base64 Attachment helper ────────────────────────────
 function readFileAsAttachment(file: File): Promise<Attachment> {
@@ -71,6 +69,7 @@ export default function ChatInput({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [temperature, setTemperature] = useState(initialTemperature);
   const [isRecording, setIsRecording] = useState(false);
+  const t = useT();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -208,7 +207,7 @@ export default function ChatInput({
             onClick={handleFileSelect}
             disabled={disabled}
             className="flex-shrink-0 rounded-lg p-1.5 text-[var(--text-3)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)] disabled:opacity-40"
-            title="添加附件"
+            title={t('composer.attach')}
           >
             <Paperclip size={18} />
           </button>
@@ -227,7 +226,7 @@ export default function ChatInput({
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入消息…  (Enter 发送, Shift+Enter 换行)"
+            placeholder={t('composer.placeholder')}
             rows={1}
             disabled={disabled}
             className="flex-1 resize-none bg-transparent py-1.5 text-[14px] leading-6 text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-none disabled:opacity-50"
@@ -241,7 +240,7 @@ export default function ChatInput({
             className={`flex-shrink-0 rounded-lg p-1.5 transition-colors hover:bg-[var(--surface-2)] disabled:opacity-40 ${
               isRecording ? 'text-[var(--danger)]' : 'text-[var(--text-3)]'
             }`}
-            title={isRecording ? '停止录音' : '语音输入'}
+            title={t('composer.voice')}
           >
             <Mic size={18} className={isRecording ? 'animate-pulse' : ''} />
           </button>
@@ -252,7 +251,7 @@ export default function ChatInput({
               onClick={onStop}
               className="flex-shrink-0 rounded-lg p-1.5 text-white transition-opacity hover:opacity-90"
               style={{ background: 'var(--danger)' }}
-              title="停止"
+              title={t('composer.stop')}
             >
               <Square size={16} fill="currentColor" />
             </button>
@@ -262,7 +261,7 @@ export default function ChatInput({
               disabled={!canSend}
               className="flex-shrink-0 rounded-lg p-1.5 text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
               style={{ background: 'var(--accent)' }}
-              title="发送"
+              title={t('composer.send')}
             >
               <ArrowUp size={18} strokeWidth={2.5} />
             </button>
@@ -276,14 +275,14 @@ export default function ChatInput({
               size={13}
               className="text-[var(--text-3)]"
             />
-            <span className="text-[11px] text-[var(--text-3)]">强度</span>
+            <span className="text-[11px] text-[var(--text-3)]">{t('composer.strengthHint')}</span>
             <div className="flex items-center gap-0.5">
-              {STRENGTHS.map((s) => {
-                const active = temperature === s.value;
+              {STRENGTH_VALUES.map((v, i) => {
+                const active = temperature === v;
                 return (
                   <button
-                    key={s.value}
-                    onClick={() => setTemperature(s.value)}
+                    key={v}
+                    onClick={() => setTemperature(v)}
                     className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
                       active
                         ? 'text-white'
@@ -295,7 +294,7 @@ export default function ChatInput({
                         : undefined
                     }
                   >
-                    {s.label}
+                    {t(STRENGTH_KEYS[i])}
                   </button>
                 );
               })}
@@ -310,7 +309,7 @@ export default function ChatInput({
               height={16}
               className="rounded-sm opacity-60"
             />
-            <span>madcop</span>
+            <span>MadCop Agent</span>
           </div>
         </div>
       </div>
