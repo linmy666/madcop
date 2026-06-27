@@ -28,6 +28,8 @@
   --moon: #8b5cf6;
   --moon-dim: #a78bfa;
   --moon-bg: rgba(139,92,246,.05);
+  --reasoning-bg: rgba(0,0,0,.03);
+  --reasoning-border: var(--border);
   --danger: #ef4444;
   --warn: #f59e0b;
   --code-bg: #f6f8fa;
@@ -39,7 +41,7 @@
   --code-number: #0550ae;
   --diff-added: #dcfce7;
   --diff-removed: #fee2e2;
-  --radius: 12px;
+  --radius: 10px;
   --radius-sm: 8px;
   --shadow: 0 1px 3px rgba(0,0,0,.06);
   --shadow-lg: 0 4px 12px rgba(0,0,0,.08);
@@ -62,6 +64,8 @@
   --moon: #c084fc;
   --moon-dim: #7c5fa8;
   --moon-bg: rgba(192,132,252,.06);
+  --reasoning-bg: rgba(255,255,255,.025);
+  --reasoning-border: var(--border);
   --danger: #f87171;
   --warn: #fbbf24;
   --code-bg: #0d1117;
@@ -129,7 +133,7 @@ a:hover { text-decoration: underline; }
 .animate-fade-in { animation: fade-in .25s ease; }
 .animate-slide-up { animation: slide-up .2s ease; }
 
-/* Thinking dots — inside .thinking-label::after */
+/* Thinking dots — accent green pulse */
 .thinking-dots::after {
   content: '';
   display: inline-block;
@@ -189,9 +193,9 @@ a:hover { text-decoration: underline; }
 .md-content strong { font-weight: 600; }
 .md-content em { font-style: italic; }
 
-/* Shimmer text */
+/* Shimmer text — uses accent green, not purple */
 .shimmer-text {
-  background: linear-gradient(90deg, var(--text-faint) 0%, var(--text-2) 50%, var(--text-faint) 100%);
+  background: linear-gradient(90deg, var(--text-faint) 0%, var(--accent) 50%, var(--text-faint) 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
