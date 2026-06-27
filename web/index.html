@@ -12,143 +12,163 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
-  --bg: #0d0d0d; --surface: #1a1a1a; --surface2: #242424; --surface3: #2e2e2e;
-  --border: #333; --text: #e8e8e8; --text-dim: #888; --text-faint: #555;
-  --accent: #10a37f; --accent-hover: #1ab892;
-  --moon: #c084fc; --moon-dim: #7c5fa8; --moon-bg: rgba(192,132,252,.08);
+  --bg: #0d0d0d; --surface: #171717; --surface2: #212121; --surface3: #2a2a2a;
+  --border: #2e2e2e; --text: #ececec; --text-dim: #8e8e8e; --text-faint: #555;
+  --accent: #10a37f; --accent-hover: #1ab892; --accent-dim: rgba(16,163,127,.12);
+  --moon: #c084fc; --moon-dim: #7c5fa8; --moon-bg: rgba(192,132,252,.06);
   --danger: #ef4444; --warn: #f59e0b;
-  --radius: 10px; --sidebar-w: 260px;
+  --radius: 12px; --sidebar-w: 260px;
+  --shadow: 0 2px 8px rgba(0,0,0,.15);
 }
 [data-theme="light"] {
-  --bg: #ffffff; --surface: #f7f7f8; --surface2: #ececf1; --surface3: #e0e0e6;
-  --border: #d9d9e3; --text: #1a1a1a; --text-dim: #6e6e80; --text-faint: #999;
-  --moon-bg: rgba(192,132,252,.05);
+  --bg: #ffffff; --surface: #f9f9f9; --surface2: #f0f0f0; --surface3: #e8e8e8;
+  --border: #ddd; --text: #1a1a1a; --text-dim: #666; --text-faint: #aaa;
+  --accent-dim: rgba(16,163,127,.08); --moon-bg: rgba(192,132,252,.04);
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
 }
 html { font-size: 15px; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; -webkit-font-smoothing: antialiased; }
 
-/* ============ SIDEBAR ============ */
-.sidebar { width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; transition: width .2s; }
-.sidebar.collapsed { width: 0; border: none; }
-.sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-.mascot-mini { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
-.brand { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
-.brand .ver { font-size: 10px; color: var(--text-dim); font-weight: 400; margin-left: 4px; }
-.sidebar-actions { margin-left: auto; display: flex; gap: 4px; }
-.icon-btn { width: 30px; height: 30px; border: none; background: transparent; color: var(--text-dim); cursor: pointer; border-radius: 6px; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+/* SIDEBAR */
+.sidebar { width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; transition: margin-left .2s; }
+.sidebar.collapsed { margin-left: calc(-1 * var(--sidebar-w)); }
+.sidebar-header { padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
+.mascot-mini { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+.brand { font-size: 15px; font-weight: 600; letter-spacing: -.3px; }
+.brand .ver { font-size: 10px; color: var(--text-faint); font-weight: 400; margin-left: 3px; }
+.sidebar-actions { margin-left: auto; display: flex; gap: 2px; }
+.icon-btn { width: 28px; height: 28px; border: none; background: transparent; color: var(--text-dim); cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all .12s; }
 .icon-btn:hover { background: var(--surface3); color: var(--text); }
-.new-btn { margin: 10px; padding: 9px 12px; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px; transition: all .15s; width: calc(100% - 20px); }
+.icon-btn svg { width: 16px; height: 16px; }
+.new-btn { margin: 8px 10px; padding: 8px 12px; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px; transition: all .12s; width: calc(100% - 20px); }
 .new-btn:hover { background: var(--surface2); border-color: var(--accent); }
+.new-btn svg { width: 14px; height: 14px; opacity: .6; }
 .search-box { margin: 0 10px 8px; position: relative; }
-.search-box input { width: 100%; padding: 7px 10px 7px 30px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; outline: none; }
+.search-box input { width: 100%; padding: 7px 10px 7px 32px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 12px; outline: none; }
 .search-box input:focus { border-color: var(--accent); }
-.search-box svg { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-dim); }
+.search-box svg { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-faint); width: 14px; height: 14px; }
 .conv-list { flex: 1; overflow-y: auto; padding: 0 6px; }
-.conv-item { padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--text-dim); margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+.conv-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-dim); margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; transition: all .1s; }
 .conv-item:hover { background: var(--surface2); color: var(--text); }
 .conv-item.active { background: var(--surface3); color: var(--text); }
-.conv-item .del { opacity: 0; color: var(--danger); font-size: 12px; margin-left: auto; flex-shrink: 0; }
-.conv-item:hover .del { opacity: .6; }
+.conv-item .del { opacity: 0; color: var(--danger); font-size: 11px; margin-left: auto; flex-shrink: 0; transition: opacity .1s; }
+.conv-item:hover .del { opacity: .5; }
 .conv-item .del:hover { opacity: 1; }
 .sidebar-footer { padding: 8px 12px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
-.rage-bar { flex: 1; height: 4px; background: var(--surface3); border-radius: 2px; overflow: hidden; cursor: help; }
+.rage-bar { flex: 1; height: 3px; background: var(--surface3); border-radius: 2px; overflow: hidden; cursor: help; }
 .rage-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--warn), var(--danger)); border-radius: 2px; transition: width .3s; }
-.rage-label { font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+.rage-label { font-size: 10px; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-/* ============ MAIN ============ */
-.main { flex: 1; display: flex; flex-direction: column; position: relative; }
-.topbar { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--surface); }
-.topbar .toggle-sidebar { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 18px; padding: 4px; }
-.model-select { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 5px 10px; font-size: 12px; cursor: pointer; outline: none; }
+/* MAIN */
+.main { flex: 1; display: flex; flex-direction: column; position: relative; min-width: 0; }
+.topbar { padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+.topbar .toggle-sidebar { background: transparent; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; border-radius: 6px; display: flex; align-items: center; }
+.topbar .toggle-sidebar:hover { background: var(--surface2); }
+.topbar .toggle-sidebar svg { width: 18px; height: 18px; }
+.model-select { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 5px 10px; font-size: 12px; cursor: pointer; outline: none; }
 .topbar-spacer { flex: 1; }
-.strength-group { display: flex; gap: 2px; background: var(--surface2); border-radius: 6px; padding: 2px; }
-.strength-btn { padding: 4px 10px; border: none; background: transparent; color: var(--text-dim); font-size: 11px; cursor: pointer; border-radius: 4px; transition: all .15s; }
+.strength-group { display: flex; gap: 1px; background: var(--surface2); border-radius: 8px; padding: 2px; }
+.strength-btn { padding: 4px 10px; border: none; background: transparent; color: var(--text-dim); font-size: 11px; cursor: pointer; border-radius: 6px; transition: all .12s; }
 .strength-btn.active { background: var(--accent); color: white; }
 
-.messages { flex: 1; overflow-y: auto; padding: 20px 0; scroll-behavior: smooth; }
-.msg { max-width: 760px; margin: 0 auto 16px; padding: 0 20px; }
-.msg .role-label { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
-.msg .role-label .mascot-tag { display: inline-flex; align-items: center; gap: 4px; }
-.msg .role-label .mascot-tag img { width: 16px; height: 16px; border-radius: 50%; }
-.msg-content { font-size: 15px; line-height: 1.7; word-wrap: break-word; }
-.msg-content p { margin-bottom: 8px; }
-.msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4 { margin: 16px 0 8px; font-weight: 600; line-height: 1.3; }
-.msg-content h1 { font-size: 22px; }
-.msg-content h2 { font-size: 19px; }
-.msg-content h3 { font-size: 17px; }
-.msg-content h4 { font-size: 15px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .3px; }
-.msg-content pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 8px 0; font-size: 13px; line-height: 1.5; }
-.msg-content pre code { background: transparent; padding: 0; }
-.msg-content code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+/* MESSAGES */
+.messages { flex: 1; overflow-y: auto; padding: 8px 0; }
+.msg { max-width: 760px; margin: 0 auto 20px; padding: 0 24px; }
+.msg .role-label { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.msg .role-label .mascot-tag { display: inline-flex; align-items: center; gap: 6px; }
+.msg .role-label .mascot-tag img { width: 18px; height: 18px; border-radius: 50%; }
+.msg-content { font-size: 15px; line-height: 1.75; word-wrap: break-word; }
+.msg-content p { margin-bottom: 10px; }
+.msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4 { margin: 20px 0 8px; font-weight: 600; line-height: 1.3; }
+.msg-content h1 { font-size: 22px; } .msg-content h2 { font-size: 19px; } .msg-content h3 { font-size: 17px; }
+.msg-content h4 { font-size: 14px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+.msg-content pre { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0; overflow: hidden; margin: 12px 0; font-size: 13px; line-height: 1.5; position: relative; }
+.msg-content pre .code-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-faint); }
+.msg-content pre .code-header .lang { text-transform: uppercase; letter-spacing: .5px; }
+.msg-content pre .code-header .copy-btn { cursor: pointer; color: var(--text-dim); background: none; border: none; font-size: 11px; transition: color .1s; }
+.msg-content pre .code-header .copy-btn:hover { color: var(--accent); }
+.msg-content pre code { display: block; padding: 14px; overflow-x: auto; font-family: 'SF Mono', 'Fira Code', monospace; }
+.msg-content code { font-family: 'SF Mono', 'Fira Code', monospace; }
 .msg-content :not(pre) > code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
-.msg-content ul, .msg-content ol { margin: 8px 0; padding-left: 24px; }
+.msg-content ul, .msg-content ol { margin: 10px 0; padding-left: 24px; }
 .msg-content li { margin-bottom: 4px; }
 .msg-content ul li::marker { color: var(--accent); }
 .msg-content ol li::marker { color: var(--accent); }
-.msg-content blockquote { border-left: 3px solid var(--accent); padding: 4px 12px; margin: 8px 0; color: var(--text-dim); background: var(--surface2); border-radius: 0 4px 4px 0; }
-.msg-content hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
-.msg-content a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color .15s; }
-.msg-content a:hover { border-bottom-color: var(--accent); }
-.msg-content table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
-.msg-content th, .msg-content td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+.msg-content blockquote { border-left: 3px solid var(--accent); padding: 6px 14px; margin: 10px 0; color: var(--text-dim); background: var(--accent-dim); border-radius: 0 6px 6px 0; }
+.msg-content hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+.msg-content a { color: var(--accent); text-decoration: none; }
+.msg-content a:hover { text-decoration: underline; }
+.msg-content table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
+.msg-content th, .msg-content td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
 .msg-content th { background: var(--surface2); font-weight: 600; }
 .msg-content tr:nth-child(even) td { background: var(--surface2); }
 .msg-content strong { font-weight: 600; }
-.msg-content img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+.msg-content img { max-width: 100%; border-radius: var(--radius); margin: 8px 0; }
+.msg-content img.attached { max-height: 200px; border: 1px solid var(--border); }
 
-/* Reasoning - no icons, pure text */
-.reasoning-block { background: var(--moon-bg); border-left: 2px solid var(--moon-dim); padding: 8px 12px; margin: 4px 0 8px; border-radius: 0 6px 6px 0; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
-.reasoning-toggle { cursor: pointer; font-size: 12px; color: var(--moon); margin-bottom: 2px; user-select: none; }
+/* Reasoning */
+.reasoning-block { background: var(--moon-bg); border-left: 2px solid var(--moon-dim); padding: 10px 14px; margin: 6px 0 10px; border-radius: 0 8px 8px 0; font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+.reasoning-toggle { cursor: pointer; font-size: 12px; color: var(--moon); margin-bottom: 4px; user-select: none; display: flex; align-items: center; gap: 4px; }
 .reasoning-toggle:hover { text-decoration: underline; }
-.reasoning-text { white-space: pre-wrap; }
+.reasoning-toggle svg { width: 12px; height: 12px; }
 
-/* Thinking animation */
-.thinking-dots { display: inline-flex; gap: 4px; align-items: center; }
-.thinking-dots span { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: pulse-dot 1.4s infinite ease-in-out; }
-.thinking-dots span:nth-child(1) { animation-delay: 0s; }
-.thinking-dots span:nth-child(2) { animation-delay: .2s; }
-.thinking-dots span:nth-child(3) { animation-delay: .4s; }
-@keyframes pulse-dot { 0%, 80%, 100% { opacity: .3; transform: scale(.8); } 40% { opacity: 1; transform: scale(1.2); } }
+/* Thinking animation — shimmer sweep */
+.thinking-shimmer { display: inline-flex; align-items: center; gap: 8px; padding: 4px 0; }
+.thinking-shimmer .shimmer-text { background: linear-gradient(90deg, var(--text-faint) 0%, var(--text-dim) 50%, var(--text-faint) 100%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: shimmer 2s linear infinite; font-size: 14px; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.thinking-shimmer .dots { display: inline-flex; gap: 3px; }
+.thinking-shimmer .dots span { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; animation: pulse-dot 1.4s infinite ease-in-out; }
+.thinking-shimmer .dots span:nth-child(2) { animation-delay: .2s; }
+.thinking-shimmer .dots span:nth-child(3) { animation-delay: .4s; }
+@keyframes pulse-dot { 0%, 80%, 100% { opacity: .3; transform: scale(.7); } 40% { opacity: 1; transform: scale(1.1); } }
 
-/* Tool call display */
-.tool-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; margin: 4px 0; font-size: 12px; }
-.tool-block .tool-header { color: var(--accent); font-weight: 600; margin-bottom: 2px; }
-.tool-block .tool-args { color: var(--text-dim); font-family: monospace; }
-.tool-block .tool-result { color: var(--text); margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+/* Token fade-in */
+@keyframes fadeInToken { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fadeInToken .3s ease; }
+
+/* Tool call */
+.tool-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin: 6px 0; font-size: 12px; }
+.tool-block .tool-header { color: var(--accent); font-weight: 600; margin-bottom: 2px; display: flex; align-items: center; gap: 4px; }
+.tool-block .tool-args { color: var(--text-dim); font-family: 'SF Mono', monospace; }
+.tool-block .tool-result { color: var(--text); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
 
 /* Welcome */
-.welcome { max-width: 760px; margin: 60px auto; text-align: center; padding: 0 20px; }
-.welcome .mascot-large { width: 120px; height: 120px; border-radius: 50%; margin-bottom: 20px; filter: drop-shadow(0 0 20px rgba(192,132,252,.3)); }
-.welcome h1 { font-size: 26px; margin-bottom: 6px; }
+.welcome { max-width: 760px; margin: 60px auto; text-align: center; padding: 0 24px; }
+.welcome .mascot-large { width: 100px; height: 100px; border-radius: 50%; margin-bottom: 20px; filter: drop-shadow(0 0 20px rgba(192,132,252,.25)); }
+.welcome h1 { font-size: 24px; margin-bottom: 6px; font-weight: 600; }
 .welcome p { color: var(--text-dim); margin-bottom: 24px; font-size: 14px; }
 
-/* ============ COMPOSER ============ */
-.composer { padding: 12px 20px 16px; border-top: 1px solid var(--border); background: var(--surface); }
+/* COMPOSER */
+.composer { padding: 8px 24px 16px; }
 .composer-inner { max-width: 760px; margin: 0 auto; }
-.composer-row { display: flex; gap: 8px; align-items: flex-end; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
+.composer-row { display: flex; gap: 8px; align-items: flex-end; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; box-shadow: var(--shadow); transition: border-color .12s; }
 .composer-row:focus-within { border-color: var(--accent); }
 .composer textarea { flex: 1; background: transparent; border: none; color: var(--text); padding: 6px 4px; font-size: 15px; resize: none; min-height: 28px; max-height: 200px; font-family: inherit; outline: none; line-height: 1.5; }
 .composer textarea::placeholder { color: var(--text-faint); }
-.attach-btn, .voice-btn, .send-btn { width: 32px; height: 32px; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; transition: all .15s; }
+.attach-btn, .voice-btn, .send-btn { width: 30px; height: 30px; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .12s; }
 .attach-btn, .voice-btn { background: transparent; color: var(--text-dim); }
 .attach-btn:hover, .voice-btn:hover { background: var(--surface3); color: var(--text); }
-.voice-btn.recording { background: var(--danger); color: white; animation: pulse-rec 1s infinite; }
-@keyframes pulse-rec { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+.attach-btn svg, .voice-btn svg { width: 18px; height: 18px; }
+.voice-btn.recording { background: var(--danger); }
+.voice-btn.recording svg { color: white; animation: pulse-rec 1s infinite; }
+@keyframes pulse-rec { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
 .send-btn { background: var(--accent); color: white; }
 .send-btn:hover { background: var(--accent-hover); }
 .send-btn:disabled { background: var(--surface3); color: var(--text-faint); cursor: not-allowed; }
+.send-btn svg { width: 16px; height: 16px; }
 .composer-hint { text-align: center; font-size: 11px; color: var(--text-faint); margin-top: 6px; }
 .attach-preview { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
-.attach-preview .attach-item { font-size: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; display: flex; align-items: center; gap: 4px; }
-.attach-preview .attach-item .remove { color: var(--danger); cursor: pointer; }
+.attach-preview .attach-item { font-size: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; display: flex; align-items: center; gap: 4px; }
+.attach-preview .attach-item img { width: 32px; height: 32px; border-radius: 4px; object-fit: cover; }
+.attach-preview .attach-item .remove { color: var(--danger); cursor: pointer; font-size: 14px; }
 .file-input { display: none; }
 
-/* ============ SETTINGS PAGE ============ */
-.settings-page { max-width: 640px; margin: 30px auto; padding: 0 20px; display: none; }
+/* SETTINGS + MEMORY PAGE */
+.settings-page { max-width: 640px; margin: 30px auto; padding: 0 24px; display: none; }
 .settings-page.active { display: block; }
-.settings-page h2 { font-size: 20px; margin-bottom: 16px; }
-.settings-page h3 { font-size: 15px; margin: 20px 0 10px; color: var(--text-dim); }
-.provider-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.settings-page h2 { font-size: 20px; margin-bottom: 16px; font-weight: 600; }
+.settings-page h3 { font-size: 14px; margin: 20px 0 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+.provider-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; }
 .provider-card.active { border-color: var(--accent); }
 .provider-card .pc-row { display: flex; justify-content: space-between; align-items: center; }
 .provider-card .pc-name { font-weight: 600; font-size: 14px; }
@@ -159,16 +179,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 .provider-card .pc-actions a.danger:hover { color: var(--danger); }
 .field-group { margin-bottom: 14px; }
 .field-group label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
-.field-group input, .field-group select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 8px 10px; font-size: 14px; outline: none; }
+.field-group input, .field-group select { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 14px; outline: none; }
 .field-group input:focus, .field-group select:focus { border-color: var(--accent); }
-.btn { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.btn { padding: 8px 18px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; }
 .btn-primary { background: var(--accent); color: white; }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-secondary { background: var(--surface3); color: var(--text); }
 .btn-row { display: flex; gap: 8px; margin-top: 16px; }
-.flash { padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 10px; }
-.flash.ok { background: rgba(16,163,127,.15); color: var(--accent); }
-.flash.err { background: rgba(239,68,68,.15); color: var(--danger); }
+.flash { padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; }
+.flash.ok { background: var(--accent-dim); color: var(--accent); }
+.flash.err { background: rgba(239,68,68,.12); color: var(--danger); }
 </style>
 </head>
 <body>
@@ -177,29 +197,40 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 <div class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <img src="/static/mascot.png" class="mascot-mini" alt="madcop">
-    <div class="brand">madcop<span class="ver">v2.1</span></div>
+    <div class="brand">madcop<span class="ver">v2.2</span></div>
     <div class="sidebar-actions">
-      <button class="icon-btn" onclick="toggleTheme()" id="themeBtn" title="切换主题">&#9788;</button>
-      <button class="icon-btn" onclick="showSettings()" title="设置">&#9881;</button>
+      <button class="icon-btn" onclick="toggleTheme()" id="themeBtn" title="切换主题">
+        <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn" onclick="showSettings()" title="设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
     </div>
   </div>
-  <button class="new-btn" onclick="newConversation()">+ 新对话</button>
+  <button class="new-btn" onclick="newConversation()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    新对话
+  </button>
   <div class="search-box">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
     <input type="text" id="searchInput" placeholder="搜索历史会话..." oninput="searchConversations()">
   </div>
   <div class="conv-list" id="convList"></div>
   <div class="sidebar-footer">
     <div class="rage-bar" title="怒气值 (上下文使用率)"><div class="rage-fill" id="rageFill"></div></div>
     <span class="rage-label" id="rageLabel">0%</span>
-    <button class="icon-btn" onclick="showMemory()" title="记忆">&#9779;</button>
+    <button class="icon-btn" onclick="showMemory()" title="记忆">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg>
+    </button>
   </div>
 </div>
 
 <!-- MAIN -->
 <div class="main">
   <div class="topbar">
-    <button class="toggle-sidebar" onclick="toggleSidebar()">&#9776;</button>
+    <button class="toggle-sidebar" onclick="toggleSidebar()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
     <select class="model-select" id="modelSelect" onchange="onModelChange()">
       <option value="">默认模型</option>
     </select>
@@ -215,7 +246,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
     <div class="welcome" id="welcome">
       <img src="/static/mascot.png" class="mascot-large" alt="madcop">
       <h1>madcop</h1>
-      <p>你的本地 AI Agent 框架 · 支持 Web 搜索、天气查询、文件操作</p>
+      <p>你的本地 AI Agent · 支持 Web 搜索、天气查询、文件操作、跨会话记忆</p>
     </div>
   </div>
 
@@ -223,11 +254,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
     <div class="composer-inner">
       <div class="attach-preview" id="attachPreview"></div>
       <div class="composer-row">
-        <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="附件">&#128206;</button>
-        <input type="file" class="file-input" id="fileInput" onchange="onFileSelect(event)" multiple>
+        <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="附件">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <input type="file" class="file-input" id="fileInput" onchange="onFileSelect(event)" multiple accept="image/*,text/*,.pdf,.csv,.json,.py,.js,.ts,.md">
         <textarea id="input" placeholder="输入消息... (Enter 发送)" rows="1"></textarea>
-        <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" title="语音输入">&#127908;</button>
-        <button class="send-btn" id="sendBtn" onclick="sendMessage()">&#9658;</button>
+        <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()" title="语音输入">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>
+        </button>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        </button>
       </div>
       <div class="composer-hint">Enter 发送 · Shift+Enter 换行 · madcop 可以搜索网页、查天气、读写文件</div>
     </div>
@@ -241,46 +278,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
   <h3>已配置的 Provider</h3>
   <div id="providerList"></div>
   <h3>添加 / 更新 Provider</h3>
-  <div class="field-group">
-    <label>Provider</label>
-    <select id="providerSelect" onchange="onPresetSelect()">
-      <option value="">— 选择 —</option>
-    </select>
-  </div>
-  <div class="field-group">
-    <label>API Base URL</label>
-    <input type="text" id="baseUrlInput" placeholder="https://api.openai.com/v1">
-  </div>
-  <div class="field-group">
-    <label>API Key</label>
-    <input type="password" id="apiKeyInput" placeholder="sk-...">
-  </div>
-  <div class="field-group">
-    <label>Model</label>
-    <input type="text" id="modelInput" placeholder="gpt-4o-mini">
-  </div>
-  <div class="btn-row">
-    <button class="btn btn-primary" onclick="saveProvider()">保存</button>
-    <button class="btn btn-secondary" onclick="showChat()">返回</button>
-  </div>
+  <div class="field-group"><label>Provider</label><select id="providerSelect" onchange="onPresetSelect()"><option value="">— 选择 —</option></select></div>
+  <div class="field-group"><label>API Base URL</label><input type="text" id="baseUrlInput" placeholder="https://api.openai.com/v1"></div>
+  <div class="field-group"><label>API Key</label><input type="password" id="apiKeyInput" placeholder="sk-..."></div>
+  <div class="field-group"><label>Model</label><input type="text" id="modelInput" placeholder="gpt-4o-mini"></div>
+  <div class="btn-row"><button class="btn btn-primary" onclick="saveProvider()">保存</button><button class="btn btn-secondary" onclick="showChat()">返回</button></div>
 </div>
 
 <!-- MEMORY PAGE -->
 <div class="settings-page" id="memoryPage">
   <h2>记忆</h2>
   <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">madcop 会自动记住你的身份、偏好和重要信息。你也可以手动添加或删除记忆。</p>
-  <div class="field-group">
-    <label>手动添加记忆</label>
-    <div style="display:flex;gap:6px;">
-      <input type="text" id="memoryInput" placeholder="例: 用户喜欢吃火锅" style="flex:1;">
-      <button class="btn btn-primary" onclick="addMemoryManual()">添加</button>
-    </div>
-  </div>
+  <div class="field-group"><label>手动添加记忆</label><div style="display:flex;gap:6px;"><input type="text" id="memoryInput" placeholder="例: 用户喜欢吃火锅" style="flex:1;"><button class="btn btn-primary" onclick="addMemoryManual()">添加</button></div></div>
   <h3>已有记忆 (<span id="memoryCount">0</span>)</h3>
   <div id="memoryList"></div>
-  <div class="btn-row">
-    <button class="btn btn-secondary" onclick="showChat()">返回聊天</button>
-  </div>
+  <div class="btn-row"><button class="btn btn-secondary" onclick="showChat()">返回聊天</button></div>
 </div>
 
 <script>
@@ -293,9 +305,8 @@ let temperature = 0.7;
 let attachments = [];
 let recognition = null;
 
-// Token estimation (rough: 1 token ~ 4 chars)
 function estimateTokens(text) { return Math.ceil(text.length / 4); }
-const CONTEXT_WINDOW = 128000; // default, updated per model
+const CONTEXT_WINDOW = 128000;
 
 // ========== THEME ==========
 function toggleTheme() {
@@ -303,298 +314,185 @@ function toggleTheme() {
   const next = cur === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('madcop-theme', next);
-  document.getElementById('themeBtn').innerHTML = next === 'dark' ? '&#9788;' : '&#9789;';
+  updateThemeIcon(next);
+}
+function updateThemeIcon(theme) {
+  const icon = document.getElementById('themeIcon');
+  if (theme === 'dark') {
+    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>';
+  } else {
+    icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  }
 }
 (function initTheme() {
   const saved = localStorage.getItem('madcop-theme') || 'dark';
   document.documentElement.setAttribute('data-theme', saved);
-  document.getElementById('themeBtn').innerHTML = saved === 'dark' ? '&#9788;' : '&#9789;';
+  updateThemeIcon(saved);
 })();
 
-// ========== SIDEBAR ==========
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('collapsed');
-}
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
-// ========== CONVERSATIONS (localStorage) ==========
-function loadConversations() {
-  try {
-    const raw = localStorage.getItem('madcop-conversations');
-    if (raw) conversations = JSON.parse(raw);
-  } catch(e) { conversations = []; }
-}
-function saveConversations() {
-  try {
-    // Keep only last 50 conversations
-    if (conversations.length > 50) conversations = conversations.slice(-50);
-    localStorage.setItem('madcop-conversations', JSON.stringify(conversations));
-  } catch(e) {}
-}
-function newConversation() {
-  const id = Date.now().toString();
-  conversations.push({ id, title: '新对话', messages: [], model: '', createdAt: id });
-  activeConvId = id;
-  saveConversations();
-  renderConvList();
-  renderMessages();
-}
-function deleteConversation(id, ev) {
-  ev.stopPropagation();
-  conversations = conversations.filter(c => c.id !== id);
-  if (activeConvId === id) activeConvId = conversations.length ? conversations[conversations.length-1].id : null;
-  saveConversations();
-  renderConvList();
-  renderMessages();
-}
-function searchConversations() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  renderConvList(q);
-}
-function getActiveConv() {
-  if (!activeConvId) { newConversation(); }
-  return conversations.find(c => c.id === activeConvId);
-}
+// ========== CONVERSATIONS ==========
+function loadConversations() { try { const raw = localStorage.getItem('madcop-conversations'); if (raw) conversations = JSON.parse(raw); } catch(e) { conversations = []; } }
+function saveConversations() { try { if (conversations.length > 50) conversations = conversations.slice(-50); localStorage.setItem('madcop-conversations', JSON.stringify(conversations)); } catch(e) {} }
+function newConversation() { const id = Date.now().toString(); conversations.push({ id, title: '新对话', messages: [], model: '', createdAt: id }); activeConvId = id; saveConversations(); renderConvList(); renderMessages(); }
+function deleteConversation(id, ev) { ev.stopPropagation(); conversations = conversations.filter(c => c.id !== id); if (activeConvId === id) activeConvId = conversations.length ? conversations[conversations.length-1].id : null; saveConversations(); renderConvList(); renderMessages(); }
+function searchConversations() { renderConvList(document.getElementById('searchInput').value.toLowerCase()); }
+function getActiveConv() { if (!activeConvId) newConversation(); return conversations.find(c => c.id === activeConvId); }
 function renderConvList(filter) {
-  const el = document.getElementById('convList');
-  el.innerHTML = '';
+  const el = document.getElementById('convList'); el.innerHTML = '';
   let list = conversations.slice().reverse();
   if (filter) list = list.filter(c => c.title.toLowerCase().includes(filter) || c.messages.some(m => m.content.toLowerCase().includes(filter)));
   list.forEach(c => {
     const div = document.createElement('div');
     div.className = 'conv-item' + (c.id === activeConvId ? ' active' : '');
-    div.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;flex:1">${esc(c.title)}</span><span class="del" onclick="deleteConversation('${c.id}', event)">x</span>`;
+    div.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis;flex:1">' + esc(c.title) + '</span><span class="del" onclick="deleteConversation(\'' + c.id + '\', event)">x</span>';
     div.onclick = () => { activeConvId = c.id; renderConvList(); renderMessages(); };
     el.appendChild(div);
   });
 }
-
-// ========== RAGE METER ==========
-function updateRageMeter() {
-  const conv = getActiveConv();
-  if (!conv) return;
-  const totalText = conv.messages.map(m => (m.content||'') + (m.reasoning||'')).join('');
-  const tokens = estimateTokens(totalText);
-  const pct = Math.min(100, Math.round(tokens / CONTEXT_WINDOW * 100));
-  document.getElementById('rageFill').style.width = pct + '%';
-  document.getElementById('rageLabel').textContent = pct + '%';
-}
+function updateRageMeter() { const conv = getActiveConv(); if (!conv) return; const totalText = conv.messages.map(m => (m.content||'') + (m.reasoning||'')).join(''); const tokens = estimateTokens(totalText); const pct = Math.min(100, Math.round(tokens / CONTEXT_WINDOW * 100)); document.getElementById('rageFill').style.width = pct + '%'; document.getElementById('rageLabel').textContent = pct + '%'; }
 
 // ========== SETTINGS ==========
 async function loadSettings() {
-  const r = await fetch('/api/settings');
-  const data = await r.json();
-  presets = data.presets || [];
-  const active = data.providers.find(p => p.provider_id === data.active_provider);
-  // Update model dropdown
+  const r = await fetch('/api/settings'); const data = await r.json(); presets = data.presets || [];
   const sel = document.getElementById('modelSelect');
   sel.innerHTML = '<option value="">默认模型</option>';
-  data.providers.forEach(p => {
-    sel.innerHTML += `<option value="${p.model}" ${p.provider_id === data.active_provider ? 'selected' : ''}>${p.label} · ${p.model}</option>`;
-  });
-  // Provider list
-  const list = document.getElementById('providerList');
-  list.innerHTML = '';
+  data.providers.forEach(p => { sel.innerHTML += '<option value="' + p.model + '" ' + (p.provider_id === data.active_provider ? 'selected' : '') + '>' + p.label + ' · ' + p.model + '</option>'; });
+  const list = document.getElementById('providerList'); list.innerHTML = '';
   if (!data.providers.length) list.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">还没有配置 Provider</p>';
   data.providers.forEach(p => {
     const card = document.createElement('div');
     card.className = 'provider-card' + (p.provider_id === data.active_provider ? ' active' : '');
-    card.innerHTML = `<div class="pc-row"><div><div class="pc-name">${p.label || p.provider_id} ${p.provider_id === data.active_provider ? '&#10003;' : ''}</div><div class="pc-meta">${p.model} · ${p.api_key_masked || 'no key'}</div></div><div class="pc-actions">${p.provider_id !== data.active_provider ? `<a onclick="setActive('${p.provider_id}')">设为默认</a>` : ''}<a onclick="editProvider('${p.provider_id}')">编辑</a><a class="danger" onclick="deleteProvider('${p.provider_id}')">删除</a></div></div>`;
+    card.innerHTML = '<div class="pc-row"><div><div class="pc-name">' + esc(p.label || p.provider_id) + (p.provider_id === data.active_provider ? ' ✓' : '') + '</div><div class="pc-meta">' + esc(p.model) + ' · ' + esc(p.api_key_masked || 'no key') + '</div></div><div class="pc-actions">' + (p.provider_id !== data.active_provider ? '<a onclick="setActive(\'' + p.provider_id + '\')">设为默认</a>' : '') + '<a onclick="editProvider(\'' + p.provider_id + '\')">编辑</a><a class="danger" onclick="deleteProvider(\'' + p.provider_id + '\')">删除</a></div></div>';
     list.appendChild(card);
   });
-  // Preset dropdown
   const ps = document.getElementById('providerSelect');
   ps.innerHTML = '<option value="">— 选择 —</option>';
-  presets.forEach(p => { ps.innerHTML += `<option value="${p.id}" data-base="${p.base_url}" data-model="${p.default_model}">${p.label}</option>`; });
+  presets.forEach(p => { ps.innerHTML += '<option value="' + p.id + '" data-base="' + p.base_url + '" data-model="' + p.default_model + '">' + p.label + '</option>'; });
 }
-function onPresetSelect() {
-  const sel = document.getElementById('providerSelect');
-  const opt = sel.options[sel.selectedIndex];
-  if (opt.value) {
-    document.getElementById('baseUrlInput').value = opt.dataset.base || '';
-    document.getElementById('modelInput').value = opt.dataset.model || '';
-  }
-}
-function editProvider(id) {
-  const sel = document.getElementById('providerSelect');
-  for (let i = 0; i < sel.options.length; i++) { if (sel.options[i].value === id) { sel.selectedIndex = i; break; } }
-  onPresetSelect();
-}
-async function saveProvider() {
-  const sel = document.getElementById('providerSelect');
-  const providerId = sel.value || 'custom';
-  const baseUrl = document.getElementById('baseUrlInput').value.trim();
-  const apiKey = document.getElementById('apiKeyInput').value.trim();
-  const model = document.getElementById('modelInput').value.trim();
-  const label = sel.options[sel.selectedIndex]?.text || providerId;
-  if (!baseUrl || !model) { showFlash('请填写 Base URL 和 Model', 'err'); return; }
-  const r = await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ provider_id: providerId, base_url: baseUrl, api_key: apiKey, model, label }) });
-  if (r.ok) { document.getElementById('apiKeyInput').value = ''; showFlash('保存成功', 'ok'); await loadSettings(); } else { showFlash('保存失败', 'err'); }
-}
+function onPresetSelect() { const sel = document.getElementById('providerSelect'); const opt = sel.options[sel.selectedIndex]; if (opt.value) { document.getElementById('baseUrlInput').value = opt.dataset.base || ''; document.getElementById('modelInput').value = opt.dataset.model || ''; } }
+function editProvider(id) { const sel = document.getElementById('providerSelect'); for (let i = 0; i < sel.options.length; i++) { if (sel.options[i].value === id) { sel.selectedIndex = i; break; } } onPresetSelect(); }
+async function saveProvider() { const sel = document.getElementById('providerSelect'); const providerId = sel.value || 'custom'; const baseUrl = document.getElementById('baseUrlInput').value.trim(); const apiKey = document.getElementById('apiKeyInput').value.trim(); const model = document.getElementById('modelInput').value.trim(); const label = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : providerId; if (!baseUrl || !model) { showFlash('请填写 Base URL 和 Model', 'err'); return; } const r = await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ provider_id: providerId, base_url: baseUrl, api_key: apiKey, model, label }) }); if (r.ok) { document.getElementById('apiKeyInput').value = ''; showFlash('保存成功', 'ok'); await loadSettings(); } else { showFlash('保存失败', 'err'); } }
 async function setActive(id) { await fetch('/api/settings/active', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ provider_id: id }) }); await loadSettings(); }
 async function deleteProvider(id) { if (!confirm('确定删除？')) return; await fetch('/api/settings/' + id, { method: 'DELETE' }); await loadSettings(); }
-function showFlash(msg, type) { const el = document.getElementById('flashMsg'); el.innerHTML = `<div class="flash ${type}">${msg}</div>`; setTimeout(() => el.innerHTML = '', 3000); }
-function showSettings() { document.getElementById('settingsPage').classList.add('active'); document.querySelector('.main').style.display = 'none'; loadSettings(); }
-function showChat() {
-  document.getElementById('settingsPage').classList.remove('active');
-  document.getElementById('memoryPage').classList.remove('active');
-  document.querySelector('.main').style.display = '';
-}
-
-function showMemory() {
-  document.getElementById('settingsPage').classList.remove('active');
-  document.getElementById('memoryPage').classList.add('active');
-  document.querySelector('.main').style.display = 'none';
-  loadMemory();
-}
-
-async function loadMemory() {
-  const r = await fetch('/api/memory');
-  const data = await r.json();
-  const items = [
-    ...(data.semantic || []).map(m => ({...m, layer: 'semantic'})),
-    ...(data.episodic || []).map(m => ({...m, layer: 'episodic'})),
-    ...(data.reflective || []).map(m => ({...m, layer: 'reflective'})),
-  ];
-  document.getElementById('memoryCount').textContent = items.length;
-  const list = document.getElementById('memoryList');
-  if (!items.length) {
-    list.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">还没有任何记忆。开始对话或手动添加。</p>';
-    return;
-  }
-  list.innerHTML = '';
-  items.forEach(m => {
-    const card = document.createElement('div');
-    card.className = 'provider-card';
-    const layerLabel = {semantic: '知识', episodic: '事件', reflective: '偏好'}[m.layer] || m.layer;
-    card.innerHTML = `<div class="pc-row"><div style="flex:1;"><div class="pc-name">${esc(m.title || '')}</div><div class="pc-meta">${layerLabel} · ${esc((m.tags || []).join(', '))}</div></div><div class="pc-actions"><a class="danger" onclick="deleteMemory('${m.id}')">删除</a></div></div>`;
-    list.appendChild(card);
-  });
-}
-
-async function addMemoryManual() {
-  const input = document.getElementById('memoryInput');
-  const content = input.value.trim();
-  if (!content) return;
-  const r = await fetch('/api/memory', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ kind: 'semantic', title: content.slice(0, 30), content, tags: ['manual', 'user-profile'] }),
-  });
-  if (r.ok) { input.value = ''; loadMemory(); } else { alert('添加失败'); }
-}
-
-async function deleteMemory(id) {
-  if (!confirm('确定删除这条记忆？')) return;
-  await fetch('/api/memory/' + id, { method: 'DELETE' });
-  loadMemory();
-}
+function showFlash(msg, type) { const el = document.getElementById('flashMsg'); el.innerHTML = '<div class="flash ' + type + '">' + msg + '</div>'; setTimeout(() => el.innerHTML = '', 3000); }
+function showSettings() { document.getElementById('settingsPage').classList.add('active'); document.getElementById('memoryPage').classList.remove('active'); document.querySelector('.main').style.display = 'none'; loadSettings(); }
+function showChat() { document.getElementById('settingsPage').classList.remove('active'); document.getElementById('memoryPage').classList.remove('active'); document.querySelector('.main').style.display = ''; }
+function showMemory() { document.getElementById('settingsPage').classList.remove('active'); document.getElementById('memoryPage').classList.add('active'); document.querySelector('.main').style.display = 'none'; loadMemory(); }
+async function loadMemory() { const r = await fetch('/api/memory'); const data = await r.json(); const items = [...(data.semantic || []).map(m => ({...m, layer: 'semantic'})), ...(data.episodic || []).map(m => ({...m, layer: 'episodic'})), ...(data.reflective || []).map(m => ({...m, layer: 'reflective'}))]; document.getElementById('memoryCount').textContent = items.length; const list = document.getElementById('memoryList'); if (!items.length) { list.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">还没有任何记忆。开始对话或手动添加。</p>'; return; } list.innerHTML = ''; items.forEach(m => { const card = document.createElement('div'); card.className = 'provider-card'; const layerLabel = {semantic: '知识', episodic: '事件', reflective: '偏好'}[m.layer] || m.layer; card.innerHTML = '<div class="pc-row"><div style="flex:1;"><div class="pc-name">' + esc(m.title || '') + '</div><div class="pc-meta">' + layerLabel + ' · ' + esc((m.tags || []).join(', ')) + '</div></div><div class="pc-actions"><a class="danger" onclick="deleteMemory(\'' + m.id + '\')">删除</a></div></div>'; list.appendChild(card); }); }
+async function addMemoryManual() { const input = document.getElementById('memoryInput'); const content = input.value.trim(); if (!content) return; const r = await fetch('/api/memory', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ kind: 'semantic', title: content.slice(0, 30), content, tags: ['manual', 'user-profile'] }) }); if (r.ok) { input.value = ''; loadMemory(); } else { alert('添加失败'); } }
+async function deleteMemory(id) { if (!confirm('确定删除这条记忆？')) return; await fetch('/api/memory/' + id, { method: 'DELETE' }); loadMemory(); }
 
 // ========== MODEL / STRENGTH ==========
-function onModelChange() {
-  const sel = document.getElementById('modelSelect');
-  const conv = getActiveConv();
-  if (conv) conv.model = sel.value;
-}
-function setStrength(btn) {
-  document.querySelectorAll('.strength-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  temperature = parseFloat(btn.dataset.strength);
-}
+function onModelChange() { const sel = document.getElementById('modelSelect'); const conv = getActiveConv(); if (conv) conv.model = sel.value; }
+function setStrength(btn) { document.querySelectorAll('.strength-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); temperature = parseFloat(btn.dataset.strength); }
 
 // ========== FILE ATTACHMENT ==========
 function onFileSelect(ev) {
   const files = Array.from(ev.target.files);
   files.forEach(f => {
-    const reader = new FileReader();
-    reader.onload = () => { attachments.push({ name: f.name, type: f.type, data: reader.result }); renderAttachments(); };
-    reader.readAsDataURL(f);
+    if (f.type.startsWith('image/')) {
+      // Images: read as data URL for potential vision API
+      const reader = new FileReader();
+      reader.onload = () => { attachments.push({ name: f.name, type: f.type, data: reader.result, isImage: true }); renderAttachments(); };
+      reader.readAsDataURL(f);
+    } else {
+      // Text files: read as text
+      const reader = new FileReader();
+      reader.onload = () => { attachments.push({ name: f.name, type: f.type, data: reader.result, isImage: false }); renderAttachments(); };
+      reader.readAsText(f);
+    }
   });
   ev.target.value = '';
 }
 function renderAttachments() {
-  const el = document.getElementById('attachPreview');
-  el.innerHTML = '';
+  const el = document.getElementById('attachPreview'); el.innerHTML = '';
   attachments.forEach((a, i) => {
-    el.innerHTML += `<span class="attach-item">${a.name}<span class="remove" onclick="attachments.splice(${i},1); renderAttachments();">x</span></span>`;
+    if (a.isImage) {
+      el.innerHTML += '<span class="attach-item"><img src="' + a.data + '"><span>' + esc(a.name) + '</span><span class="remove" onclick="attachments.splice(' + i + ',1); renderAttachments();">x</span></span>';
+    } else {
+      el.innerHTML += '<span class="attach-item"><span>' + esc(a.name) + '</span><span class="remove" onclick="attachments.splice(' + i + ',1); renderAttachments();">x</span></span>';
+    }
   });
 }
 
 // ========== VOICE INPUT ==========
 function toggleVoice() {
   const btn = document.getElementById('voiceBtn');
-  if (recognition) {
-    recognition.stop();
-    recognition = null;
-    btn.classList.remove('recording');
-    return;
-  }
+  if (recognition) { recognition.stop(); recognition = null; btn.classList.remove('recording'); return; }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { alert('浏览器不支持语音识别'); return; }
-  recognition = new SR();
-  recognition.lang = 'zh-CN';
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.onresult = (ev) => {
-    let text = '';
-    for (let i = 0; i < ev.results.length; i++) text += ev.results[i][0].transcript;
-    document.getElementById('input').value = text;
-  };
+  recognition = new SR(); recognition.lang = 'zh-CN'; recognition.continuous = false; recognition.interimResults = true;
+  recognition.onresult = (ev) => { let text = ''; for (let i = 0; i < ev.results.length; i++) text += ev.results[i][0].transcript; document.getElementById('input').value = text; };
   recognition.onend = () => { btn.classList.remove('recording'); recognition = null; };
-  recognition.start();
-  btn.classList.add('recording');
+  recognition.start(); btn.classList.add('recording');
 }
 
 // ========== CHAT ==========
 function renderMessages() {
-  const el = document.getElementById('messages');
-  const conv = getActiveConv();
-  if (!conv || conv.messages.length === 0) {
-    el.innerHTML = `<div class="welcome" id="welcome"><img src="/static/mascot.png" class="mascot-large" alt="madcop"><h1>madcop</h1><p>你的本地 AI Agent 框架 · 支持 Web 搜索、天气查询、文件操作</p></div>`;
-    updateRageMeter();
-    return;
-  }
+  const el = document.getElementById('messages'); const conv = getActiveConv();
+  if (!conv || conv.messages.length === 0) { el.innerHTML = '<div class="welcome" id="welcome"><img src="/static/mascot.png" class="mascot-large" alt="madcop"><h1>madcop</h1><p>你的本地 AI Agent · 支持 Web 搜索、天气查询、文件操作、跨会话记忆</p></div>'; updateRageMeter(); return; }
   el.innerHTML = '';
   conv.messages.forEach(m => {
-    const div = document.createElement('div');
-    div.className = 'msg ' + m.role;
+    const div = document.createElement('div'); div.className = 'msg ' + m.role;
     let html = '';
     if (m.role === 'user') {
-      html = `<div class="role-label">你</div><div class="msg-content">${formatContent(m.content)}</div>`;
+      html = '<div class="role-label">你</div><div class="msg-content">' + formatContent(m.content) + '</div>';
+      // Show attached images
+      if (m.attachments) {
+        m.attachments.filter(a => a.isImage).forEach(a => {
+          html += '<div class="msg-content"><img class="attached" src="' + a.data + '"></div>';
+        });
+      }
     } else {
-      html = `<div class="role-label"><span class="mascot-tag"><img src="/static/mascot.png"> madcop</span></div>`;
+      html = '<div class="role-label"><span class="mascot-tag"><img src="/static/mascot.png"> madcop</span></div>';
       if (m.toolCalls && m.toolCalls.length) {
         m.toolCalls.forEach(tc => {
-          html += `<div class="tool-block"><div class="tool-header">${esc(tc.name)}</div><div class="tool-args">${esc(JSON.stringify(tc.args))}</div>${tc.result ? `<div class="tool-result">${esc(tc.result)}</div>` : ''}</div>`;
+          html += '<div class="tool-block"><div class="tool-header">' + esc(tc.name) + '</div><div class="tool-args">' + esc(JSON.stringify(tc.args)) + '</div>' + (tc.result ? '<div class="tool-result">' + esc(tc.result.slice(0, 500)) + '</div>' : '') + '</div>';
         });
       }
       if (m.reasoning) {
-        html += `<div class="reasoning-toggle" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">推理过程 (点击展开/折叠)</div><div class="reasoning-block reasoning-text" style="display:none">${esc(m.reasoning)}</div>`;
+        html += '<div class="reasoning-toggle" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === \'none\' ? \'block\' : \'none\'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> 推理过程</div><div class="reasoning-block" style="display:none">' + esc(m.reasoning) + '</div>';
       }
-      html += `<div class="msg-content">${formatContent(m.content)}</div>`;
+      html += '<div class="msg-content">' + formatContent(m.content) + '</div>';
     }
-    div.innerHTML = html;
-    el.appendChild(div);
+    div.innerHTML = html; el.appendChild(div);
   });
-  // Highlight code
-  el.querySelectorAll('pre code').forEach(block => { try { hljs.highlightElement(block); } catch(e) {} });
-  el.scrollTop = el.scrollHeight;
-  updateRageMeter();
+  el.querySelectorAll('pre code').forEach(block => {
+    try { hljs.highlightElement(block); } catch(e) {}
+    // Add copy button to code blocks
+    const pre = block.closest('pre');
+    if (pre && !pre.querySelector('.code-header')) {
+      const header = document.createElement('div');
+      header.className = 'code-header';
+      const lang = block.className.match(/language-(\w+)/);
+      header.innerHTML = '<span class="lang">' + (lang ? lang[1] : 'code') + '</span><button class="copy-btn" onclick="copyCode(this)">复制</button>';
+      pre.insertBefore(header, pre.firstChild);
+    }
+  });
+  el.scrollTop = el.scrollHeight; updateRageMeter();
+}
+
+function copyCode(btn) {
+  const code = btn.closest('pre').querySelector('code');
+  navigator.clipboard.writeText(code.textContent).then(() => {
+    btn.textContent = '已复制';
+    setTimeout(() => btn.textContent = '复制', 1500);
+  });
 }
 
 function formatContent(text) {
   if (!text) return '';
-  // Strip model-specific tool-call XML tags before markdown rendering
   text = text.replace(/<minimax:tool_call>[\s\S]*?<\/minimax:tool_call>/g, '');
   text = text.replace(/<invoke[\s\S]*?<\/invoke>/g, '');
   text = text.replace(/<parameter[\s\S]*?<\/parameter>/g, '');
   text = text.replace(/<\/?(?:minimax|invoke|parameter|function_calls)[^>]*>/g, '');
-  // Render markdown via marked.js + sanitize via DOMPurify
   if (typeof marked !== 'undefined') {
     marked.setOptions({ breaks: true, gfm: true });
     const raw = marked.parse(text);
     return DOMPurify.sanitize(raw, { ADD_ATTR: ['target'] });
   }
-  // Fallback: basic HTML escape
   return esc(text).replace(/\n/g, '<br>');
 }
 
@@ -606,55 +504,48 @@ async function sendMessage() {
   const text = textarea.value.trim();
   if (!text && !attachments.length) return;
   const conv = getActiveConv();
-  const userMsg = { role: 'user', content: text + (attachments.length ? '\n\n[附件: ' + attachments.map(a => a.name).join(', ') + ']' : '') };
+  const userMsg = { role: 'user', content: text + (attachments.length ? '\n\n[附件: ' + attachments.map(a => a.name).join(', ') + ']' : ''), attachments: attachments.length ? attachments.slice() : undefined };
   conv.messages.push(userMsg);
   if (conv.messages.filter(m => m.role === 'user').length === 1) conv.title = text.slice(0, 30);
-  textarea.value = '';
-  textarea.style.height = 'auto';
-  const sentAttachments = attachments.slice();
-  attachments = [];
-  renderAttachments();
-  renderConvList();
-  renderMessages();
+  textarea.value = ''; textarea.style.height = 'auto';
+  const sentAttachments = attachments.slice(); attachments = []; renderAttachments();
+  renderConvList(); renderMessages();
 
-  // Placeholder assistant message
+  // Assistant placeholder with shimmer animation
   const aMsg = { role: 'assistant', content: '', reasoning: '', toolCalls: [] };
   conv.messages.push(aMsg);
   const msgDiv = document.createElement('div');
   msgDiv.className = 'msg assistant';
-  msgDiv.innerHTML = `<div class="role-label"><span class="mascot-tag"><img src="/static/mascot.png"> madcop</span></div><div id="live-stream"><div class="thinking-dots"><span></span><span></span><span></span></div></div>`;
+  msgDiv.innerHTML = '<div class="role-label"><span class="mascot-tag"><img src="/static/mascot.png"> madcop</span></div><div id="live-stream"><div class="thinking-shimmer"><span class="shimmer-text">思考中</span><span class="dots"><span></span><span></span><span></span></span></div></div>';
   document.getElementById('messages').appendChild(msgDiv);
   document.getElementById('messages').scrollTop = 999999;
 
-  streaming = true;
-  document.getElementById('sendBtn').disabled = true;
+  streaming = true; document.getElementById('sendBtn').disabled = true;
 
   try {
-    // Build messages array — send last N messages to fit context
-    const histMessages = conv.messages.slice(0, -1).map(m => ({ role: m.role, content: m.content }));
-    // Trim if too many tokens
-    let totalChars = histMessages.reduce((s, m) => s + m.content.length, 0);
-    while (totalChars > CONTEXT_WINDOW * 3.5 && histMessages.length > 2) {
-      histMessages.shift();
-      totalChars = histMessages.reduce((s, m) => s + m.content.length, 0);
-    }
-
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ messages: histMessages, temperature })
+    // Build messages — send text + image content for vision models
+    const histMessages = conv.messages.slice(0, -1).map(m => {
+      // For messages with image attachments, send as multi-content
+      if (m.attachments && m.attachments.some(a => a.isImage)) {
+        const content = [{ type: 'text', text: m.content }];
+        m.attachments.filter(a => a.isImage).forEach(a => {
+          content.push({ type: 'image_url', image_url: { url: a.data } });
+        });
+        return { role: m.role, content };
+      }
+      return { role: m.role, content: m.content };
     });
+    // Token trimming
+    let totalChars = histMessages.reduce((s, m) => { const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content); return s + c.length; }, 0);
+    while (totalChars > CONTEXT_WINDOW * 3.5 && histMessages.length > 2) { histMessages.shift(); totalChars = histMessages.reduce((s, m) => { const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content); return s + c.length; }, 0); }
 
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    const resp = await fetch('/api/chat', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ messages: histMessages, temperature }) });
+    const reader = resp.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
 
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const { done, value } = await reader.read(); if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
+      const lines = buffer.split('\n'); buffer = lines.pop();
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         try {
@@ -662,10 +553,7 @@ async function sendMessage() {
           if (evt.type === 'reasoning') { aMsg.reasoning += evt.content; }
           else if (evt.type === 'text') { aMsg.content += evt.content; }
           else if (evt.type === 'tool') { aMsg.toolCalls.push({ name: evt.name, args: evt.args, result: null }); }
-          else if (evt.type === 'tool_result') {
-            const tc = aMsg.toolCalls[aMsg.toolCalls.length - 1];
-            if (tc) tc.result = evt.result;
-          }
+          else if (evt.type === 'tool_result') { const tc = aMsg.toolCalls[aMsg.toolCalls.length - 1]; if (tc) tc.result = evt.result; }
           else if (evt.type === 'done') { aMsg.model = evt.model; }
           else if (evt.type === 'error') { aMsg.content += '\n\nError: ' + evt.message; }
           updateLiveStream(aMsg);
@@ -675,42 +563,34 @@ async function sendMessage() {
   } catch (e) {
     aMsg.content += '\n\nNetwork error: ' + e.message;
   } finally {
-    streaming = false;
-    document.getElementById('sendBtn').disabled = false;
-    saveConversations();
-    renderMessages();
+    streaming = false; document.getElementById('sendBtn').disabled = false;
+    saveConversations(); renderMessages();
   }
 }
 
 function updateLiveStream(aMsg) {
-  const el = document.getElementById('live-stream');
-  if (!el) return;
+  const el = document.getElementById('live-stream'); if (!el) return;
   let html = '';
   if (aMsg.toolCalls && aMsg.toolCalls.length) {
     aMsg.toolCalls.forEach(tc => {
-      html += `<div class="tool-block"><div class="tool-header">${esc(tc.name)}</div><div class="tool-args">${esc(JSON.stringify(tc.args))}</div>${tc.result ? `<div class="tool-result">${esc(tc.result.slice(0, 500))}</div>` : '<div class="thinking-dots"><span></span><span></span><span></span></div>'}</div>`;
+      html += '<div class="tool-block"><div class="tool-header">' + esc(tc.name) + '</div><div class="tool-args">' + esc(JSON.stringify(tc.args)) + '</div>' + (tc.result ? '<div class="tool-result">' + esc(tc.result.slice(0, 500)) + '</div>' : '<div class="thinking-shimmer"><span class="dots"><span></span><span></span><span></span></span></div>') + '</div>';
     });
   }
   if (aMsg.reasoning) {
-    html += `<div class="reasoning-toggle" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">推理过程 (点击展开/折叠)</div><div class="reasoning-block" style="display:none">${esc(aMsg.reasoning)}</div>`;
+    html += '<div class="reasoning-toggle" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === \'none\' ? \'block\' : \'none\'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> 推理过程</div><div class="reasoning-block" style="display:none">' + esc(aMsg.reasoning) + '</div>';
   }
   if (aMsg.content) {
-    html += `<div class="msg-content">${formatContent(aMsg.content)}</div>`;
+    html += '<div class="msg-content fade-in">' + formatContent(aMsg.content) + '</div>';
   }
-  if (!html) html = '<div class="thinking-dots"><span></span><span></span><span></span></div>';
+  if (!html) html = '<div class="thinking-shimmer"><span class="shimmer-text">思考中</span><span class="dots"><span></span><span></span><span></span></span></div>';
   el.innerHTML = html;
   document.getElementById('messages').scrollTop = 999999;
   updateRageMeter();
 }
 
 // ========== INPUT HANDLING ==========
-document.getElementById('input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
-document.getElementById('input').addEventListener('input', function() {
-  this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 200) + 'px';
-});
+document.getElementById('input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+document.getElementById('input').addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 200) + 'px'; });
 
 // ========== INIT ==========
 loadConversations();
