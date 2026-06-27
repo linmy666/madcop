@@ -96,14 +96,49 @@ def reset_memory_store(store: MemoryStore) -> None:
     _memory_store = store
 
 
-def _build_memory_system_prompt(user_query: str) -> str:
+def _estimate_tokens(text: str) -> int:
+    """Rough token count: 1 token ~ 4 chars (English) or 1.5 chars (CJK)."""
+    cjk = sum(1 for c in text if ord(c) > 0x4E00)
+    return max(1, cjk // 2 + (len(text) - cjk) // 4)
+
+
+def _truncate_to_budget(lines: list[str], budget_tokens: int) -> list[str]:
+    """Keep adding lines from `lines` until `budget_tokens` is exhausted.
+
+    Used to cap the size of the memory block in the system prompt
+    (DeerFlow uses a 2K-token cap on memory injection).
+    """
+    out: list[str] = []
+    used = 0
+    for line in lines:
+        cost = _estimate_tokens(line) + 1  # +1 for the newline
+        if used + cost > budget_tokens:
+            break
+        out.append(line)
+        used += cost
+    return out
+
+
+def _build_memory_system_prompt(
+    user_query: str,
+    *,
+    profile_budget: int = 800,
+    relevant_budget: int = 800,
+    preferences_budget: int = 400,
+) -> str:
     """Build a system prompt enriched with relevant memories + user prefs.
 
+    Token-budgeted (Gap 3): the three memory sections are each capped
+    so a user with thousands of memories can't blow out the context
+    window. Default caps match DeerFlow's ~2K total.
+
     Steps:
-    1. Always include user-profile facts (name, preferences) from L3 —
-       these are critical context regardless of the query.
-    2. Search all layers for memories relevant to *user_query*.
-    3. Fetch L4 user preferences / dislikes.
+    1. Always include user-profile facts (name, preferences) from L3,
+       capped to `profile_budget` tokens.
+    2. Search all layers for memories relevant to *user_query*,
+       capped to `relevant_budget` tokens.
+    3. Fetch L4 user preferences / dislikes, capped to
+       `preferences_budget` tokens.
     4. Format into a single system-prompt string.
     """
     store = get_memory_store()
@@ -117,58 +152,76 @@ def _build_memory_system_prompt(user_query: str) -> str:
         "You can remember facts about the user across sessions."
     ]
 
-    # --- user-profile facts (always injected) --------------------------- #
-    # These are memories tagged "user-profile" — e.g. the user's
-    # name.  We always include them because identity is always relevant.
-    # We query MemoryStore directly (returns MemoryRecord) so both
-    # auto-extracted (Fact) and manually-added (MemoryRecord) memories
-    # are surfaced — SemanticMemory.list_recent returns Fact objects
-    # which only have subject/predicate/object.
+    # --- user-profile facts (always injected, token-capped) ----------- #
+    # Skip memories whose metadata.valid_until is in the past (Gap 4).
+    import time as _time
+    import json as _json
+    now = _time.time()
     try:
-        # Direct SQL query: recent memory_records tagged user-profile
         rows = store._conn.execute(
-            "SELECT id, kind, title, content, tags FROM memory_records "
+            "SELECT id, kind, title, content, tags, metadata FROM memory_records "
             "WHERE tags LIKE '%user-profile%' "
             "ORDER BY created_at DESC LIMIT 100"
         ).fetchall()
         profile_lines: list[str] = []
         for row in rows:
+            # Temporal validity check
+            try:
+                meta = _json.loads(row["metadata"] or "{}")
+                valid_until = meta.get("valid_until")
+                if isinstance(valid_until, (int, float)) and valid_until < now:
+                    continue  # expired
+            except (ValueError, TypeError):
+                pass
+
             content = row["content"] or ""
             text = content
             if text.startswith("{"):
                 try:
-                    parsed = __import__("json").loads(text)
+                    parsed = _json.loads(text)
                     text = parsed.get("object") or row["title"] or ""
                 except Exception:
                     text = row["title"] or ""
             if text:
                 profile_lines.append(f"- {text}")
-        if profile_lines:
-            parts.append("# Known facts about the user\n" + "\n".join(profile_lines))
+        # Token-cap profile section
+        kept = _truncate_to_budget(profile_lines, profile_budget)
+        if kept:
+            omitted = len(profile_lines) - len(kept)
+            section = "# Known facts about the user\n" + "\n".join(kept)
+            if omitted > 0:
+                section += f"\n... and {omitted} more (truncated by token budget)"
+            parts.append(section)
     except Exception:
         pass
 
-    # --- relevant memories (L2/L3/L4 via FTS5) -------------------------- #
+    # --- relevant memories (L2/L3/L4 via FTS5, token-capped) ----------- #
     try:
         results = retriever.retrieve(user_query)
     except Exception:
         results = []
     if results:
+        # Use the retriever's formatter, then truncate
         ctx = retriever.format_for_prompt(results)
         if ctx:
-            parts.append(ctx)
+            ctx_lines = ctx.split("\n")
+            kept_ctx = _truncate_to_budget(ctx_lines, relevant_budget)
+            if kept_ctx:
+                parts.append("\n".join(kept_ctx))
 
-    # --- L4 user preferences -------------------------------------------- #
+    # --- L4 user preferences (token-capped) ----------------------------- #
     try:
         prefs = ReflectiveMemory(store).find_preferences(limit=10)
     except Exception:
         prefs = []
     if prefs:
-        lines = ["\n# User preferences"]
+        lines = ["# User preferences"]
         for p in prefs:
             tag = "likes" if p.kind.value == "user_preference" else "dislikes"
             lines.append(f"- User {tag}: {p.text}")
-        parts.append("\n".join(lines))
+        kept = _truncate_to_budget(lines, preferences_budget)
+        if kept:
+            parts.append("\n".join(kept))
 
     return "\n\n".join(parts)
 
@@ -402,7 +455,23 @@ def create_app() -> FastAPI:
         else:
             messages.insert(0, Message(role="system", content=sys_prompt))
 
-        registry = default_registry()
+        # --- Context compaction (Gap 6) ---------------------------------- #
+        # If the conversation is too long, summarise the oldest messages
+        # into a single condensed system message before sending to the
+        # LLM. Cheap truncate fallback if no LLM client is available.
+        from madcop.memory import CompactionConfig, compact_messages
+        try:
+            messages = compact_messages(
+                messages,
+                CompactionConfig(max_tokens=8000, keep_recent=8,
+                                 min_age_to_summarise=4,
+                                 summary_max_tokens=400),
+                llm_client=client,
+            )
+        except Exception:
+            pass
+
+        registry = default_registry(store=get_memory_store())
         tool_schemas = registry.openai_schemas()
 
         async def event_stream() -> AsyncIterator[str]:
@@ -421,9 +490,12 @@ def create_app() -> FastAPI:
                 if not resp.tool_calls:
                     for sse in _stream_chunks(client, messages, body):
                         yield sse
-                    # -- Memory extraction (after response) -------------- #
+                    # -- Memory extraction (async, debounced) ----------- #
+                    # Don't block the response — schedule a background
+                    # thread that respects the 30s debounce window.
                     try:
-                        _store_extracted_facts(messages)
+                        from .memory_pipeline import schedule_extraction
+                        schedule_extraction(messages)
                     except Exception:
                         pass
                     return
@@ -458,9 +530,10 @@ def create_app() -> FastAPI:
                 for sse in _stream_chunks(client, messages, body):
                     yield sse
 
-                # -- Memory extraction (after response) ------------------ #
+                # -- Memory extraction (async, debounced) ----------------- #
                 try:
-                    _store_extracted_facts(messages)
+                    from .memory_pipeline import schedule_extraction
+                    schedule_extraction(messages)
                 except Exception:
                     pass
 

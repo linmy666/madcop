@@ -20,13 +20,14 @@ Path convention: ~/.madcop/memory.db by default.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 
 class MemoryKind(str, Enum):
@@ -174,6 +175,67 @@ class MemoryStore:
             )
             self._conn.execute("DELETE FROM memory_fts WHERE id = ?", (record_id,))
         return cur.rowcount > 0
+
+    def update(
+        self,
+        record_id: str,
+        *,
+        title: str | None = None,
+        content: str | None = None,
+        tags: tuple[str, ...] | None = None,
+        metadata_patch: dict[str, Any] | None = None,
+    ) -> MemoryRecord | None:
+        """Update fields of an existing record. Returns the updated record.
+
+        - title/content/tags: if provided, replace the field
+        - metadata_patch: dict of keys to merge into the JSON metadata
+        - FTS index is kept in sync (delete + reinsert)
+        - updated_at is bumped
+        """
+        existing = self.get(record_id)
+        if existing is None:
+            return None
+        new_title = title if title is not None else existing.title
+        new_content = content if content is not None else existing.content
+        new_tags = tags if tags is not None else existing.tags
+        if metadata_patch:
+            try:
+                meta = json.loads(existing.metadata or "{}")
+            except (json.JSONDecodeError, TypeError):
+                meta = {}
+            meta.update(metadata_patch)
+        else:
+            try:
+                meta = json.loads(existing.metadata or "{}")
+            except (json.JSONDecodeError, TypeError):
+                meta = {}
+        new_metadata = json.dumps(meta, ensure_ascii=False)
+        new_updated_at = time.time()
+        with self._conn:
+            self._conn.execute(
+                "UPDATE memory_records SET title=?, content=?, tags=?, "
+                "metadata=?, updated_at=? WHERE id=?",
+                (new_title, new_content, ",".join(new_tags),
+                 new_metadata, new_updated_at, record_id),
+            )
+            # FTS5 doesn't support UPDATE — delete + reinsert
+            self._conn.execute("DELETE FROM memory_fts WHERE id = ?", (record_id,))
+            self._conn.execute(
+                "INSERT INTO memory_fts(id, kind, title, content, tags) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (record_id, existing.kind.value, new_title, new_content,
+                 ",".join(new_tags)),
+            )
+        return MemoryRecord(
+            id=record_id,
+            kind=existing.kind,
+            title=new_title,
+            content=new_content,
+            tags=new_tags,
+            created_at=existing.created_at,
+            updated_at=new_updated_at,
+            metadata=new_metadata,
+        )
 
     def list_by_kind(
         self,

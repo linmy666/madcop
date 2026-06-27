@@ -198,3 +198,87 @@ def test_memory_kind_values():
     assert MemoryKind.EPISODIC.value == "episodic"
     assert MemoryKind.SEMANTIC.value == "semantic"
     assert MemoryKind.REFLECTIVE.value == "reflective"
+
+
+# --------------------------------------------------------------------------- #
+# Update method
+# --------------------------------------------------------------------------- #
+
+
+def test_update_content(store):
+    """Updating content refreshes both the row and the FTS index."""
+    rec = store.insert(
+        kind=MemoryKind.SEMANTIC,
+        title="old title",
+        content="old content about cats",
+        tags=("tag1",),
+    )
+    updated = store.update(rec.id, content="new content about dogs", title="new title")
+    assert updated is not None
+    assert updated.content == "new content about dogs"
+    assert updated.title == "new title"
+    # FTS should find the new content, not the old
+    rows = store._conn.execute(
+        "SELECT * FROM memory_fts WHERE memory_fts MATCH 'dogs'"
+    ).fetchall()
+    assert len(rows) == 1
+    rows2 = store._conn.execute(
+        "SELECT * FROM memory_fts WHERE memory_fts MATCH 'cats'"
+    ).fetchall()
+    assert len(rows2) == 0
+
+
+def test_update_tags(store):
+    rec = store.insert(
+        kind=MemoryKind.SEMANTIC, title="x", content="y", tags=("a", "b"),
+    )
+    updated = store.update(rec.id, tags=("c", "d"))
+    assert updated is not None
+    assert updated.tags == ("c", "d")
+
+
+def test_update_metadata_patch(store):
+    rec = store.insert(
+        kind=MemoryKind.SEMANTIC, title="x", content="y", tags=(),
+    )
+    updated = store.update(rec.id, metadata_patch={"superseded_by": "new-id", "confidence": 0.9})
+    assert updated is not None
+    import json
+    meta = json.loads(updated.metadata)
+    assert meta["superseded_by"] == "new-id"
+    assert meta["confidence"] == 0.9
+
+
+def test_update_nonexistent(store):
+    result = store.update("nonexistent-id-xyz", content="x")
+    assert result is None
+
+
+def test_update_bumps_updated_at(store):
+    rec = store.insert(
+        kind=MemoryKind.SEMANTIC, title="x", content="y", tags=(),
+    )
+    original_updated = rec.updated_at
+    import time as _t
+    _t.sleep(0.01)
+    updated = store.update(rec.id, content="y2")
+    assert updated.updated_at > original_updated
+
+
+# --------------------------------------------------------------------------- #
+# Temporal validity (Gap 4)
+# --------------------------------------------------------------------------- #
+
+
+def test_update_metadata_valid_until(store):
+    """Update with valid_until timestamp in metadata_patch."""
+    rec = store.insert(
+        kind=MemoryKind.SEMANTIC, title="x", content="y", tags=()
+    )
+    import time
+    future = time.time() + 86400  # 1 day from now
+    updated = store.update(rec.id, metadata_patch={"valid_until": future})
+    assert updated is not None
+    import json
+    meta = json.loads(updated.metadata)
+    assert abs(meta["valid_until"] - future) < 1

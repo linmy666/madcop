@@ -186,3 +186,62 @@ def test_docs_available(client: TestClient):
     r = client.get("/docs")
     assert r.status_code == 200
     assert "swagger" in r.text.lower() or "openapi" in r.text.lower()
+
+
+# --------------------------------------------------------------------------- #
+# Gap 3: Token-budgeted memory injection
+# --------------------------------------------------------------------------- #
+
+def test_memory_system_prompt_caps_profile_budget(client):
+    """When profile memories exceed the budget, the prompt is truncated."""
+    from madcop.server.app import _build_memory_system_prompt, reset_memory_store
+    from madcop.memory import MemoryStore, MemoryKind
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as td:
+        # Isolated store with 50 long user-profile memories
+        store = MemoryStore(path=Path(td) / "m.db")
+        reset_memory_store(store)
+        for i in range(50):
+            store.insert(
+                kind=MemoryKind.SEMANTIC,
+                title=f"Fact {i}",
+                content=f"User has fact number {i} which is a long string to fill tokens. " * 5,
+                tags=("user-profile",),
+            )
+        try:
+            # Tight budget: 100 tokens
+            prompt = _build_memory_system_prompt(
+                "anything", profile_budget=100, relevant_budget=100, preferences_budget=100
+            )
+            # Should contain truncation notice
+            assert "truncated" in prompt
+            # Should not contain ALL 50 facts
+            for i in range(50):
+                if i > 5:
+                    assert f"Fact {i}" not in prompt or "truncated" in prompt, (
+                        f"Fact {i} should have been truncated"
+                    )
+        finally:
+            store.close()
+            reset_memory_store(None)  # type: ignore[arg-type]
+
+
+def test_estimate_tokens_cjk_vs_english():
+    from madcop.server.app import _estimate_tokens
+    # English: ~1 token per 4 chars
+    assert _estimate_tokens("hello world") <= 5
+    # Chinese: ~1 token per 1.5 chars
+    assert _estimate_tokens("你好世界") <= 6
+    # Empty/min
+    assert _estimate_tokens("") >= 1
+
+
+def test_truncate_to_budget_respects_limit():
+    from madcop.server.app import _truncate_to_budget
+    lines = ["- " + "x" * 100 for _ in range(20)]  # ~25 tokens each
+    kept = _truncate_to_budget(lines, 50)
+    assert len(kept) < len(lines)
+    # Total char count of kept lines should be under budget*4
+    total_chars = sum(len(l) for l in kept)
+    assert total_chars < 200  # 50 tokens * 4 chars/token

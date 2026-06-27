@@ -27,6 +27,7 @@ from .semantic import SemanticMemory, Fact, FactKind
 from .reflective import ReflectiveMemory, Reflection, ReflectionKind
 from .retriever import Retriever, RetrievalResult
 from .growth import GrowthEngine, GrowthConfig
+from .compactor import CompactionConfig, compact_messages
 # v0.5.0 legacy: keep L1 in-memory ConversationBuffer exportable
 from .buffer import ConversationBuffer  # noqa: F401  (backward compat)
 
@@ -37,5 +38,6 @@ __all__ = [
     "ReflectiveMemory", "Reflection", "ReflectionKind",
     "Retriever", "RetrievalResult",
     "GrowthEngine", "GrowthConfig",
+    "CompactionConfig", "compact_messages",
     "ConversationBuffer",
 ]

@@ -1,5 +1,6 @@
 """L7 — Tool registry for agent tool use."""
 
+from ..memory import MemoryStore
 from ..llm import ToolCall
 from .registry import (
     EchoTool,
@@ -44,14 +45,22 @@ from .eventbus import (
 from .weather import WeatherTool
 
 
-def default_registry() -> ToolRegistry:
-    """Build a ToolRegistry pre-loaded with the built-in chat tools."""
+def default_registry(store: MemoryStore | None = None) -> ToolRegistry:
+    """Build a ToolRegistry pre-loaded with the built-in chat tools.
+
+    If `store` is provided, the LLM-managed memory tools (store/recall/forget)
+    are also registered so the agent can write to its own long-term memory.
+    """
     reg = ToolRegistry()
     reg.register(EchoTool())
     reg.register(GetTimeTool())
     reg.register(WebSearchTool())
     reg.register(WebFetchTool())
     reg.register(WeatherTool())
+    if store is not None:
+        from .memory import default_memory_tools
+        for tool in default_memory_tools(store):
+            reg.register(tool)
     return reg
 
 

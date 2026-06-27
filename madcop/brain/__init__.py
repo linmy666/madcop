@@ -64,3 +64,6 @@ __all__ = [
     "BrainMiddleware",
     "LEARN_PREFIX",
 ]
+
+# v2.1 — Unified Brain + Memory façade (Gap 10)
+from .unified import UnifiedEntry, UnifiedConfig, UnifiedKnowledge

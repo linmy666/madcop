@@ -192,9 +192,10 @@ def test_existing_system_prompt_is_replaced(client: TestClient, fake_client):
 
 def test_extract_name_english(client: TestClient, fake_client):
     """User says 'my name is X' → fact is extracted and stored."""
-    client.post("/api/chat", json={
-        "messages": [{"role": "user", "content": "My name is John."}],
-    })
+    from madcop.server.app import _store_extracted_facts
+    from madcop.llm import Message
+    msgs = [Message(role="user", content="My name is John.")]
+    _store_extracted_facts(msgs)
     store = app_module.get_memory_store()
     sem = SemanticMemory(store)
     facts = sem.search("John")
@@ -204,9 +205,10 @@ def test_extract_name_english(client: TestClient, fake_client):
 
 def test_extract_name_chinese(client: TestClient, fake_client):
     """User says '我叫X' → fact is extracted."""
-    client.post("/api/chat", json={
-        "messages": [{"role": "user", "content": "你好，我叫小明。"}],
-    })
+    from madcop.server.app import _store_extracted_facts
+    from madcop.llm import Message
+    msgs = [Message(role="user", content="你好，我叫小明。")]
+    _store_extracted_facts(msgs)
     store = app_module.get_memory_store()
     sem = SemanticMemory(store)
     facts = sem.search("小明")
@@ -215,9 +217,10 @@ def test_extract_name_chinese(client: TestClient, fake_client):
 
 def test_extract_preference_english(client: TestClient, fake_client):
     """User says 'I like X' → preference fact is stored."""
-    client.post("/api/chat", json={
-        "messages": [{"role": "user", "content": "I like dark mode."}],
-    })
+    from madcop.server.app import _store_extracted_facts
+    from madcop.llm import Message
+    msgs = [Message(role="user", content="I like dark mode.")]
+    _store_extracted_facts(msgs)
     store = app_module.get_memory_store()
     sem = SemanticMemory(store)
     facts = sem.search("dark")
@@ -227,9 +230,10 @@ def test_extract_preference_english(client: TestClient, fake_client):
 
 def test_extract_preference_chinese(client: TestClient, fake_client):
     """User says '我喜欢X' → preference fact is stored."""
-    client.post("/api/chat", json={
-        "messages": [{"role": "user", "content": "我喜欢Python编程。"}],
-    })
+    from madcop.server.app import _store_extracted_facts
+    from madcop.llm import Message
+    msgs = [Message(role="user", content="我喜欢Python编程。")]
+    _store_extracted_facts(msgs)
     store = app_module.get_memory_store()
     sem = SemanticMemory(store)
     # FTS5 may not tokenize "Python" from Chinese-mixed content,
@@ -425,10 +429,13 @@ def test_list_memory_groups_correctly(client: TestClient):
 
 def test_cross_session_memory_flow(client: TestClient, fake_client):
     """End-to-end: user states name in session 1, it's available in session 2."""
-    # Session 1: user introduces themselves
-    client.post("/api/chat", json={
-        "messages": [{"role": "user", "content": "My name is Bob."}],
-    })
+    # Session 1: user introduces themselves.
+    # Use the sync extraction path so session 2 sees the fact immediately
+    # (the async pipeline has a debounce window which we don't want to
+    # wait on in a unit test).
+    from madcop.server.app import _store_extracted_facts
+    from madcop.llm import Message
+    _store_extracted_facts([Message(role="user", content="My name is Bob.")])
 
     # Session 2: ask "who am I?" — memory should be injected
     client.post("/api/chat", json={
