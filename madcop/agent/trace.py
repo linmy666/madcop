@@ -315,6 +315,68 @@ def reset_trace_store(store: TraceStore | None) -> None:
     _trace_store = store
 
 
+# ───────────────────────────────────────────────────────────────────
+# LLM-callable trace operations (pure functions, no Tool dependency)
+# ───────────────────────────────────────────────────────────────────
+
+RESUME_FROM_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "node_id": {
+            "type": "string",
+            "description": "The trace node to resume from. All downstream nodes will be marked superseded.",
+        },
+    },
+    "required": ["node_id"],
+}
+
+GET_TRACE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "conversation_id": {
+            "type": "string",
+            "description": "Conversation to inspect.",
+        },
+    },
+    "required": ["conversation_id"],
+}
+
+
+def execute_resume_from(
+    node_id: str,
+    store: TraceStore | None = None,
+) -> str:
+    """Mark all downstream nodes of the given node as superseded.
+
+    Returns a summary of what was superseded.
+    """
+    s = store or get_trace_store()
+    node = s.get(node_id)
+    if not node:
+        return f"Error: node '{node_id}' not found."
+    superseded = s.reset_downstream(node_id)
+    if not superseded:
+        return f"Node '{node_id}' has no downstream dependencies to supersede."
+    return f"Superseded {len(superseded)} downstream node(s): {', '.join(superseded[:10])}"
+
+
+def execute_get_trace(
+    conversation_id: str,
+    store: TraceStore | None = None,
+) -> str:
+    """Return a human-readable summary of the trace DAG for a conversation."""
+    s = store or get_trace_store()
+    nodes = s.get_conversation_trace(conversation_id)
+    if not nodes:
+        return f"No trace found for conversation '{conversation_id}'."
+    lines = [f"Trace for '{conversation_id}' ({len(nodes)} nodes):"]
+    for n in nodes:
+        indent = "  " * n.depth
+        status_icon = {"done": "✓", "running": "→", "error": "✗", "pending": "○", "superseded": "⊘"}.get(n.status, "?")
+        lines.append(f"{indent}{status_icon} [{n.node_type}] {n.label} (#{n.id[:8]})")
+    return "\n".join(lines)
+
+
 __all__ = [
     "TraceNode",
     "TraceStore",
@@ -322,4 +384,8 @@ __all__ = [
     "DEFAULT_TRACE_DB",
     "get_trace_store",
     "reset_trace_store",
+    "execute_resume_from",
+    "execute_get_trace",
+    "RESUME_FROM_SCHEMA",
+    "GET_TRACE_SCHEMA",
 ]

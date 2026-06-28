@@ -32,7 +32,7 @@ def test_health(client: TestClient):
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "ok"
-    assert data["version"] == "2.3.0"
+    assert data["version"] == "2.6.0"
 
 
 # --------------------------------------------------------------------------- #

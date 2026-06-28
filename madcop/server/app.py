@@ -543,13 +543,13 @@ def create_app() -> FastAPI:
                         pass
                     # -- Auto-create skill from "how-to" conversations --- #
                     try:
-                        from madcop.agent.skills import get_skill_store, auto_create_skill_from_conversation
+                        from madcop.agent.skill_forge import get_skill_store, auto_forge_from_conversation
                         user_msg = body.messages[-1].content if body.messages else ""
                         # Reconstruct assistant text from SSE — easier: we don't have it here.
                         # We'll just call the heuristic with a partial signal.
                         full_assistant = resp.content or ""
                         if full_assistant:
-                            auto_create_skill_from_conversation(
+                            auto_forge_from_conversation(
                                 get_skill_store(),
                                 user_msg,
                                 full_assistant,
@@ -636,10 +636,10 @@ def create_app() -> FastAPI:
 
                 # -- Auto-create skill from "how-to" conversations --------- #
                 try:
-                    from madcop.agent.skills import get_skill_store, auto_create_skill_from_conversation
+                    from madcop.agent.skill_forge import get_skill_store, auto_forge_from_conversation
                     user_msg = body.messages[-1].content if body.messages else ""
                     assistant_text = "".join(m.content for m in messages if m.role == "assistant")
-                    auto_create_skill_from_conversation(
+                    auto_forge_from_conversation(
                         get_skill_store(),
                         user_msg,
                         assistant_text,
@@ -803,7 +803,7 @@ def create_app() -> FastAPI:
     @app.get("/api/skills")
     async def list_skills() -> dict[str, Any]:
         """List all skills."""
-        from madcop.agent.skills import get_skill_store
+        from madcop.agent.skill_forge import get_skill_store
         store = get_skill_store()
         skills = store.list_skills()
         return {"skills": skills, "total": len(skills)}
@@ -811,7 +811,7 @@ def create_app() -> FastAPI:
     @app.get("/api/skills/{name}")
     async def get_skill(name: str) -> dict[str, Any]:
         """Get a single skill by name."""
-        from madcop.agent.skills import get_skill_store
+        from madcop.agent.skill_forge import get_skill_store
         store = get_skill_store()
         skill = store.get_skill(name)
         if not skill:
@@ -821,7 +821,7 @@ def create_app() -> FastAPI:
     @app.post("/api/skills")
     async def create_skill(body: dict[str, Any]) -> dict[str, Any]:
         """Manually create a skill."""
-        from madcop.agent.skills import get_skill_store
+        from madcop.agent.skill_forge import get_skill_store
         store = get_skill_store()
         path = store.create_skill(
             name=body.get("name", "unnamed"),
@@ -834,7 +834,7 @@ def create_app() -> FastAPI:
 
     @app.delete("/api/skills/{name}")
     async def delete_skill(name: str) -> dict[str, Any]:
-        from madcop.agent.skills import get_skill_store
+        from madcop.agent.skill_forge import get_skill_store
         store = get_skill_store()
         ok = store.delete_skill(name)
         if not ok:
@@ -843,7 +843,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/skills/search")
     async def search_skills(q: str = "") -> dict[str, Any]:
-        from madcop.agent.skills import get_skill_store
+        from madcop.agent.skill_forge import get_skill_store
         store = get_skill_store()
         results = store.search_skills(q) if q else store.list_skills()
         return {"results": results, "total": len(results)}

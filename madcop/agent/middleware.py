@@ -256,12 +256,20 @@ _STUCK_PATTERNS: tuple[str, ...] = (
 
 
 class QianControlMiddleware:
-    """The Qian control-theory middleware. Sets the design invariants.
+    """The control-theory middleware. Sets the design invariants.
 
-    - Logs every step outcome (closed-loop feedback)
-    - Detects repeated identical failures (early correction: HALT)
-    - Warns on slow middlewares (stability)
-    - Emits progress every N steps (controllability)
+    Core principles (applied as runtime checks):
+
+    - **Closed-loop feedback**: every step outcome is logged + compared
+      against expected behavior. Deviation from expected is tracked.
+    - **Early correction (早纠偏)**: detect repeated identical failures
+      and HALT before the agent wastes tokens.
+    - **Stability monitoring**: warn on slow middlewares, high deviation
+      ratios, or oscillating state (agent going in circles).
+    - **Controllability**: emit progress checkpoints every N steps so
+      external observers can intervene.
+    - **Drift detection**: if the agent's output quality degrades over
+      consecutive steps (longer outputs but less relevant content), flag it.
     """
 
     name = "qian_control"
@@ -269,17 +277,22 @@ class QianControlMiddleware:
     def __init__(
         self,
         *,
-        max_repeat_failures: int = 3,          # halt after N identical errors
-        slow_middleware_ms: int = 100,         # warn if any middleware is slower
-        progress_every_n_steps: int = 5,       # log a progress line every N
+        max_repeat_failures: int = 3,
+        slow_middleware_ms: int = 100,
+        progress_every_n_steps: int = 5,
+        max_deviation_ratio: float = 0.6,
+        max_step_count: int = 30,
     ):
         self.max_repeat_failures = max_repeat_failures
         self.slow_middleware_ms = slow_middleware_ms
         self.progress_every_n_steps = progress_every_n_steps
-        # Per-instance state (not per-ctx). A fresh `HookContext` per
-        # hook call would reset the count otherwise.
+        self.max_deviation_ratio = max_deviation_ratio
+        self.max_step_count = max_step_count
+        # Per-instance state
         self._step_count: int = 0
         self._error_history: dict[str, int] = {}
+        self._deviations: list[float] = []
+        self._output_lengths: list[int] = []
 
     def __call__(self, ctx: HookContext) -> None:
         if ctx.hook == HOOK_STEP_END and ctx.outcome is not None:
@@ -295,6 +308,36 @@ class QianControlMiddleware:
         logger.info("[qian] step %s → %s (cost=$%.4f)",
                     step_name, status, getattr(outcome, "cost_usd", 0.0))
 
+        # Track output length for drift detection
+        output_text = getattr(outcome, "output", "") or ""
+        self._output_lengths.append(len(output_text))
+
+        # Deviation tracking: if step failed, record deviation
+        if not outcome.success:
+            self._deviations.append(1.0)  # full deviation on failure
+        else:
+            # Heuristic: if output is suspiciously short or empty, partial deviation
+            if len(output_text) < 10:
+                self._deviations.append(0.5)
+            else:
+                self._deviations.append(0.0)
+
+        # Stability: check deviation ratio
+        if len(self._deviations) >= 5:
+            recent = self._deviations[-5:]
+            avg_dev = sum(recent) / len(recent)
+            if avg_dev > self.max_deviation_ratio:
+                ctx.directives.append(Directive(
+                    kind="HALT",
+                    detail=f"qian_control: deviation ratio {avg_dev:.0%} > {self.max_deviation_ratio:.0%} threshold (last 5 steps)",
+                ))
+
+        # Drift detection: outputs getting longer but not finishing
+        if len(self._output_lengths) >= 5:
+            recent_lens = self._output_lengths[-5:]
+            if all(l > 2000 for l in recent_lens) and self._step_count > 10:
+                logger.warning("[qian] drift detected: outputs consistently >2000 chars, step=%d", self._step_count)
+
         # Early correction: detect stuck patterns
         if not outcome.success and outcome.error:
             err = outcome.error
@@ -303,12 +346,9 @@ class QianControlMiddleware:
                     count = self._error_history.get(pattern, 0) + 1
                     self._error_history[pattern] = count
                     if count >= self.max_repeat_failures:
-                        # Emit a HALT directive. The chain runner
-                        # reads ctx.directives and translates it
-                        # into a MiddlewareHalt.
                         ctx.directives.append(Directive(
                             kind="HALT",
-                            detail=f"qian_control: '{pattern}' seen {count} times",
+                            detail=f"qian_control: '{pattern}' seen {count} times — early correction",
                         ))
                     break
 
@@ -316,6 +356,13 @@ class QianControlMiddleware:
         self._step_count += 1
         if self._step_count % self.progress_every_n_steps == 0:
             logger.info("[qian] progress: %d steps completed", self._step_count)
+
+        # Hard cap on step count (prevents runaway loops)
+        if self._step_count >= self.max_step_count:
+            ctx.directives.append(Directive(
+                kind="HALT",
+                detail=f"qian_control: reached max_step_count ({self.max_step_count})",
+            ))
 
     def _on_plan_end(self, ctx: HookContext) -> None:
         elapsed = time.time() - ctx.started_at

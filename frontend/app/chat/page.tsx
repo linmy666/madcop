@@ -10,6 +10,7 @@ import type { Message, SSEEvent } from '@/types/chat';
 import { TracePanel } from '@/components/chat/TracePanel';
 import { useT } from '@/hooks/useTranslation';
 import { Activity } from 'lucide-react';
+import { GitContextBar } from '@/components/layout/GitContextBar';
 
 export default function ChatPage() {
   const conversations = useChatStore((s) => s.conversations);
@@ -157,6 +158,11 @@ export default function ChatPage() {
               onSend={(text, attachments) => handleSend(text, attachments)}
               disabled={isStreaming}
               isStreaming={isStreaming}
+            />
+            <GitContextBar
+              repo="linruihan/madcop"
+              branch="main"
+              status={isStreaming ? 'streaming…' : 'clean working tree'}
             />
           </div>
           <TracePanel

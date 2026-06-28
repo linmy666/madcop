@@ -15,10 +15,10 @@ from madcop.agent.trace import (
     get_trace_store,
     reset_trace_store,
 )
-from madcop.agent.skills import (
+from madcop.agent.skill_forge import (
     SkillMeta,
     SkillStore,
-    auto_create_skill_from_conversation,
+    auto_forge_from_conversation,
     get_skill_store,
     reset_skill_store,
 )
@@ -205,7 +205,7 @@ def test_skill_yaml_format(skill_store: SkillStore):
     assert text.startswith("---\n")
     assert text.endswith("Body content here")
     assert "name: format-test" in text
-    assert "source: auto" in text  # default
+    assert "source: manual" in text  # default source is manual
     assert "version: 1.0" in text
 
 
@@ -262,7 +262,7 @@ def test_skill_manual_source(skill_store: SkillStore):
 
 def test_auto_create_from_how_to(skill_store: SkillStore):
     """User asks a how-to question -> assistant gives steps -> auto create skill."""
-    path = auto_create_skill_from_conversation(
+    path = auto_forge_from_conversation(
         skill_store,
         user_message="如何写一个 Python 测试函数？",
         assistant_response="""1. 导入 pytest
@@ -283,7 +283,7 @@ def test_example():
 
 def test_auto_create_skip_unrelated(skill_store: SkillStore):
     """User asks 'what time is it' -> no how-to pattern -> no skill."""
-    path = auto_create_skill_from_conversation(
+    path = auto_forge_from_conversation(
         skill_store,
         user_message="现在几点了？",
         assistant_response="现在是下午 3 点。",
@@ -295,7 +295,54 @@ def test_auto_create_no_duplicate(skill_store: SkillStore):
     """Same user message twice -> second time is skipped."""
     user_msg = "如何部署 Python 应用？"
     assistant = "1. 打包\n2. 上传\n3. 运行"
-    p1 = auto_create_skill_from_conversation(skill_store, user_msg, assistant)
-    p2 = auto_create_skill_from_conversation(skill_store, user_msg, assistant)
+    p1 = auto_forge_from_conversation(skill_store, user_msg, assistant)
+    p2 = auto_forge_from_conversation(skill_store, user_msg, assistant)
     assert p1 is not None
     assert p2 is None  # dedup
+
+
+# ───────────────────────────────────────────────────────────────────
+# Trace Studio — execute_resume_from + execute_get_trace
+# ───────────────────────────────────────────────────────────────────
+
+def test_execute_resume_from_supersedes_downstream(trace_store: TraceStore):
+    from madcop.agent.trace import execute_resume_from
+    a = trace_store.create_node(conversation_id="c1")
+    b = trace_store.create_node(conversation_id="c1", parent_id=a.id)
+    c = trace_store.create_node(conversation_id="c1", parent_id=b.id)
+    result = execute_resume_from(a.id, store=trace_store)
+    assert "Superseded" in result
+    assert "2" in result
+    assert trace_store.get(b.id).status == "superseded"
+    assert trace_store.get(c.id).status == "superseded"
+
+
+def test_execute_resume_from_no_downstream(trace_store: TraceStore):
+    from madcop.agent.trace import execute_resume_from
+    a = trace_store.create_node(conversation_id="c1")
+    result = execute_resume_from(a.id, store=trace_store)
+    assert "no downstream" in result.lower()
+
+
+def test_execute_resume_from_not_found(trace_store: TraceStore):
+    from madcop.agent.trace import execute_resume_from
+    result = execute_resume_from("nonexistent", store=trace_store)
+    assert "Error" in result
+
+
+def test_execute_get_trace_returns_readable(trace_store: TraceStore):
+    from madcop.agent.trace import execute_get_trace
+    a = trace_store.create_node(conversation_id="c1", label="root")
+    b = trace_store.create_node(conversation_id="c1", parent_id=a.id, label="child")
+    trace_store.mark_done(a.id)
+    result = execute_get_trace("c1", store=trace_store)
+    assert "c1" in result
+    assert "root" in result
+    assert "child" in result
+    assert "2 nodes" in result
+
+
+def test_execute_get_trace_empty(trace_store: TraceStore):
+    from madcop.agent.trace import execute_get_trace
+    result = execute_get_trace("nonexistent", store=trace_store)
+    assert "No trace" in result
