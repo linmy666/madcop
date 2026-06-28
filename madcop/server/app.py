@@ -333,6 +333,12 @@ def create_app() -> FastAPI:
         from madcop import __version__
         return {"status": "ok", "version": __version__}
 
+    @app.get("/health")
+    async def health_root() -> dict[str, str]:
+        """cc-haha React 客户端期望的 healthcheck 端点"""
+        from madcop import __version__
+        return {"status": "ok", "version": __version__}
+
     # ------------------------------------------------------------------- #
     # Settings
     # ------------------------------------------------------------------- #
