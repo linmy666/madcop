@@ -879,7 +879,7 @@ export const zh: Record<TranslationKey, string> = {
   // Settings > Computer Use
   'settings.tab.computerUse': 'Computer Use',
   'settings.computerUse.title': 'Computer Use',
-  'settings.computerUse.description': '允许 Claude 截屏、点击、打字并控制你的电脑。需要 Python 3，macOS 上还需要辅助功能权限。',
+  'settings.computerUse.description': '允许 MadCop 截屏、点击、打字并控制你的电脑。需要 Python 3，macOS 上还需要辅助功能权限。',
   'settings.computerUse.enabledToggle': '启用',
   'settings.computerUse.disabledHint': 'Computer Use 已关闭。新会话不会注入 computer-use MCP，也不会把桌面控制工具暴露给 Coding Agent。',
   'settings.computerUse.notSupported': 'Computer Use 仅支持 macOS 和 Windows。',

@@ -1601,14 +1601,7 @@ def register(app: FastAPI) -> None:
     async def cc_whatsapp_unbind() -> dict[str, Any]:
         return {"ok": True}
 
-    # ---- Desktop UI preferences ----------------------------------- #
-
-    @app.get("/api/desktop-ui/preferences", include_in_schema=False)
-    async def cc_ui_prefs() -> dict[str, Any]:
-        return {
-            "sidebar": {"width": 260, "collapsed": False},
-            "profile": {"name": "MadCop", "avatar": None},
-        }
+    # ---- Desktop UI preferences (real implementation at end of file) ---- #
 
     @app.get("/api/desktop-ui/preferences/profile",
               include_in_schema=False)
@@ -1714,15 +1707,6 @@ def register(app: FastAPI) -> None:
             body = {}
         return _safe(lambda: _reorder_providers(body.get("orderedIds", [])),
                       default={"providers": [], "providerOrder": []})
-
-    @app.post("/api/providers/test", include_in_schema=False)
-    async def cc_test_provider_config(request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        return _safe(lambda: _test_provider_config(body),
-                      default={"result": {"ok": False, "error": "no config"}})
 
     @app.put("/api/providers/settings", include_in_schema=False)
     async def cc_update_provider_settings(request: Request) -> dict[str, Any]:
@@ -2529,7 +2513,43 @@ def register(app: FastAPI) -> None:
 
     @app.get("/api/desktop-ui/preferences", include_in_schema=False)
     async def cc_desktop_prefs() -> dict[str, Any]:
-        return _load_prefs()
+        """Return the full DesktopUiPreferencesResponse shape:
+        {preferences: {schemaVersion, sidebar, profile}, exists}
+        """
+        prefs = _load_prefs()
+        return {
+            "preferences": {
+                "schemaVersion": 1,
+                "sidebar": {
+                    "projectOrder": prefs.get("sidebar", {}).get(
+                        "projectOrder", []),
+                    "pinnedProjects": prefs.get("sidebar", {}).get(
+                        "pinnedProjects", []),
+                    "hiddenProjects": prefs.get("sidebar", {}).get(
+                        "hiddenProjects", []),
+                    "projectOrganization": prefs.get("sidebar", {}).get(
+                        "projectOrganization", "project"),
+                    "projectSortBy": prefs.get("sidebar", {}).get(
+                        "projectSortBy", "updatedAt"),
+                    # Also expose legacy fields so the old UI doesn't break
+                    "collapsed": prefs.get("sidebar", {}).get("collapsed", False),
+                    "width": prefs.get("sidebar", {}).get("width", 260),
+                },
+                "profile": {
+                    "displayName": prefs.get("profile", {}).get(
+                        "displayName") or prefs.get("profile", {}).get(
+                            "name", "MadCop User"),
+                    "subtitle": prefs.get("profile", {}).get(
+                        "subtitle", ""),
+                    "avatarFile": prefs.get("profile", {}).get(
+                        "avatarFile") or prefs.get("profile", {}).get(
+                            "avatar"),
+                    "avatarUpdatedAt": prefs.get("profile", {}).get(
+                        "avatarUpdatedAt"),
+                },
+            },
+            "exists": True,
+        }
 
     @app.put("/api/desktop-ui/preferences/{section}", include_in_schema=False)
     async def cc_desktop_prefs_set(section: str, request: Request) -> dict[str, Any]:
@@ -2766,7 +2786,13 @@ def register(app: FastAPI) -> None:
         path: str = Query(default=""),
         cwd: str = Query(default=""),
     ) -> dict[str, Any]:
-        """Read a memory file's full content."""
+        """Read a memory file's full content.
+
+        Special case: if the file is `MEMORY.md` and its content is empty,
+        auto-generate content from the L1 Semantic memory store (facts like
+        "user name is 林芮翰") so the user can actually see their
+        remembered facts in the UI.
+        """
         if not path:
             return {"file": None, "error": "path required"}
         p = Path(path).expanduser()
@@ -2779,6 +2805,10 @@ def register(app: FastAPI) -> None:
             updated = _dt.datetime.fromtimestamp(
                 stat.st_mtime, tz=_dt.timezone.utc
             ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            # If file is empty/blank AND it's MEMORY.md, synthesise from L1
+            if (not content.strip()
+                and p.name.upper() == "MEMORY.MD"):
+                content = _synthesize_memory_md()
             return {"file": {
                 "path": str(p),
                 "content": content,
@@ -3019,7 +3049,7 @@ def register(app: FastAPI) -> None:
                 t["status"] = "pending"
         return {"ok": True}
 
-    # ---- Provider test (already exists; reaffirm shape) -------- #
+    # ---- Provider test (returns ProviderTestResult shape) ---- #
 
     @app.post("/api/providers/{provider_id}/test", include_in_schema=False)
     async def cc_provider_test_real(provider_id: str, request: Request) -> dict[str, Any]:
@@ -3030,24 +3060,79 @@ def register(app: FastAPI) -> None:
         try:
             from madcop.llm import OpenAICompatClient, Message
             s = settings_store.load_settings()
-            p = next((x for x in (s.providers or []) if x.id == provider_id), None)
+            p = next((x for x in (s.providers or [])
+                      if getattr(x, "provider_id", "") == provider_id), None)
             if not p:
-                return {"result": {"ok": False, "error": f"provider {provider_id} not found"}}
+                return {"result": {
+                    "connectivity": {"success": False, "latencyMs": 0,
+                                     "error": f"provider {provider_id} not found"},
+                }}
             base = body.get("baseUrl") or getattr(p, "base_url", "")
             model = body.get("modelId") or getattr(p, "model", "")
             api_key = getattr(p, "api_key", "")
             if not base or not model or not api_key:
-                return {"result": {"ok": False, "error": "missing base_url / model / api_key"}}
+                return {"result": {
+                    "connectivity": {"success": False, "latencyMs": 0,
+                                     "error": "missing base_url / model / api_key"},
+                }}
             client = OpenAICompatClient(base_url=base, api_key=api_key)
+            t0 = time.time()
             resp = await asyncio.to_thread(
                 client.chat,
                 [Message(role="user", content="ping")],
                 model=model,
             )
-            return {"result": {"ok": True, "model": resp.model,
-                               "latencyMs": int(getattr(resp, "latency_ms", 0))}}
+            latency_ms = int((time.time() - t0) * 1000)
+            return {"result": {
+                "connectivity": {
+                    "success": True,
+                    "latencyMs": latency_ms,
+                    "modelUsed": getattr(resp, "model", model),
+                },
+            }}
         except Exception as e:
-            return {"result": {"ok": False, "error": str(e)[:200]}}
+            return {"result": {
+                "connectivity": {"success": False, "latencyMs": 0,
+                                 "error": str(e)[:200]},
+            }}
+
+    @app.post("/api/providers/test", include_in_schema=False)
+    async def cc_provider_test_config(request: Request) -> dict[str, Any]:
+        """Test a provider config without saving (used in the form)."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        try:
+            from madcop.llm import OpenAICompatClient, Message
+            base = body.get("baseUrl") or body.get("base_url") or ""
+            api_key = body.get("apiKey") or body.get("api_key") or ""
+            model = body.get("modelId") or body.get("model") or ""
+            if not base or not model or not api_key:
+                return {"result": {
+                    "connectivity": {"success": False, "latencyMs": 0,
+                                     "error": "missing baseUrl/apiKey/modelId"},
+                }}
+            client = OpenAICompatClient(base_url=base, api_key=api_key)
+            t0 = time.time()
+            resp = await asyncio.to_thread(
+                client.chat,
+                [Message(role="user", content="ping")],
+                model=model,
+            )
+            latency_ms = int((time.time() - t0) * 1000)
+            return {"result": {
+                "connectivity": {
+                    "success": True,
+                    "latencyMs": latency_ms,
+                    "modelUsed": getattr(resp, "model", model),
+                },
+            }}
+        except Exception as e:
+            return {"result": {
+                "connectivity": {"success": False, "latencyMs": 0,
+                                 "error": str(e)[:200]},
+            }}
 
     # ---- Session extra endpoints ------------------------------- #
 
@@ -3201,6 +3286,77 @@ def _force_distill_skill(topic: str, user_query: str,
     """Backwards-compat wrapper."""
     from madcop.memory.skill_distill import force_distill_skill
     return force_distill_skill(topic, user_query, assistant_response)
+
+
+def _synthesize_memory_md() -> str:
+    """Generate a MEMORY.md content from L1 Semantic memory facts.
+
+    Returns a markdown document listing all extracted user facts (name,
+    preferences, etc.) so the user can see what MadCop has remembered
+    about them when they open the memory settings page.
+    """
+    import datetime as _dt
+    lines: list[str] = [
+        "# Project Memory",
+        "",
+        f"_Auto-generated on {_dt.datetime.now(_dt.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}._",
+        "",
+        "These are the facts MadCop Agent has learned about you across all",
+        "your sessions. Edit this file freely — your changes will be kept",
+        "the next time the auto-generator runs (it only fills in empty files).",
+        "",
+        "## About you",
+        "",
+    ]
+    try:
+        from madcop.server.app import get_memory_store
+        from madcop.memory import SemanticMemory, MemoryKind
+        store = get_memory_store()
+        sem = SemanticMemory(store)
+        facts = store.list_by_kind(MemoryKind.SEMANTIC, limit=200)
+        user_facts = [f for f in facts
+                      if "user" in f.tags or "user-profile" in f.tags
+                      or "user" in (f.title or "").lower()
+                      or "user" in (f.content or "").lower()[:200]]
+        if not user_facts:
+            lines.append("_No personal facts extracted yet. Start a conversation and say something like 'I am 林芮翰' or 'I live in 上海' — MadCop will remember._")
+        else:
+            for f in user_facts[:50]:
+                # Parse JSON content if it's structured
+                text = f.content or f.title or ""
+                if text.startswith("{"):
+                    try:
+                        import json as _j
+                        parsed = _j.loads(text)
+                        text = parsed.get("object") or text
+                    except Exception:
+                        pass
+                if text:
+                    lines.append(f"- {text}")
+        lines.append("")
+        lines.append("## Skills")
+        lines.append("")
+        skill_facts = [f for f in facts if "skill" in f.tags]
+        if not skill_facts:
+            lines.append("_No auto-distilled skills yet. Try asking MadCop 'teach me how to do X' — it'll create a SKILL.md you can edit._")
+        else:
+            for f in skill_facts[:20]:
+                text = f.content or f.title or ""
+                if text.startswith("{"):
+                    try:
+                        import json as _j
+                        parsed = _j.loads(text)
+                        text = parsed.get("object") or text
+                    except Exception:
+                        pass
+                if text:
+                    lines.append(f"- {text}")
+        lines.append("")
+        lines.append("---")
+        lines.append(f"_Total: {len(facts)} facts in memory store._")
+    except Exception as e:
+        lines.append(f"_Could not load memory: {e}_")
+    return "\n".join(lines)
 
 
 # ---- Activity stats from trace store -------------------------- #
