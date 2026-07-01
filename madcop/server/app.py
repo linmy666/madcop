@@ -233,6 +233,22 @@ def _build_memory_system_prompt(
         if kept:
             parts.append("\n".join(kept))
 
+    # --- Available skills (so LLM can reference them) ----------------- #
+    try:
+        from madcop.memory.skill_distill import list_user_skills
+        skills = list_user_skills()
+        if skills:
+            skill_lines = ["# Available SKILLs (auto-distilled or user-created)"]
+            for s in skills[:10]:  # cap to 10 to save tokens
+                skill_lines.append(
+                    f"- **{s['name']}**: {s.get('description', '')[:80]}"
+                )
+            kept = _truncate_to_budget(skill_lines, 300)
+            if kept:
+                parts.append("\n".join(kept))
+    except Exception:
+        pass
+
     return "\n\n".join(parts)
 
 
@@ -1022,56 +1038,170 @@ def create_app() -> FastAPI:
         }
 
     # ------------------------------------------------------------------- #
-    # Skills API (auto-sediment)
+    # Skills API (auto-distill + LLM-callable)
+    # Returns SkillMeta shape: {name, displayName?, description, source,
+    #   userInvocable, version?, contentLength, hasDirectory, pluginName?}
     # ------------------------------------------------------------------- #
 
     @app.get("/api/skills")
-    async def list_skills() -> dict[str, Any]:
-        """List all skills."""
+    async def list_skills(
+        q: str = Query(default=""),
+        source: str = Query(default=""),
+        cwd: str = Query(default=""),
+    ) -> dict[str, Any]:
+        """List all skills (auto-distilled user skills + bundled + project)."""
+        from madcop.memory.skill_distill import list_user_skills
         from madcop.agent.skill_forge import get_skill_store
-        store = get_skill_store()
-        skills = store.list_skills()
+        skills: list[dict[str, Any]] = []
+        # User skills (auto-distilled) — primary path
+        if not source or source == "user":
+            for s in list_user_skills():
+                if q and q.lower() not in (s["name"] + s.get("description", "")).lower():
+                    continue
+                s["source"] = "user"
+                skills.append(s)
+        # Legacy skill_forge store
+        try:
+            forge = get_skill_store()
+            for s in forge.list_skills():
+                # Convert forge format to SkillMeta
+                if isinstance(s, dict):
+                    name = s.get("name", "")
+                    skills.append({
+                        "name": name,
+                        "displayName": s.get("displayName", name),
+                        "description": s.get("description", ""),
+                        "source": "user",
+                        "userInvocable": True,
+                        "version": s.get("version", "1.0"),
+                        "contentLength": len(s.get("body", "")),
+                        "hasDirectory": False,
+                    })
+        except Exception:
+            pass
+        # Bundled skills
+        if not source or source == "bundled":
+            bundled = Path(__file__).resolve().parent.parent.parent / "skills"
+            if bundled.exists():
+                for f in bundled.glob("*.md"):
+                    content = f.read_text(errors="ignore")
+                    title = f.stem
+                    if content.startswith("# "):
+                        title = content.split("\n", 1)[0][2:].strip()
+                    if q and q.lower() not in (title + content).lower():
+                        continue
+                    skills.append({
+                        "name": f.stem,
+                        "displayName": title,
+                        "description": content[:200],
+                        "source": "bundled",
+                        "userInvocable": True,
+                        "contentLength": len(content),
+                        "hasDirectory": False,
+                        "path": str(f),
+                    })
         return {"skills": skills, "total": len(skills)}
+
+    @app.get("/api/skills/detail")
+    async def get_skill_detail(
+        name: str = Query(...),
+        source: str = Query(default="user"),
+        cwd: str = Query(default=""),
+    ) -> dict[str, Any]:
+        """Get a skill's full content. Returns {detail: SkillDetail}.
+
+        Must be registered BEFORE the /api/skills/{name} catch-all below,
+        otherwise FastAPI matches the literal "detail" as the {name}.
+        """
+        from madcop.memory.skill_distill import read_skill_detail
+        detail = read_skill_detail(name, source)
+        if detail:
+            return {"detail": detail}
+        raise HTTPException(404, f"Skill '{name}' not found")
 
     @app.get("/api/skills/{name}")
     async def get_skill(name: str) -> dict[str, Any]:
-        """Get a single skill by name."""
+        """Get a single skill by name. Returns SkillDetail shape."""
+        from madcop.memory.skill_distill import read_skill_detail
+        detail = read_skill_detail(name, "user")
+        if detail:
+            return detail
+        # Fallback: skill_forge
         from madcop.agent.skill_forge import get_skill_store
-        store = get_skill_store()
-        skill = store.get_skill(name)
-        if not skill:
-            raise HTTPException(404, f"Skill '{name}' not found")
-        return skill
+        skill = get_skill_store().get_skill(name)
+        if skill:
+            return {
+                "meta": {
+                    "name": name,
+                    "displayName": skill.get("displayName", name),
+                    "description": skill.get("description", ""),
+                    "source": "user",
+                    "userInvocable": True,
+                    "contentLength": len(skill.get("body", "")),
+                    "hasDirectory": False,
+                },
+                "tree": [],
+                "files": [{
+                    "path": str(Path.home() / ".madcop" / "skills" / f"{name}.md"),
+                    "content": skill.get("body", ""),
+                    "language": "markdown",
+                    "isEntry": True,
+                }],
+                "skillRoot": str(Path.home() / ".madcop" / "skills"),
+            }
+        raise HTTPException(404, f"Skill '{name}' not found")
 
     @app.post("/api/skills")
     async def create_skill(body: dict[str, Any]) -> dict[str, Any]:
-        """Manually create a skill."""
-        from madcop.agent.skill_forge import get_skill_store
-        store = get_skill_store()
-        path = store.create_skill(
-            name=body.get("name", "unnamed"),
-            description=body.get("description", ""),
-            body=body.get("body", ""),
-            triggers=body.get("triggers", []),
-            source=body.get("source", "manual"),
-        )
-        return {"path": path, "created": True}
+        """Manually create a skill. Also auto-distills if it looks teachable."""
+        name = body.get("name", "unnamed")
+        description = body.get("description", "")
+        body_md = body.get("body", "")
+        # Use distill module to create the file with proper format
+        from madcop.memory.skill_distill import force_distill_skill
+        topic = body.get("topic", name)
+        skill_name = force_distill_skill(
+            topic, description or topic, body_md)
+        if not skill_name:
+            # Fallback: just write directly
+            target = Path.home() / ".madcop" / "skills" / f"{name}.md"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            content = f"# {name}\n\n{description}\n\n{body_md}\n"
+            target.write_text(content, encoding="utf-8")
+            skill_name = target.stem
+        return {"path": str(Path.home() / ".madcop" / "skills" / f"{skill_name}.md"),
+                "created": True, "name": skill_name}
+
+    @app.post("/api/skills/distill")
+    async def distill_skill_endpoint(body: dict[str, Any]) -> dict[str, Any]:
+        """Manually trigger auto-distill from a (query, response) pair."""
+        from madcop.memory.skill_distill import force_distill_skill
+        topic = body.get("topic", "")
+        user_q = body.get("userQuery", topic)
+        assistant_r = body.get("assistantResponse", "")
+        if not user_q or not assistant_r:
+            return {"ok": False, "error": "userQuery and assistantResponse required"}
+        name = force_distill_skill(topic, user_q, assistant_r)
+        if name:
+            return {"ok": True, "skillName": name}
+        return {"ok": False, "error": "could not distill"}
 
     @app.delete("/api/skills/{name}")
     async def delete_skill(name: str) -> dict[str, Any]:
-        from madcop.agent.skill_forge import get_skill_store
-        store = get_skill_store()
-        ok = store.delete_skill(name)
-        if not ok:
+        target = Path.home() / ".madcop" / "skills" / f"{name}.md"
+        if not target.exists():
             raise HTTPException(404, f"Skill '{name}' not found")
+        target.unlink()
         return {"deleted": True, "name": name}
 
     @app.get("/api/skills/search")
     async def search_skills(q: str = "") -> dict[str, Any]:
-        from madcop.agent.skill_forge import get_skill_store
-        store = get_skill_store()
-        results = store.search_skills(q) if q else store.list_skills()
-        return {"results": results, "total": len(results)}
+        from madcop.memory.skill_distill import list_user_skills
+        skills = list_user_skills()
+        if q:
+            skills = [s for s in skills if q.lower() in s["name"].lower()
+                      or q.lower() in s.get("description", "").lower()]
+        return {"results": skills, "total": len(skills)}
 
     # ------------------------------------------------------------------- #
     # WebUI (static HTML at /)
@@ -1265,6 +1395,24 @@ def create_app() -> FastAPI:
                     }
                     _MESSAGES[session_id].append(asst_entry)
                     sess["messageCount"] = len(_MESSAGES[session_id])
+                    # ---- Auto-distill SKILL from teach-me exchanges ---- #
+                    try:
+                        from madcop.memory.skill_distill import (
+                            distill_skill_from_exchange,
+                        )
+                        skill_name = distill_skill_from_exchange(
+                            user_query=latest_user_msg,
+                            assistant_response=content,
+                        )
+                        if skill_name:
+                            await ws.send_json({
+                                "type": "skill_distilled",
+                                "skillName": skill_name,
+                                "message": f"Auto-distilled SKILL: {skill_name}",
+                            })
+                    except Exception as _e:
+                        import sys as _sys
+                        print(f"[ws] skill distill error: {_e}", file=_sys.stderr, flush=True)
                     # 5) status: idle (stream done)
                     await ws.send_json({"type": "status", "state": "idle",
                                         "verb": ""})

@@ -718,7 +718,10 @@ def register(app: FastAPI) -> None:
         source: str = Query(default="user"),
         name: str = Query(default=""),
     ) -> dict[str, Any]:
-        detail = _safe(lambda: _get_skill_detail(source, name), default=None)
+        # Use the unified skill_distill reader (handles both user skills
+        # auto-distilled by MadCop and any custom skills on disk).
+        from madcop.memory.skill_distill import read_skill_detail
+        detail = read_skill_detail(name, source)
         if not detail:
             return {"detail": None}
         return {"detail": detail}
@@ -893,28 +896,10 @@ def register(app: FastAPI) -> None:
                       default={"episodic": [], "semantic": [], "reflective": [],
                                "scenario": [], "persona": [], "insight": []})
 
-    @app.get("/api/memory/projects", include_in_schema=False)
-    async def cc_memory_projects_legacy() -> dict[str, Any]:
-        return _safe(_list_memory_projects, default={"projects": []})
-
-    @app.get("/api/memory/files", include_in_schema=False)
-    async def cc_memory_files_get() -> dict[str, Any]:
-        return {"files": []}
-
-    @app.get("/api/memory/file", include_in_schema=False)
-    async def cc_memory_file_read(
-        projectId: str = Query(default=""),
-        path: str = Query(default=""),
-    ) -> dict[str, Any]:
-        return {
-            "file": {
-                "path": path,
-                "name": path.split("/")[-1] if path else "",
-                "bytes": 0, "updatedAt": "", "type": "markdown",
-                "description": "", "title": path.split("/")[-1] if path else "",
-                "isIndex": False, "content": "",
-            }
-        }
+    # NOTE: /api/memory/{projects,files,file} are defined in the v2.6.0
+    # section below with full real implementations. The legacy stubs that
+    # used to be here were removed because they shadowed the real handlers
+    # (FastAPI matches routes in registration order).
 
     @app.put("/api/memory/file", include_in_schema=False)
     async def cc_memory_file_write(request: Request) -> dict[str, Any]:
@@ -1787,48 +1772,146 @@ def register(app: FastAPI) -> None:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # ---- Skills (from disk) -------------------------------------- #
+    # ---- Skills (from disk + auto-distilled) -------------------- #
 
     @app.get("/api/skills", include_in_schema=False)
     async def cc_skills_list(
         q: str = Query(default=""),
         category: str = Query(default=""),
+        source: str = Query(default=""),
+        cwd: str = Query(default=""),
     ) -> dict[str, Any]:
         """List skills from ~/.madcop/skills/ + bundled defaults."""
         skills: list[dict[str, Any]] = []
-        # Bundled defaults (in-repo)
-        bundled = Path(__file__).parent.parent.parent / "skills"
-        for d in [bundled, Path.home() / ".madcop" / "skills"]:
-            if not d.exists():
-                continue
-            for f in d.glob("*.md"):
-                content = f.read_text(errors="ignore")
-                title = f.stem
-                if content.startswith("# "):
-                    title = content.split("\n", 1)[0][2:].strip()
-                if q and q.lower() not in (title + content).lower():
+        # User skills (auto-distilled)
+        from madcop.memory.skill_distill import list_user_skills
+        if not source or source == "user":
+            for s in list_user_skills():
+                if q and q.lower() not in s["name"].lower() + s.get("description", "").lower():
                     continue
-                skills.append({
-                    "name": f.stem,
-                    "title": title,
-                    "path": str(f),
-                    "category": category or "general",
-                    "description": content[:200],
-                })
+                s["source"] = "user"
+                skills.append(s)
+        # Project skills (in cwd/.madcop/skills/)
+        if cwd and (not source or source == "project"):
+            proj_dir = Path(cwd) / ".madcop" / "skills"
+            if proj_dir.exists():
+                for f in proj_dir.glob("*.md"):
+                    content = f.read_text(errors="ignore")
+                    title = f.stem
+                    if content.startswith("# "):
+                        title = content.split("\n", 1)[0][2:].strip()
+                    if q and q.lower() not in (title + content).lower():
+                        continue
+                    skills.append({
+                        "name": f.stem,
+                        "displayName": title,
+                        "description": content[:200],
+                        "source": "project",
+                        "userInvocable": True,
+                        "contentLength": len(content),
+                        "hasDirectory": False,
+                        "path": str(f),
+                    })
+        # Bundled skills (in-repo)
+        if not source or source == "bundled":
+            bundled = Path(__file__).parent.parent.parent / "skills"
+            if bundled.exists():
+                for f in bundled.glob("*.md"):
+                    content = f.read_text(errors="ignore")
+                    title = f.stem
+                    if content.startswith("# "):
+                        title = content.split("\n", 1)[0][2:].strip()
+                    if q and q.lower() not in (title + content).lower():
+                        continue
+                    skills.append({
+                        "name": f.stem,
+                        "displayName": title,
+                        "description": content[:200],
+                        "source": "bundled",
+                        "userInvocable": True,
+                        "contentLength": len(content),
+                        "hasDirectory": False,
+                        "path": str(f),
+                    })
         return {"skills": skills, "total": len(skills)}
 
     @app.get("/api/skills/detail", include_in_schema=False)
-    async def cc_skills_detail(name: str = Query(...)) -> dict[str, Any]:
-        for d in [Path.home() / ".madcop" / "skills",
-                  Path(__file__).parent.parent.parent / "skills"]:
-            f = d / f"{name}.md"
+    async def cc_skills_detail(
+        name: str = Query(default=""),
+        source: str = Query(default="user"),
+        cwd: str = Query(default=""),
+    ) -> dict[str, Any]:
+        """Read a skill's full content + tree. Returns SkillDetail shape:
+          {detail: {meta, tree, files, skillRoot}}
+        """
+        from madcop.memory.skill_distill import read_skill_detail
+        # User skill
+        if source in ("user", "project"):
+            detail = read_skill_detail(name, source)
+            if detail:
+                return {"detail": detail}
+        # Project skill
+        if source == "project" and cwd:
+            proj_dir = Path(cwd) / ".madcop" / "skills"
+            f = proj_dir / f"{name}.md"
             if f.exists():
                 content = f.read_text(errors="ignore")
-                return {
-                    "name": name, "title": f.stem,
-                    "content": content, "path": str(f),
-                }
-        return {"name": name, "content": "", "error": "not found"}
+                return {"detail": {
+                    "meta": {
+                        "name": name, "displayName": name,
+                        "description": content[:200], "source": "project",
+                        "userInvocable": True, "contentLength": len(content),
+                        "hasDirectory": False,
+                    },
+                    "tree": [{"name": f.name, "path": str(f), "type": "file"}],
+                    "files": [{"path": str(f), "content": content,
+                               "language": "markdown", "isEntry": True}],
+                    "skillRoot": str(proj_dir),
+                }}
+        # Bundled skill
+        bundled = Path(__file__).parent.parent.parent / "skills"
+        f = bundled / f"{name}.md"
+        if f.exists():
+            content = f.read_text(errors="ignore")
+            return {"detail": {
+                "meta": {
+                    "name": name, "displayName": name,
+                    "description": content[:200], "source": "bundled",
+                    "userInvocable": True, "contentLength": len(content),
+                    "hasDirectory": False,
+                },
+                "tree": [{"name": f.name, "path": str(f), "type": "file"}],
+                "files": [{"path": str(f), "content": content,
+                           "language": "markdown", "isEntry": True}],
+                "skillRoot": str(bundled),
+            }}
+        return {"detail": {"meta": {"name": name}, "tree": [], "files": []}}
+
+    # Trigger a manual distill (for testing or force-distill)
+    @app.post("/api/skills/distill", include_in_schema=False)
+    async def cc_skills_distill(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        topic = body.get("topic", "")
+        user_q = body.get("userQuery", topic)
+        assistant_r = body.get("assistantResponse", "")
+        if not user_q or not assistant_r:
+            return {"ok": False, "error": "userQuery and assistantResponse required"}
+        from madcop.memory.skill_distill import force_distill_skill
+        name = force_distill_skill(topic, user_q, assistant_r)
+        if name:
+            return {"ok": True, "skillName": name}
+        return {"ok": False, "error": "could not distill"}
+
+    @app.delete("/api/skills/{name}", include_in_schema=False)
+    async def cc_skills_delete(name: str) -> dict[str, Any]:
+        target = Path.home() / ".madcop" / "skills" / f"{name}.md"
+        if not target.exists():
+            return {"ok": False, "error": "not found"}
+        target.unlink()
+        return {"ok": True, "deleted": name}
 
     # ---- Scheduled tasks (basic cron-like) ---------------------- #
 
@@ -1950,11 +2033,87 @@ def register(app: FastAPI) -> None:
     # ---- MCP (server definitions) ------------------------------- #
 
     @app.get("/api/mcp", include_in_schema=False)
-    async def cc_mcp_list(q: str = Query(default="")) -> dict[str, Any]:
+    async def cc_mcp_list(
+        q: str = Query(default=""),
+        scope: str = Query(default=""),
+        cwd: str = Query(default=""),
+    ) -> dict[str, Any]:
         servers = _load_mcp_servers()
         if q:
             servers = [s for s in servers if q.lower() in s["name"].lower()]
-        return {"servers": servers, "total": len(servers)}
+        # Reshape to McpServerRecord
+        records: list[dict[str, Any]] = []
+        for s in servers:
+            config = s.get("config") or {
+                "type": "stdio",
+                "command": s.get("command", ""),
+                "args": s.get("args", []),
+                "env": s.get("env", {}),
+            }
+            status = s.get("status", "disconnected")
+            enabled = s.get("enabled", True)
+            if not enabled:
+                status_str = "disabled"
+            elif status == "connected":
+                status_str = "connected"
+            else:
+                status_str = "needs-auth"
+            records.append({
+                "name": s["name"],
+                "scope": s.get("scope", "user"),
+                "transport": s.get("transport", "stdio"),
+                "enabled": enabled,
+                "status": status_str,
+                "statusLabel": status_str.replace("-", " ").title(),
+                "statusDetail": s.get("statusDetail", ""),
+                "configLocation": s.get("configLocation", str(_MCP_FILE)),
+                "summary": s.get("summary",
+                    f"{config.get('type', 'stdio')}: "
+                    f"{config.get('command', '') or config.get('url', '')}"),
+                "canEdit": True,
+                "canRemove": True,
+                "canReconnect": True,
+                "canToggle": True,
+                "config": config,
+                "projectPath": s.get("projectPath") or (cwd or None),
+            })
+        return {"servers": records, "total": len(records)}
+
+    @app.get("/api/mcp/{name}/status", include_in_schema=False)
+    async def cc_mcp_status(name: str, cwd: str = Query(default="")) -> dict[str, Any]:
+        servers = _load_mcp_servers()
+        for s in servers:
+            if s["name"] == name:
+                config = s.get("config") or {
+                    "type": "stdio",
+                    "command": s.get("command", ""),
+                    "args": s.get("args", []),
+                    "env": s.get("env", {}),
+                }
+                status = s.get("status", "disconnected")
+                enabled = s.get("enabled", True)
+                if not enabled:
+                    status_str = "disabled"
+                elif status == "connected":
+                    status_str = "connected"
+                else:
+                    status_str = "needs-auth"
+                return {"server": {
+                    "name": name,
+                    "scope": s.get("scope", "user"),
+                    "transport": s.get("transport", "stdio"),
+                    "enabled": enabled,
+                    "status": status_str,
+                    "statusLabel": status_str.replace("-", " ").title(),
+                    "statusDetail": s.get("statusDetail", ""),
+                    "configLocation": s.get("configLocation", str(_MCP_FILE)),
+                    "summary": s.get("summary", ""),
+                    "canEdit": True, "canRemove": True,
+                    "canReconnect": True, "canToggle": True,
+                    "config": config,
+                    "projectPath": s.get("projectPath") or (cwd or None),
+                }, "connected": status_str == "connected"}
+        return {"server": None, "connected": False}
 
     @app.post("/api/mcp", include_in_schema=False)
     async def cc_mcp_create(request: Request) -> dict[str, Any]:
@@ -1966,15 +2125,38 @@ def register(app: FastAPI) -> None:
         if not name:
             return {"ok": False, "error": "name required"}
         servers = _load_mcp_servers()
+        scope = body.get("scope", "user")
+        config = body.get("config", {
+            "type": "stdio",
+            "command": body.get("command", ""),
+            "args": body.get("args", []),
+            "env": body.get("env", {}),
+        })
         new_server = {
-            "name": name, "command": body.get("command", ""),
-            "args": body.get("args", []), "env": body.get("env", {}),
+            "name": name,
+            "scope": scope,
+            "transport": config.get("type", "stdio"),
+            "command": config.get("command", ""),
+            "args": config.get("args", []),
+            "env": config.get("env", {}),
+            "config": config,
             "enabled": body.get("enabled", True),
-            "status": "stopped",
+            "status": "disconnected",
+            "summary": f"{config.get('type', 'stdio')}: "
+                       f"{config.get('command', '') or config.get('url', '')}",
         }
         servers.append(new_server)
         _save_mcp_servers(servers)
-        return {"ok": True, "server": new_server}
+        return {"ok": True, "server": {
+            "name": name, "scope": scope,
+            "transport": new_server["transport"],
+            "enabled": new_server["enabled"],
+            "status": "needs-auth", "statusLabel": "Needs Auth",
+            "configLocation": str(_MCP_FILE), "summary": new_server["summary"],
+            "canEdit": True, "canRemove": True,
+            "canReconnect": True, "canToggle": True,
+            "config": config,
+        }}
 
     @app.put("/api/mcp/{name}", include_in_schema=False)
     async def cc_mcp_update(name: str, request: Request) -> dict[str, Any]:
@@ -1985,13 +2167,33 @@ def register(app: FastAPI) -> None:
         servers = _load_mcp_servers()
         for i, s in enumerate(servers):
             if s["name"] == name:
-                servers[i].update(body)
+                # Frontend sends {scope, config}
+                if "config" in body:
+                    s["config"] = body["config"]
+                    s["command"] = body["config"].get("command", s.get("command", ""))
+                    s["args"] = body["config"].get("args", s.get("args", []))
+                    s["env"] = body["config"].get("env", s.get("env", {}))
+                if "scope" in body:
+                    s["scope"] = body["scope"]
+                if "enabled" in body:
+                    s["enabled"] = body["enabled"]
+                servers[i] = s
                 _save_mcp_servers(servers)
-                return {"ok": True, "server": servers[i]}
+                return {"ok": True, "server": {
+                    "name": name, "scope": s.get("scope", "user"),
+                    "transport": s.get("transport", "stdio"),
+                    "enabled": s.get("enabled", True),
+                    "status": "disconnected", "statusLabel": "Disconnected",
+                    "configLocation": str(_MCP_FILE),
+                    "summary": s.get("summary", ""),
+                    "canEdit": True, "canRemove": True,
+                    "canReconnect": True, "canToggle": True,
+                    "config": s.get("config", {}),
+                }}
         return {"ok": False, "error": "not found"}
 
     @app.delete("/api/mcp/{name}", include_in_schema=False)
-    async def cc_mcp_delete(name: str) -> dict[str, Any]:
+    async def cc_mcp_delete(name: str, cwd: str = Query(default="")) -> dict[str, Any]:
         servers = _load_mcp_servers()
         new_servers = [s for s in servers if s["name"] != name]
         if len(new_servers) == len(servers):
@@ -2000,37 +2202,59 @@ def register(app: FastAPI) -> None:
         return {"ok": True, "deleted": name}
 
     @app.post("/api/mcp/{name}/toggle", include_in_schema=False)
-    async def cc_mcp_toggle(name: str) -> dict[str, Any]:
+    async def cc_mcp_toggle(name: str, request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
         servers = _load_mcp_servers()
         for s in servers:
             if s["name"] == name:
-                s["enabled"] = not s.get("enabled", True)
+                if "enabled" in body:
+                    s["enabled"] = bool(body["enabled"])
+                else:
+                    s["enabled"] = not s.get("enabled", True)
                 _save_mcp_servers(servers)
-                return {"ok": True, "server": s}
+                return {"ok": True, "server": {
+                    "name": name, "scope": s.get("scope", "user"),
+                    "transport": s.get("transport", "stdio"),
+                    "enabled": s["enabled"],
+                    "status": "disabled" if not s["enabled"] else "needs-auth",
+                    "statusLabel": "Disabled" if not s["enabled"] else "Needs Auth",
+                    "configLocation": str(_MCP_FILE),
+                    "summary": s.get("summary", ""),
+                    "canEdit": True, "canRemove": True,
+                    "canReconnect": True, "canToggle": True,
+                    "config": s.get("config", {}),
+                }}
         return {"ok": False, "error": "not found"}
 
     @app.post("/api/mcp/{name}/reconnect", include_in_schema=False)
-    async def cc_mcp_reconnect(name: str) -> dict[str, Any]:
+    async def cc_mcp_reconnect(name: str, cwd: str = Query(default="")) -> dict[str, Any]:
         servers = _load_mcp_servers()
         for s in servers:
             if s["name"] == name:
-                s["status"] = "connected" if s.get("enabled") else "stopped"
+                # Mark as needs-auth (we don't actually spawn processes)
+                s["status"] = "needs-auth"
                 _save_mcp_servers(servers)
-                return {"ok": True, "server": s}
+                return {"ok": True, "server": {
+                    "name": name, "scope": s.get("scope", "user"),
+                    "transport": s.get("transport", "stdio"),
+                    "enabled": s.get("enabled", True),
+                    "status": "needs-auth", "statusLabel": "Needs Auth",
+                    "statusDetail": "Restart MadCop Agent to apply changes",
+                    "configLocation": str(_MCP_FILE),
+                    "summary": s.get("summary", ""),
+                    "canEdit": True, "canRemove": True,
+                    "canReconnect": True, "canToggle": True,
+                    "config": s.get("config", {}),
+                }}
         return {"ok": False, "error": "not found"}
-
-    @app.get("/api/mcp/{name}/status", include_in_schema=False)
-    async def cc_mcp_status(name: str) -> dict[str, Any]:
-        servers = _load_mcp_servers()
-        for s in servers:
-            if s["name"] == name:
-                return {"server": s, "connected": s.get("status") == "connected"}
-        return {"server": None, "connected": False}
 
     @app.get("/api/mcp/project-paths", include_in_schema=False)
     async def cc_mcp_project_paths() -> dict[str, Any]:
-        return {"paths": [str(p) for p in _SESSIONS.values()
-                          if p.get("workDir")]}
+        return {"projectPaths": list({str(p) for p in _SESSIONS.values()
+                                       if p.get("workDir")})}
 
     # ---- Search (real FTS5 over sessions + memory) -------------- #
 
@@ -2233,44 +2457,179 @@ def register(app: FastAPI) -> None:
     async def cc_settings_cli_launcher() -> dict[str, Any]:
         return {"enabled": True, "command": "open -a Terminal"}
 
-    # ---- Memory projects / files -------------------------------- #
+    # ---- Memory projects / files (MemorySettings tab) ------------ #
+    # Shapes:
+    #   MemoryProject = {id, label, memoryDir, exists, fileCount, isCurrent}
+    #   MemoryFile    = {path, name, bytes, updatedAt, type?, description?,
+    #                    title, isIndex}
+    #   MemoryFileDetail = {path, content, updatedAt, bytes}
 
     @app.get("/api/memory/projects", include_in_schema=False)
-    async def cc_memory_projects() -> dict[str, Any]:
+    async def cc_memory_projects(
+        cwd: str = Query(default=""),
+    ) -> dict[str, Any]:
+        """List memory projects: global (~/.madcop/memory) + per-session workDir."""
         projects: list[dict[str, Any]] = []
         seen: set[str] = set()
+        # Global memory root
+        global_dir = Path.home() / ".madcop" / "memory"
+        if global_dir.is_dir():
+            n = sum(1 for _ in global_dir.rglob("*.md"))
+            projects.append({
+                "id": "global",
+                "label": "Global memory (~/brain/memory)",
+                "memoryDir": str(global_dir),
+                "exists": True,
+                "fileCount": n,
+                "isCurrent": False,
+            })
+        # Per-session workDir memory (cwd/.claude/memory or cwd/MEMORY.md)
         for s in _SESSIONS.values():
             wd = s.get("workDir")
-            if wd and wd not in seen:
-                seen.add(wd)
-                projects.append({"path": wd, "name": Path(wd).name,
-                                 "sessionCount": sum(
-                                     1 for x in _SESSIONS.values()
-                                     if x.get("workDir") == wd)})
+            if not wd or wd in seen:
+                continue
+            seen.add(wd)
+            wd_path = Path(wd)
+            mem_dir = wd_path / ".claude" / "memory"
+            if not mem_dir.is_dir():
+                mem_dir = wd_path  # fallback: project root
+            n = sum(1 for _ in mem_dir.rglob("*.md"))
+            projects.append({
+                "id": wd,
+                "label": wd_path.name,
+                "memoryDir": str(mem_dir),
+                "exists": mem_dir.is_dir(),
+                "fileCount": n,
+                "isCurrent": wd == cwd or (not cwd and s.get("id") == (
+                    list(_SESSIONS.values())[0].get("id") if _SESSIONS else ""
+                )),
+            })
+        # If cwd supplied but no project matched, add it as a candidate
+        if cwd and cwd not in seen:
+            wd_path = Path(cwd)
+            mem_dir = wd_path / ".claude" / "memory"
+            n = sum(1 for _ in mem_dir.rglob("*.md"))
+            projects.append({
+                "id": cwd,
+                "label": wd_path.name or cwd,
+                "memoryDir": str(mem_dir),
+                "exists": mem_dir.is_dir(),
+                "fileCount": n,
+                "isCurrent": True,
+            })
         return {"projects": projects}
 
     @app.get("/api/memory/files", include_in_schema=False)
-    async def cc_memory_files(path: str = Query(default="")) -> dict[str, Any]:
-        target = Path(path).expanduser() if path else Path.home() / ".madcop" / "memory"
+    async def cc_memory_files(
+        projectId: str = Query(default=""),
+        path: str = Query(default=""),
+        cwd: str = Query(default=""),
+    ) -> dict[str, Any]:
+        """List memory files in a project. projectId is the path or 'global'."""
+        if not path:
+            if projectId == "global":
+                path = str(Path.home() / ".madcop" / "memory")
+            elif projectId:
+                p = Path(projectId)
+                path = str(p / ".claude" / "memory"
+                          if (p / ".claude" / "memory").is_dir() else p)
+            elif cwd:
+                p = Path(cwd)
+                path = str(p / ".claude" / "memory"
+                          if (p / ".claude" / "memory").is_dir() else p)
+            else:
+                path = str(Path.home() / ".madcop" / "memory")
+        target = Path(path).expanduser()
         if not target.is_dir():
             return {"files": []}
         files: list[dict[str, Any]] = []
-        for f in target.rglob("*"):
-            if f.is_file():
-                files.append({"path": str(f), "name": f.name,
-                              "size": f.stat().st_size,
-                              "modified": f.stat().st_mtime})
-        return {"files": files[:100]}
+        for f in sorted(target.glob("*.md")):
+            if not f.is_file():
+                continue
+            stat = f.stat()
+            content = f.read_text(errors="ignore")
+            # Extract first H1 as title
+            title = f.stem
+            description = ""
+            if content.startswith("# "):
+                title = content.split("\n", 1)[0][2:].strip()
+            # First paragraph as description
+            for line in content.splitlines():
+                if line.strip() and not line.startswith("#"):
+                    description = line.strip()[:200]
+                    break
+            import datetime as _dt
+            updated = _dt.datetime.fromtimestamp(
+                stat.st_mtime, tz=_dt.timezone.utc
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            files.append({
+                "path": str(f),
+                "name": f.name,
+                "bytes": stat.st_size,
+                "updatedAt": updated,
+                "type": "markdown",
+                "title": title,
+                "description": description,
+                "isIndex": f.name.lower() in ("memory.md", "readme.md", "index.md"),
+            })
+        return {"files": files}
 
     @app.get("/api/memory/file", include_in_schema=False)
-    async def cc_memory_file(path: str = Query(...)) -> dict[str, Any]:
+    async def cc_memory_file(
+        projectId: str = Query(default=""),
+        path: str = Query(default=""),
+        cwd: str = Query(default=""),
+    ) -> dict[str, Any]:
+        """Read a memory file's full content."""
+        if not path:
+            return {"file": None, "error": "path required"}
         p = Path(path).expanduser()
         if not p.is_file():
-            return {"error": "not found"}
+            return {"file": None, "error": "not found"}
         try:
-            return {"path": str(p), "content": p.read_text(errors="ignore")[:10000]}
+            content = p.read_text(errors="ignore")
+            import datetime as _dt
+            stat = p.stat()
+            updated = _dt.datetime.fromtimestamp(
+                stat.st_mtime, tz=_dt.timezone.utc
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return {"file": {
+                "path": str(p),
+                "content": content,
+                "updatedAt": updated,
+                "bytes": stat.st_size,
+            }}
         except Exception as e:
-            return {"error": str(e)}
+            return {"file": None, "error": str(e)}
+
+    @app.put("/api/memory/file", include_in_schema=False)
+    async def cc_memory_file_save(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        path = body.get("path", "")
+        content = body.get("content", "")
+        if not path:
+            return {"ok": False, "error": "path required"}
+        p = Path(path).expanduser()
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+            import datetime as _dt
+            stat = p.stat()
+            return {
+                "ok": True,
+                "file": {
+                    "path": str(p),
+                    "updatedAt": _dt.datetime.fromtimestamp(
+                        stat.st_mtime, tz=_dt.timezone.utc
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "bytes": stat.st_size,
+                },
+            }
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     # ---- Adapters (IM / OAuth) — show "not configured" gracefully #
 
@@ -2644,6 +3003,18 @@ def _save_mcp_servers(servers: list[dict[str, Any]]) -> None:
         _MCP_FILE.write_text(_j.dumps(servers, ensure_ascii=False, indent=2))
     except Exception:
         pass
+
+
+# ---- Force-distill skill (bypasses pattern detection) ---------- #
+# Now lives in madcop.memory.skill_distill.force_distill_skill as the
+# canonical implementation. We keep a thin wrapper here for backwards
+# compatibility with the existing cc_haha_compat imports.
+
+def _force_distill_skill(topic: str, user_query: str,
+                          assistant_response: str) -> str | None:
+    """Backwards-compat wrapper."""
+    from madcop.memory.skill_distill import force_distill_skill
+    return force_distill_skill(topic, user_query, assistant_response)
 
 
 # ---- Activity stats from trace store -------------------------- #
