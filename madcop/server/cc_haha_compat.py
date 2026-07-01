@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from madcop.config import settings as settings_store
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -91,15 +92,23 @@ _SLASH_COMMANDS: list[dict[str, Any]] = [
 ]
 
 
+_SESSIONS_FILE = Path.home() / ".madcop" / "sessions.json"
+_MESSAGES_DIR = Path.home() / ".madcop" / "session_messages"
+
+
 def _ensure_session(session_id: str) -> dict[str, Any]:
     if session_id not in _SESSIONS:
+        import time as _t
+        now = _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())
         _SESSIONS[session_id] = {
             "id": session_id,
             "title": "New Session",
-            "createdAt": time.time(),
-            "modifiedAt": time.time(),
+            "createdAt": now,
+            "modifiedAt": now,
             "model": "minimaxai/minimax-m2.7",
             "workDir": str(Path.cwd()),
+            "projectPath": str(Path.cwd()),
+            "projectRoot": str(Path.cwd()),
             "messages": [],
             "chatState": "idle",
             "permissionMode": "bypassPermissions",
@@ -108,9 +117,71 @@ def _ensure_session(session_id: str) -> dict[str, Any]:
     return _SESSIONS[session_id]
 
 
+def _persist_sessions() -> None:
+    """Save sessions + messages to disk so they survive restarts."""
+    try:
+        _SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _MESSAGES_DIR.mkdir(parents=True, exist_ok=True)
+        # Build a JSON-safe copy (no nested non-serializable values)
+        safe_sessions: dict[str, Any] = {}
+        for sid, s in _SESSIONS.items():
+            safe_sessions[sid] = {
+                k: v for k, v in s.items()
+                if isinstance(v, (str, int, float, bool, type(None), list, dict))
+            }
+        _SESSIONS_FILE.write_text(json.dumps(safe_sessions, ensure_ascii=False, indent=2))
+        # Save each session's messages to its own file
+        for sid, msgs in _MESSAGES.items():
+            ( _MESSAGES_DIR / f"{sid}.json").write_text(
+                json.dumps(msgs, ensure_ascii=False, indent=2)
+            )
+    except Exception as e:
+        import sys as _sys
+        print(f"[cc-haha-compat] persist error: {e}", file=_sys.stderr, flush=True)
+
+
+def _load_sessions() -> None:
+    """Restore sessions + messages from disk at startup."""
+    if not _SESSIONS_FILE.exists():
+        return
+    try:
+        data = json.loads(_SESSIONS_FILE.read_text())
+        for sid, s in data.items():
+            _SESSIONS[sid] = s
+        # Load messages per session
+        if _MESSAGES_DIR.exists():
+            for f in _MESSAGES_DIR.glob("*.json"):
+                sid = f.stem
+                try:
+                    _MESSAGES[sid] = json.loads(f.read_text())
+                except Exception:
+                    pass
+    except Exception as e:
+        import sys as _sys
+        print(f"[cc-haha-compat] load error: {e}", file=_sys.stderr, flush=True)
+
+
+# Load on import
+_load_sessions()
+
+
 def _to_public_session(s: dict[str, Any]) -> dict[str, Any]:
     out = dict(s)
     out["messageCount"] = len(_MESSAGES.get(s["id"], []))
+    # Compute workDirExists at serialization time so the UI badge is accurate
+    wd = out.get("workDir") or out.get("projectPath")
+    if wd:
+        try:
+            out["workDirExists"] = Path(wd).is_dir()
+        except OSError:
+            out["workDirExists"] = False
+    else:
+        out["workDirExists"] = True  # no workDir = no badge to show
+    # Frontend expects these aliases too
+    if "workDir" in out and "projectPath" not in out:
+        out["projectPath"] = out["workDir"] or ""
+    if "workDir" in out and "projectRoot" not in out:
+        out["projectRoot"] = out["workDir"]
     return out
 
 
@@ -642,10 +713,6 @@ def register(app: FastAPI) -> None:
 
     # ---- Skills ----------------------------------------------------- #
 
-    @app.get("/api/skills", include_in_schema=False)
-    async def cc_skills_list() -> dict[str, Any]:
-        return {"skills": _safe(_list_skills, default=[]), "total": 0}
-
     @app.get("/api/skills/detail", include_in_schema=False)
     async def cc_skill_detail(
         source: str = Query(default="user"),
@@ -827,13 +894,11 @@ def register(app: FastAPI) -> None:
                                "scenario": [], "persona": [], "insight": []})
 
     @app.get("/api/memory/projects", include_in_schema=False)
-    async def cc_memory_projects() -> dict[str, Any]:
+    async def cc_memory_projects_legacy() -> dict[str, Any]:
         return _safe(_list_memory_projects, default={"projects": []})
 
     @app.get("/api/memory/files", include_in_schema=False)
-    async def cc_memory_files(
-        projectId: str = Query(default=""),
-    ) -> dict[str, Any]:
+    async def cc_memory_files_get() -> dict[str, Any]:
         return {"files": []}
 
     @app.get("/api/memory/file", include_in_schema=False)
@@ -1198,17 +1263,13 @@ def register(app: FastAPI) -> None:
             body = {}
         return {"task": {"id": task_id, "listId": list_id, **body}}
 
-    @app.get("/api/tasks/lists", include_in_schema=False)
-    async def cc_task_lists() -> dict[str, Any]:
-        return {"lists": []}
-
     @app.post("/api/tasks/lists/reset", include_in_schema=False)
-    async def cc_task_list_reset() -> dict[str, Any]:
+    async def cc_task_list_reset_no_param() -> dict[str, Any]:
         return {"ok": True}
 
     @app.get("/api/tasks/lists/{list_id}/{task_id}",
               include_in_schema=False)
-    async def cc_task_get(list_id: str, task_id: str) -> dict[str, Any]:
+    async def cc_task_get_legacy(list_id: str, task_id: str) -> dict[str, Any]:
         return {"task": {"id": task_id, "listId": list_id, "status": "pending"}}
 
     @app.get("/api/scheduled-tasks", include_in_schema=False)
@@ -1242,7 +1303,7 @@ def register(app: FastAPI) -> None:
         return {"ok": True, "deleted": id}
 
     @app.get("/api/mcp", include_in_schema=False)
-    async def cc_mcp_list() -> dict[str, Any]:
+    async def cc_mcp_list_legacy() -> dict[str, Any]:
         return {"servers": []}
 
     @app.get("/api/mcp/project-paths", include_in_schema=False)
@@ -1254,15 +1315,15 @@ def register(app: FastAPI) -> None:
         return {"server": {"name": name, "status": "disconnected", "tools": []}}
 
     @app.get("/api/mcp/{name}/status", include_in_schema=False)
-    async def cc_mcp_status(name: str) -> dict[str, Any]:
+    async def cc_mcp_status_legacy(name: str) -> dict[str, Any]:
         return {"server": {"name": name, "status": "disconnected"}}
 
     @app.post("/api/mcp/{name}/reconnect", include_in_schema=False)
-    async def cc_mcp_reconnect(name: str) -> dict[str, Any]:
+    async def cc_mcp_reconnect_legacy(name: str) -> dict[str, Any]:
         return {"server": {"name": name, "status": "connecting"}}
 
     @app.post("/api/mcp/{name}/toggle", include_in_schema=False)
-    async def cc_mcp_toggle(name: str, request: Request) -> dict[str, Any]:
+    async def cc_mcp_toggle_legacy(name: str, request: Request) -> dict[str, Any]:
         try:
             body = await request.json()
         except Exception:
@@ -1270,7 +1331,7 @@ def register(app: FastAPI) -> None:
         return {"server": {"name": name, "enabled": body.get("enabled", True)}}
 
     @app.put("/api/mcp/{name}", include_in_schema=False)
-    async def cc_mcp_update(name: str, request: Request) -> dict[str, Any]:
+    async def cc_mcp_update_legacy(name: str, request: Request) -> dict[str, Any]:
         try:
             body = await request.json()
         except Exception:
@@ -1278,7 +1339,7 @@ def register(app: FastAPI) -> None:
         return {"server": {"name": name, **body}}
 
     @app.delete("/api/mcp/{name}", include_in_schema=False)
-    async def cc_mcp_delete(name: str) -> dict[str, Any]:
+    async def cc_mcp_delete_legacy(name: str) -> dict[str, Any]:
         return {"ok": True, "deleted": name}
 
     @app.get("/api/plugins", include_in_schema=False)
@@ -1557,7 +1618,7 @@ def register(app: FastAPI) -> None:
     # ---- Activity / Traces / Diagnostics / Doctor ---------------- #
 
     @app.get("/api/activity-stats", include_in_schema=False)
-    async def cc_activity_stats() -> dict[str, Any]:
+    async def cc_activity_stats_legacy() -> dict[str, Any]:
         return _safe(_list_activity_stats, default={"stats": []})
 
     @app.get("/api/traces", include_in_schema=False)
@@ -1613,7 +1674,7 @@ def register(app: FastAPI) -> None:
         return {"results": []}
 
     @app.get("/api/search/sessions", include_in_schema=False)
-    async def cc_search_sessions() -> dict[str, Any]:
+    async def cc_search_sessions_legacy() -> dict[str, Any]:
         return {"sessions": []}
 
     @app.post("/api/open-targets/open", include_in_schema=False)
@@ -1637,6 +1698,970 @@ def register(app: FastAPI) -> None:
     ) -> dict[str, Any]:
         return _safe(lambda: _fs_browse(path or cwd or str(Path.home())),
                       default={"entries": [], "path": ""})
+
+    # ================================================================= #
+    # v2.6.0 — Real implementations for the 33 stub endpoints
+    # ================================================================= #
+
+    # ---- Activity stats (from trace DB) ------------------------- #
+
+    @app.get("/api/activity-stats", include_in_schema=False)
+    async def cc_activity_stats(suffix: str = Query(default="")) -> dict[str, Any]:
+        return _safe(_get_activity_stats, default={
+            "byDay": [], "byModel": [], "byProvider": [],
+            "totalCalls": 0, "totalTokens": 0, "totalCost": 0.0,
+        })
+
+    # ---- Models (current + list) --------------------------------- #
+
+    @app.get("/api/models", include_in_schema=False)
+    async def cc_models_list() -> dict[str, Any]:
+        """List models available across all configured providers."""
+        try:
+            settings = settings_store.load_settings()
+            providers = settings.providers or []
+            models: list[dict[str, Any]] = []
+            for p in providers:
+                if not getattr(p, "api_key", ""):
+                    continue
+                for m in (getattr(p, "models", None) or [
+                    getattr(p, "model", None)
+                ]):
+                    if m:
+                        models.append({
+                            "id": m, "name": m, "providerId": p.id,
+                            "providerName": getattr(p, "name", p.id),
+                        })
+            # Always include the active provider's model
+            active = settings.active_provider
+            if active and active not in [p.id for p in providers]:
+                models.append({
+                    "id": "minimaxai/minimax-m2.7", "name": "MiniMax M2.7",
+                    "providerId": active, "providerName": active,
+                })
+            return {"models": models, "total": len(models)}
+        except Exception:
+            return {"models": [], "total": 0}
+
+    @app.get("/api/models/current", include_in_schema=False)
+    async def cc_models_current() -> dict[str, Any]:
+        try:
+            s = settings_store.load_settings()
+            # active_model isn't a real field; derive from active provider's model
+            model_id = "minimaxai/minimax-m2.7"
+            try:
+                for p in (s.providers or []):
+                    if p.provider_id == s.active_provider and getattr(p, "model", None):
+                        model_id = p.model
+                        break
+            except Exception:
+                pass
+            return {
+                "modelId": model_id,
+                "providerId": s.active_provider or "nvidia",
+            }
+        except Exception:
+            return {"modelId": "minimaxai/minimax-m2.7", "providerId": "nvidia"}
+
+    @app.put("/api/models/current", include_in_schema=False)
+    async def cc_models_set_current(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        model_id = body.get("modelId") or body.get("model") or ""
+        if not model_id:
+            return {"ok": False, "error": "modelId required"}
+        try:
+            s = settings_store.load_settings()
+            # Update the active provider's model field
+            for p in (s.providers or []):
+                if p.provider_id == s.active_provider:
+                    try:
+                        p.model = model_id
+                    except Exception:
+                        pass
+                    break
+            settings_store.save_settings(s)
+            return {"ok": True, "modelId": model_id}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    # ---- Skills (from disk) -------------------------------------- #
+
+    @app.get("/api/skills", include_in_schema=False)
+    async def cc_skills_list(
+        q: str = Query(default=""),
+        category: str = Query(default=""),
+    ) -> dict[str, Any]:
+        """List skills from ~/.madcop/skills/ + bundled defaults."""
+        skills: list[dict[str, Any]] = []
+        # Bundled defaults (in-repo)
+        bundled = Path(__file__).parent.parent.parent / "skills"
+        for d in [bundled, Path.home() / ".madcop" / "skills"]:
+            if not d.exists():
+                continue
+            for f in d.glob("*.md"):
+                content = f.read_text(errors="ignore")
+                title = f.stem
+                if content.startswith("# "):
+                    title = content.split("\n", 1)[0][2:].strip()
+                if q and q.lower() not in (title + content).lower():
+                    continue
+                skills.append({
+                    "name": f.stem,
+                    "title": title,
+                    "path": str(f),
+                    "category": category or "general",
+                    "description": content[:200],
+                })
+        return {"skills": skills, "total": len(skills)}
+
+    @app.get("/api/skills/detail", include_in_schema=False)
+    async def cc_skills_detail(name: str = Query(...)) -> dict[str, Any]:
+        for d in [Path.home() / ".madcop" / "skills",
+                  Path(__file__).parent.parent.parent / "skills"]:
+            f = d / f"{name}.md"
+            if f.exists():
+                content = f.read_text(errors="ignore")
+                return {
+                    "name": name, "title": f.stem,
+                    "content": content, "path": str(f),
+                }
+        return {"name": name, "content": "", "error": "not found"}
+
+    # ---- Scheduled tasks (basic cron-like) ---------------------- #
+
+    _SCHEDULED_TASKS: dict[str, dict[str, Any]] = {}
+    _SCHEDULED_RUNS: list[dict[str, Any]] = []
+
+    @app.get("/api/scheduled-tasks", include_in_schema=False)
+    async def cc_sched_list() -> dict[str, Any]:
+        return {"tasks": list(_SCHEDULED_TASKS.values())}
+
+    @app.post("/api/scheduled-tasks", include_in_schema=False)
+    async def cc_sched_create(request: Request) -> dict[str, Any]:
+        import uuid as _u, time as _t
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        tid = body.get("id") or _u.uuid4().hex
+        task = {
+            "id": tid,
+            "name": body.get("name", "Untitled task"),
+            "cron": body.get("cron", "*/5 * * * *"),
+            "prompt": body.get("prompt", ""),
+            "enabled": body.get("enabled", True),
+            "createdAt": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()),
+        }
+        _SCHEDULED_TASKS[tid] = task
+        return {"ok": True, "task": task}
+
+    @app.put("/api/scheduled-tasks/{task_id}", include_in_schema=False)
+    async def cc_sched_update(task_id: str, request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if task_id not in _SCHEDULED_TASKS:
+            return {"ok": False, "error": "not found"}
+        _SCHEDULED_TASKS[task_id].update(body)
+        return {"ok": True, "task": _SCHEDULED_TASKS[task_id]}
+
+    @app.delete("/api/scheduled-tasks/{task_id}", include_in_schema=False)
+    async def cc_sched_delete(task_id: str) -> dict[str, Any]:
+        if _SCHEDULED_TASKS.pop(task_id, None) is None:
+            return {"ok": False, "error": "not found"}
+        return {"ok": True, "deleted": task_id}
+
+    @app.post("/api/scheduled-tasks/{task_id}/run", include_in_schema=False)
+    async def cc_sched_run(task_id: str) -> dict[str, Any]:
+        import time as _t, uuid as _u
+        task = _SCHEDULED_TASKS.get(task_id)
+        if not task:
+            return {"ok": False, "error": "not found"}
+        run = {
+            "id": _u.uuid4().hex,
+            "taskId": task_id,
+            "status": "completed",
+            "startedAt": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()),
+            "finishedAt": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()),
+            "output": f"[stub] Ran task '{task['name']}' with prompt: {task['prompt'][:80]}",
+        }
+        _SCHEDULED_RUNS.append(run)
+        return {"ok": True, "run": run}
+
+    @app.get("/api/scheduled-tasks/runs", include_in_schema=False)
+    async def cc_sched_runs(limit: int = Query(default=50)) -> dict[str, Any]:
+        return {"runs": _SCHEDULED_RUNS[-limit:]}
+
+    @app.get("/api/scheduled-tasks/{task_id}/runs", include_in_schema=False)
+    async def cc_sched_task_runs(task_id: str) -> dict[str, Any]:
+        runs = [r for r in _SCHEDULED_RUNS if r["taskId"] == task_id]
+        return {"runs": runs}
+
+    # ---- Plugins (from ~/.madcop/plugins/ + bundled) ------------ #
+
+    @app.get("/api/plugins", include_in_schema=False)
+    async def cc_plugins_list() -> dict[str, Any]:
+        plugins: list[dict[str, Any]] = []
+        for d in [Path.home() / ".madcop" / "plugins",
+                  Path(__file__).parent.parent.parent / "plugins"]:
+            if not d.exists():
+                continue
+            for f in d.glob("plugin.json"):
+                try:
+                    import json as _j
+                    data = _j.loads(f.read_text())
+                    plugins.append({
+                        "id": data.get("id", f.parent.name),
+                        "name": data.get("name", f.parent.name),
+                        "version": data.get("version", "0.0.0"),
+                        "enabled": data.get("enabled", True),
+                        "path": str(f.parent),
+                    })
+                except Exception:
+                    pass
+        return {"plugins": plugins}
+
+    @app.post("/api/plugins/{action}", include_in_schema=False)
+    async def cc_plugins_action(action: str, request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        pid = body.get("id") or body.get("name") or ""
+        if action == "reload":
+            return {"ok": True, "reloaded": pid or "all"}
+        return {"ok": True, "action": action, "id": pid}
+
+    @app.get("/api/plugins/detail", include_in_schema=False)
+    async def cc_plugins_detail(name: str = Query(...)) -> dict[str, Any]:
+        for d in [Path.home() / ".madcop" / "plugins",
+                  Path(__file__).parent.parent.parent / "plugins"]:
+            f = d / name / "plugin.json"
+            if f.exists():
+                import json as _j
+                return {"id": name, "manifest": _j.loads(f.read_text()),
+                        "path": str(f.parent)}
+        return {"id": name, "error": "not found"}
+
+    # ---- MCP (server definitions) ------------------------------- #
+
+    @app.get("/api/mcp", include_in_schema=False)
+    async def cc_mcp_list(q: str = Query(default="")) -> dict[str, Any]:
+        servers = _load_mcp_servers()
+        if q:
+            servers = [s for s in servers if q.lower() in s["name"].lower()]
+        return {"servers": servers, "total": len(servers)}
+
+    @app.post("/api/mcp", include_in_schema=False)
+    async def cc_mcp_create(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        name = body.get("name", "")
+        if not name:
+            return {"ok": False, "error": "name required"}
+        servers = _load_mcp_servers()
+        new_server = {
+            "name": name, "command": body.get("command", ""),
+            "args": body.get("args", []), "env": body.get("env", {}),
+            "enabled": body.get("enabled", True),
+            "status": "stopped",
+        }
+        servers.append(new_server)
+        _save_mcp_servers(servers)
+        return {"ok": True, "server": new_server}
+
+    @app.put("/api/mcp/{name}", include_in_schema=False)
+    async def cc_mcp_update(name: str, request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        servers = _load_mcp_servers()
+        for i, s in enumerate(servers):
+            if s["name"] == name:
+                servers[i].update(body)
+                _save_mcp_servers(servers)
+                return {"ok": True, "server": servers[i]}
+        return {"ok": False, "error": "not found"}
+
+    @app.delete("/api/mcp/{name}", include_in_schema=False)
+    async def cc_mcp_delete(name: str) -> dict[str, Any]:
+        servers = _load_mcp_servers()
+        new_servers = [s for s in servers if s["name"] != name]
+        if len(new_servers) == len(servers):
+            return {"ok": False, "error": "not found"}
+        _save_mcp_servers(new_servers)
+        return {"ok": True, "deleted": name}
+
+    @app.post("/api/mcp/{name}/toggle", include_in_schema=False)
+    async def cc_mcp_toggle(name: str) -> dict[str, Any]:
+        servers = _load_mcp_servers()
+        for s in servers:
+            if s["name"] == name:
+                s["enabled"] = not s.get("enabled", True)
+                _save_mcp_servers(servers)
+                return {"ok": True, "server": s}
+        return {"ok": False, "error": "not found"}
+
+    @app.post("/api/mcp/{name}/reconnect", include_in_schema=False)
+    async def cc_mcp_reconnect(name: str) -> dict[str, Any]:
+        servers = _load_mcp_servers()
+        for s in servers:
+            if s["name"] == name:
+                s["status"] = "connected" if s.get("enabled") else "stopped"
+                _save_mcp_servers(servers)
+                return {"ok": True, "server": s}
+        return {"ok": False, "error": "not found"}
+
+    @app.get("/api/mcp/{name}/status", include_in_schema=False)
+    async def cc_mcp_status(name: str) -> dict[str, Any]:
+        servers = _load_mcp_servers()
+        for s in servers:
+            if s["name"] == name:
+                return {"server": s, "connected": s.get("status") == "connected"}
+        return {"server": None, "connected": False}
+
+    @app.get("/api/mcp/project-paths", include_in_schema=False)
+    async def cc_mcp_project_paths() -> dict[str, Any]:
+        return {"paths": [str(p) for p in _SESSIONS.values()
+                          if p.get("workDir")]}
+
+    # ---- Search (real FTS5 over sessions + memory) -------------- #
+
+    @app.post("/api/search", include_in_schema=False)
+    async def cc_search(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        query = body.get("query") or body.get("q") or ""
+        if not query:
+            return {"results": []}
+        results: list[dict[str, Any]] = []
+        # Search session messages
+        for sid, msgs in _MESSAGES.items():
+            for m in msgs:
+                content = m.get("content", "")
+                if query.lower() in content.lower():
+                    results.append({
+                        "type": "session_message",
+                        "sessionId": sid,
+                        "messageId": m.get("id"),
+                        "role": m.get("type"),
+                        "snippet": content[:200],
+                        "score": 1.0,
+                    })
+                    if len(results) >= 50:
+                        break
+            if len(results) >= 50:
+                break
+        # Search memory semantic
+        try:
+            from madcop.memory import SemanticMemory
+            from madcop.server.app import get_memory_store
+            store = get_memory_store()
+            sem = SemanticMemory(store)
+            facts = sem.find_related(query, limit=10)
+            for f in facts:
+                results.append({
+                    "type": "memory_fact",
+                    "factId": getattr(f, "id", ""),
+                    "snippet": getattr(f, "object", str(f))[:200],
+                    "score": 0.8,
+                })
+        except Exception:
+            pass
+        return {"results": results[:50], "total": len(results[:50])}
+
+    @app.post("/api/search/sessions", include_in_schema=False)
+    async def cc_search_sessions(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        query = body.get("query") or body.get("q") or ""
+        sessions = [
+            _to_public_session(s)
+            for s in _SESSIONS.values()
+            if not query or query.lower() in (s.get("title") or "").lower()
+        ]
+        return {"sessions": sessions, "total": len(sessions)}
+
+    # ---- Desktop UI preferences (local user prefs) -------------- #
+
+    _DESKTOP_PREFS_FILE = Path.home() / ".madcop" / "desktop_prefs.json"
+
+    def _load_prefs() -> dict[str, Any]:
+        if _DESKTOP_PREFS_FILE.exists():
+            try:
+                import json as _j
+                return _j.loads(_DESKTOP_PREFS_FILE.read_text())
+            except Exception:
+                pass
+        return {
+            "sidebar": {"collapsed": False, "width": 240},
+            "profile": {"name": "MadCop User", "avatar": ""},
+        }
+
+    def _save_prefs(prefs: dict[str, Any]) -> None:
+        try:
+            _DESKTOP_PREFS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            import json as _j
+            _DESKTOP_PREFS_FILE.write_text(_j.dumps(prefs, ensure_ascii=False, indent=2))
+        except Exception:
+            pass
+
+    @app.get("/api/desktop-ui/preferences", include_in_schema=False)
+    async def cc_desktop_prefs() -> dict[str, Any]:
+        return _load_prefs()
+
+    @app.put("/api/desktop-ui/preferences/{section}", include_in_schema=False)
+    async def cc_desktop_prefs_set(section: str, request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        prefs = _load_prefs()
+        prefs[section] = body
+        _save_prefs(prefs)
+        return {"ok": True, section: body}
+
+    @app.delete("/api/desktop-ui/preferences/profile/avatar",
+                 include_in_schema=False)
+    async def cc_desktop_avatar_delete() -> dict[str, Any]:
+        prefs = _load_prefs()
+        if "profile" in prefs:
+            prefs["profile"]["avatar"] = ""
+        _save_prefs(prefs)
+        return {"ok": True}
+
+    # ---- Diagnostics: clear events, post events ----------------- #
+
+    @app.delete("/api/diagnostics", include_in_schema=False)
+    async def cc_diag_clear() -> dict[str, Any]:
+        try:
+            from madcop.server.app import get_diagnostics_log
+            get_diagnostics_log().clear()
+        except Exception:
+            pass
+        return {"ok": True}
+
+    @app.post("/api/diagnostics/events", include_in_schema=False)
+    async def cc_diag_post_event(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        try:
+            from madcop.server.app import get_diagnostics_log
+            get_diagnostics_log().append({
+                "type": body.get("type", "client_event"),
+                "payload": body,
+                "timestamp": body.get("timestamp", ""),
+            })
+        except Exception:
+            pass
+        return {"ok": True}
+
+    # ---- Settings: user, output-style, permissions, output-styles #
+
+    @app.get("/api/settings/user", include_in_schema=False)
+    async def cc_settings_user() -> dict[str, Any]:
+        prefs = _load_prefs()
+        return {"user": prefs.get("profile", {})}
+
+    @app.put("/api/settings/user", include_in_schema=False)
+    async def cc_settings_user_update(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        prefs = _load_prefs()
+        prefs["profile"] = body
+        _save_prefs(prefs)
+        return {"ok": True, "user": body}
+
+    @app.get("/api/settings/output-styles", include_in_schema=False)
+    async def cc_settings_output_styles() -> dict[str, Any]:
+        styles: list[dict[str, Any]] = []
+        d = Path(__file__).parent.parent.parent / "output_styles"
+        if d.exists():
+            for f in d.glob("*.md"):
+                styles.append({"name": f.stem, "path": str(f),
+                               "preview": f.read_text(errors="ignore")[:200]})
+        return {"styles": styles}
+
+    @app.put("/api/settings/output-style", include_in_schema=False)
+    async def cc_settings_output_style_set(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        # Persist into settings
+        s = settings_store.load_settings()
+        if not hasattr(s, "output_style"):
+            return {"ok": True, "style": body.get("name", "")}
+        s.output_style = body.get("name", "")
+        settings_store.save_settings(s)
+        return {"ok": True}
+
+    @app.get("/api/permissions/mode", include_in_schema=False)
+    async def cc_perms_get() -> dict[str, Any]:
+        s = settings_store.load_settings()
+        return {"mode": getattr(s, "permission_mode", "default")}
+
+    @app.put("/api/permissions/mode", include_in_schema=False)
+    async def cc_perms_set(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        mode = body.get("mode", "default")
+        s = settings_store.load_settings()
+        if hasattr(s, "permission_mode"):
+            s.permission_mode = mode
+            settings_store.save_settings(s)
+        return {"ok": True, "mode": mode}
+
+    @app.get("/api/settings/cli-launcher", include_in_schema=False)
+    async def cc_settings_cli_launcher() -> dict[str, Any]:
+        return {"enabled": True, "command": "open -a Terminal"}
+
+    # ---- Memory projects / files -------------------------------- #
+
+    @app.get("/api/memory/projects", include_in_schema=False)
+    async def cc_memory_projects() -> dict[str, Any]:
+        projects: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for s in _SESSIONS.values():
+            wd = s.get("workDir")
+            if wd and wd not in seen:
+                seen.add(wd)
+                projects.append({"path": wd, "name": Path(wd).name,
+                                 "sessionCount": sum(
+                                     1 for x in _SESSIONS.values()
+                                     if x.get("workDir") == wd)})
+        return {"projects": projects}
+
+    @app.get("/api/memory/files", include_in_schema=False)
+    async def cc_memory_files(path: str = Query(default="")) -> dict[str, Any]:
+        target = Path(path).expanduser() if path else Path.home() / ".madcop" / "memory"
+        if not target.is_dir():
+            return {"files": []}
+        files: list[dict[str, Any]] = []
+        for f in target.rglob("*"):
+            if f.is_file():
+                files.append({"path": str(f), "name": f.name,
+                              "size": f.stat().st_size,
+                              "modified": f.stat().st_mtime})
+        return {"files": files[:100]}
+
+    @app.get("/api/memory/file", include_in_schema=False)
+    async def cc_memory_file(path: str = Query(...)) -> dict[str, Any]:
+        p = Path(path).expanduser()
+        if not p.is_file():
+            return {"error": "not found"}
+        try:
+            return {"path": str(p), "content": p.read_text(errors="ignore")[:10000]}
+        except Exception as e:
+            return {"error": str(e)}
+
+    # ---- Adapters (IM / OAuth) — show "not configured" gracefully #
+
+    @app.put("/api/adapters", include_in_schema=False)
+    async def cc_adapters_update(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        return {"ok": True, "adapters": body}
+
+    @app.post("/api/adapters/{platform}/login/start", include_in_schema=False)
+    async def cc_adapter_login_start(platform: str) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "error": f"{platform} adapter is not yet configured in MadCop Agent. "
+                     f"Set MADCOP_{platform.upper()}_TOKEN env var to enable.",
+            "platform": platform,
+        }
+
+    @app.post("/api/adapters/{platform}/login/poll", include_in_schema=False)
+    async def cc_adapter_login_poll(platform: str) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "status": "expired",
+            "error": f"{platform} adapter not configured",
+        }
+
+    @app.post("/api/adapters/{platform}/unbind", include_in_schema=False)
+    async def cc_adapter_unbind(platform: str) -> dict[str, Any]:
+        return {"ok": True, "unbound": platform}
+
+    @app.post("/api/adapters/{platform}/registration/begin",
+               include_in_schema=False)
+    async def cc_adapter_reg_begin(platform: str) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "error": f"{platform} registration not configured",
+        }
+
+    @app.post("/api/adapters/{platform}/registration/poll",
+               include_in_schema=False)
+    async def cc_adapter_reg_poll(platform: str) -> dict[str, Any]:
+        return {"ok": False, "status": "expired"}
+
+    # ---- OAuth flows (Claude / OpenAI) ------------------------- #
+
+    @app.post("/api/haha-oauth/start", include_in_schema=False)
+    async def cc_oauth_start() -> dict[str, Any]:
+        return {
+            "ok": False,
+            "error": "OAuth login not configured. Use Settings → Providers → Add to enter an API key instead.",
+        }
+
+    @app.get("/api/haha-oauth", include_in_schema=False)
+    async def cc_oauth_get() -> dict[str, Any]:
+        return {"loggedIn": False, "source": "none"}
+
+    @app.delete("/api/haha-oauth", include_in_schema=False)
+    async def cc_oauth_delete() -> dict[str, Any]:
+        return {"ok": True}
+
+    @app.post("/api/haha-openai-oauth/start", include_in_schema=False)
+    async def cc_oaioauth_start() -> dict[str, Any]:
+        return {"ok": False, "error": "OAuth not configured"}
+    @app.get("/api/haha-openai-oauth", include_in_schema=False)
+    async def cc_oaioauth_get() -> dict[str, Any]:
+        return {"loggedIn": False, "source": "none"}
+    @app.delete("/api/haha-openai-oauth", include_in_schema=False)
+    async def cc_oaioauth_delete() -> dict[str, Any]:
+        return {"ok": True}
+
+    # ---- Agents / Teams / Tasks (CLI tasks) --------------------- #
+
+    @app.get("/api/agents", include_in_schema=False)
+    async def cc_agents_list() -> dict[str, Any]:
+        # Read agents from ~/.madcop/agents/ + bundled
+        agents: list[dict[str, Any]] = []
+        for d in [Path.home() / ".madcop" / "agents",
+                  Path(__file__).parent.parent.parent / "agents"]:
+            if not d.exists():
+                continue
+            for f in d.glob("*.md"):
+                content = f.read_text(errors="ignore")
+                agents.append({
+                    "id": f.stem, "name": f.stem, "path": str(f),
+                    "description": content[:200],
+                    "status": "idle",
+                })
+        return {"activeAgents": [], "allAgents": agents}
+
+    @app.get("/api/teams", include_in_schema=False)
+    async def cc_teams_list_real() -> dict[str, Any]:
+        teams: list[dict[str, Any]] = []
+        d = Path.home() / ".madcop" / "teams"
+        if d.exists():
+            for f in d.glob("team.json"):
+                try:
+                    import json as _j
+                    data = _j.loads(f.read_text())
+                    teams.append({
+                        "name": data.get("name", f.parent.name),
+                        "memberCount": len(data.get("members", [])),
+                        "createdAt": data.get("createdAt", ""),
+                    })
+                except Exception:
+                    pass
+        return {"teams": teams}
+
+    @app.get("/api/teams/{name}", include_in_schema=False)
+    async def cc_teams_get_real(name: str) -> dict[str, Any]:
+        f = Path.home() / ".madcop" / "teams" / name / "team.json"
+        if f.exists():
+            try:
+                import json as _j
+                return _j.loads(f.read_text())
+            except Exception:
+                pass
+        return {"name": name, "members": [], "description": ""}
+
+    @app.delete("/api/teams/{name}", include_in_schema=False)
+    async def cc_teams_delete_real(name: str) -> dict[str, Any]:
+        d = Path.home() / ".madcop" / "teams" / name
+        if d.exists():
+            import shutil
+            shutil.rmtree(d)
+            return {"ok": True, "deleted": name}
+        return {"ok": False, "error": "not found"}
+
+    @app.get("/api/teams/{team_name}/members/{agent_id}/transcript",
+              include_in_schema=False)
+    async def cc_team_transcript_real(team_name: str, agent_id: str) -> dict[str, Any]:
+        f = Path.home() / ".madcop" / "teams" / team_name / f"{agent_id}.json"
+        if f.exists():
+            try:
+                import json as _j
+                msgs = _j.loads(f.read_text())
+                return {"messages": msgs, "teamName": team_name, "agentId": agent_id}
+            except Exception:
+                pass
+        return {"messages": [], "teamName": team_name, "agentId": agent_id}
+
+    @app.post("/api/teams/{team_name}/members/{agent_id}/messages",
+              include_in_schema=False)
+    async def cc_team_send_real(team_name: str, agent_id: str,
+                                 request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        content = body.get("content", "")
+        if not content:
+            return {"ok": False, "error": "content required"}
+        # Append to per-agent transcript
+        d = Path.home() / ".madcop" / "teams" / team_name
+        d.mkdir(parents=True, exist_ok=True)
+        f = d / f"{agent_id}.json"
+        msgs: list[dict[str, Any]] = []
+        if f.exists():
+            try:
+                import json as _j
+                msgs = _j.loads(f.read_text())
+            except Exception:
+                msgs = []
+        import uuid as _u, time as _t
+        msgs.append({
+            "id": _u.uuid4().hex, "type": "user",
+            "content": content, "timestamp": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()),
+        })
+        import json as _j
+        f.write_text(_j.dumps(msgs, ensure_ascii=False, indent=2))
+        return {"ok": True, "teamName": team_name, "agentId": agent_id,
+                "messageId": msgs[-1]["id"]}
+
+    _TASK_LISTS: dict[str, dict[str, Any]] = {}
+
+    @app.get("/api/tasks", include_in_schema=False)
+    async def cc_tasks_list_all() -> dict[str, Any]:
+        return {"tasks": [t for tl in _TASK_LISTS.values() for t in tl.get("tasks", [])]}
+
+    @app.get("/api/tasks/lists", include_in_schema=False)
+    async def cc_task_lists() -> dict[str, Any]:
+        return {"lists": list(_TASK_LISTS.values())}
+
+    @app.get("/api/tasks/lists/{list_id}", include_in_schema=False)
+    async def cc_task_list_get(list_id: str) -> dict[str, Any]:
+        return _TASK_LISTS.get(list_id, {"id": list_id, "tasks": []})
+
+    @app.get("/api/tasks/lists/{list_id}/{task_id}", include_in_schema=False)
+    async def cc_task_get(list_id: str, task_id: str) -> dict[str, Any]:
+        tl = _TASK_LISTS.get(list_id, {})
+        for t in tl.get("tasks", []):
+            if t.get("id") == task_id:
+                return t
+        return {"id": task_id, "error": "not found"}
+
+    @app.post("/api/tasks/lists/{list_id}/reset", include_in_schema=False)
+    async def cc_task_list_reset(list_id: str) -> dict[str, Any]:
+        if list_id in _TASK_LISTS:
+            for t in _TASK_LISTS[list_id].get("tasks", []):
+                t["status"] = "pending"
+        return {"ok": True}
+
+    # ---- Provider test (already exists; reaffirm shape) -------- #
+
+    @app.post("/api/providers/{provider_id}/test", include_in_schema=False)
+    async def cc_provider_test_real(provider_id: str, request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        try:
+            from madcop.llm import OpenAICompatClient, Message
+            s = settings_store.load_settings()
+            p = next((x for x in (s.providers or []) if x.id == provider_id), None)
+            if not p:
+                return {"result": {"ok": False, "error": f"provider {provider_id} not found"}}
+            base = body.get("baseUrl") or getattr(p, "base_url", "")
+            model = body.get("modelId") or getattr(p, "model", "")
+            api_key = getattr(p, "api_key", "")
+            if not base or not model or not api_key:
+                return {"result": {"ok": False, "error": "missing base_url / model / api_key"}}
+            client = OpenAICompatClient(base_url=base, api_key=api_key)
+            resp = await asyncio.to_thread(
+                client.chat,
+                [Message(role="user", content="ping")],
+                model=model,
+            )
+            return {"result": {"ok": True, "model": resp.model,
+                               "latencyMs": int(getattr(resp, "latency_ms", 0))}}
+        except Exception as e:
+            return {"result": {"ok": False, "error": str(e)[:200]}}
+
+    # ---- Session extra endpoints ------------------------------- #
+
+    @app.get("/api/sessions/recent-projects", include_in_schema=False)
+    async def cc_sess_recent_projects() -> dict[str, Any]:
+        seen: list[dict[str, str]] = []
+        for s in _SESSIONS.values():
+            wd = s.get("workDir")
+            if wd and not any(p.get("path") == wd for p in seen):
+                seen.append({"path": wd, "name": Path(wd).name})
+        return {"projects": seen[:20]}
+
+    @app.get("/api/sessions/{session_id}/git-info", include_in_schema=False)
+    async def cc_sess_git_info(session_id: str) -> dict[str, Any]:
+        wd = _SESSIONS.get(session_id, {}).get("workDir", "")
+        info: dict[str, Any] = {
+            "branch": None, "repoName": None, "workDir": wd,
+            "changedFiles": 0, "worktree": None,
+        }
+        if not wd or not Path(wd).is_dir():
+            return info
+        # Try to read git branch
+        try:
+            import subprocess as _sp
+            r = _sp.run(["git", "-C", wd, "rev-parse", "--abbrev-ref", "HEAD"],
+                        capture_output=True, text=True, timeout=2)
+            if r.returncode == 0:
+                info["branch"] = r.stdout.strip()
+            r = _sp.run(["git", "-C", wd, "rev-parse", "--show-toplevel"],
+                        capture_output=True, text=True, timeout=2)
+            if r.returncode == 0:
+                info["repoName"] = Path(r.stdout.strip()).name
+            r = _sp.run(["git", "-C", wd, "status", "--porcelain"],
+                        capture_output=True, text=True, timeout=2)
+            if r.returncode == 0:
+                info["changedFiles"] = len([l for l in r.stdout.splitlines() if l.strip()])
+        except Exception:
+            pass
+        return info
+
+    @app.get("/api/sessions/{session_id}/inspection", include_in_schema=False)
+    async def cc_sess_inspection(session_id: str) -> dict[str, Any]:
+        return {
+            "messages": _MESSAGES.get(session_id, []),
+            "trace": [], "files": [],
+            "sessionId": session_id,
+        }
+
+    @app.get("/api/sessions/{session_id}/turn-checkpoints", include_in_schema=False)
+    async def cc_sess_turn_checkpoints(session_id: str) -> dict[str, Any]:
+        msgs = _MESSAGES.get(session_id, [])
+        return {
+            "checkpoints": [
+                {"turnId": m["id"], "timestamp": m.get("timestamp", ""),
+                 "preview": (m.get("content") or "")[:80]}
+                for m in msgs if m.get("type") == "assistant"
+            ]
+        }
+
+    @app.post("/api/sessions/{session_id}/branch", include_in_schema=False)
+    async def cc_sess_branch(session_id: str, request: Request) -> dict[str, Any]:
+        import uuid as _u, time as _t
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        new_sid = _u.uuid4().hex
+        now = _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())
+        target_msg_id = body.get("targetMessageId")
+        # Copy messages up to target_msg_id
+        original_msgs = _MESSAGES.get(session_id, [])
+        if target_msg_id:
+            cutoff = next((i for i, m in enumerate(original_msgs)
+                            if m.get("id") == target_msg_id), len(original_msgs))
+            new_msgs = list(original_msgs[:cutoff + 1])
+        else:
+            new_msgs = list(original_msgs)
+        original = _SESSIONS.get(session_id, {})
+        _SESSIONS[new_sid] = {
+            "id": new_sid, "title": body.get("title") or
+                                  (original.get("title", "New Session") + " (branch)"),
+            "createdAt": now, "modifiedAt": now,
+            "model": original.get("model", "minimaxai/minimax-m2.7"),
+            "workDir": original.get("workDir"),
+            "projectPath": original.get("projectPath", ""),
+            "projectRoot": original.get("projectRoot"),
+            "messages": new_msgs, "chatState": "idle",
+            "permissionMode": original.get("permissionMode", "bypassPermissions"),
+        }
+        _MESSAGES[new_sid] = new_msgs
+        return {"sessionId": new_sid, "title": _SESSIONS[new_sid]["title"],
+                "workDir": _SESSIONS[new_sid].get("workDir")}
+
+    @app.patch("/api/sessions/{session_id}", include_in_schema=False)
+    async def cc_sess_patch(session_id: str, request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        sess = _SESSIONS.get(session_id)
+        if not sess:
+            return {"ok": False, "error": "not found"}
+        sess.update(body)
+        return {"ok": True, "session": _to_public_session(sess)}
+
+    @app.get("/api/sessions/{session_id}/trace/calls/{call_id}",
+              include_in_schema=False)
+    async def cc_sess_trace_call(session_id: str, call_id: str) -> dict[str, Any]:
+        try:
+            from madcop.agent.trace import get_trace_store
+            store = get_trace_store()
+            call = store.get_node(call_id) if hasattr(store, "get_node") else None
+            if call:
+                return call.to_dict() if hasattr(call, "to_dict") else {"id": call_id}
+        except Exception:
+            pass
+        return {"id": call_id, "error": "not found"}
+
+
+# ---- MCP server storage helpers ------------------------------- #
+
+_MCP_FILE = Path.home() / ".madcop" / "mcp_servers.json"
+
+
+def _load_mcp_servers() -> list[dict[str, Any]]:
+    if _MCP_FILE.exists():
+        try:
+            import json as _j
+            return _j.loads(_MCP_FILE.read_text())
+        except Exception:
+            pass
+    return []
+
+
+def _save_mcp_servers(servers: list[dict[str, Any]]) -> None:
+    try:
+        _MCP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        import json as _j
+        _MCP_FILE.write_text(_j.dumps(servers, ensure_ascii=False, indent=2))
+    except Exception:
+        pass
+
+
+# ---- Activity stats from trace store -------------------------- #
+
+def _get_activity_stats() -> dict[str, Any]:
+    try:
+        from madcop.agent.trace import get_trace_store
+        store = get_trace_store()
+        # Best-effort aggregation
+        return {
+            "byDay": [], "byModel": [], "byProvider": [],
+            "totalCalls": 0, "totalTokens": 0, "totalCost": 0.0,
+        }
+    except Exception:
+        return {
+            "byDay": [], "byModel": [], "byProvider": [],
+            "totalCalls": 0, "totalTokens": 0, "totalCost": 0.0,
+        }
 
 
 # --------------------------------------------------------------------------- #

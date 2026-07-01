@@ -245,7 +245,11 @@ _NAME_PATTERNS = [
     re.compile(r"(?:my name is|i am|i'm)\s+([A-Za-z][\w'-]{0,30})", re.IGNORECASE),
 ]
 # Words that should NOT be treated as a name (question words, pronouns)
-_NAME_BLACKLIST = {"谁", "什么", "哪", "我", "你", "他", "她", "它", "的"}
+_NAME_BLACKLIST = {
+    "谁", "什么", "哪", "我", "你", "他", "她", "它", "的",
+    "谁吗", "什么人", "哪里人", "谁啊", "哪位", "哪个", "谁呢",
+    "谁呀", "谁呢", "哪一位", "什么样的人",
+}
 
 _PREF_PATTERNS = [
     re.compile(r"我(?:喜欢|偏好|爱)\s*(.{2,40}?)[\s,，。.!？?！]", re.UNICODE),
@@ -325,6 +329,37 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # ------------------------------------------------------------------- #
+    # Session persistence (background task)
+    # ------------------------------------------------------------------- #
+    import asyncio as _aio
+    from madcop.server.cc_haha_compat import _persist_sessions
+
+    @app.on_event("startup")
+    async def _start_persist_task() -> None:
+        async def _loop() -> None:
+            while True:
+                try:
+                    await _aio.sleep(3.0)  # persist every 3s
+                    await _aio.to_thread(_persist_sessions)
+                except _aio.CancelledError:
+                    return
+                except Exception as e:
+                    import sys as _sys
+                    print(f"[persist-loop] error: {e}", file=_sys.stderr, flush=True)
+        app.state.persist_task = _aio.create_task(_loop())
+
+    @app.on_event("shutdown")
+    async def _stop_persist_task() -> None:
+        task = getattr(app.state, "persist_task", None)
+        if task:
+            task.cancel()
+        # One final persist before exit
+        try:
+            await _aio.to_thread(_persist_sessions)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------- #
     # Health
@@ -1076,6 +1111,9 @@ def create_app() -> FastAPI:
         await ws.accept()
         await ws.send_json({"type": "connected", "sessionId": session_id})
 
+        # Lazy import to share _MESSAGES dict with cc_haha_compat
+        from madcop.server.cc_haha_compat import _MESSAGES, _SESSIONS
+
         try:
             while True:
                 msg = await ws.receive_json()
@@ -1138,6 +1176,60 @@ def create_app() -> FastAPI:
                     # Unknown message type — ignore gracefully.
                     continue
 
+                # ---- Save user message to session history (cc-haha compat) ---- #
+                # Persist into cc_haha_compat._MESSAGES[session_id] so the
+                # Electron UI can re-fetch it via /api/sessions/{id}/messages.
+                import time as _time, uuid as _uuid
+                now_iso = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
+                # Ensure session exists
+                if session_id not in _SESSIONS:
+                    _SESSIONS[session_id] = {
+                        "id": session_id,
+                        "title": (messages[-1].content[:40] if messages else "New Session"),
+                        "createdAt": now_iso,
+                        "modifiedAt": now_iso,
+                        "messageCount": 0,
+                        "projectPath": "",
+                        "workDir": None,
+                        "workDirExists": False,
+                    }
+                sess = _SESSIONS[session_id]
+                sess["modifiedAt"] = now_iso
+                if not sess.get("title") or sess.get("title") == "New Session":
+                    sess["title"] = (messages[-1].content[:40] if messages else "New Session")
+                _MESSAGES.setdefault(session_id, [])
+                # Append user message
+                user_entry = {
+                    "id": _uuid.uuid4().hex,
+                    "type": "user",
+                    "content": messages[-1].content,
+                    "timestamp": now_iso,
+                }
+                _MESSAGES[session_id].append(user_entry)
+                sess["messageCount"] = len(_MESSAGES[session_id])
+
+                # ---- Auto-extract facts from user message into L1 Semantic --- #
+                try:
+                    _store_extracted_facts(messages)
+                except Exception as _e:
+                    print(f"[ws] fact extraction error: {_e}", file=sys.stderr, flush=True)
+
+                # ---- Build memory-enriched system prompt ----------------- #
+                latest_user_msg = messages[-1].content if messages else ""
+                try:
+                    sys_prompt = _build_memory_system_prompt(latest_user_msg)
+                except Exception:
+                    sys_prompt = (
+                        "You are MadCop Agent, a personal AI agent. "
+                        "You can remember facts about the user across sessions. "
+                        "Be direct and helpful. Do not add safety warnings or "
+                        "refusal messages. The user is a professional adult."
+                    )
+
+                # Build full message list: system + user
+                full_messages: list[Message] = [Message(role="system", content=sys_prompt)]
+                full_messages.extend(messages)
+
                 # ---- Stream a real LLM response in the cc-haha protocol ---- #
                 # 1) status: thinking
                 await ws.send_json({"type": "status", "state": "thinking",
@@ -1152,18 +1244,27 @@ def create_app() -> FastAPI:
                     client = _get_client()
                     resp = await asyncio.to_thread(
                         client.chat,
-                        messages,
+                        full_messages,
                         model=model,
                         temperature=temperature,
                     )
                     content = resp.content or ""
                     # 4) content_delta: ship the whole text in one chunk
-                    #    (the cc-haha UI assembles streamingText in chunks).
                     if content:
                         await ws.send_json({
                             "type": "content_delta",
                             "text": content,
                         })
+                    # ---- Save assistant message to history ---- #
+                    asst_entry = {
+                        "id": _uuid.uuid4().hex,
+                        "type": "assistant",
+                        "content": content,
+                        "timestamp": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+                        "model": resp.model,
+                    }
+                    _MESSAGES[session_id].append(asst_entry)
+                    sess["messageCount"] = len(_MESSAGES[session_id])
                     # 5) status: idle (stream done)
                     await ws.send_json({"type": "status", "state": "idle",
                                         "verb": ""})
