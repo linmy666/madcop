@@ -342,18 +342,44 @@ def _list_providers() -> dict[str, Any]:
 
 
 def _list_provider_presets() -> dict[str, Any]:
+    """Return full ProviderPreset list for the cc-haha React UI.
+
+    Each preset has: id, name, baseUrl, apiFormat, defaultModels
+    (with main/haiku/sonnet/opus), needsApiKey, websiteUrl, authStrategy,
+    featured.
+    """
     from madcop.config.settings import PROVIDER_PRESETS
-    return {"presets": [
-        {
-            "id": p.get("id") or p.get("provider_id"),
-            "label": p.get("label") or p.get("name") or p.get("id"),
-            "name": p.get("label") or p.get("name") or p.get("id"),
-            "base_url": p.get("base_url") or p.get("baseUrl"),
-            "default_model": p.get("default_model") or p.get("model") or "",
-            "model": p.get("default_model") or p.get("model") or "",
-            "description": p.get("description", ""),
-        } for p in (PROVIDER_PRESETS or [])
-    ]}
+    # Map preset id → apiFormat heuristic
+    _FORMAT_MAP = {
+        "anthropic": "anthropic",
+        "openai": "openai_chat",
+        "minimax": "openai_chat",
+        "deepseek": "openai_chat",
+        "zhipu": "openai_chat",
+        "nvidia": "openai_chat",  # NVIDIA NIM uses OpenAI Chat Completions
+    }
+    out: list[dict[str, Any]] = []
+    for p in (PROVIDER_PRESETS or []):
+        pid = p.get("id") or p.get("provider_id") or ""
+        model = p.get("default_model") or p.get("model") or ""
+        out.append({
+            "id": pid,
+            "name": p.get("label") or p.get("name") or pid,
+            "baseUrl": p.get("base_url") or p.get("baseUrl") or "",
+            "apiFormat": _FORMAT_MAP.get(pid, "openai_chat"),
+            "defaultModels": {
+                "main": model,
+                "haiku": model,
+                "sonnet": model,
+                "opus": model,
+            },
+            "needsApiKey": True,
+            "websiteUrl": "",
+            "apiKeyUrl": "",
+            "authStrategy": "api_key",
+            "featured": False,
+        })
+    return {"presets": out}
 
 
 def _create_provider(body: dict[str, Any]) -> dict[str, Any]:

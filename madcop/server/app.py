@@ -408,21 +408,11 @@ def create_app() -> FastAPI:
     @app.get("/api/providers/presets")
     async def list_provider_presets_cc_haha() -> dict[str, Any]:
         """cc-haha React 客户端期望的 provider presets 列表端点.
-        Returns { presets: [...] } shaped to match the cc-haha Preset type.
+        Returns the full ProviderPreset shape: id, name, baseUrl,
+        apiFormat, defaultModels, needsApiKey, websiteUrl, authStrategy.
         """
-        from madcop.config.settings import PROVIDER_PRESETS
-        presets = []
-        for p in PROVIDER_PRESETS or []:
-            presets.append({
-                "id": p.get("id") or p.get("provider_id"),
-                "label": p.get("label") or p.get("name") or p.get("id"),
-                "name": p.get("label") or p.get("name") or p.get("id"),
-                "base_url": p.get("base_url") or p.get("baseUrl"),
-                "default_model": p.get("default_model") or p.get("model") or "",
-                "model": p.get("default_model") or p.get("model") or "",
-                "description": p.get("description", ""),
-            })
-        return {"presets": presets}
+        from madcop.server.cc_haha_compat import _list_provider_presets as _cc_presets
+        return _cc_presets()
 
     @app.get("/api/models")
     async def list_models_cc_haha() -> dict[str, Any]:
