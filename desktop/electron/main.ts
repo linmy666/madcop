@@ -57,7 +57,7 @@ let trayController: TrayController | null = null
 installMacOsChromiumKeychainPromptGuard(app)
 
 function appRoot() {
-  return app.isPackaged ? app.getAppPath() : process.cwd()
+  return "/Users/linruihan/PycharmProjects/madcop/desktop"
 }
 
 function unpackedRoot() {
@@ -78,11 +78,7 @@ function previewAgentPath() {
 }
 
 function rendererEntry() {
-  return resolveRendererEntry({
-    isPackaged: app.isPackaged,
-    appRoot: appRoot(),
-    env: process.env,
-  })
+  return path.join(appRoot(), "dist", "index.html")
 }
 
 async function loadRendererEntry(
@@ -398,9 +394,9 @@ app.whenReady().then(async () => {
   applyWindowsAppUserModelId(app)
   applyStartupPortableMode(app)
   // PATCHED: skip cc-haha sidecar — we use standalone MadCop FastAPI backend on :8765
-  // await getServerRuntime().startServer().catch(error => {
+/* PATCHED:   // await getServerRuntime().startServer().catch(error => {
   //   console.error('[desktop] failed to start Electron server sidecar', error)
-  // })
+  // }) */
   await installApplicationMenu(app, () => mainWindow)
   if (shouldInstallTray(process.platform)) {
     trayController = await installTray({

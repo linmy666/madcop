@@ -161,7 +161,7 @@ const DEFAULT_OUTPUT_STYLE_OPTIONS: OutputStyleOption[] = [
   {
     value: DEFAULT_OUTPUT_STYLE,
     label: 'Default',
-    description: 'Claude completes coding tasks efficiently and provides concise responses',
+    description: 'MadCop is optimized for efficient task completion and concise responses',
     source: 'built-in',
   },
 ]
@@ -221,7 +221,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const previousH5Access = get().h5Access
-      const [{ mode }, modelsRes, { model }, { level }, userSettings, h5AccessResult, traceCapture] = await Promise.all([
+      const results = await Promise.allSettled([
         settingsApi.getPermissionMode(),
         modelsApi.list(),
         modelsApi.getCurrent(),
@@ -230,30 +230,49 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         loadH5AccessSettings(previousH5Access),
         loadTraceCaptureSettings(),
       ])
-      const theme = isThemeMode(userSettings.theme) ? userSettings.theme : 'white'
+      // PATCHED for madcop backend: tolerate null/undefined from compat catch-all
+      const r0 = results[0] as any
+      const r1 = results[1] as any
+      const r2 = results[2] as any
+      const r3 = results[3] as any
+      const r4 = results[4] as any
+      const r5 = results[5] as any
+      const r6 = results[6] as any
+      const val = (r: any) => (r?.status === 'fulfilled' ? r.value : null) ?? {}
+      const permissionModeRes = val(r0)
+      const modelsRes = val(r1)
+      const currentModelRes = val(r2)
+      const effortRes = val(r3)
+      const userSettings = val(r4)
+      const h5AccessResult = (r5?.status === 'fulfilled' ? r5.value : { settings: undefined, diagnostics: undefined, error: 'failed' })
+      const traceCapture = (r6?.status === 'fulfilled' ? r6.value : undefined)
+      const mode = permissionModeRes?.mode
+      const model = currentModelRes?.model
+      const level = effortRes?.level
+      const theme = isThemeMode(userSettings?.theme) ? userSettings.theme : 'white'
       useUIStore.getState().setTheme(theme)
       set({
         permissionMode: mode,
-        availableModels: modelsRes.models,
-        activeProviderName: modelsRes.provider?.name ?? null,
+        availableModels: modelsRes?.models ?? [],
+        activeProviderName: modelsRes?.provider?.name ?? null,
         currentModel: model,
         effortLevel: level,
-        thinkingEnabled: userSettings.alwaysThinkingEnabled !== false,
-        autoDreamEnabled: userSettings.autoDreamEnabled === true,
+        thinkingEnabled: userSettings?.alwaysThinkingEnabled !== false,
+        autoDreamEnabled: userSettings?.autoDreamEnabled === true,
         theme,
-        chatSendBehavior: normalizeChatSendBehavior(userSettings.chatSendBehavior),
-        outputStyle: normalizeOutputStyle(userSettings.outputStyle),
-        skipWebFetchPreflight: userSettings.skipWebFetchPreflight !== false,
-        desktopNotificationsEnabled: userSettings.desktopNotificationsEnabled === true,
-        desktopTerminal: normalizeDesktopTerminalSettings(userSettings.desktopTerminal),
-        webSearch: normalizeWebSearchSettings(userSettings.webSearch),
-        updateProxy: normalizeUpdateProxySettings(userSettings.updateProxy),
-        network: normalizeNetworkSettings(userSettings.network),
+        chatSendBehavior: normalizeChatSendBehavior(userSettings?.chatSendBehavior),
+        outputStyle: normalizeOutputStyle(userSettings?.outputStyle),
+        skipWebFetchPreflight: userSettings?.skipWebFetchPreflight !== false,
+        desktopNotificationsEnabled: userSettings?.desktopNotificationsEnabled === true,
+        desktopTerminal: normalizeDesktopTerminalSettings(userSettings?.desktopTerminal),
+        webSearch: normalizeWebSearchSettings(userSettings?.webSearch),
+        updateProxy: normalizeUpdateProxySettings(userSettings?.updateProxy),
+        network: normalizeNetworkSettings(userSettings?.network),
         traceCapture,
-        h5Access: h5AccessResult.settings,
-        h5AccessDiagnostics: h5AccessResult.diagnostics,
-        h5AccessError: h5AccessResult.error,
-        responseLanguage: typeof userSettings.language === 'string' ? userSettings.language : '',
+        h5Access: h5AccessResult?.settings ?? null,
+        h5AccessDiagnostics: h5AccessResult?.diagnostics ?? null,
+        h5AccessError: h5AccessResult?.error ?? null,
+        responseLanguage: typeof userSettings?.language === 'string' ? userSettings.language : '',
         isLoading: false,
         error: null,
       })
@@ -733,7 +752,10 @@ async function loadH5AccessSettings(previousH5Access: H5AccessSettings): Promise
   error: string | null
 }> {
   try {
-    const { settings, diagnostics } = await h5AccessApi.get()
+    // PATCHED for madcop backend compat: tolerate null from catch-all
+    const h5Res = (await h5AccessApi.get()) as any
+    const settings = h5Res?.settings
+    const diagnostics = h5Res?.diagnostics ?? null
     return {
       settings: normalizeH5AccessSettings(settings),
       diagnostics: diagnostics ?? null,

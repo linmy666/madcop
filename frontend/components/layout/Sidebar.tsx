@@ -18,7 +18,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-const MASCOT_URL = 'http://127.0.0.1:8765/static/mascot.png';
+const MASCOT_URL_FALLBACK = 'http://127.0.0.1:8765/static/mascot.png';
 
 /**
  * MadCop Agent — Sidebar
@@ -69,7 +69,7 @@ export function Sidebar() {
         style={{ borderBottom: '1px solid var(--border)' }}
       >
         <img
-          src={MASCOT_URL}
+          src={MASCOT_URL_FALLBACK}
           alt={brand.name}
           width={28}
           height={28}

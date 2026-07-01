@@ -938,7 +938,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     if (runtimeSelection) {
       wsManager.send(sessionId, { type: 'set_runtime_config', ...runtimeSelection })
     }
-    if (!sessionId.startsWith('__') && !useTeamStore.getState().getMemberBySessionId(sessionId)) {
+    // PATCHED for madcop backend compat: tolerate undefined sessionId
+    if (sessionId && !sessionId.startsWith('__') && !useTeamStore.getState().getMemberBySessionId(sessionId)) {
       wsManager.send(sessionId, { type: 'prewarm_session' })
     }
 

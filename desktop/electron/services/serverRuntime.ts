@@ -46,21 +46,14 @@ export class ElectronServerRuntime {
   }
 
   async startServer(): Promise<string> {
-    if (this.server) return this.server.url
-    if (this.startPromise) return this.startPromise
-
-    this.startPromise = this.startServerOnce()
-    try {
-      return await this.startPromise
-    } finally {
-      this.startPromise = null
-    }
+    // PATCHED: short-circuit to standalone MadCop FastAPI on :8765
+    this.server = { url: "http://127.0.0.1:8765", child: { pid: 0, kill: () => {} } as any }
+    return this.server.url
   }
 
   async getServerUrl(): Promise<string> {
-    if (this.server) return this.server.url
-    if (this.startupError) throw new Error(this.startupError)
-    return await this.startServer()
+    // PATCHED: return standalone MadCop FastAPI
+    return "http://127.0.0.1:8765"
   }
 
   async restartAdaptersSidecars(): Promise<void> {
@@ -78,9 +71,10 @@ export class ElectronServerRuntime {
   }
 
   private async startServerOnce(): Promise<string> {
-    // Prefer the configured fixed port, then the previous run's port, so
-    // phone bookmarks / QR codes / reverse proxies survive restarts (#767).
-    const port = await reserveServerPort(SERVER_BIND_HOST, preferredServerPorts())
+    // PATCHED: no sidecar spawn
+    this.server = { url: "http://127.0.0.1:8765", child: { pid: 0, kill: () => {} } as any }
+    return "http://127.0.0.1:8765"
+const port = await reserveServerPort(SERVER_BIND_HOST, preferredServerPorts())
     const url = `http://${SERVER_CONTROL_HOST}:${port}`
     const logs: string[] = []
     const env = await this.resolveSidecarBaseEnv()
@@ -108,8 +102,7 @@ export class ElectronServerRuntime {
     }
   }
 
-  private async startAdaptersSidecars(serverUrl: string): Promise<void> {
-    const env = await this.resolveSidecarBaseEnv()
+  private async startAdaptersSidecars(serverUrl: string): Promise<void> { return; /* PATCHED: no sidecar */const env = await this.resolveSidecarBaseEnv()
     for (const [label, flag] of [
       ['feishu', '--feishu'],
       ['telegram', '--telegram'],

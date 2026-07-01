@@ -95,7 +95,7 @@ export const mockTranscript = {
     },
   ],
   teamBar: [
-    { id: 'lead', role: 'Lead Claude', active: false, color: '#87736D' },
+    { id: 'lead', role: 'Lead MadCop', active: false, color: '#87736D' },
     { id: 'a2', role: 'Frontend Dev', active: true, color: '#dc2626' },
     { id: 'a3', role: 'Backend Architect', active: false, color: '#2563eb' },
   ],
@@ -140,7 +140,7 @@ export const mockScheduledTasks = {
 // ─── Session Controls ─────────────────────────────────────────────
 export const mockPermissionModes = [
   { id: 'ask', label: 'Ask permissions', description: 'Confirm every file edit or terminal command.', icon: 'lock' },
-  { id: 'auto', label: 'Auto accept edits', description: 'Claude writes to disk without asking.', icon: 'edit_note' },
+  { id: 'auto', label: 'Auto accept edits', description: 'MadCop writes to disk without asking.', icon: 'edit_note' },
   { id: 'plan', label: 'Plan mode', description: 'Architecture & reasoning only. No writes.', icon: 'architecture' },
   { id: 'bypass', label: 'Bypass permissions', description: 'Full root access for shell and file system.', icon: 'warning' },
 ]
@@ -185,7 +185,7 @@ export const mockToolInspection = {
 
 // ─── New Task Modal ───────────────────────────────────────────────
 export const mockNewTaskDefaults = {
-  models: ['Claude 3.5 Sonnet', 'Claude 3.5 Haiku', 'Claude 3.5 Opus'],
+  models: ['MadCop Sonnet 3.5', 'MadCop Haiku 3.5', 'MadCop Opus 3.5'],
   frequencies: ['Hourly', 'Daily at 9:00 AM', 'Weekly', 'Monthly', 'Custom cron'],
 }
 

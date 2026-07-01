@@ -20,7 +20,7 @@ import { FileSearchMenu, type FileSearchMenuHandle } from '../components/chat/Fi
 import { LocalSlashCommandPanel, type LocalSlashCommandName } from '../components/chat/LocalSlashCommandPanel'
 import { useMobileViewport } from '../hooks/useMobileViewport'
 import { isDesktopRuntime } from '../lib/desktopRuntime'
-import { publicAssetPath } from '../lib/publicAsset'
+import { AnimationPlayer } from '../components/animations/AnimationPlayer'
 import {
   filesToComposerAttachments,
   selectNativeFileAttachments,
@@ -569,11 +569,21 @@ export function EmptySession() {
         <div className={`flex flex-col items-center text-center ${
           isMobileComposer ? 'max-w-[300px]' : 'max-w-md'
         }`}>
-          <img
-            src={publicAssetPath('app-icon.png')}
-            alt="MadCop Agent"
-            className={isMobileComposer ? 'mb-4 h-16 w-16' : 'mb-6 h-24 w-24'}
-          />
+          {/* Animated clover (idle, "ready" state) — replaced with a
+              regular three-dots spinner while the user is Actioning. */}
+          {isSubmitting ? (
+            <AnimationPlayer
+              key="spinner"
+              name="spinner"
+              className={isMobileComposer ? 'mb-4 h-20 w-20' : 'mb-6 h-32 w-32'}
+            />
+          ) : (
+            <AnimationPlayer
+              key="clover"
+              name="clover"
+              className={isMobileComposer ? 'mb-4 h-20 w-20' : 'mb-6 h-32 w-32'}
+            />
+          )}
           <h1
             className={`mb-2 font-extrabold tracking-tight text-[var(--color-text-primary)] ${
               isMobileComposer ? 'text-2xl' : 'text-3xl'

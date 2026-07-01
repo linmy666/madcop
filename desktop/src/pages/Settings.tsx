@@ -23,6 +23,7 @@ import { useProviderStore } from '../stores/providerStore'
 import { useTranslation, type TranslationKey } from '../i18n'
 import { Modal } from '../components/shared/Modal'
 import { ConfirmDialog } from '../components/shared/ConfirmDialog'
+import { AnimationPlayer } from '../components/animations/AnimationPlayer'
 import { Input } from '../components/shared/Input'
 import { Button } from '../components/shared/Button'
 import { Dropdown } from '../components/shared/Dropdown'
@@ -304,11 +305,9 @@ function buildProviderListItems(
       { id: provider.id, kind: 'saved', provider } satisfies ProviderListItem,
     ]),
   )
-  const items = new Map<string, ProviderListItem>([
-    [CLAUDE_OFFICIAL_PROVIDER_ID, { id: CLAUDE_OFFICIAL_PROVIDER_ID, kind: 'claude-official' }],
-    [OPENAI_OFFICIAL_PROVIDER_ID, { id: OPENAI_OFFICIAL_PROVIDER_ID, kind: 'openai-official' }],
-    ...savedItems,
-  ])
+  const items = new Map<string, ProviderListItem>(
+    savedItems,
+  )
 
   return normalizeProviderOrder(providerOrder, providers)
     .map((id) => items.get(id))
@@ -561,7 +560,7 @@ function ProviderSettings() {
 
       {isLoading && providers.length === 0 ? (
         <div className="flex justify-center py-8">
-          <div className="animate-spin w-5 h-5 border-2 border-[var(--color-brand)] border-t-transparent rounded-full" />
+          <AnimationPlayer name="ripple" className="h-12 w-12" />
         </div>
       ) : null}
 

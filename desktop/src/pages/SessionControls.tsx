@@ -138,7 +138,7 @@ export default function SessionControls() {
                   <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary font-bold text-xs">
                     AI
                   </div>
-                  <span className="font-semibold text-sm">Claude 4.6 Sonnet</span>
+                  <span className="font-semibold text-sm">MadCop 默认模型</span>
                 </div>
                 <p className="text-on-surface-variant leading-relaxed">
                   I've analyzed the{' '}
@@ -383,7 +383,7 @@ export default function SessionControls() {
         >
           <textarea
             className="w-full bg-transparent border-none focus:ring-0 focus:outline-none resize-none font-body text-on-surface placeholder:text-outline"
-            placeholder="Reply to Claude..."
+            placeholder="Reply to MadCop..."
             rows={2}
           />
           <div className="flex justify-between items-center">

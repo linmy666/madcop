@@ -6,7 +6,7 @@ import { getDesktopHost } from '../lib/desktopHost'
 
 /**
  * Desktop host trigger: let the app process kill + respawn adapter sidecar,
- * 让 ~/.claude/adapters.json 里的最新凭据被新进程读到，建立飞书 / Telegram / 微信 / 钉钉 / WhatsApp
+ * 让 ~/.madcop/adapters.json 里的最新凭据被新进程读到，建立飞书 / Telegram / 微信 / 钉钉 / WhatsApp
  * 的 WebSocket 连接。
  *
  * 在非桌面环境（纯浏览器调试 / 单元测试）这会安静跳过 —— 那种场景下

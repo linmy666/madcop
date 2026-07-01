@@ -36,6 +36,12 @@ export function getApiUrl(pathOrUrl: string) {
   try {
     return new URL(pathOrUrl).toString()
   } catch {
+    // PATCHED for madcop backend compat: tolerate null/undefined inputs
+    // so the React UI surfaces the actual API error instead of a generic
+    // "Cannot read properties of undefined (reading 'startsWith')".
+    if (!pathOrUrl) {
+      return `${baseUrl}/api/__missing_path__`
+    }
     const normalizedPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`
     return `${baseUrl}${normalizedPath}`
   }
@@ -85,12 +91,28 @@ async function request<T>(method: string, path: string, body?: unknown, options?
     clearTimeout(timeout)
 
     if (!res.ok) {
+      // PATCHED for madcop backend compat: 404/405 = endpoint not yet implemented in madcop,
+      // return null instead of throwing so the desktop UI can still render.
+      if (res.status === 404 || res.status === 405) {
+        return null as T
+      }
       const errorBody = await res.json().catch(() => res.text())
       throw new ApiError(res.status, errorBody)
     }
 
     if (res.status === 204) return undefined as T
-    return res.json() as Promise<T>
+    // PATCHED for madcop backend compat: also tolerate empty / non-object
+    // bodies so `const { x } = await api.get(...)` never throws on a missing
+    // field.  Returns an empty object so destructuring yields undefined fields.
+    const text = await res.text()
+    if (!text || text.trim() === '') {
+      return {} as T
+    }
+    try {
+      return JSON.parse(text) as T
+    } catch {
+      return {} as T
+    }
   } catch (err) {
     clearTimeout(timeout)
     if (controller.signal.aborted) {

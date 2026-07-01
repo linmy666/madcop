@@ -15,12 +15,14 @@ Routes:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -338,6 +340,145 @@ def create_app() -> FastAPI:
         """cc-haha React 客户端期望的 healthcheck 端点"""
         from madcop import __version__
         return {"status": "ok", "version": __version__}
+
+    @app.get("/api/providers")
+    async def list_providers_cc_haha() -> dict[str, Any]:
+        """cc-haha React 客户端期望的 providers 列表端点
+        返回 {providers: [...], activeId: ...} 格式
+
+        The cc-haha SavedProvider type expects a `models` map with
+        main/haiku/sonnet/opus sub-fields. madcop's public dict only
+        exposes a single `model` string, so we synthesise the same model
+        into all four slots so the React UI never throws on
+        `provider.models.main.trim()`.
+        """
+        s = settings_store.load_settings()
+        public = settings_store.settings_to_public_dict(s)
+        providers = public.get("providers", [])
+        active_id = public.get("active_provider_id") or public.get("active_provider")
+        cc_providers = []
+        for p in providers:
+            model_id = p.get("model") or ""
+            cc_providers.append({
+                "id": p.get("provider_id") or p.get("id"),
+                "name": p.get("label") or p.get("name") or p.get("provider_id"),
+                "provider_id": p.get("provider_id"),
+                "label": p.get("label") or p.get("provider_id"),
+                "base_url": p.get("base_url"),
+                "model": model_id,
+                # Synthesise the multi-model shape the cc-haha UI expects.
+                "models": {
+                    "main": model_id,
+                    "haiku": model_id,
+                    "sonnet": model_id,
+                    "opus": model_id,
+                },
+                "api_key_masked": p.get("api_key_masked", ""),
+                "is_official": p.get("is_official", False),
+                "auth_type": p.get("auth_type", "api_key"),
+            })
+        return {
+            "providers": cc_providers,
+            "activeId": active_id,
+            "activeProvider": active_id,
+            "providerOrder": [p["id"] for p in cc_providers],
+        }
+
+    @app.get("/api/providers/presets")
+    async def list_provider_presets_cc_haha() -> dict[str, Any]:
+        """cc-haha React 客户端期望的 provider presets 列表端点.
+        Returns { presets: [...] } shaped to match the cc-haha Preset type.
+        """
+        from madcop.config.settings import PROVIDER_PRESETS
+        presets = []
+        for p in PROVIDER_PRESETS or []:
+            presets.append({
+                "id": p.get("id") or p.get("provider_id"),
+                "label": p.get("label") or p.get("name") or p.get("id"),
+                "name": p.get("label") or p.get("name") or p.get("id"),
+                "base_url": p.get("base_url") or p.get("baseUrl"),
+                "default_model": p.get("default_model") or p.get("model") or "",
+                "model": p.get("default_model") or p.get("model") or "",
+                "description": p.get("description", ""),
+            })
+        return {"presets": presets}
+
+    @app.get("/api/models")
+    async def list_models_cc_haha() -> dict[str, Any]:
+        """cc-haha React 客户端期望的 models 列表端点
+        返回 {models: [...], provider: {...}} 格式
+        """
+        s = settings_store.load_settings()
+        public = settings_store.settings_to_public_dict(s)
+        active_id = public.get("active_provider")
+        providers = public.get("providers", [])
+        active_provider = next((p for p in providers if p.get("provider_id") == active_id), None)
+        # 转成 cc-haha ModelInfo 格式
+        models = []
+        for p in providers:
+            models.append({
+                "id": p.get("model"),
+                "name": p.get("label") or p.get("model"),
+                "description": f"{p.get('provider_id')} via {p.get('base_url')}",
+                "context": "auto",
+            })
+        return {
+            "models": models,
+            "provider": (
+                {
+                    "id": active_provider.get("provider_id"),
+                    "name": active_provider.get("label") or active_provider.get("provider_id"),
+                }
+                if active_provider else None
+            ),
+        }
+
+    @app.get("/api/models/current")
+    async def get_current_model_cc_haha() -> dict[str, Any]:
+        """cc-haha React 客户端期望的 current model 端点"""
+        s = settings_store.load_settings()
+        public = settings_store.settings_to_public_dict(s)
+        active_id = public.get("active_provider")
+        providers = public.get("providers", [])
+        active_provider = next((p for p in providers if p.get("provider_id") == active_id), None)
+        if not active_provider:
+            return {"model": None}
+        return {
+            "model": {
+                "id": active_provider.get("model"),
+                "name": active_provider.get("label") or active_provider.get("model"),
+            }
+        }
+
+    @app.get("/api/permissions/mode")
+    async def get_permission_mode_cc_haha() -> dict[str, str]:
+        """cc-haha React 客户端期望的 permission mode 端点"""
+        return {"mode": "bypassPermissions"}
+
+    @app.get("/api/effort")
+    async def get_effort_cc_haha() -> dict[str, Any]:
+        """cc-haha React 客户端期望的 effort level 端点"""
+        return {
+            "level": "medium",
+            "available": ["low", "medium", "high", "max"],
+        }
+
+    @app.get("/api/settings/user")
+    async def get_user_settings_cc_haha() -> dict[str, Any]:
+        """cc-haha React 客户端期望的 user settings 端点"""
+        return {
+            "theme": "white",
+            "alwaysThinkingEnabled": True,
+            "autoDreamEnabled": False,
+            "chatSendBehavior": "enter",
+            "outputStyle": "default",
+            "skipWebFetchPreflight": True,
+            "desktopNotificationsEnabled": True,
+            "desktopTerminal": {"shell": "/bin/zsh"},
+            "webSearch": {"mode": "auto"},
+            "updateProxy": {"mode": "system", "url": ""},
+            "language": "zh",
+        }
 
     # ------------------------------------------------------------------- #
     # Settings
@@ -679,19 +820,35 @@ def create_app() -> FastAPI:
 
     @app.get("/api/memory")
     async def list_memory() -> dict[str, Any]:
-        """List all memories, grouped by kind (episodic / semantic / reflective)."""
-        store = get_memory_store()
-        result: dict[str, Any] = {}
+        """List all memories, grouped by kind — now 5 tiers (TencentDB shape).
 
-        from madcop.memory import MemoryKind
+        L0 episodic, L1 semantic, L2 reflective, L3 scenario,
+        L4 persona traits, L5 insight. (madcop's 5-tier is
+        inspired by TencentDB Agent Memory's 4-tier pyramid plus the
+        cross-session Insight layer.)
+        """
+        from madcop.memory import (
+            MemoryStore, MemoryKind,
+            EpisodicMemory, SemanticMemory, ReflectiveMemory,
+            ScenarioMemory, PersonaMemory, InsightMemory,
+        )
+        store = get_memory_store()
+        result: dict[str, Any] = {
+            "episodic": [],
+            "semantic": [],
+            "reflective": [],
+            "scenario": [],
+            "persona": [],
+            "insight": [],
+        }
+        # L0/L1/L2 — from the legacy unified store
         for kind_label, mk in [
             ("episodic", MemoryKind.EPISODIC),
             ("semantic", MemoryKind.SEMANTIC),
             ("reflective", MemoryKind.REFLECTIVE),
         ]:
-            records = store.list_by_kind(mk, limit=200)
-            result[kind_label] = [
-                {
+            for r in store.list_by_kind(mk, limit=200):
+                result[kind_label].append({
                     "id": r.id,
                     "kind": r.kind.value,
                     "title": r.title,
@@ -699,10 +856,37 @@ def create_app() -> FastAPI:
                     "tags": list(r.tags),
                     "created_at": r.created_at,
                     "updated_at": r.updated_at,
-                }
-                for r in records
-            ]
-        result["total"] = store.total_count()
+                })
+        # L3 scenario + L4 persona + L5 insight — from the new layer stores
+        try:
+            scm = ScenarioMemory(store)
+            for sc in scm.list_recent(limit=50):
+                result["scenario"].append(scm.to_public_dict(sc))
+        except Exception:
+            pass
+        try:
+            pm = PersonaMemory(store)
+            for t in pm.traits():
+                result["persona"].append({
+                    "key": t.key,
+                    "value": t.value,
+                    "confidence": t.confidence,
+                })
+        except Exception:
+            pass
+        try:
+            im = InsightMemory(store)
+            for ins in im.list(limit=50):
+                result["insight"].append({
+                    "id": ins.id,
+                    "title": ins.title,
+                    "description": ins.description,
+                    "confidence": ins.confidence,
+                    "occurrences": ins.occurrences,
+                    "tags": ins.tags,
+                })
+        except Exception:
+            pass
         return result
 
     @app.post("/api/memory")
@@ -865,6 +1049,152 @@ def create_app() -> FastAPI:
             return FileResponse(web_dir / "index.html", media_type="text/html")
 
         app.mount("/static", StaticFiles(directory=str(web_dir)), name="static")
+
+    # ------------------------------------------------------------------- #
+    # cc-haha React client compatibility layer
+    # Surfaces madcop's real data (skills, memory, sessions, channels)
+    # through the endpoints the cc-haha UI expects.
+    # ------------------------------------------------------------------- #
+    from .cc_haha_compat import register as register_cc_haha_compat
+    from .cc_haha_compat import install_catch_all
+    register_cc_haha_compat(app)
+    install_catch_all(app)
+
+    # ------------------------------------------------------------------- #
+    # WebSocket endpoint — the cc-haha React UI opens
+    #   ws://host:8765/ws/<sessionId>
+    # for real-time chat streaming.  We bridge it to the same LLM
+    # client as the /api/chat SSE endpoint so the Electron UI sees
+    # a unified stream of {type, content, done} messages.
+    # ------------------------------------------------------------------- #
+
+    @app.websocket("/ws/{session_id}")
+    async def cc_websocket_chat(ws: WebSocket, session_id: str) -> None:
+        import sys
+        print(f"[ws] accepted session_id={session_id}", file=sys.stderr, flush=True)
+        # Send the standard 'connected' handshake first.
+        await ws.accept()
+        await ws.send_json({"type": "connected", "sessionId": session_id})
+
+        try:
+            while True:
+                msg = await ws.receive_json()
+                print(f"[ws] {session_id} recv: {str(msg)[:200]}", file=sys.stderr, flush=True)
+                if not isinstance(msg, dict):
+                    continue
+                mtype = msg.get("type", "")
+
+                # Simple acks ------------------------------------------------- #
+                if mtype == "ping":
+                    await ws.send_json({"type": "pong"})
+                    continue
+                if mtype == "set_runtime_config":
+                    await ws.send_json({"type": "ack", "config": msg})
+                    continue
+                if mtype == "set_permission_mode":
+                    await ws.send_json({
+                        "type": "permission_mode_changed",
+                        "mode": msg.get("mode", "default"),
+                    })
+                    continue
+                if mtype == "prewarm_session":
+                    await ws.send_json({"type": "ack", "sessionId": session_id})
+                    continue
+                if mtype == "stop_generation":
+                    await ws.send_json({"type": "status", "state": "idle"})
+                    continue
+                if mtype == "permission_response":
+                    # In a real impl we'd apply this to the live tool call.
+                    await ws.send_json({"type": "status", "state": "idle"})
+                    continue
+                if mtype == "computer_use_permission_response":
+                    await ws.send_json({"type": "status", "state": "idle"})
+                    continue
+
+                # Chat turn (user_message OR chat) ------------------------- #
+                from madcop.llm import Message
+                model = msg.get("model")
+                temperature = msg.get("temperature", 0.7)
+                if mtype == "user_message":
+                    content = msg.get("content", "")
+                    if not content:
+                        await ws.send_json({"type": "status", "state": "idle"})
+                        continue
+                    messages = [Message(role="user", content=content)]
+                elif mtype in ("chat", ""):
+                    raw_messages = msg.get("messages", [])
+                    if not raw_messages:
+                        await ws.send_json({"type": "status", "state": "idle"})
+                        continue
+                    try:
+                        messages = [
+                            Message(role=m["role"], content=m["content"])
+                            for m in raw_messages
+                        ]
+                    except (KeyError, TypeError):
+                        await ws.send_json({"type": "status", "state": "idle"})
+                        continue
+                else:
+                    # Unknown message type — ignore gracefully.
+                    continue
+
+                # ---- Stream a real LLM response in the cc-haha protocol ---- #
+                # 1) status: thinking
+                await ws.send_json({"type": "status", "state": "thinking",
+                                    "verb": "Thinking"})
+                # 2) content_start: text
+                await ws.send_json({
+                    "type": "content_start",
+                    "blockType": "text",
+                })
+                # 3) Run the LLM call in a thread (non-blocking).
+                try:
+                    client = _get_client()
+                    resp = await asyncio.to_thread(
+                        client.chat,
+                        messages,
+                        model=model,
+                        temperature=temperature,
+                    )
+                    content = resp.content or ""
+                    # 4) content_delta: ship the whole text in one chunk
+                    #    (the cc-haha UI assembles streamingText in chunks).
+                    if content:
+                        await ws.send_json({
+                            "type": "content_delta",
+                            "text": content,
+                        })
+                    # 5) status: idle (stream done)
+                    await ws.send_json({"type": "status", "state": "idle",
+                                        "verb": ""})
+                    # 6) message_complete: token usage (best-effort)
+                    usage: dict[str, int] = {}
+                    raw_usage = getattr(resp, "usage", None) or {}
+                    if hasattr(raw_usage, "get"):
+                        usage = {
+                            "inputTokens": int(raw_usage.get("prompt_tokens", 0) or 0),
+                            "outputTokens": int(raw_usage.get("completion_tokens", 0) or 0),
+                        }
+                    await ws.send_json({
+                        "type": "message_complete",
+                        "usage": usage,
+                        "model": resp.model,
+                    })
+                except WebSocketDisconnect:
+                    return
+                except Exception as e:
+                    import sys as _sys
+                    print(f"[ws] {session_id} error: {e}", file=_sys.stderr, flush=True)
+                    try:
+                        await ws.send_json({"type": "status", "state": "idle"})
+                        await ws.send_json({
+                            "type": "error",
+                            "message": str(e)[:500],
+                        })
+                    except Exception:
+                        pass
+        except WebSocketDisconnect:
+            return
 
     return app
 

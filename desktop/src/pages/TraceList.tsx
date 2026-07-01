@@ -403,7 +403,7 @@ function openTraceSettings(t: ReturnType<typeof useTranslation>) {
   useTabStore.getState().openTab(SETTINGS_TAB_ID, t('sidebar.settings'), 'settings')
 }
 
-/** `claude-sonnet-4-5-20250929` -> `sonnet-4-5`; non-Claude ids pass through. */
+/** `madcop-sonnet-4-5-20250929` -> `sonnet-4-5`; non-Claude ids pass through. */
 function shortModelName(model: string): string {
   const short = model.replace(/^claude-/i, '').replace(/-\d{8}$/, '')
   return short || model

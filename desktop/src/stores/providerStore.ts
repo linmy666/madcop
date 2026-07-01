@@ -101,11 +101,19 @@ function mergeSavedOrderIntoProviderOrder(providerOrder: string[], savedOrder: s
 }
 
 function providerModelIds(provider: SavedProvider): Set<string> {
-  return new Set(
-    Object.values(provider.models)
-      .map((modelId) => modelId.trim())
-      .filter(Boolean),
-  )
+  // PATCHED for madcop backend: provider may not have a `models` map.
+  // Fall back to a single `model` string.
+  const providerAny = provider as any
+  const modelsMap = providerAny.models
+  if (modelsMap && typeof modelsMap === 'object') {
+    return new Set(
+      Object.values(modelsMap)
+        .map((modelId) => String(modelId ?? '').trim())
+        .filter(Boolean),
+    )
+  }
+  const single = String(providerAny.model ?? '').trim()
+  return new Set(single ? [single] : [])
 }
 
 function resolveRuntimeRefreshSelection(
@@ -168,7 +176,13 @@ export const useProviderStore = create<ProviderStore>((set, get) => ({
   fetchProviders: async () => {
     set({ isLoading: true, error: null })
     try {
-      const { providers, activeId, providerOrder } = await providersApi.list()
+      // PATCHED for madcop backend compat: tolerate missing fields
+      const result = (await providersApi.list()) as
+        | { providers?: unknown[]; activeId?: string | null; providerOrder?: string[] }
+        | null
+      const providers = (Array.isArray(result?.providers) ? result.providers : []) as SavedProvider[]
+      const activeId = result?.activeId ?? null
+      const providerOrder = Array.isArray(result?.providerOrder) ? result.providerOrder : undefined
       set({
         providers,
         providerOrder: normalizeProviderOrder(providerOrder, providers),
@@ -187,7 +201,9 @@ export const useProviderStore = create<ProviderStore>((set, get) => ({
   fetchPresets: async () => {
     set({ isPresetsLoading: true, error: null })
     try {
-      const { presets } = await providersApi.presets()
+      // PATCHED for madcop backend compat: tolerate missing `presets` field
+      const result = (await providersApi.presets()) as { presets?: unknown[] } | null
+      const presets = (Array.isArray(result?.presets) ? result.presets : []) as ProviderPreset[]
       set({ presets, isPresetsLoading: false })
     } catch (err) {
       set({ isPresetsLoading: false, error: err instanceof Error ? err.message : String(err) })
@@ -271,7 +287,13 @@ export const useProviderStore = create<ProviderStore>((set, get) => ({
 
     const provider = get().providers.find((p) => p.id === id)
     if (!provider) return
-    await settings.setModel(provider.models.main)
+    // PATCHED for madcop backend: provider doesn't have a `models.main` sub-field;
+    // the real model id lives directly on `provider.model`.
+    const modelId =
+      (provider as any).models?.main ??
+      (provider as any).model ??
+      ''
+    await settings.setModel(modelId)
     await settings.fetchAll()
   },
 

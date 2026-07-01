@@ -63,7 +63,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const requestId = ++fetchSessionsRequestId
     set({ isLoading: true, error: null })
     try {
-      const { sessions: raw } = await sessionsApi.list(buildSessionListParams(project))
+      const listResult = await sessionsApi.list(buildSessionListParams(project))
+      // PATCHED for madcop backend compat: tolerate null from catch-all
+      const raw = (listResult as any)?.sessions ?? []
       if (requestId !== fetchSessionsRequestId) return
       let syncedSessions: SessionListItem[] = []
       set((state) => {

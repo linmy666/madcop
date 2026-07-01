@@ -69,32 +69,32 @@ function buildProviderModels(
   provider: SavedProvider,
   labels: Record<'main' | 'haiku' | 'sonnet' | 'opus', string>,
 ): ModelInfo[] {
-  const entries: Array<{ id: string; label: string }> = [
-    { id: provider.models.main.trim(), label: labels.main },
-    { id: provider.models.haiku.trim(), label: labels.haiku },
-    { id: provider.models.sonnet.trim(), label: labels.sonnet },
-    { id: provider.models.opus.trim(), label: labels.opus },
-  ]
-
-  const byId = new Map<string, { id: string; labels: string[] }>()
-  for (const entry of entries) {
-    if (!entry.id) continue
-    const existing = byId.get(entry.id)
-    if (existing) {
-      if (!existing.labels.includes(entry.label)) {
-        existing.labels.push(entry.label)
-      }
-      continue
-    }
-    byId.set(entry.id, { id: entry.id, labels: [entry.label] })
+  // PATCHED for madcop backend: madcop's SavedProvider has a single `model`
+  // field, not a `models.{main,haiku,sonnet,opus}` map. We synthesize a
+  // single-entry list from that string so the UI doesn't crash.
+  const providerAny = provider as any
+  const explicit = providerAny.models
+  if (explicit && typeof explicit === 'object') {
+    const entries: Array<{ id: string; label: string }> = [
+      { id: String(explicit.main ?? '').trim(), label: labels.main },
+      { id: String(explicit.haiku ?? '').trim(), label: labels.haiku },
+      { id: String(explicit.sonnet ?? '').trim(), label: labels.sonnet },
+      { id: String(explicit.opus ?? '').trim(), label: labels.opus },
+    ]
+    return entries
+      .filter((e) => e.id)
+      .map<ModelInfo>((e) => ({
+        id: e.id,
+        name: e.label,
+        description: '',
+        context: 'auto',
+      }))
   }
-
-  return [...byId.values()].map((entry) => ({
-    id: entry.id,
-    name: entry.id,
-    description: entry.labels.join(' · '),
-    context: '',
-  }))
+  const modelId = String(providerAny.model ?? '').trim()
+  if (!modelId) return []
+  return [
+    { id: modelId, name: labels.main, description: '', context: 'auto' },
+  ]
 }
 
 function buildProviderChoices(
@@ -152,7 +152,10 @@ function resolveDefaultRuntimeSelection(
       ? providers.find((provider) => provider.name === activeProviderName)
       : undefined
   const inferredProviderId = activeId ?? activeProvider?.id ?? null
-  const providerMainModelId = activeProvider?.models.main.trim()
+  const providerMainModelId =
+    (activeProvider as any)?.models?.main?.trim?.() ??
+    (activeProvider as any)?.model?.trim?.() ??
+    ''
 
   return {
     providerId: inferredProviderId,

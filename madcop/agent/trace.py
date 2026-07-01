@@ -217,6 +217,16 @@ class TraceStore:
         ).fetchall()
         return [TraceNode.from_row(r) for r in rows]
 
+    def list_conversations(self, limit: int = 50) -> list[str]:
+        """Return distinct conversation_ids, most recent first."""
+        rows = self._conn.execute(
+            "SELECT DISTINCT conversation_id, MAX(created_at) AS last "
+            "FROM trace_nodes GROUP BY conversation_id "
+            "ORDER BY last DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [r["conversation_id"] for r in rows if r["conversation_id"]]
+
     def get_children(self, parent_id: str) -> list[TraceNode]:
         rows = self._conn.execute(
             "SELECT * FROM trace_nodes WHERE parent_id = ? "

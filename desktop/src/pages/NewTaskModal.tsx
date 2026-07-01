@@ -230,7 +230,7 @@ export default function NewTaskModal() {
                         type="text"
                         value={rootFolder}
                         onChange={(e) => setRootFolder(e.target.value)}
-                        placeholder="/users/projects/claude-app"
+                        placeholder="/users/projects/madcop-app"
                         className="flex-1 bg-[var(--color-surface-container)] rounded-lg border-none focus:ring-1 focus:ring-[var(--color-primary)] text-sm placeholder:text-[var(--color-outline)]/50 px-4 py-2.5 transition-all outline-none"
                       />
                       <button className="bg-[var(--color-surface-container-high)] px-3 rounded-lg flex items-center justify-center hover:bg-[var(--color-surface-variant)] transition-colors">

@@ -52,7 +52,7 @@ export function AgentTeams() {
                 </div>
                 <div className="space-y-4 flex-1">
                   <p className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-widest">
-                    Claude Companion
+                    MadCop Agent
                   </p>
                   <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-5 shadow-[var(--shadow-dropdown)]">
                     <p className="mb-4 text-[var(--color-text-primary)]">
@@ -167,7 +167,7 @@ export function AgentTeams() {
                 </div>
                 <input
                   className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-sm text-[var(--color-text-primary)] py-2"
-                  placeholder="Type a command or ask Claude..."
+                  placeholder="Type a command or ask MadCop..."
                   type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
