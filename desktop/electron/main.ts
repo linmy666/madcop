@@ -57,7 +57,13 @@ let trayController: TrayController | null = null
 installMacOsChromiumKeychainPromptGuard(app)
 
 function appRoot() {
-  return "/Users/linruihan/PycharmProjects/madcop/desktop"
+  // In development, main.cjs is in electron-dist/, so project root is ..
+  // In production (asar), main.cjs is in app.asar, so we need app.getAppPath()
+  if (app.isPackaged) {
+    return app.getAppPath()
+  }
+  // Go up from electron-dist/ to project root
+  return path.resolve(__dirname, '..')
 }
 
 function unpackedRoot() {

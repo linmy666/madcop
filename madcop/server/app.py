@@ -397,43 +397,13 @@ def create_app() -> FastAPI:
         """cc-haha React 客户端期望的 providers 列表端点
         返回 {providers: [...], activeId: ...} 格式
 
-        The cc-haha SavedProvider type expects a `models` map with
-        main/haiku/sonnet/opus sub-fields. madcop's public dict only
-        exposes a single `model` string, so we synthesise the same model
-        into all four slots so the React UI never throws on
-        `provider.models.main.trim()`.
+        Returns the full SavedProvider shape (with apiKey decrypted,
+        apiFormat, authStrategy, presetId, etc.) so the Edit-Provider
+        form in the Settings UI can pre-fill all fields.
         """
-        s = settings_store.load_settings()
-        public = settings_store.settings_to_public_dict(s)
-        providers = public.get("providers", [])
-        active_id = public.get("active_provider_id") or public.get("active_provider")
-        cc_providers = []
-        for p in providers:
-            model_id = p.get("model") or ""
-            cc_providers.append({
-                "id": p.get("provider_id") or p.get("id"),
-                "name": p.get("label") or p.get("name") or p.get("provider_id"),
-                "provider_id": p.get("provider_id"),
-                "label": p.get("label") or p.get("provider_id"),
-                "base_url": p.get("base_url"),
-                "model": model_id,
-                # Synthesise the multi-model shape the cc-haha UI expects.
-                "models": {
-                    "main": model_id,
-                    "haiku": model_id,
-                    "sonnet": model_id,
-                    "opus": model_id,
-                },
-                "api_key_masked": p.get("api_key_masked", ""),
-                "is_official": p.get("is_official", False),
-                "auth_type": p.get("auth_type", "api_key"),
-            })
-        return {
-            "providers": cc_providers,
-            "activeId": active_id,
-            "activeProvider": active_id,
-            "providerOrder": [p["id"] for p in cc_providers],
-        }
+        # Use the cc_haha_compat helper which returns the full shape
+        from madcop.server.cc_haha_compat import _list_providers as _cc_list
+        return _cc_list()
 
     @app.get("/api/providers/presets")
     async def list_provider_presets_cc_haha() -> dict[str, Any]:

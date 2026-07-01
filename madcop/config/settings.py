@@ -123,6 +123,13 @@ class ProviderSettings:
     api_key: str = ""           # stored ENCRYPTED (fernet:...) on disk
     model: str = ""             # e.g. "MiniMax-M3"
     label: str = ""             # display label, e.g. "MiniMax"
+    # v2.6.0: extended fields for full SavedProvider round-trip
+    preset_id: str = ""         # e.g. "nvidia", "openai", "minimax"
+    api_format: str = "openai_chat"  # anthropic | openai_chat | openai_responses
+    auth_strategy: str = "api_key"   # api_key | auth_token | dual
+    runtime_kind: str = ""     # anthropic_compatible | openai_oauth
+    tool_search_enabled: bool = True
+    notes: str = ""
 
 
 @dataclass
@@ -147,6 +154,12 @@ def _settings_from_dict(raw: dict[str, Any]) -> Settings:
             api_key=p.get("api_key", ""),  # stays encrypted on disk
             model=p.get("model", ""),
             label=p.get("label", ""),
+            preset_id=p.get("preset_id", "") or p.get("provider_id", ""),
+            api_format=p.get("api_format", "openai_chat"),
+            auth_strategy=p.get("auth_strategy", "api_key"),
+            runtime_kind=p.get("runtime_kind", ""),
+            tool_search_enabled=p.get("tool_search_enabled", True),
+            notes=p.get("notes", ""),
         ))
     return Settings(
         active_provider=raw.get("active_provider", ""),

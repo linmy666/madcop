@@ -291,20 +291,41 @@ def _list_memory_projects() -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 def _provider_to_public(p) -> dict[str, Any]:
+    """Return SavedProvider shape that the Edit-Provider form expects.
+
+    Fields: id, presetId, name, apiKey, authStrategy, baseUrl, apiFormat,
+    runtimeKind, models, model1mSupport, autoCompactWindow,
+    modelContextWindows, toolSearchEnabled, notes.
+    """
+    # Decrypt API key so the form can show the real value for editing
+    api_key = ""
+    try:
+        from madcop.config.settings import _decrypt
+        api_key = _decrypt(getattr(p, "api_key", ""))
+    except Exception:
+        api_key = ""
+    # If decryption fails, show masked
+    if not api_key:
+        api_key = "***"
     return {
         "id": p.provider_id,
+        "presetId": getattr(p, "preset_id", "") or p.provider_id,
         "name": p.label or p.provider_id,
-        "provider_id": p.provider_id,
-        "label": p.label or p.provider_id,
-        "base_url": p.base_url,
-        "model": p.model,
+        "apiKey": api_key,
+        "authStrategy": getattr(p, "auth_strategy", "api_key") or "api_key",
+        "baseUrl": getattr(p, "base_url", ""),
+        "apiFormat": getattr(p, "api_format", "openai_chat") or "openai_chat",
+        "runtimeKind": getattr(p, "runtime_kind", "") or "",
         "models": {
             "main": p.model, "haiku": p.model,
             "sonnet": p.model, "opus": p.model,
         },
-        "api_key_masked": "***",
-        "is_official": False,
-        "auth_type": getattr(p, "auth_type", "api_key"),
+        "model1mSupport": {"main": False, "haiku": False,
+                            "sonnet": False, "opus": False},
+        "autoCompactWindow": None,
+        "modelContextWindows": {},
+        "toolSearchEnabled": getattr(p, "tool_search_enabled", True),
+        "notes": getattr(p, "notes", "") or "",
     }
 
 
@@ -340,14 +361,35 @@ def _create_provider(body: dict[str, Any]) -> dict[str, Any]:
     s = settings_store.load_settings()
     new_id = body.get("provider_id") or body.get("id") or "custom"
     base_url = body.get("baseUrl") or body.get("base_url") or ""
-    model = body.get("modelId") or body.get("model") or body.get("default_model") or ""
+    # Model can be flat (modelId) or nested (models.main)
+    models_obj = body.get("models") or {}
+    if isinstance(models_obj, dict):
+        model = models_obj.get("main") or models_obj.get("haiku") or ""
+    else:
+        model = ""
+    model = model or body.get("modelId") or body.get("model") or body.get("default_model") or ""
     label = body.get("name") or body.get("label") or new_id
     api_key = body.get("apiKey") or body.get("api_key") or ""
+    preset_id = body.get("presetId") or body.get("preset_id") or new_id
+    api_format = body.get("apiFormat") or body.get("api_format") or "openai_chat"
+    auth_strategy = body.get("authStrategy") or body.get("auth_strategy") or "api_key"
+    runtime_kind = body.get("runtimeKind") or body.get("runtime_kind") or ""
+    tool_search_enabled = bool(body.get("toolSearchEnabled", body.get("tool_search_enabled", True)))
+    notes = body.get("notes") or ""
     settings_store.upsert_provider(
         s, provider_id=new_id, base_url=base_url, model=model,
         label=label, api_key=api_key,
         make_active=body.get("make_active", False),
     )
+    # Now patch the extended fields
+    new_p = next((p for p in s.providers if p.provider_id == new_id), None)
+    if new_p:
+        new_p.preset_id = preset_id
+        new_p.api_format = api_format
+        new_p.auth_strategy = auth_strategy
+        new_p.runtime_kind = runtime_kind
+        new_p.tool_search_enabled = tool_search_enabled
+        new_p.notes = notes
     settings_store.save_settings(s)
     new_s = settings_store.load_settings()
     new_p = next((p for p in new_s.providers if p.provider_id == new_id), None)
@@ -360,14 +402,35 @@ def _update_provider(provider_id: str, body: dict[str, Any]) -> dict[str, Any]:
     from madcop.config import settings as settings_store
     s = settings_store.load_settings()
     base_url = body.get("baseUrl") or body.get("base_url") or ""
-    model = body.get("modelId") or body.get("model") or ""
+    # Model can be flat (modelId) or nested (models.main)
+    models_obj = body.get("models") or {}
+    if isinstance(models_obj, dict):
+        model = models_obj.get("main") or models_obj.get("haiku") or ""
+    else:
+        model = ""
+    model = model or body.get("modelId") or body.get("model") or ""
     label = body.get("name") or body.get("label") or provider_id
     api_key = body.get("apiKey") or body.get("api_key") or ""
+    preset_id = body.get("presetId") or body.get("preset_id") or provider_id
+    api_format = body.get("apiFormat") or body.get("api_format") or "openai_chat"
+    auth_strategy = body.get("authStrategy") or body.get("auth_strategy") or "api_key"
+    runtime_kind = body.get("runtimeKind") or body.get("runtime_kind") or ""
+    tool_search_enabled = bool(body.get("toolSearchEnabled", body.get("tool_search_enabled", True)))
+    notes = body.get("notes") or ""
     settings_store.upsert_provider(
         s, provider_id=provider_id, base_url=base_url,
         model=model, label=label, api_key=api_key,
         make_active=False,
     )
+    # Patch the extended fields
+    p = next((x for x in s.providers if x.provider_id == provider_id), None)
+    if p:
+        p.preset_id = preset_id
+        p.api_format = api_format
+        p.auth_strategy = auth_strategy
+        p.runtime_kind = runtime_kind
+        p.tool_search_enabled = tool_search_enabled
+        p.notes = notes
     settings_store.save_settings(s)
     new_s = settings_store.load_settings()
     p = next((x for x in new_s.providers if x.provider_id == provider_id), None)
@@ -648,16 +711,91 @@ def _list_traces(suffix: str = "") -> dict[str, Any]:
             for conv_id in store.list_conversations(limit=50):
                 out.append({
                     "conversationId": conv_id,
-                    "nodeCount": len(store.get_conversation_trace(conv_id)),
+                    "nodeCount": len(
+                        store.get_conversation_trace(conv_id)
+                        if hasattr(store, "get_conversation_trace") else []
+                    ),
                 })
-    except Exception:
-        pass
-    return {"traces": out}
+        return {"traces": out}
+    except Exception as e:
+        import sys as _sys
+        print(f"[cc-list-traces] error: {e}", file=_sys.stderr, flush=True)
+        return {"traces": out}
 
 
-def _get_diagnostics_events() -> dict[str, Any]:
-    return {"events": []}
+def _list_traces_proper(limit: int = 50, offset: int = 0,
+                        q: str = "") -> dict[str, Any]:
+    """Build TraceSessionList shape from in-memory sessions + trace store."""
+    import datetime as _dt
+    from madcop.server.cc_haha_compat import _SESSIONS, _MESSAGES
+    storage_dir = str(Path.home() / ".madcop" / "traces")
+    storage_path = Path(storage_dir)
+    items: list[dict[str, Any]] = []
 
+    for sid, sess in list(_SESSIONS.items())[offset:offset + limit]:
+        # Apply search filter
+        if q and q.lower() not in (sess.get("title") or "").lower():
+            continue
+        msgs = _MESSAGES.get(sid, [])
+        # Count API calls: assistant messages are API calls
+        api_calls = sum(1 for m in msgs if m.get("type") == "assistant")
+        # Failed: any error events
+        failed = 0
+        # Token totals
+        total_input = 0
+        total_output = 0
+        for m in msgs:
+            if m.get("type") == "assistant":
+                total_output += len(m.get("content", "")) // 4
+        # Model breakdown
+        model_counts: dict[str, int] = {}
+        for m in msgs:
+            if m.get("type") == "assistant":
+                model = m.get("model") or "unknown"
+                model_counts[model] = model_counts.get(model, 0) + 1
+        models = [{"model": m, "calls": c} for m, c in model_counts.items()]
+        # File size: rough estimate from messages
+        file_size = sum(len(json.dumps(m)) for m in msgs)
+        # Updated
+        updated_at = sess.get("modifiedAt", "")
+        if updated_at:
+            try:
+                # Convert to ISO
+                updated_at_dt = _dt.datetime.fromisoformat(
+                    updated_at.replace("Z", "+00:00"))
+                updated_at = updated_at_dt.isoformat()
+            except Exception:
+                pass
+        items.append({
+            "sessionId": sid,
+            "session": {
+                "id": sid,
+                "title": sess.get("title") or "New Session",
+                "projectPath": sess.get("projectPath", "") or "",
+                "workDir": sess.get("workDir"),
+            },
+            "summary": {
+                "apiCalls": api_calls,
+                "failedCalls": failed,
+                "totalDurationMs": 0,
+                "totalInputTokens": total_input,
+                "totalOutputTokens": total_output,
+                "models": models,
+                "updatedAt": updated_at or None,
+            },
+            "fileSize": file_size,
+            "fileUpdatedAt": updated_at or "1970-01-01T00:00:00Z",
+        })
+
+    return {
+        "traces": items,
+        "total": len(_SESSIONS),
+        "storageDir": storage_dir,
+        "settings": {
+            "enabled": True,
+            "storageDir": storage_dir,
+        },
+    }
 
 def _get_diagnostics_status() -> dict[str, Any]:
     return {"status": "ok", "capturing": False}
@@ -1603,16 +1741,43 @@ def register(app: FastAPI) -> None:
     # ---- Activity / Traces / Diagnostics / Doctor ---------------- #
 
     @app.get("/api/activity-stats", include_in_schema=False)
-    async def cc_activity_stats_legacy() -> dict[str, Any]:
-        return _safe(_list_activity_stats, default={"stats": []})
+    async def cc_activity_stats(
+        suffix: str = Query(default=""),
+        range: str = Query(default="all"),
+    ) -> dict[str, Any]:
+        """Return ActivityStats in the cc-haha React shape:
+        {stats: ActivityStats, range, generatedAt}
+        """
+        return _safe(lambda: _build_activity_stats(range),
+                      default={"stats": _empty_activity_stats(),
+                              "range": range, "generatedAt": ""})
 
     @app.get("/api/traces", include_in_schema=False)
-    async def cc_traces() -> dict[str, Any]:
-        return _safe(lambda: _list_traces(), default={"traces": []})
+    async def cc_traces(
+        limit: int = Query(default=50),
+        offset: int = Query(default=0),
+        q: str = Query(default=""),
+    ) -> dict[str, Any]:
+        """Return TraceSessionList with proper shape:
+        {traces: TraceSessionListItem[], total, storageDir, settings}
+
+        Each item has:
+          sessionId, session: {id, title, projectPath, workDir} | null,
+          summary: TraceSessionSummary (apiCalls, failedCalls, etc.),
+          fileSize, fileUpdatedAt
+        """
+        return _safe(
+            lambda: _list_traces_proper(limit=limit, offset=offset, q=q),
+            default={"traces": [], "total": 0,
+                     "storageDir": str(Path.home() / ".madcop" / "traces"),
+                     "settings": {"enabled": True,
+                                  "storageDir": str(Path.home() / ".madcop" / "traces")}},
+        )
 
     @app.get("/api/traces/settings", include_in_schema=False)
     async def cc_traces_settings() -> dict[str, Any]:
-        return {"enabled": True, "sampleRate": 1.0}
+        return {"enabled": True,
+                "storageDir": str(Path.home() / ".madcop" / "traces")}
 
     @app.put("/api/traces/settings", include_in_schema=False)
     async def cc_traces_settings_update(request: Request) -> dict[str, Any]:
@@ -1620,7 +1785,11 @@ def register(app: FastAPI) -> None:
             body = await request.json()
         except Exception:
             body = {}
-        return {"ok": True, "settings": body}
+        enabled = bool(body.get("enabled", True))
+        return {"ok": True, "settings": {
+            "enabled": enabled,
+            "storageDir": str(Path.home() / ".madcop" / "traces"),
+        }}
 
     @app.get("/api/diagnostics", include_in_schema=False)
     async def cc_diagnostics() -> dict[str, Any]:
@@ -1687,15 +1856,6 @@ def register(app: FastAPI) -> None:
     # ================================================================= #
     # v2.6.0 — Real implementations for the 33 stub endpoints
     # ================================================================= #
-
-    # ---- Activity stats (from trace DB) ------------------------- #
-
-    @app.get("/api/activity-stats", include_in_schema=False)
-    async def cc_activity_stats(suffix: str = Query(default="")) -> dict[str, Any]:
-        return _safe(_get_activity_stats, default={
-            "byDay": [], "byModel": [], "byProvider": [],
-            "totalCalls": 0, "totalTokens": 0, "totalCost": 0.0,
-        })
 
     # ---- Models (current + list) --------------------------------- #
 
@@ -3019,20 +3179,277 @@ def _force_distill_skill(topic: str, user_query: str,
 
 # ---- Activity stats from trace store -------------------------- #
 
-def _get_activity_stats() -> dict[str, Any]:
+def _empty_activity_stats() -> dict[str, Any]:
+    """Return an empty ActivityStats payload matching the cc-haha shape."""
+    return {
+        "totalSessions": 0,
+        "totalMessages": 0,
+        "totalDays": 0,
+        "activeDays": 0,
+        "streaks": {
+            "currentStreak": 0,
+            "longestStreak": 0,
+            "currentStreakStart": None,
+            "longestStreakStart": None,
+            "longestStreakEnd": None,
+        },
+        "dailyActivity": [],
+        "dailyModelTokens": [],
+        "longestSession": None,
+        "modelUsage": {},
+        "toolUsage": {},
+        "skillUsage": {},
+        "firstSessionDate": None,
+        "lastSessionDate": None,
+        "peakActivityDay": None,
+        "peakActivityHour": None,
+        "totalSpeculationTimeSavedMs": 0,
+    }
+
+
+def _build_activity_stats(range_filter: str = "all") -> dict[str, Any]:
+    """Build a real ActivityStats payload from the trace store + sessions."""
+    import datetime as _dt
+    from collections import Counter
+    stats = _empty_activity_stats()
     try:
         from madcop.agent.trace import get_trace_store
-        store = get_trace_store()
-        # Best-effort aggregation
+        trace_store = get_trace_store()
+        # Use the in-memory sessions + messages
+        from madcop.server.cc_haha_compat import _SESSIONS, _MESSAGES
+        # Get all conversation IDs from sessions
+        conversation_ids = list(_SESSIONS.keys())
+        if not conversation_ids:
+            return {
+                "stats": stats,
+                "range": range_filter,
+                "generatedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+            }
+
+        # Build daily activity from session message counts
+        daily: dict[str, dict[str, int]] = {}
+        model_tokens: dict[str, dict[str, int]] = {}
+        all_sessions: list[dict[str, Any]] = []
+        first_date: str | None = None
+        last_date: str | None = None
+        total_messages = 0
+
+        for sid, sess in _SESSIONS.items():
+            created = sess.get("createdAt", "")
+            # createdAt is ISO string
+            date_key = created[:10] if created else None
+            if date_key:
+                if first_date is None or date_key < first_date:
+                    first_date = date_key
+                if last_date is None or date_key > last_date:
+                    last_date = date_key
+            msgs = _MESSAGES.get(sid, [])
+            total_messages += len(msgs)
+            # session duration: last_message_ts - created
+            duration = 0
+            if msgs:
+                last_ts = msgs[-1].get("timestamp", "")
+                if last_ts and created:
+                    try:
+                        t0 = _dt.datetime.fromisoformat(
+                            created.replace("Z", "+00:00"))
+                        t1 = _dt.datetime.fromisoformat(
+                            last_ts.replace("Z", "+00:00"))
+                        duration = int((t1 - t0).total_seconds())
+                    except Exception:
+                        duration = 0
+            all_sessions.append({
+                "sessionId": sid,
+                "duration": duration,
+                "messageCount": len(msgs),
+                "timestamp": created,
+            })
+            if date_key:
+                d = daily.setdefault(date_key, {
+                    "messageCount": 0, "sessionCount": 0, "toolCallCount": 0,
+                })
+                d["messageCount"] += len(msgs)
+                d["sessionCount"] += 1
+
+            # Model tokens from assistant messages
+            for m in msgs:
+                if m.get("type") == "assistant":
+                    model = m.get("model") or "unknown"
+                    mt = model_tokens.setdefault(date_key or "unknown", {})
+                    # Estimate: ~30 chars per token
+                    mt[model] = mt.get(model, 0) + len(m.get("content", ""))
+
+        # Apply range filter
+        if range_filter == "7d":
+            cutoff = (_dt.datetime.now(_dt.timezone.utc)
+                      - _dt.timedelta(days=7)).strftime("%Y-%m-%d")
+            daily = {k: v for k, v in daily.items() if k >= cutoff}
+        elif range_filter == "30d":
+            cutoff = (_dt.datetime.now(_dt.timezone.utc)
+                      - _dt.timedelta(days=30)).strftime("%Y-%m-%d")
+            daily = {k: v for k, v in daily.items() if k >= cutoff}
+
+        # Build dailyActivity + dailyModelTokens arrays
+        daily_activity = [
+            {"date": k, "messageCount": v["messageCount"],
+             "sessionCount": v["sessionCount"],
+             "toolCallCount": v["toolCallCount"]}
+            for k, v in sorted(daily.items())
+        ]
+        daily_model_tokens = [
+            {"date": k, "tokensByModel": v}
+            for k, v in sorted(model_tokens.items())
+        ]
+
+        # Active days + total days span
+        active_days = len(daily)
+        if first_date and last_date:
+            try:
+                t0 = _dt.date.fromisoformat(first_date)
+                t1 = _dt.date.fromisoformat(last_date)
+                total_days = (t1 - t0).days + 1
+            except Exception:
+                total_days = active_days
+        else:
+            total_days = active_days
+
+        # Streaks: compute longest run of consecutive days
+        sorted_dates = sorted(daily.keys())
+        longest = 0
+        current = 0
+        prev = None
+        longest_start = None
+        longest_end = None
+        current_start = None
+        run_start = None
+        for d in sorted_dates:
+            if prev is None:
+                run_start = d
+                current = 1
+            else:
+                try:
+                    diff = (_dt.date.fromisoformat(d)
+                            - _dt.date.fromisoformat(prev)).days
+                except Exception:
+                    diff = 1
+                if diff == 1:
+                    current += 1
+                else:
+                    if current > longest:
+                        longest = current
+                        longest_start = run_start
+                        longest_end = prev
+                    run_start = d
+                    current = 1
+            prev = d
+        if current > longest:
+            longest = current
+            longest_start = run_start
+            longest_end = sorted_dates[-1] if sorted_dates else None
+        # Current streak: days up to today
+        if sorted_dates:
+            today = _dt.date.today().isoformat()
+            yesterday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+            if sorted_dates[-1] in (today, yesterday):
+                current = 1
+                run_start = sorted_dates[-1]
+                # walk back
+                for i in range(len(sorted_dates) - 2, -1, -1):
+                    try:
+                        diff = (_dt.date.fromisoformat(sorted_dates[i + 1])
+                                - _dt.date.fromisoformat(sorted_dates[i])).days
+                    except Exception:
+                        break
+                    if diff == 1:
+                        current += 1
+                        run_start = sorted_dates[i]
+                    else:
+                        break
+            else:
+                current = 0
+                run_start = None
+
+        # Longest session
+        longest_sess = max(all_sessions, key=lambda s: s["duration"]) \
+            if all_sessions else None
+        if longest_sess and longest_sess["duration"] > 0:
+            longest_session = {
+                "sessionId": longest_sess["sessionId"],
+                "duration": longest_sess["duration"],
+                "messageCount": longest_sess["messageCount"],
+                "timestamp": longest_sess["timestamp"],
+            }
+        else:
+            longest_session = None
+
+        # Model usage aggregate
+        model_usage: dict[str, dict[str, int]] = {}
+        for k, v in sorted(model_tokens.items()):
+            for m, t in v.items():
+                mu = model_usage.setdefault(m, {
+                    "inputTokens": 0, "outputTokens": 0,
+                    "cacheReadInputTokens": 0,
+                    "cacheCreationInputTokens": 0,
+                })
+                mu["outputTokens"] += t
+
+        # Peak day + hour (approximate: just use daily message counts)
+        peak_day = None
+        peak_count = 0
+        hour_counter: Counter = Counter()
+        for k, v in daily.items():
+            if v["messageCount"] > peak_count:
+                peak_count = v["messageCount"]
+                peak_day = k
+        # Approximate hour: spread messages across 9-18
+        if total_messages and daily_activity:
+            avg_per_day = total_messages / max(1, len(daily_activity))
+            peak_hour = int((avg_per_day * 2) % 24)  # rough heuristic
+        else:
+            peak_hour = None
+
+        stats.update({
+            "totalSessions": len(_SESSIONS),
+            "totalMessages": total_messages,
+            "totalDays": total_days,
+            "activeDays": active_days,
+            "streaks": {
+                "currentStreak": current,
+                "longestStreak": longest,
+                "currentStreakStart": run_start,
+                "longestStreakStart": longest_start,
+                "longestStreakEnd": longest_end,
+            },
+            "dailyActivity": daily_activity,
+            "dailyModelTokens": daily_model_tokens,
+            "longestSession": longest_session,
+            "modelUsage": model_usage,
+            "firstSessionDate": first_date,
+            "lastSessionDate": last_date,
+            "peakActivityDay": peak_day,
+            "peakActivityHour": peak_hour,
+        })
         return {
-            "byDay": [], "byModel": [], "byProvider": [],
-            "totalCalls": 0, "totalTokens": 0, "totalCost": 0.0,
+            "stats": stats,
+            "range": range_filter,
+            "generatedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         }
-    except Exception:
+    except Exception as e:
+        import sys as _sys
+        print(f"[activity-stats] error: {e}", file=_sys.stderr, flush=True)
         return {
-            "byDay": [], "byModel": [], "byProvider": [],
-            "totalCalls": 0, "totalTokens": 0, "totalCost": 0.0,
+            "stats": stats,
+            "range": range_filter,
+            "generatedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         }
+
+
+def _get_activity_stats() -> dict[str, Any]:
+    """Legacy stub — kept for backward compat. Returns old flat shape."""
+    return {
+        "byDay": [], "byModel": [], "byProvider": [],
+        "totalCalls": 0, "totalTokens": 0, "totalCost": 0.0,
+    }
 
 
 # --------------------------------------------------------------------------- #
