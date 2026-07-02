@@ -965,6 +965,7 @@ export const jp: Record<TranslationKey, string> = {
   'settings.general.appearance.light': '暖色クラシック',
   'settings.general.appearance.dark': 'ダーク',
   'settings.general.appearance.white': '純白',
+  'settings.general.appearance.pixel': 'ピクセル Pixel',
   'settings.general.languageTitle': '言語',
   'settings.general.languageDescription': 'アプリケーションの表示言語を選択します。',
   'settings.general.responseLangTitle': '応答言語',

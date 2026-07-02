@@ -1,94 +1,65 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  MadCop v2.6.0 — Stardew Valley pixel-art mascot
-  A friendly detective-farmer: hat + overalls + magnifying glass.
-  Hand-drawn, animated (breathing, blinking, swaying magnifier).
+  MadCop Mascot — Stardew Valley pixel-art variant
+  Source: 紫色水滴小生物 with halo + smile
+  Reinterpretation: 16-bit SDV color palette, pixelated.
+  Replaces the previous detective variant.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
      shape-rendering="crispEdges">
   <style>
-    @keyframes breathe { 0%, 100% { transform: scale(1) } 50% { transform: scale(1.04) } }
-    @keyframes blink {
-      0%, 90%, 100% { transform: scaleY(1) }
-      93%, 97% { transform: scaleY(0.05) }
-    }
-    @keyframes glassSway { 0%, 100% { transform: rotate(-8deg) } 50% { transform: rotate(8deg) } }
-    @keyframes sparkle { 0%, 100% { opacity: 0 } 50% { opacity: 1 } }
-
-    .mascot { animation: breathe 3.5s ease-in-out infinite; transform-origin: 50px 60px; }
-    .eyeL { animation: blink 5s ease-in-out infinite; transform-origin: 38px 47px; }
-    .eyeR { animation: blink 5s ease-in-out infinite; transform-origin: 62px 47px; }
-    .glass { animation: glassSway 3s ease-in-out infinite; transform-origin: 80px 75px; }
-    .sp1 { animation: sparkle 2s ease-in-out infinite; }
-    .sp2 { animation: sparkle 2s ease-in-out 0.7s infinite; }
-    .sp3 { animation: sparkle 2s ease-in-out 1.4s infinite; }
+    @keyframes bl { 0%,90%,100%{transform:scaleY(1)} 93%,97%{transform:scaleY(0.05)} }
+    @keyframes ha { 0%,100%{transform:rotate(-3deg)} 50%{transform:rotate(3deg)} }
+    .eye { animation: bl 5s ease-in-out infinite; transform-origin: center; }
+    .halo { animation: ha 4s ease-in-out infinite; transform-origin: 32px 8px; }
   </style>
 
-  <g class="mascot">
-    <!-- straw hat (Stardew) — wider brim, soft yellow -->
-    <rect x="22" y="22" width="56" height="4" fill="#A56A47"/>
-    <rect x="22" y="22" width="56" height="1" fill="#5C2A20"/>
-    <path d="M 28 22 L 32 10 L 68 10 L 72 22 Z" fill="#FFD76E" stroke="#B48F3A" stroke-width="1.5"/>
-    <path d="M 30 14 L 70 14" stroke="#B48F3A" stroke-width="1.5" fill="none"/>
-    <rect x="34" y="16" width="32" height="3" fill="#7AB87A"/>
-    <!-- hat band decoration -->
+  <!-- Halo (gold) -->
+  <ellipse class="halo" cx="32" cy="9" rx="11" ry="2.5"
+           fill="none" stroke="#FFD700" stroke-width="2"/>
+  <ellipse class="halo" cx="32" cy="9" rx="13" ry="1.5"
+           fill="none" stroke="#FFCE00" stroke-width="1.2" opacity="0.5"/>
 
-    <!-- face (skin) -->
-    <rect x="32" y="26" width="36" height="28" fill="#F4D5A0" stroke="#5C2A20" stroke-width="1.5"/>
-    <!-- cheek blush -->
-    <rect x="33" y="44" width="5" height="3" fill="#E76A85" opacity="0.5"/>
-    <rect x="62" y="44" width="5" height="3" fill="#E76A85" opacity="0.5"/>
+  <!-- Body (purple drop) - pixel art -->
+  <path d="M 32 14
+           L 50 38
+           Q 50 56 32 58
+           Q 14 56 14 38
+           Z" fill="#9F86E0" stroke="#5C2A20" stroke-width="1.5"/>
+  <!-- Highlight (lighter purple) -->
+  <ellipse cx="22" cy="46" rx="3" ry="5" fill="#B8A7F0" opacity="0.6"/>
+  <!-- Belly (lighter) -->
+  <path d="M 22 32
+           Q 22 50 32 52
+           Q 42 50 42 32
+           Q 42 26 32 22
+           Q 22 26 22 32
+           Z" fill="#C9B381" opacity="0.5"/>
 
-    <!-- eyes (with blink) -->
-    <g class="eyeL"><rect x="36" y="42" width="4" height="6" fill="#2C2620"/></g>
-    <g class="eyeR"><rect x="60" y="42" width="4" height="6" fill="#2C2620"/></g>
-    <!-- eye highlights -->
-    <rect x="37" y="42" width="1" height="2" fill="#FFF6DA"/>
-    <rect x="61" y="42" width="1" height="2" fill="#FFF6DA"/>
+  <!-- Face mask (darker purple) - pixel style -->
+  <rect x="18" y="28" width="28" height="14" fill="#6B4FA0" stroke="#5C2A20" stroke-width="1.5" rx="1"/>
 
-    <!-- mouth (smile) -->
-    <path d="M 44 52 L 50 56 L 56 52" stroke="#5C2A20" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- Eyes (whites) - pixel blocks -->
+  <rect class="eye" x="21" y="30" width="6" height="8" fill="#F4E4BC" stroke="#5C2A20" stroke-width="1"/>
+  <rect class="eye" x="37" y="30" width="6" height="8" fill="#F4E4BC" stroke="#5C2A20" stroke-width="1"/>
+  <!-- Pupils -->
+  <rect x="23" y="32" width="3" height="3" fill="#5C2A20"/>
+  <rect x="39" y="32" width="3" height="3" fill="#5C2A20"/>
+  <!-- Eye highlights -->
+  <rect x="22" y="32" width="1" height="1" fill="#F4E4BC"/>
+  <rect x="38" y="32" width="1" height="1" fill="#F4E4BC"/>
 
-    <!-- body (overalls) -->
-    <path d="M 30 54 L 70 54 L 72 90 L 28 90 Z" fill="#3A6FA8" stroke="#1A2238" stroke-width="1.5"/>
-    <!-- overall straps -->
-    <path d="M 38 54 L 38 64 M 62 54 L 62 64" stroke="#1A2238" stroke-width="1.5"/>
-    <!-- shirt under overalls (red plaid) -->
-    <rect x="38" y="54" width="24" height="6" fill="#C03B3B"/>
-    <rect x="38" y="56" width="24" height="1" fill="#7E1F1F" opacity="0.6"/>
-    <rect x="38" y="58" width="24" height="1" fill="#7E1F1F" opacity="0.6"/>
+  <!-- Smile (pink) - pixel curve -->
+  <path d="M 28 41
+           Q 32 44 36 41"
+        stroke="#E76A85" stroke-width="1.5" fill="none" stroke-linecap="round"/>
 
-    <!-- gold buckle on overalls -->
-    <rect x="46" y="62" width="8" height="4" fill="#FFD76E" stroke="#B48F3A" stroke-width="1"/>
-    <rect x="48" y="63" width="4" height="2" fill="#FFEC9A"/>
+  <!-- Halo dot above (small highlight) -->
+  <ellipse cx="26" cy="6" rx="2" ry="1" fill="#FFD700"/>
 
-    <!-- arms -->
-    <rect x="26" y="58" width="6" height="20" fill="#3A6FA8" stroke="#1A2238" stroke-width="1.2"/>
-    <rect x="68" y="58" width="6" height="20" fill="#3A6FA8" stroke="#1A2238" stroke-width="1.2"/>
-    <!-- hands (skin) -->
-    <rect x="26" y="78" width="6" height="4" fill="#F4D5A0" stroke="#5C2A20" stroke-width="1"/>
-    <rect x="68" y="78" width="6" height="4" fill="#F4D5A0" stroke="#5C2A20" stroke-width="1"/>
-
-    <!-- legs (overalls) -->
-    <rect x="34" y="78" width="10" height="14" fill="#3A6FA8" stroke="#1A2238" stroke-width="1.2"/>
-    <rect x="56" y="78" width="10" height="14" fill="#3A6FA8" stroke="#1A2238" stroke-width="1.2"/>
-    <!-- boots (brown) -->
-    <rect x="32" y="90" width="14" height="6" fill="#5C2A20"/>
-    <rect x="54" y="90" width="14" height="6" fill="#5C2A20"/>
-    <rect x="32" y="94" width="14" height="1" fill="#FFD76E"/>
-    <rect x="54" y="94" width="14" height="1" fill="#FFD76E"/>
-
-    <!-- magnifying glass (held by right hand) -->
-    <g class="glass">
-      <rect x="68" y="74" width="14" height="14" fill="#92C3E1" stroke="#5C2A20" stroke-width="1.5"/>
-      <rect x="69" y="75" width="12" height="12" fill="#C5E1F2" opacity="0.6"/>
-      <path d="M 70 76 L 76 82" stroke="#FFFFFF" stroke-width="2" fill="none" opacity="0.7"/>
-      <rect x="80" y="86" width="3" height="6" fill="#5C2A20" transform="rotate(45 81 89)"/>
-    </g>
-
-    <!-- sparkles around mascot -->
-    <g class="sp1"><rect x="14" y="20" width="2" height="2" fill="#FFD76E"/></g>
-    <g class="sp2"><rect x="86" y="14" width="2" height="2" fill="#FFD76E"/></g>
-    <g class="sp3"><rect x="12" y="50" width="2" height="2" fill="#7AB87A"/></g>
+  <!-- Animation: subtle breathing -->
+  <g style="animation: br 3s ease-in-out infinite; transform-origin: 32px 40px;">
+    <animateTransform attributeName="transform" type="scale"
+      values="1;1.03;1" dur="3s" repeatCount="indefinite" additive="sum"/>
   </g>
 </svg>

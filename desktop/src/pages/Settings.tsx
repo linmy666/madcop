@@ -242,7 +242,7 @@ export function Settings() {
   )
 }
 
-function TabButton({ icon, label, active, onClick }: { icon: string; label: string; active: boolean; onClick: () => void }) {
+function TabButton({ icon, label, active, onClick }: { icon: ReactNode; label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -2099,10 +2099,11 @@ export function GeneralSettings() {
     ? t('settings.general.outputStyleScopeLocalHint')
     : t('settings.general.outputStyleScopeUserHint')
 
-  const THEMES: Array<{ value: ThemeMode; label: string }> = [
+  const THEMES: Array<{ value: string; label: string }> = [
     { value: 'white', label: t('settings.general.appearance.white') },
     { value: 'light', label: t('settings.general.appearance.light') },
-    { value: 'dark', label: t('settings.general.appearance.dark') },
+    { value: 'dark',  label: t('settings.general.appearance.dark')  },
+    { value: 'pixel', label: t('settings.general.appearance.pixel')  },
   ]
 
   const WEB_SEARCH_MODES: Array<{ value: WebSearchMode; label: string }> = [
@@ -2482,20 +2483,38 @@ export function GeneralSettings() {
         {THEMES.map(({ value, label }) => (
           <button
             key={value}
-            onClick={() => void setTheme(value)}
-            aria-pressed={theme === value}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all ${
+            onClick={() => {
+              if (value === 'pixel') {
+                // Toggle stardew pixel theme
+                const next = localStorage.getItem('madcop-theme-stardew') !== '1'
+                localStorage.setItem('madcop-theme-stardew', next ? '1' : '0')
+                document.body.classList.toggle('theme-stardew', next)
+                // Also set theme to white as base
+                void setTheme('white')
+              } else {
+                void setTheme(value as ThemeMode)
+                // Turn off stardew if user chooses something else
+                localStorage.setItem('madcop-theme-stardew', '0')
+                document.body.classList.remove('theme-stardew')
+              }
+            }}
+            aria-pressed={value === 'pixel'
+              ? localStorage.getItem('madcop-theme-stardew') === '1'
+              : theme === value}
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all flex flex-col items-center gap-0.5 ${
               theme === value
                 ? 'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] border-transparent shadow-[var(--shadow-button-primary)]'
                 : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
             }`}
           >
-            {label}
+            <span>{label}</span>
           </button>
         ))}
       </div>
 
-      {/* v2.6.0: Stardew Valley pixel-theme toggle */}
+      {/* v2.6.0: Bauhaus geometric toggle (for 纯白 / pure white) */}
+
+      {/* v2.6.0: Stardew-style pixel toggle */}
       <StardewThemeToggle />
 
       {/* Language selector */}
@@ -4133,7 +4152,7 @@ function SummaryCard({
 }: {
   label: string
   value: string
-  icon: string
+  icon: ReactNode
   className?: string
 }) {
   return (
@@ -4156,7 +4175,7 @@ function DetailStat({
 }: {
   label: string
   value: string
-  icon: string
+  icon: ReactNode
 }) {
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
@@ -4232,15 +4251,10 @@ const GITHUB_ISSUES = `${GITHUB_REPO}/issues`
 const GITHUB_RELEASES = `${GITHUB_REPO}/releases`
 const AUTHOR_GITHUB = 'https://github.com/linmy666'
 const AUTHOR_NAME = '林芮翰'
-const AUTHOR_HANDLE = 'linmy666'
 const SOCIAL_LINKS = [
   {
-    name: 'GitHub',
-    icon: '/icons/github.svg',
-    url: AUTHOR_GITHUB,
-    label: `@${AUTHOR_HANDLE}`,
-  },
-  {
+    // v2.6.0: GitHub removed — already shown in the Author block above
+    // (no reason to list it twice).
     name: 'Bilibili',
     icon: '/icons/bilibili.svg',
     url: 'https://space.bilibili.com/262182743',

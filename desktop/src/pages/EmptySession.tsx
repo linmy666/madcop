@@ -573,7 +573,7 @@ export function EmptySession() {
               Reads 'isSubmitting' to swap between ready/working states. */}
           <MadCopLoader
             state={isSubmitting ? 'working' : 'ready'}
-            size={isMobileComposer ? 80 : 128}
+            size={isMobileComposer ? 96 : 160}
             className={isMobileComposer ? 'mb-4' : 'mb-6'}
           />
           <h1

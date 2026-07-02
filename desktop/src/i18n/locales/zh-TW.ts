@@ -965,6 +965,7 @@ export const zh: Record<TranslationKey, string> = {
   'settings.general.appearance.light': '經典暖色',
   'settings.general.appearance.dark': '暗色',
   'settings.general.appearance.white': '純白',
+  'settings.general.appearance.pixel': '像素 Pixel',
   'settings.general.languageTitle': '語言',
   'settings.general.languageDescription': '選擇應用程式的顯示語言。',
   'settings.general.responseLangTitle': '回覆語言',

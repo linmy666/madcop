@@ -15,7 +15,9 @@ export function applyTheme(theme: ThemeMode) {
   if (typeof document === 'undefined') return
   document.documentElement.setAttribute('data-theme', theme)
   document.documentElement.style.colorScheme = theme === 'dark' ? 'dark' : 'light'
-  // v2.6.0: Stardew pixel theme — read from localStorage, default off
+  // v2.6.0: Pixel (Stardew-style) and Bauhaus themes — independent
+  // toggles, both controllable from settings, both apply as
+  // v2.6.0: Pixel (Stardew-style) — toggled via localStorage.
   try {
     const stardew = localStorage.getItem('madcop-theme-stardew') === '1'
     document.body.classList.toggle('theme-stardew', stardew)

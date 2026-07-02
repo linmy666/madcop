@@ -965,6 +965,7 @@ export const kr: Record<TranslationKey, string> = {
   'settings.general.appearance.light': '따뜻한 클래식',
   'settings.general.appearance.dark': '어둡게',
   'settings.general.appearance.white': '순백색',
+  'settings.general.appearance.pixel': '픽셀 Pixel',
   'settings.general.languageTitle': '언어',
   'settings.general.languageDescription': '애플리케이션의 표시 언어를 선택합니다.',
   'settings.general.responseLangTitle': '응답 언어',

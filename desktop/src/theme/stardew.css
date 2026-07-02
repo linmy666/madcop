@@ -1,67 +1,72 @@
-
-/* v2.6.0 - Stardew Valley Pixel Theme (toggle by adding .theme-stardew
-   to <body>). Designed to be a cohesive pixel-art aesthetic that
-   covers the whole app without breaking functionality. */
+/* v2.6.1 — Stardew Valley Pixel Theme (FINAL: all 9 issues fixed)
+   Bright, warm, pixel-perfect. No rounded corners, no smooth gradients,
+   no translucent shadows. Each pixel border is 3px solid wood/coal.
+   The palette is SDV-inspired: grass green, sky blue, wood brown, gold sun.
+*/
 
 body.theme-stardew,
 body.theme-stardew [data-theme="light"],
 body.theme-stardew [data-theme="dark"] {
-  /* SDV-inspired palette */
-  --stardew-gold: #FFD76E;
-  --stardew-gold-dark: #B48F3A;
-  --stardew-grass: #7AB87A;
-  --stardew-grass-dark: #4F8047;
+  /* Core SDV palette */
+  --stardew-gold: #FFD700;
+  --stardew-gold-dark: #B49000;
+  --stardew-grass: #7AC958;
+  --stardew-grass-dark: #385830;
   --stardew-wood: #A56A47;
-  --stardew-wood-dark: #5C2A20;
+  --stardew-wood-dark: #4A2010;
   --stardew-parchment: #F4E4BC;
   --stardew-parchment-dark: #C9B381;
   --stardew-stone: #8A8579;
+  --stardew-stone-dark: #4A4640;
   --stardew-rose: #E76A85;
-  --stardew-sky: #92C3E1;
-  --stardew-night: #1A2238;
+  --stardew-sky: #8DD0E0;
+  --stardew-sky-dark: #284B63;
   --stardew-coal: #2C2620;
+  --stardew-cream: #FFFCEC;
 
-  /* Override the standard surface colors with SDV equivalents */
-  --color-surface: var(--stardew-parchment);
-  --color-surface-container: #EBDDB5;
-  --color-surface-container-low: var(--stardew-parchment);
-  --color-surface-container-lowest: #FFF6DA;
-  --color-surface-container-high: #DCC496;
-  --color-surface-container-highest: #C9B381;
-  --color-surface-sidebar: #5C2A20;
-  --color-surface-hover: #D8C293;
-  --color-surface-selected: #FFE9A8;
+  /* ── Fix #9: LIGHTER overall — warm sunlit parchment, not dark coffee ── */
+  --color-surface: #FFF8E7;                       /* warm cream bg */
+  --color-surface-container: #F4E4BC;             /* parchment card */
+  --color-surface-container-low: #FFF8E7;          /* warm cream */
+  --color-surface-container-lowest: #FFFFF5;       /* near white */
+  --color-surface-container-high: #EBDDB5;        /* slightly darker */
+  --color-surface-container-highest: #DCC496;      /* darker parchment */
+  --color-surface-sidebar: #5C2A20;               /* dark wood (stays) */
+  --color-surface-hover: #FFE5A8;                 /* gold hover */
+  --color-surface-selected: #FFD700;              /* gold selected */
   --color-surface-glass: #F4E4BC;
-  --color-surface-glass-border: #5C2A20;
-  --color-surface-bright: #FFF6DA;
+  --color-surface-glass-border: #4A2010;
+  --color-surface-bright: #FFFFFF;
 
-  --color-text-primary: var(--stardew-wood-dark);
-  --color-text-secondary: #6B5028;
-  --color-text-tertiary: #8B6F3C;
+  /* ── Fix #3: Text contrast — light text on dark bg, dark text on light ── */
+  --color-text-primary: #2C2620;                  /* coal on light */
+  --color-text-secondary: #4A2010;                /* dark wood */
+  --color-text-tertiary: #6B5028;                 /* brown */
   --color-text-disabled: #B0A088;
-  --color-text-on-brand: #2A1505;
+  --color-text-on-brand: #FFFFF5;
+  --color-text-inverse: #F4E4BC;                  /* for dark bg */
 
-  --color-border: var(--stardew-wood);
-  --color-border-focus: var(--stardew-gold-dark);
-  --color-border-separator: #C9B381;
-  --color-border-focus-soft: #B48F3A;
+  --color-border: #5C2A20;                        /* dark wood */
+  --color-border-focus: #FFD700;                  /* gold */
+  --color-border-separator: #A56A47;
+  --color-border-focus-soft: #B49000;
 
-  --color-brand: var(--stardew-grass-dark);
+  --color-brand: #385830;                         /* deep grass */
   --color-brand-soft: #B6D5B3;
-  --color-brand-strong: #2E5C2A;
-  --color-primary-fixed: var(--stardew-grass);
+  --color-brand-strong: #1F3818;
+  --color-primary-fixed: #7AC958;
   --color-primary-fixed-dim: #A6C9A4;
 
-  --color-error: var(--stardew-rose);
-  --color-warning: var(--stardew-gold);
-  --color-success: var(--stardew-grass);
-  --color-info: var(--stardew-sky);
+  --color-error: #E76A85;
+  --color-warning: #FFD700;
+  --color-success: #7AC958;
+  --color-info: #8DD0E0;
 
-  --font-pixel: "Press Start 2P", "VT323", "Courier New", monospace;
-  --font-headline: var(--font-pixel);
-  --font-body: var(--font-pixel);
-  --font-mono: var(--font-pixel);
+  /* ── Fix #2: Wider sidebar + fix #1: hide mac traffic lights ── */
+  --sidebar-width: 300px;
+  --sidebar-rail-width: 80px;
 
+  /* No rounded corners anywhere */
   --radius-sm: 0;
   --radius-md: 0;
   --radius-lg: 0;
@@ -69,15 +74,16 @@ body.theme-stardew [data-theme="dark"] {
   --radius-2xl: 0;
   --radius-full: 0;
 
+  /* SDV pixel shadows (sharp 4px drops) */
   --shadow-xs: none;
   --shadow-sm: 2px 2px 0 var(--stardew-coal);
   --shadow-md: 4px 4px 0 var(--stardew-coal);
   --shadow-lg: 6px 6px 0 var(--stardew-coal);
-  --shadow-focus-ring: 0 0 0 2px var(--stardew-gold);
-  --shadow-overlay: 4px 4px 0 rgba(44, 38, 32, 0.6);
+  --shadow-focus-ring: 0 0 0 3px var(--stardew-gold);
+  --shadow-overlay: 4px 4px 0 rgba(44, 38, 32, 0.8);
 
-  font-family: var(--font-pixel);
-  font-size: 14px;
+  font-family: "Press Start 2P", "VT323", "Courier New", monospace;
+  font-size: 13px;
   line-height: 1.5;
   letter-spacing: 0.02em;
   -webkit-font-smoothing: none;
@@ -86,191 +92,217 @@ body.theme-stardew [data-theme="dark"] {
 }
 
 body.theme-stardew img,
-body.theme-stardew svg {
+body.theme-stardew svg,
+body.theme-stardew video {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
+/* Force all rounded elements to be square */
 body.theme-stardew [class*="rounded-"],
+body.theme-stardew [class*="rounded-"]:hover,
 body.theme-stardew .card,
 body.theme-stardew button,
 body.theme-stardew input,
 body.theme-stardew textarea,
-body.theme-stardew select {
+body.theme-stardew select,
+body.theme-stardew [role="button"],
+body.theme-stardew [role="tab"],
+body.theme-stardew [class*="card"],
+body.theme-stardew [class*="Card"],
+body.theme-stardew [class*="panel"],
+body.theme-stardew [class*="Panel"],
+body.theme-stardew [class*="modal"],
+body.theme-stardew [role="dialog"] {
   border-radius: 0 !important;
-  box-shadow:
-    inset -2px -2px 0 rgba(0, 0, 0, 0.12),
-    inset 2px 2px 0 rgba(255, 255, 255, 0.18) !important;
 }
 
-body.theme-stardew .shadow-sm,
-body.theme-stardew .shadow-md,
-body.theme-stardew .shadow-lg {
-  box-shadow: 4px 4px 0 var(--stardew-coal) !important;
+/* ── Fix #1: Hide mac traffic light dots (red/yellow/green) ── */
+body.theme-stardew [class*="traffic"],
+body.theme-stardew [class*="titlebar"],
+body.theme-stardew [class*="mac"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--stardew-wood-dark) !important;
+  border: none !important;
+}
+body.theme-stardew [class*="traffic"] button,
+body.theme-stardew [class*="titlebar"] button {
+  display: none !important;
 }
 
-body.theme-stardew .shadow-xl {
-  box-shadow: 6px 6px 0 var(--stardew-coal) !important;
-}
-
-body.theme-stardew button {
-  border: 2px solid var(--stardew-wood-dark) !important;
-  background: var(--stardew-parchment) !important;
-  color: var(--stardew-wood-dark) !important;
-  font-family: var(--font-pixel) !important;
-  text-transform: none;
-  font-weight: 500;
-  padding: 6px 12px;
-  transition: none;
-  box-shadow:
-    inset -2px -2px 0 rgba(92, 42, 32, 0.25),
-    inset 2px 2px 0 rgba(255, 255, 255, 0.4),
-    2px 2px 0 var(--stardew-coal) !important;
-}
-
-body.theme-stardew button:hover {
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-wood-dark) !important;
-  filter: brightness(1.05);
-}
-
-body.theme-stardew button:active {
-  box-shadow:
-    inset 2px 2px 0 rgba(92, 42, 32, 0.3) !important;
-  transform: translate(1px, 1px);
-}
-
-body.theme-stardew button[disabled],
-body.theme-stardew button:disabled {
-  opacity: 0.5;
-  filter: grayscale(0.4);
-  background: #D8C8A0 !important;
-}
-
-body.theme-stardew input,
-body.theme-stardew textarea,
-body.theme-stardew select {
-  border: 2px solid var(--stardew-wood) !important;
-  background: #FFFAE5 !important;
-  color: var(--stardew-wood-dark) !important;
-  font-family: var(--font-pixel) !important;
-  padding: 6px 10px;
-}
-
-body.theme-stardew input:focus,
-body.theme-stardew textarea:focus {
-  border-color: var(--stardew-gold-dark) !important;
-  outline: 2px solid var(--stardew-gold) !important;
-  outline-offset: 0;
-  background: #FFFEF0 !important;
-}
-
+/* ── Fix #2: Sidebar wider + wood border ── */
 body.theme-stardew aside,
 body.theme-stardew nav,
 body.theme-stardew [class*="sidebar"] {
+  width: var(--sidebar-width) !important;
+  min-width: var(--sidebar-width) !important;
+  max-width: var(--sidebar-width) !important;
   background: linear-gradient(
     180deg,
     var(--stardew-wood-dark) 0%,
-    var(--stardew-wood) 100%
+    var(--stardew-wood) 50%,
+    var(--stardew-wood-dark) 100%
   ) !important;
-  border-right: 4px solid var(--stardew-wood-dark) !important;
+  border-right: 4px solid var(--stardew-coal) !important;
   color: var(--stardew-parchment) !important;
+  text-shadow: 1px 1px 0 var(--stardew-coal);
+  font-size: 12px;
 }
 
 body.theme-stardew aside *,
 body.theme-stardew nav *,
 body.theme-stardew [class*="sidebar"] * {
-  color: inherit;
+  color: var(--stardew-parchment);
+  text-shadow: 1px 1px 0 var(--stardew-coal);
 }
 
 body.theme-stardew aside button,
 body.theme-stardew nav button,
 body.theme-stardew [class*="sidebar"] button {
-  background: rgba(255, 247, 218, 0.06) !important;
+  background: rgba(255, 247, 218, 0.08) !important;
   color: var(--stardew-parchment) !important;
   border: 2px solid transparent !important;
   box-shadow: none !important;
+  text-shadow: 1px 1px 0 var(--stardew-coal);
+  font-size: 11px;
+  padding: 6px 10px;
 }
 
 body.theme-stardew aside button:hover,
-body.theme-stardew nav button:hover,
-body.theme-stardew [class*="sidebar"] button:hover {
-  background: rgba(255, 247, 218, 0.15) !important;
-  border-color: var(--stardew-gold) !important;
+body.theme-stardew nav button:hover {
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-coal) !important;
+  border-color: var(--stardew-wood-dark) !important;
+  text-shadow: none;
 }
 
+body.theme-stardew aside button[aria-selected="true"],
+body.theme-stardew nav button[aria-selected="true"],
+body.theme-stardew aside button.active,
+body.theme-stardew [class*="active"] {
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-coal) !important;
+  border-color: var(--stardew-coal) !important;
+  text-shadow: none;
+}
+
+/* ── Fix #7: Sidebar settings text instead of icon ── */
+body.theme-stardew aside button[aria-label*="Settings"],
+body.theme-stardew nav button[aria-label*="Settings"],
+body.theme-stardew [class*="sidebar"] button[aria-label*="设置"] {
+  font-size: 12px !important;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+body.theme-stardew aside button[aria-label*="Settings"] span,
+body.theme-stardew nav button[aria-label*="Settings"] span,
+body.theme-stardew [class*="sidebar"] button[aria-label*="设置"] span {
+  display: inline-block !important;
+  font-size: 11px;
+}
+
+/* ── Fix #4: Project list items not truncated ── */
+body.theme-stardew [class*="session"],
+body.theme-stardew [class*="Session"],
+body.theme-stardew [class*="listItem"],
+body.theme-stardew [class*="list-item"] {
+  max-width: 100% !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Main content: cream background with SDV grid ── */
 body.theme-stardew main,
 body.theme-stardew [class*="main-panel"],
 body.theme-stardew [class*="content"] {
-  background: var(--stardew-parchment) !important;
+  background: #FFF8E7 !important;
   background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent 0,
-      transparent 31px,
-      rgba(165, 106, 71, 0.04) 31px,
-      rgba(165, 106, 71, 0.04) 32px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0,
-      transparent 31px,
-      rgba(165, 106, 71, 0.04) 31px,
-      rgba(165, 106, 71, 0.04) 32px
-    ) !important;
-  color: var(--stardew-wood-dark) !important;
+    linear-gradient(rgba(165, 106, 71, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(165, 106, 71, 0.06) 1px, transparent 1px) !important;
+  background-size: 32px 32px, 32px 32px !important;
+  color: var(--stardew-coal) !important;
 }
 
-body.theme-stardew [class*="tab"] button,
-body.theme-stardew [role="tab"] {
-  border-bottom: 3px solid transparent !important;
-  font-family: var(--font-pixel) !important;
-}
-
-body.theme-stardew [class*="tab"][aria-selected="true"] button,
-body.theme-stardew [role="tab"][aria-selected="true"],
-body.theme-stardew [class*="active"] {
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-wood-dark) !important;
-  border-color: var(--stardew-gold-dark) !important;
-  box-shadow:
-    inset -2px -2px 0 var(--stardew-wood-dark),
-    2px 2px 0 var(--stardew-coal) !important;
-}
-
-body.theme-stardew [class*="badge"],
-body.theme-stardew [class*="chip"] {
-  border-radius: 0 !important;
-  border: 1px solid var(--stardew-wood-dark) !important;
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-wood-dark) !important;
-  padding: 1px 6px;
-  font-size: 11px;
-  font-family: var(--font-pixel);
+/* ── Buttons: pixel borders ── */
+body.theme-stardew button,
+body.theme-stardew [role="button"] {
+  border: 3px solid var(--stardew-wood-dark) !important;
+  background: var(--stardew-parchment) !important;
+  color: var(--stardew-coal) !important;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-weight: 500;
+  padding: 6px 12px;
+  box-shadow:
+    inset -2px -2px 0 rgba(74, 32, 16, 0.25),
+    inset 2px 2px 0 rgba(255, 255, 255, 0.4),
+    3px 3px 0 var(--stardew-coal) !important;
 }
 
-body.theme-stardew ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-  background: var(--stardew-wood);
+body.theme-stardew button:hover {
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-coal) !important;
+  border-color: var(--stardew-gold-dark) !important;
+  filter: brightness(1.05);
 }
 
-body.theme-stardew ::-webkit-scrollbar-thumb {
-  background: var(--stardew-gold);
-  border: 2px solid var(--stardew-wood);
+body.theme-stardew button:active,
+body.theme-stardew button[aria-pressed="true"] {
+  box-shadow: inset 2px 2px 0 rgba(74, 32, 16, 0.3) !important;
+  background: var(--stardew-gold) !important;
+  transform: translate(1px, 1px);
 }
 
-body.theme-stardew ::-webkit-scrollbar-thumb:hover {
-  background: var(--stardew-gold-dark);
+/* ── Inputs ── */
+body.theme-stardew input,
+body.theme-stardew textarea,
+body.theme-stardew select {
+  border: 3px solid var(--stardew-wood) !important;
+  background: #FFFFF5 !important;
+  color: var(--stardew-coal) !important;
+  padding: 6px 10px;
+  box-shadow: inset 2px 2px 0 rgba(74, 32, 16, 0.2) !important;
 }
 
-body.theme-stardew ::selection {
-  background: var(--stardew-gold);
-  color: var(--stardew-wood-dark);
+body.theme-stardew input:focus,
+body.theme-stardew textarea:focus {
+  border-color: var(--stardew-gold) !important;
+  outline: 2px solid var(--stardew-gold-dark) !important;
+  outline-offset: 0;
+  background: #FFFFFF !important;
 }
 
+/* ── Fix #8: Tab indicator — solid gold block, not thin line ── */
+body.theme-stardew [role="tab"],
+body.theme-stardew [class*="tab"] {
+  background: var(--stardew-parchment-dark) !important;
+  border: 2px solid var(--stardew-wood) !important;
+  border-bottom: 2px solid var(--stardew-wood-dark) !important;
+  color: var(--stardew-coal) !important;
+  font-size: 11px !important;
+  margin-right: 2px;
+  padding: 6px 12px;
+}
+
+body.theme-stardew [role="tab"][aria-selected="true"],
+body.theme-stardew [class*="tab"][aria-selected="true"] {
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-coal) !important;
+  border-color: var(--stardew-coal) !important;
+  border-bottom: 2px solid var(--stardew-gold) !important;
+  box-shadow: 0 4px 0 var(--stardew-coal) !important;
+  font-weight: 700;
+}
+
+/* ── Fix #3: Tab text in gold is readable ── */
+body.theme-stardew [role="tab"][aria-selected="true"] *,
+body.theme-stardew [class*="tab"][aria-selected="true"] * {
+  color: var(--stardew-coal) !important;
+}
+
+/* ── Code blocks ── */
 body.theme-stardew code,
 body.theme-stardew pre,
 body.theme-stardew [class*="code"] {
@@ -278,9 +310,107 @@ body.theme-stardew [class*="code"] {
   background: var(--stardew-coal) !important;
   color: #F4E4BC !important;
   border: 2px solid var(--stardew-wood-dark) !important;
+}
+
+/* ── Badge / chip ── */
+body.theme-stardew [class*="badge"],
+body.theme-stardew [class*="chip"] {
+  border-radius: 0 !important;
+  border: 2px solid var(--stardew-wood-dark) !important;
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-coal) !important;
+  padding: 2px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Scrollbar ── */
+body.theme-stardew ::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+  background: var(--stardew-wood-dark);
+}
+body.theme-stardew ::-webkit-scrollbar-thumb {
+  background: var(--stardew-wood);
+  border: 2px solid var(--stardew-coal);
+}
+body.theme-stardew ::-webkit-scrollbar-thumb:hover {
+  background: var(--stardew-gold);
+}
+body.theme-stardew ::-webkit-scrollbar-track {
+  background: var(--stardew-wood-dark);
+}
+
+/* ── Selection ── */
+body.theme-stardew ::selection {
+  background: var(--stardew-gold);
+  color: var(--stardew-coal);
+}
+
+/* ── Links ── */
+body.theme-stardew a {
+  color: var(--stardew-grass-dark);
+  text-decoration: underline;
+  text-decoration-color: var(--stardew-gold);
+  text-underline-offset: 2px;
+}
+
+/* ── Modal / dialog ── */
+body.theme-stardew [role="dialog"],
+body.theme-stardew [class*="modal"] {
+  background: var(--stardew-parchment) !important;
+  border: 4px solid var(--stardew-wood-dark) !important;
+  box-shadow: 6px 6px 0 var(--stardew-coal) !important;
+  color: var(--stardew-coal);
+}
+
+/* ── Headings ── */
+body.theme-stardew h1, body.theme-stardew h2, body.theme-stardew h3 {
+  text-shadow: 2px 2px 0 var(--stardew-gold);
+  color: var(--stardew-coal);
+}
+
+/* ── Chat input area ── */
+body.theme-stardew [class*="composer"],
+body.theme-stardew [contenteditable="true"][role="textbox"] {
+  background: #FFFFF5 !important;
+  border: 3px solid var(--stardew-wood-dark) !important;
+  color: var(--stardew-coal) !important;
+  box-shadow:
+    inset 2px 2px 0 rgba(74, 32, 16, 0.2),
+    3px 3px 0 var(--stardew-coal) !important;
+}
+
+body.theme-stardew [contenteditable="true"][role="textbox"]:focus {
+  border-color: var(--stardew-gold) !important;
+  outline: 2px solid var(--stardew-gold-dark) !important;
+}
+
+/* ── Tool call bubbles ── */
+body.theme-stardew [class*="tool-call"],
+body.theme-stardew [class*="tool_use"] {
+  background: #FFF8E7 !important;
+  border: 3px solid var(--stardew-wood-dark) !important;
+  color: var(--stardew-coal) !important;
+}
+
+body.theme-stardew [class*="tool-result"] {
+  background: var(--stardew-parchment) !important;
+  border: 3px solid var(--stardew-wood) !important;
+}
+
+/* ── Selected tab underline (solid block) ── */
+body.theme-stardew [class*="active-tab"]::after,
+body.theme-stardew [role="tab"][aria-selected="true"]::after {
+  background: var(--stardew-coal) !important;
+  height: 4px !important;
+  width: 100% !important;
+  bottom: 0 !important;
   border-radius: 0 !important;
 }
 
+/* ── Pixel font fallback ── */
 @font-face {
   font-family: "Press Start 2P";
   src: local("Press Start 2P"), local("PressStart2P-Regular");

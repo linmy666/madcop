@@ -30,7 +30,7 @@ export function StardewThemeToggle() {
   return (
     <div
       role="group"
-      aria-label="Stardew Valley pixel theme"
+      aria-label="像素 Pixel theme"
       className="mb-8 flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-3"
     >
       <img
@@ -41,11 +41,11 @@ export function StardewThemeToggle() {
       />
       <div className="flex-1">
         <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
-          Stardew Valley Pixel Theme
+          像素 Pixel
         </h3>
         <p className="text-xs text-[var(--color-text-tertiary)]">
-          Hand-drawn 16-bit pixel art skin — warm parchment, brown
-          wood, green grass. Press Start 2P-style typography.
+          16-bit 像素风皮肤 — 暖羊皮纸 + 棕木 + 草地 + 金色高亮
+          （致敬复古 RPG 美术风格）。
         </p>
       </div>
       <button
