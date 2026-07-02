@@ -417,6 +417,8 @@ export const en = {
   'settings.providers.sonnetModel': 'Sonnet Model',
   'settings.providers.opusModel': 'Opus Model',
   'settings.providers.model1mSupportShort': '1M',
+  'settings.providers.activeModel': 'Active model',
+  'settings.providers.activeModelDesc': 'Used for the main chat. Other Claude slots are auto-synced.',
   'settings.providers.sameAsMain': 'Same as main',
   'settings.providers.contextSettingsTitle': 'Context and auto-compact',
   'settings.providers.contextSettingsDesc': 'Preset limits are applied automatically. Edit only when the provider changes limits or you use a custom model ID.',

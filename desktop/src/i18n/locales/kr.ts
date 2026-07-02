@@ -419,6 +419,8 @@ export const kr: Record<TranslationKey, string> = {
   'settings.providers.sonnetModel': 'Sonnet 모델',
   'settings.providers.opusModel': 'Opus 모델',
   'settings.providers.model1mSupportShort': '1M',
+  'settings.providers.activeModel': '활성 모델',
+  'settings.providers.activeModelDesc': '메인 대화용. 다른 Claude 슬롯은 자동 동기화됩니다.',
   'settings.providers.sameAsMain': '메인과 동일',
   'settings.providers.contextSettingsTitle': '컨텍스트 및 자동 압축',
   'settings.providers.contextSettingsDesc': '사전 설정 한도가 자동으로 적용됩니다. 공급자가 한도를 변경하거나 사용자 지정 모델 ID를 사용할 때만 편집하세요.',

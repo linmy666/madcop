@@ -419,6 +419,8 @@ export const jp: Record<TranslationKey, string> = {
   'settings.providers.sonnetModel': 'Sonnet モデル',
   'settings.providers.opusModel': 'Opus モデル',
   'settings.providers.model1mSupportShort': '1M',
+  'settings.providers.activeModel': '現在のモデル',
+  'settings.providers.activeModelDesc': 'メイン対話用。Claude の他のスロットは自動同期されます。',
   'settings.providers.sameAsMain': 'メインと同じ',
   'settings.providers.contextSettingsTitle': 'コンテキストと自動コンパクト',
   'settings.providers.contextSettingsDesc': 'プリセットの上限は自動的に適用されます。プロバイダーが上限を変更した場合やカスタムモデル ID を使用する場合のみ編集してください。',

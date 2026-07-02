@@ -419,6 +419,8 @@ export const zh: Record<TranslationKey, string> = {
   'settings.providers.sonnetModel': 'Sonnet 模型',
   'settings.providers.opusModel': 'Opus 模型',
   'settings.providers.model1mSupportShort': '1M',
+  'settings.providers.activeModel': '当前模型',
+  'settings.providers.activeModelDesc': '用于主对话。其他 Claude 槽位会自动同步。',
   'settings.providers.sameAsMain': '与主模型相同',
   'settings.providers.contextSettingsTitle': '上下文与自动压缩',
   'settings.providers.contextSettingsDesc': '预设会自动应用模型窗口。只有服务商调整限制，或使用自定义模型 ID 时才需要修改。',

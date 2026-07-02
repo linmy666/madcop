@@ -68,7 +68,21 @@ function officialChoices(
 function buildProviderModels(
   provider: SavedProvider,
   labels: Record<'main' | 'haiku' | 'sonnet' | 'opus', string>,
+  liveModels: ModelInfo[] = [],
 ): ModelInfo[] {
+  // v2.6.0: Use the live `/v1/models` list (auto-fetched by the backend)
+  // when available, falling back to the 4-slot map for backward compat.
+  if (liveModels.length > 0) {
+    // Filter to models belonging to this provider (providerId on the ModelInfo)
+    const own = liveModels.filter(
+      (m) => (m as any).providerId === provider.id
+              || (m as any).providerName === provider.name,
+    )
+    if (own.length > 0) {
+      return own
+    }
+    // If no live match by id, fall through to the legacy 4-slot
+  }
   // PATCHED for madcop backend: madcop's SavedProvider has a single `model`
   // field, not a `models.{main,haiku,sonnet,opus}` map. We synthesize a
   // single-entry list from that string so the UI doesn't crash.
@@ -133,7 +147,7 @@ function buildProviderChoices(
       providerId: provider.id,
       providerName: provider.name,
       isDefault: activeId === provider.id,
-      models: buildProviderModels(provider, labels),
+      models: buildProviderModels(provider, labels, availableModels),
     })
   }
 

@@ -4,6 +4,7 @@ import { useChatStore } from '../../stores/chatStore'
 import { useTabStore } from '../../stores/tabStore'
 import { useTranslation, type TranslationKey } from '../../i18n'
 import { formatTokenCount } from '../../lib/formatTokenCount'
+import { ThinkingAnimation } from './ThinkingAnimation'
 
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`
@@ -129,19 +130,29 @@ export function StreamingIndicator() {
   }
 
   return (
-    <div className="mb-2 flex w-fit items-center gap-2 rounded-full border border-[var(--color-border)]/40 bg-[var(--color-surface-container-low)] px-3 py-1">
-      <span className="text-[var(--color-brand)] animate-shimmer text-xs">✦</span>
-      <span className="text-xs font-medium text-[var(--color-text-secondary)]">{verb}...</span>
-      {elapsedSeconds > 0 && (
-        <span className="text-[10px] text-[var(--color-text-tertiary)]">
-          {formatElapsed(elapsedSeconds)}
-        </span>
+    <div className="mb-2">
+      {/* v2.6.0: when the LLM is thinking but no content has streamed yet,
+          show a hand-drawn stick-figure step animation that flips through
+          reading / thinking / searching / ready. The shimmer ✦
+          indicator remains for the brief "Working..." phrase and for
+          the first token arrival. */}
+      {streamingTokens === 0 && (
+        <ThinkingAnimation active={chatState !== 'idle'} />
       )}
-      {streamingTokens > 0 && (
-        <span className="text-[10px] text-[var(--color-text-tertiary)]">
-          · ↓ {t('common.tokens', { count: formatTokenCount(streamingTokens) })}
-        </span>
-      )}
+      <div className="flex w-fit items-center gap-2 rounded-full border border-[var(--color-border)]/40 bg-[var(--color-surface-container-low)] px-3 py-1">
+        <span className="text-[var(--color-brand)] animate-shimmer text-xs">✦</span>
+        <span className="text-xs font-medium text-[var(--color-text-secondary)]">{verb}...</span>
+        {elapsedSeconds > 0 && (
+          <span className="text-[10px] text-[var(--color-text-tertiary)]">
+            {formatElapsed(elapsedSeconds)}
+          </span>
+        )}
+        {streamingTokens > 0 && (
+          <span className="text-[10px] text-[var(--color-text-tertiary)]">
+            · ↓ {t('common.tokens', { count: formatTokenCount(streamingTokens) })}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

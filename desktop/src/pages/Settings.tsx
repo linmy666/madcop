@@ -1642,9 +1642,16 @@ function ProviderFormModal({ open, onClose, mode, provider, presets }: ProviderF
           </div>
         )}
 
-        {/* Model Mapping */}
+        {/* Model Mapping — for non-Anthropic API formats, only show ONE
+            model field (the others are auto-synced to the same value).
+            This avoids confusing the user with 4 identical slots. */}
         <div>
-          <label className="text-sm font-medium text-[var(--color-text-primary)] mb-2 block">{t('settings.providers.modelMapping')}</label>
+          <label className="text-sm font-medium text-[var(--color-text-primary)] mb-2 block">
+            {apiFormat === 'anthropic'
+              ? t('settings.providers.modelMapping')
+              : t('settings.providers.activeModel')}
+          </label>
+          {apiFormat === 'anthropic' ? (
           <div className="grid grid-cols-2 gap-2">
             {MODEL_SLOTS.map((slot) => {
               const labelKey = slot === 'main'
@@ -1678,6 +1685,29 @@ function ProviderFormModal({ open, onClose, mode, provider, presets }: ProviderF
               )
             })}
           </div>
+          ) : (
+            /* Non-Anthropic: single "主模型" field. The other 3 slots
+               are auto-synced to the same value so the proxy still works. */
+            <div className="flex flex-col gap-1">
+              <Input
+                label={t('settings.providers.mainModel')}
+                required
+                value={models.main}
+                onChange={(e) => {
+                  const v = e.target.value
+                  handleModelChange('main', v)
+                  // Auto-sync the other 3 slots to the same model
+                  handleModelChange('haiku', v)
+                  handleModelChange('sonnet', v)
+                  handleModelChange('opus', v)
+                }}
+                placeholder="Model ID"
+              />
+              <p className="text-[11px] text-[var(--color-text-tertiary)]">
+                {t('settings.providers.activeModelDesc')}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-container-low)]">
@@ -4190,14 +4220,28 @@ function PluginSettings() {
 
 // ─── About Settings ──────────────────────────────────────
 
+// MadCop Agent — author & project info.
+// v2.6.0: Author is 林芮翰 (GitHub @linmy666). B站 is the only Chinese
+// social channel; Douyin / Xiaohongshu removed by author request.
 const GITHUB_REPO = 'https://github.com/linmy666/madcop'
 const GITHUB_ISSUES = `${GITHUB_REPO}/issues`
 const GITHUB_RELEASES = `${GITHUB_REPO}/releases`
-const AUTHOR_GITHUB = 'https://github.com/NanmiCoder'
+const AUTHOR_GITHUB = 'https://github.com/linmy666'
+const AUTHOR_NAME = '林芮翰'
+const AUTHOR_HANDLE = 'linmy666'
 const SOCIAL_LINKS = [
-  { name: 'Bilibili', icon: '/icons/bilibili.svg', url: 'https://space.bilibili.com/434377496', label: '程序员阿江-Relakkes' },
-  { name: 'Douyin', icon: '/icons/douyin.svg', url: 'https://www.douyin.com/user/MS4wLjABAAAATJPY7LAlaa5X-c8uNdWkvz0jUGgpw4eeXIwu_8BhvqE', label: '程序员阿江-Relakkes' },
-  { name: 'Xiaohongshu', icon: '/icons/xiaohongshu.svg', url: 'https://www.xiaohongshu.com/user/profile/5f58bd990000000001003753', label: '程序员阿江-Relakkes' },
+  {
+    name: 'GitHub',
+    icon: '/icons/github.svg',
+    url: AUTHOR_GITHUB,
+    label: `@${AUTHOR_HANDLE}`,
+  },
+  {
+    name: 'Bilibili',
+    icon: '/icons/bilibili.svg',
+    url: 'https://space.bilibili.com/262182743',
+    label: `${AUTHOR_NAME}`,
+  },
 ] as const
 
 function isValidHttpProxyUrl(value: string) {
@@ -4560,7 +4604,7 @@ function AboutSettings() {
           className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
         >
           <img src={publicAssetPath('icons/github.svg')} alt="GitHub" className="w-4 h-4 opacity-60" />
-          <span className="text-sm text-[var(--color-text-primary)]">程序员阿江-Relakkes</span>
+          <span className="text-sm text-[var(--color-text-primary)]">林芮翰</span>
           <span className="text-xs text-[var(--color-text-tertiary)] ml-auto">GitHub</span>
         </button>
       </div>

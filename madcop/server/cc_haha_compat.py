@@ -390,7 +390,11 @@ def _create_provider(body: dict[str, Any]) -> dict[str, Any]:
     # Model can be flat (modelId) or nested (models.main)
     models_obj = body.get("models") or {}
     if isinstance(models_obj, dict):
-        model = models_obj.get("main") or models_obj.get("haiku") or ""
+        # v2.6.0: prefer a single "active model" — accept any of
+        # main/haiku/sonnet/opus but they all point to the same thing now
+        model = (models_obj.get("main") or models_obj.get("haiku")
+                 or models_obj.get("sonnet") or models_obj.get("opus")
+                 or "")
     else:
         model = ""
     model = model or body.get("modelId") or body.get("model") or body.get("default_model") or ""
@@ -428,10 +432,11 @@ def _update_provider(provider_id: str, body: dict[str, Any]) -> dict[str, Any]:
     from madcop.config import settings as settings_store
     s = settings_store.load_settings()
     base_url = body.get("baseUrl") or body.get("base_url") or ""
-    # Model can be flat (modelId) or nested (models.main)
     models_obj = body.get("models") or {}
     if isinstance(models_obj, dict):
-        model = models_obj.get("main") or models_obj.get("haiku") or ""
+        model = (models_obj.get("main") or models_obj.get("haiku")
+                 or models_obj.get("sonnet") or models_obj.get("opus")
+                 or "")
     else:
         model = ""
     model = model or body.get("modelId") or body.get("model") or ""
@@ -1868,34 +1873,58 @@ def register(app: FastAPI) -> None:
     # ================================================================= #
 
     # ---- Models (current + list) --------------------------------- #
+    # v2.6.0: Auto-fetch models from the active provider's /v1/models
+    # endpoint instead of using the hardcoded models.{main,haiku,...}
+    # mapping. The user picks a model in the UI from a live dropdown.
+
+    _MODELS_CACHE: dict[str, Any] = {}  # cache: provider_id -> {ts, models}
 
     @app.get("/api/models", include_in_schema=False)
     async def cc_models_list() -> dict[str, Any]:
-        """List models available across all configured providers."""
+        """List models available across all configured providers.
+
+        Auto-fetches from {baseUrl}/v1/models (OpenAI-compatible) and
+        returns the live model list. Falls back to whatever's in
+        settings if the fetch fails.
+        """
+        import time as _t
         try:
             settings = settings_store.load_settings()
             providers = settings.providers or []
-            models: list[dict[str, Any]] = []
+            active = settings.active_provider
+            out: list[dict[str, Any]] = []
+            now = _t.time()
             for p in providers:
                 if not getattr(p, "api_key", ""):
                     continue
-                for m in (getattr(p, "models", None) or [
-                    getattr(p, "model", None)
-                ]):
-                    if m:
-                        models.append({
-                            "id": m, "name": m, "providerId": p.id,
-                            "providerName": getattr(p, "name", p.id),
-                        })
-            # Always include the active provider's model
-            active = settings.active_provider
-            if active and active not in [p.id for p in providers]:
-                models.append({
-                    "id": "minimaxai/minimax-m2.7", "name": "MiniMax M2.7",
-                    "providerId": active, "providerName": active,
-                })
-            return {"models": models, "total": len(models)}
-        except Exception:
+                pid = getattr(p, "provider_id", "")
+                base = getattr(p, "base_url", "").rstrip("/")
+                if not base:
+                    continue
+                # Cache for 5 minutes per provider
+                cached = _MODELS_CACHE.get(pid)
+                if cached and (now - cached.get("ts", 0)) < 300:
+                    models = cached["models"]
+                else:
+                    models = await asyncio.to_thread(
+                        _fetch_provider_models, base,
+                        getattr(p, "api_key", ""))
+                    _MODELS_CACHE[pid] = {"ts": now, "models": models}
+                provider_name = getattr(p, "label", "") or pid
+                for m in models:
+                    mid = m.get("id", "")
+                    if not mid:
+                        continue
+                    out.append({
+                        "id": mid,
+                        "name": _model_display_name(mid),
+                        "providerId": pid,
+                        "providerName": provider_name,
+                    })
+            return {"models": out, "total": len(out)}
+        except Exception as e:
+            import sys as _sys
+            print(f"[cc-models-list] error: {e}", file=_sys.stderr, flush=True)
             return {"models": [], "total": 0}
 
     @app.get("/api/models/current", include_in_schema=False)
@@ -3279,7 +3308,74 @@ def _save_mcp_servers(servers: list[dict[str, Any]]) -> None:
 # ---- Force-distill skill (bypasses pattern detection) ---------- #
 # Now lives in madcop.memory.skill_distill.force_distill_skill as the
 # canonical implementation. We keep a thin wrapper here for backwards
-# compatibility with the existing cc_haha_compat imports.
+# ---- Provider test (returns ProviderTestResult shape) ---- #
+
+# ---- Auto-fetch model list ----------------------------------- #
+
+def fetch_provider_models(base_url: str, api_key: str) -> list[dict[str, Any]]:
+    """Module-level public API: fetch models from a provider's
+    /v1/models endpoint. Used by app.py's legacy list_models_cc_haha.
+    """
+    return _fetch_provider_models(base_url, api_key)
+
+
+def _fetch_provider_models(base_url: str, api_key: str) -> list[dict[str, Any]]:
+    """Fetch available models from a provider's OpenAI-compatible /v1/models.
+
+    Returns a list of {id, ...} dicts. Falls back to [] on any error.
+    Used by /api/models to auto-populate the model dropdown.
+    """
+    if not base_url or not api_key:
+        return []
+    try:
+        import requests as _req
+        url = f"{base_url.rstrip('/')}/models"
+        resp = _req.get(
+            url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=8,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            models = data.get("data", [])
+            if isinstance(models, list):
+                return models
+        return []
+    except Exception as e:
+        import sys as _sys
+        print(f"[fetch-provider-models] {base_url} error: {e}",
+              file=_sys.stderr, flush=True)
+        return []
+
+
+def _model_display_name(model_id: str) -> str:
+    """Turn 'minimaxai/minimax-m3' into a friendly display name.
+
+    - Drop the org prefix (minimaxai/ → '')
+    - Convert dashes/underscores to spaces and Title Case
+    - Keep 'M3' / 'M2.7' style version numbers readable
+    """
+    if not model_id:
+        return ""
+    s = model_id
+    # Drop "minimaxai/" and common org prefixes
+    for prefix in ("minimaxai/", "openai/", "anthropic/", "meta/",
+                   "google/", "deepseek-ai/", "mistralai/", "nvidia/"):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+    # Replace separators
+    s = s.replace("-", " ").replace("_", " ").strip()
+    # Title-case but keep all-uppercase tokens (M3, GLM, GPT)
+    out = []
+    for tok in s.split():
+        if tok.isupper() and len(tok) <= 6:
+            out.append(tok)
+        elif tok[0:1].isdigit():
+            out.append(tok)
+        else:
+            out.append(tok.capitalize())
+    return " ".join(out) or model_id
+
 
 def _force_distill_skill(topic: str, user_query: str,
                           assistant_response: str) -> str | None:

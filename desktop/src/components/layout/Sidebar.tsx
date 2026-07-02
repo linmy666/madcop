@@ -11,8 +11,8 @@ import { useChatStore } from '../../stores/chatStore'
 import { useOpenTargetStore } from '../../stores/openTargetStore'
 import { desktopUiPreferencesApi, type SidebarProjectPreferences } from '../../api/desktopUiPreferences'
 import { getDesktopHost } from '../../lib/desktopHost'
-import { publicAssetPath } from '../../lib/publicAsset'
 import { AnimationPlayer } from '../animations/AnimationPlayer'
+import { MascotAvatar } from '../common/MascotAvatar'
 
 const desktopHost = getDesktopHost()
 const isDesktopRuntime = desktopHost.isDesktop
@@ -606,7 +606,7 @@ export function Sidebar({ isMobile = false, onRequestClose }: SidebarProps) {
       >
         <div className={`flex ${expanded ? 'items-center justify-between gap-3' : 'flex-col items-center gap-2'}`}>
           <div className={`flex min-w-0 items-center ${expanded ? 'gap-2.5' : 'justify-center'}`}>
-            <img src={publicAssetPath('app-icon.png')} alt="" className="h-8 w-8 flex-shrink-0" />
+            <MascotAvatar size={32} />
             <span
               className={`sidebar-copy ${expanded ? 'sidebar-copy--visible' : 'sidebar-copy--hidden'} text-[13px] font-semibold tracking-tight text-[var(--color-text-primary)]`}
               style={{ fontFamily: 'var(--font-headline)' }}

@@ -417,31 +417,85 @@ def create_app() -> FastAPI:
     @app.get("/api/models")
     async def list_models_cc_haha() -> dict[str, Any]:
         """cc-haha React 客户端期望的 models 列表端点
-        返回 {models: [...], provider: {...}} 格式
+
+        v2.6.0: AUTO-FETCHES from each provider's /v1/models endpoint
+        and groups by provider. No more hardcoded Haiku/Sonnet/Opus
+        mapping — the user sees the live model list and picks one.
         """
         s = settings_store.load_settings()
-        public = settings_store.settings_to_public_dict(s)
-        active_id = public.get("active_provider")
-        providers = public.get("providers", [])
-        active_provider = next((p for p in providers if p.get("provider_id") == active_id), None)
-        # 转成 cc-haha ModelInfo 格式
-        models = []
-        for p in providers:
-            models.append({
-                "id": p.get("model"),
-                "name": p.get("label") or p.get("model"),
-                "description": f"{p.get('provider_id')} via {p.get('base_url')}",
-                "context": "auto",
-            })
+        # Use the raw settings object (has decrypted api_key) rather
+        # than settings_to_public_dict (which only exposes masked keys).
+        try:
+            from madcop.server.cc_haha_compat import fetch_provider_models
+        except ImportError:
+            fetch_provider_models = None  # type: ignore
+        out: list[dict[str, Any]] = []
+        for p in (s.providers or []):
+            pid = getattr(p, "provider_id", "")
+            base = (getattr(p, "base_url", "") or "").rstrip("/")
+            api_key = getattr(p, "api_key", "") or ""
+            if not api_key.startswith("nvapi-") and not api_key.startswith("sk-"):
+                # If still fernet: prefix, skip auto-fetch (key not in raw form)
+                if api_key.startswith("fernet:"):
+                    api_key = ""  # can't decrypt; skip
+            if fetch_provider_models and base and api_key:
+                # Auto-fetch live model list (5-min cache in cc_haha_compat)
+                live = fetch_provider_models(base, api_key)
+                for m in live:
+                    mid = m.get("id", "")
+                    if not mid:
+                        continue
+                    # Friendly name: drop org prefix
+                    name = mid
+                    for prefix in ("minimaxai/", "openai/", "anthropic/",
+                                   "meta/", "google/", "deepseek-ai/",
+                                   "mistralai/", "nvidia/"):
+                        if name.startswith(prefix):
+                            name = name[len(prefix):]
+                            break
+                    name = name.replace("-", " ").replace("_", " ")
+                    # Title-case but keep all-caps tokens
+                    parts = []
+                    for tok in name.split():
+                        if tok.isupper() and len(tok) <= 6:
+                            parts.append(tok)
+                        elif tok and tok[0].isdigit():
+                            parts.append(tok)
+                        else:
+                            parts.append(tok.capitalize())
+                    out.append({
+                        "id": mid,
+                        "name": " ".join(parts) or mid,
+                        "description": f"{pid} via {base}",
+                        "context": "auto",
+                        "providerId": pid,
+                        "providerName": getattr(p, "label", "") or pid,
+                    })
+            else:
+                # Fallback: just the configured model
+                mid = getattr(p, "model", "")
+                if mid:
+                    out.append({
+                        "id": mid, "name": mid,
+                        "description": f"{pid} via {base}",
+                        "context": "auto",
+                        "providerId": pid,
+                        "providerName": getattr(p, "label", "") or pid,
+                    })
+        # Pick the active provider for the "provider" field
+        active = next((p for p in (s.providers or [])
+                       if getattr(p, "provider_id", "") == s.active_provider), None)
+        if active is not None:
+            provider_field = {
+                "id": getattr(active, "provider_id", ""),
+                "name": getattr(active, "label", "") or getattr(active, "provider_id", ""),
+            }
+        else:
+            provider_field = None
         return {
-            "models": models,
-            "provider": (
-                {
-                    "id": active_provider.get("provider_id"),
-                    "name": active_provider.get("label") or active_provider.get("provider_id"),
-                }
-                if active_provider else None
-            ),
+            "models": out,
+            "provider": provider_field,
+            "total": len(out),
         }
 
     @app.get("/api/models/current")
