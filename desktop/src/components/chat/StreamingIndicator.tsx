@@ -46,6 +46,9 @@ export function StreamingIndicator() {
   const elapsedSeconds = sessionState?.elapsedSeconds ?? 0
   // chars ÷ 4 estimates output tokens for this turn, mirroring the CLI spinner.
   const streamingTokens = Math.round((sessionState?.streamingResponseChars ?? 0) / 4)
+  // v2.6.0: Track when the LLM has actually emitted its first text delta
+  // (used to decide when to hide the ThinkingAnimation).
+  const streamingText = sessionState?.streamingText ?? ''
 
   useEffect(() => {
     if (!apiRetry) return undefined
@@ -135,9 +138,14 @@ export function StreamingIndicator() {
           show a hand-drawn stick-figure step animation that flips through
           reading / thinking / searching / ready. The shimmer ✦
           indicator remains for the brief "Working..." phrase and for
-          the first token arrival. */}
-      {streamingTokens === 0 && (
-        <ThinkingAnimation active={chatState !== 'idle'} />
+          the first token arrival.
+
+          We keep the animation visible until the FIRST text delta lands
+          (streamingText.length > 0) — not based on token count, since
+          fast models like MiniMax M2.7 stream 50+ tokens in the first
+          delta, making token-count-based logic too eager. */}
+      {!streamingText && (chatState === 'thinking' || chatState === 'tool_executing' || chatState === 'compacting') && (
+        <ThinkingAnimation active={true} />
       )}
       <div className="flex w-fit items-center gap-2 rounded-full border border-[var(--color-border)]/40 bg-[var(--color-surface-container-low)] px-3 py-1">
         <span className="text-[var(--color-brand)] animate-shimmer text-xs">✦</span>
