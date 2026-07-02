@@ -20,7 +20,7 @@ import { FileSearchMenu, type FileSearchMenuHandle } from '../components/chat/Fi
 import { LocalSlashCommandPanel, type LocalSlashCommandName } from '../components/chat/LocalSlashCommandPanel'
 import { useMobileViewport } from '../hooks/useMobileViewport'
 import { isDesktopRuntime } from '../lib/desktopRuntime'
-import { AnimationPlayer } from '../components/animations/AnimationPlayer'
+import { MadCopLoader } from '../components/common/MadCopLoader'
 import {
   filesToComposerAttachments,
   selectNativeFileAttachments,
@@ -569,21 +569,13 @@ export function EmptySession() {
         <div className={`flex flex-col items-center text-center ${
           isMobileComposer ? 'max-w-[300px]' : 'max-w-md'
         }`}>
-          {/* Animated clover (idle, "ready" state) — replaced with a
-              regular three-dots spinner while the user is Actioning. */}
-          {isSubmitting ? (
-            <AnimationPlayer
-              key="spinner"
-              name="spinner"
-              className={isMobileComposer ? 'mb-4 h-20 w-20' : 'mb-6 h-32 w-32'}
-            />
-          ) : (
-            <AnimationPlayer
-              key="clover"
-              name="clover"
-              className={isMobileComposer ? 'mb-4 h-20 w-20' : 'mb-6 h-32 w-32'}
-            />
-          )}
+          {/* v2.6.0: MadCopLoader (inline SVG) replaces abstract clover.mp4.
+              Reads 'isSubmitting' to swap between ready/working states. */}
+          <MadCopLoader
+            state={isSubmitting ? 'working' : 'ready'}
+            size={isMobileComposer ? 80 : 128}
+            className={isMobileComposer ? 'mb-4' : 'mb-6'}
+          />
           <h1
             className={`mb-2 font-extrabold tracking-tight text-[var(--color-text-primary)] ${
               isMobileComposer ? 'text-2xl' : 'text-3xl'

@@ -1384,13 +1384,26 @@ def create_app() -> FastAPI:
                     "blockType": "text",
                 })
                 # 3) Run the LLM call in a thread (non-blocking).
+                # v2.6.0: pass tool schemas so the LLM can call web_search /
+                # web_fetch / get_weather / etc. (registry has 6+ tools).
+                # Some models (e.g. minimax-m3) reject parallel tool calls
+                # with 'single tool-calls at once!' — handled by passing
+                # parallel_tool_calls=False in the tool defs.
                 try:
                     client = _get_client()
+                    registry = default_registry(store=get_memory_store())
+                    tool_schemas = registry.openai_schemas()
+                    # Annotate each tool with parallel_tool_calls: False
+                    # so the model only emits ONE call per request.
+                    for ts in (tool_schemas or []):
+                        if "function" in ts:
+                            ts["function"]["parallel_tool_calls"] = False
                     resp = await asyncio.to_thread(
                         client.chat,
                         full_messages,
                         model=model,
                         temperature=temperature,
+                        tools=tool_schemas or None,
                     )
                     content = resp.content or ""
                     # 4) content_delta: ship the whole text in one chunk
@@ -1399,6 +1412,132 @@ def create_app() -> FastAPI:
                             "type": "content_delta",
                             "text": content,
                         })
+                    # ---- Tool-call loop: execute any requested tools, then
+                    #      do a second LLM call with the tool results.
+                    # ----
+                    if resp.tool_calls:
+                        # Emit a content_block_end so the UI knows the
+                        # first text block is done and tool_use is coming.
+                        # The frontend treats tool calls as separate blocks.
+                        # Append the assistant's tool-call message so the
+                        # API accepts the following tool messages.
+                        from madcop.llm import Message as _Msg
+                        full_messages.append(_Msg(
+                            role="assistant",
+                            content=content or "",
+                            tool_calls=resp.tool_calls,
+                        ))
+                        for call in resp.tool_calls:
+                            args = call.arguments or {}
+                            # Pretty name mapping for the UI
+                            tool_label = {
+                                "web_search": "🔍 上网搜索",
+                                "web_fetch": "🌐 抓取网页",
+                                "get_weather": "🌤 查询天气",
+                                "bash": "💻 执行命令",
+                                "read_file": "📄 读取文件",
+                                "write_file": "✏️ 写入文件",
+                            }.get(call.name, f"🔧 {call.name}")
+                            await ws.send_json({
+                                "type": "tool_use_complete",
+                                "toolName": call.name,
+                                "toolUseId": call.id or "",
+                                "input": args,
+                                "label": tool_label,
+                            })
+                            try:
+                                result = await asyncio.to_thread(
+                                    registry.dispatch, call)
+                                result_str = result.to_message_content()
+                            except Exception as exc:
+                                result_str = f"Tool error: {exc}"
+                            await ws.send_json({
+                                "type": "tool_result",
+                                "toolUseId": call.id or "",
+                                "name": call.name,
+                                "content": result_str,
+                                "isError": False,
+                            })
+                            full_messages.append(_Msg(
+                                role="tool",
+                                content=result_str,
+                                name=call.name,
+                                tool_call_id=call.id,
+                            ))
+                        # ---- Loop: do a 2nd LLM call, then a 3rd if it
+                        #      produced more tool calls, etc. We cap at 3
+                        #      rounds to avoid infinite loops. Each round
+                        #      is one tool call (parallel_tool_calls=False).
+                        # ----
+                        for _round in range(3):
+                            await ws.send_json({
+                                "type": "status", "state": "thinking",
+                                "verb": "Composing",
+                            })
+                            resp2 = await asyncio.to_thread(
+                                client.chat,
+                                full_messages,
+                                model=model,
+                                temperature=temperature,
+                                tools=tool_schemas or None,
+                            )
+                            content2 = resp2.content or ""
+                            if content2:
+                                await ws.send_json({
+                                    "type": "content_delta",
+                                    "text": content2,
+                                })
+                            # If the 2nd call didn't trigger more tools,
+                            # we're done.
+                            if not resp2.tool_calls:
+                                resp = resp2
+                                content = content2
+                                break
+                            # Otherwise, append and execute again.
+                            full_messages.append(_Msg(
+                                role="assistant",
+                                content=content2 or "",
+                                tool_calls=resp2.tool_calls,
+                            ))
+                            for call in resp2.tool_calls:
+                                args = call.arguments or {}
+                                tool_label = {
+                                    "web_search": "🔍 上网搜索",
+                                    "web_fetch": "🌐 抓取网页",
+                                    "get_weather": "🌤 查询天气",
+                                    "bash": "💻 执行命令",
+                                    "read_file": "📄 读取文件",
+                                    "write_file": "✏️ 写入文件",
+                                }.get(call.name, f"🔧 {call.name}")
+                                await ws.send_json({
+                                    "type": "tool_use_complete",
+                                    "toolName": call.name,
+                                    "toolUseId": call.id or "",
+                                    "input": args,
+                                    "label": tool_label,
+                                })
+                                try:
+                                    result = await asyncio.to_thread(
+                                        registry.dispatch, call)
+                                    result_str = result.to_message_content()
+                                except Exception as exc:
+                                    result_str = f"Tool error: {exc}"
+                                await ws.send_json({
+                                    "type": "tool_result",
+                                    "toolUseId": call.id or "",
+                                    "name": call.name,
+                                    "content": result_str,
+                                    "isError": False,
+                                })
+                                full_messages.append(_Msg(
+                                    role="tool",
+                                    content=result_str,
+                                    name=call.name,
+                                    tool_call_id=call.id,
+                                ))
+                            # Continue to next round
+                            resp = resp2
+                            content = content2
                     # ---- Save assistant message to history ---- #
                     asst_entry = {
                         "id": _uuid.uuid4().hex,

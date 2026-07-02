@@ -1,0 +1,288 @@
+
+/* v2.6.0 - Stardew Valley Pixel Theme (toggle by adding .theme-stardew
+   to <body>). Designed to be a cohesive pixel-art aesthetic that
+   covers the whole app without breaking functionality. */
+
+body.theme-stardew,
+body.theme-stardew [data-theme="light"],
+body.theme-stardew [data-theme="dark"] {
+  /* SDV-inspired palette */
+  --stardew-gold: #FFD76E;
+  --stardew-gold-dark: #B48F3A;
+  --stardew-grass: #7AB87A;
+  --stardew-grass-dark: #4F8047;
+  --stardew-wood: #A56A47;
+  --stardew-wood-dark: #5C2A20;
+  --stardew-parchment: #F4E4BC;
+  --stardew-parchment-dark: #C9B381;
+  --stardew-stone: #8A8579;
+  --stardew-rose: #E76A85;
+  --stardew-sky: #92C3E1;
+  --stardew-night: #1A2238;
+  --stardew-coal: #2C2620;
+
+  /* Override the standard surface colors with SDV equivalents */
+  --color-surface: var(--stardew-parchment);
+  --color-surface-container: #EBDDB5;
+  --color-surface-container-low: var(--stardew-parchment);
+  --color-surface-container-lowest: #FFF6DA;
+  --color-surface-container-high: #DCC496;
+  --color-surface-container-highest: #C9B381;
+  --color-surface-sidebar: #5C2A20;
+  --color-surface-hover: #D8C293;
+  --color-surface-selected: #FFE9A8;
+  --color-surface-glass: #F4E4BC;
+  --color-surface-glass-border: #5C2A20;
+  --color-surface-bright: #FFF6DA;
+
+  --color-text-primary: var(--stardew-wood-dark);
+  --color-text-secondary: #6B5028;
+  --color-text-tertiary: #8B6F3C;
+  --color-text-disabled: #B0A088;
+  --color-text-on-brand: #2A1505;
+
+  --color-border: var(--stardew-wood);
+  --color-border-focus: var(--stardew-gold-dark);
+  --color-border-separator: #C9B381;
+  --color-border-focus-soft: #B48F3A;
+
+  --color-brand: var(--stardew-grass-dark);
+  --color-brand-soft: #B6D5B3;
+  --color-brand-strong: #2E5C2A;
+  --color-primary-fixed: var(--stardew-grass);
+  --color-primary-fixed-dim: #A6C9A4;
+
+  --color-error: var(--stardew-rose);
+  --color-warning: var(--stardew-gold);
+  --color-success: var(--stardew-grass);
+  --color-info: var(--stardew-sky);
+
+  --font-pixel: "Press Start 2P", "VT323", "Courier New", monospace;
+  --font-headline: var(--font-pixel);
+  --font-body: var(--font-pixel);
+  --font-mono: var(--font-pixel);
+
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-full: 0;
+
+  --shadow-xs: none;
+  --shadow-sm: 2px 2px 0 var(--stardew-coal);
+  --shadow-md: 4px 4px 0 var(--stardew-coal);
+  --shadow-lg: 6px 6px 0 var(--stardew-coal);
+  --shadow-focus-ring: 0 0 0 2px var(--stardew-gold);
+  --shadow-overlay: 4px 4px 0 rgba(44, 38, 32, 0.6);
+
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+  image-rendering: pixelated;
+}
+
+body.theme-stardew img,
+body.theme-stardew svg {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+body.theme-stardew [class*="rounded-"],
+body.theme-stardew .card,
+body.theme-stardew button,
+body.theme-stardew input,
+body.theme-stardew textarea,
+body.theme-stardew select {
+  border-radius: 0 !important;
+  box-shadow:
+    inset -2px -2px 0 rgba(0, 0, 0, 0.12),
+    inset 2px 2px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+body.theme-stardew .shadow-sm,
+body.theme-stardew .shadow-md,
+body.theme-stardew .shadow-lg {
+  box-shadow: 4px 4px 0 var(--stardew-coal) !important;
+}
+
+body.theme-stardew .shadow-xl {
+  box-shadow: 6px 6px 0 var(--stardew-coal) !important;
+}
+
+body.theme-stardew button {
+  border: 2px solid var(--stardew-wood-dark) !important;
+  background: var(--stardew-parchment) !important;
+  color: var(--stardew-wood-dark) !important;
+  font-family: var(--font-pixel) !important;
+  text-transform: none;
+  font-weight: 500;
+  padding: 6px 12px;
+  transition: none;
+  box-shadow:
+    inset -2px -2px 0 rgba(92, 42, 32, 0.25),
+    inset 2px 2px 0 rgba(255, 255, 255, 0.4),
+    2px 2px 0 var(--stardew-coal) !important;
+}
+
+body.theme-stardew button:hover {
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-wood-dark) !important;
+  filter: brightness(1.05);
+}
+
+body.theme-stardew button:active {
+  box-shadow:
+    inset 2px 2px 0 rgba(92, 42, 32, 0.3) !important;
+  transform: translate(1px, 1px);
+}
+
+body.theme-stardew button[disabled],
+body.theme-stardew button:disabled {
+  opacity: 0.5;
+  filter: grayscale(0.4);
+  background: #D8C8A0 !important;
+}
+
+body.theme-stardew input,
+body.theme-stardew textarea,
+body.theme-stardew select {
+  border: 2px solid var(--stardew-wood) !important;
+  background: #FFFAE5 !important;
+  color: var(--stardew-wood-dark) !important;
+  font-family: var(--font-pixel) !important;
+  padding: 6px 10px;
+}
+
+body.theme-stardew input:focus,
+body.theme-stardew textarea:focus {
+  border-color: var(--stardew-gold-dark) !important;
+  outline: 2px solid var(--stardew-gold) !important;
+  outline-offset: 0;
+  background: #FFFEF0 !important;
+}
+
+body.theme-stardew aside,
+body.theme-stardew nav,
+body.theme-stardew [class*="sidebar"] {
+  background: linear-gradient(
+    180deg,
+    var(--stardew-wood-dark) 0%,
+    var(--stardew-wood) 100%
+  ) !important;
+  border-right: 4px solid var(--stardew-wood-dark) !important;
+  color: var(--stardew-parchment) !important;
+}
+
+body.theme-stardew aside *,
+body.theme-stardew nav *,
+body.theme-stardew [class*="sidebar"] * {
+  color: inherit;
+}
+
+body.theme-stardew aside button,
+body.theme-stardew nav button,
+body.theme-stardew [class*="sidebar"] button {
+  background: rgba(255, 247, 218, 0.06) !important;
+  color: var(--stardew-parchment) !important;
+  border: 2px solid transparent !important;
+  box-shadow: none !important;
+}
+
+body.theme-stardew aside button:hover,
+body.theme-stardew nav button:hover,
+body.theme-stardew [class*="sidebar"] button:hover {
+  background: rgba(255, 247, 218, 0.15) !important;
+  border-color: var(--stardew-gold) !important;
+}
+
+body.theme-stardew main,
+body.theme-stardew [class*="main-panel"],
+body.theme-stardew [class*="content"] {
+  background: var(--stardew-parchment) !important;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 31px,
+      rgba(165, 106, 71, 0.04) 31px,
+      rgba(165, 106, 71, 0.04) 32px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 31px,
+      rgba(165, 106, 71, 0.04) 31px,
+      rgba(165, 106, 71, 0.04) 32px
+    ) !important;
+  color: var(--stardew-wood-dark) !important;
+}
+
+body.theme-stardew [class*="tab"] button,
+body.theme-stardew [role="tab"] {
+  border-bottom: 3px solid transparent !important;
+  font-family: var(--font-pixel) !important;
+}
+
+body.theme-stardew [class*="tab"][aria-selected="true"] button,
+body.theme-stardew [role="tab"][aria-selected="true"],
+body.theme-stardew [class*="active"] {
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-wood-dark) !important;
+  border-color: var(--stardew-gold-dark) !important;
+  box-shadow:
+    inset -2px -2px 0 var(--stardew-wood-dark),
+    2px 2px 0 var(--stardew-coal) !important;
+}
+
+body.theme-stardew [class*="badge"],
+body.theme-stardew [class*="chip"] {
+  border-radius: 0 !important;
+  border: 1px solid var(--stardew-wood-dark) !important;
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-wood-dark) !important;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: var(--font-pixel);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+body.theme-stardew ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+  background: var(--stardew-wood);
+}
+
+body.theme-stardew ::-webkit-scrollbar-thumb {
+  background: var(--stardew-gold);
+  border: 2px solid var(--stardew-wood);
+}
+
+body.theme-stardew ::-webkit-scrollbar-thumb:hover {
+  background: var(--stardew-gold-dark);
+}
+
+body.theme-stardew ::selection {
+  background: var(--stardew-gold);
+  color: var(--stardew-wood-dark);
+}
+
+body.theme-stardew code,
+body.theme-stardew pre,
+body.theme-stardew [class*="code"] {
+  font-family: "Courier New", monospace !important;
+  background: var(--stardew-coal) !important;
+  color: #F4E4BC !important;
+  border: 2px solid var(--stardew-wood-dark) !important;
+  border-radius: 0 !important;
+}
+
+@font-face {
+  font-family: "Press Start 2P";
+  src: local("Press Start 2P"), local("PressStart2P-Regular");
+  font-display: swap;
+}

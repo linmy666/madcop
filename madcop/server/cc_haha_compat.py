@@ -3280,6 +3280,10 @@ def register(app: FastAPI) -> None:
             pass
         return {"id": call_id, "error": "not found"}
 
+    # v2.6.0: register Project Workspace endpoints (must be the LAST
+    # thing inside register() so the live `app` arg is in scope).
+    _register_project_endpoints(app)
+
 
 # ---- MCP server storage helpers ------------------------------- #
 
@@ -3730,7 +3734,138 @@ def _get_activity_stats() -> dict[str, Any]:
     }
 
 
+# ---- Project Workspace endpoints (v2.6.0) ---- #
+
+def _project_dict(p) -> dict[str, Any]:
+    """Convert a Project dataclass to a frontend-friendly dict."""
+    from madcop.server.projects import PHASE_TEMPLATE
+    return {
+        **p.to_dict(),
+        "phase_info": {
+            "phase": p.current_phase,
+            **PHASE_TEMPLATE.get(p.current_phase, {}),
+        },
+    }
+
+
+def _register_project_endpoints(app: FastAPI) -> None:
+    """Register /api/projects/* endpoints (v2.6.0 long-running tasks)."""
+    from madcop.server.projects import get_project_store, PHASE_ORDER
+
+    @app.get("/api/projects", include_in_schema=False)
+    async def cc_list_projects(status: str = Query(default="")):
+        try:
+            store = get_project_store()
+            items = store.list(status=status or None, limit=100)
+            return {"projects": [_project_dict(p) for p in items],
+                    "total": len(items)}
+        except Exception as e:
+            return {"projects": [], "total": 0, "error": str(e)}
+
+    @app.post("/api/projects", include_in_schema=False)
+    async def cc_create_project(request: Request):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        store = get_project_store()
+        proj = store.create(
+            name=body.get("name", "Untitled Project"),
+            description=body.get("description", ""),
+            metadata=body.get("metadata", {}),
+        )
+        return _project_dict(proj)
+
+    @app.get("/api/projects/{project_id}", include_in_schema=False)
+    async def cc_get_project(project_id: str):
+        store = get_project_store()
+        proj = store.get(project_id)
+        if not proj:
+            return {"error": "not found"}
+        return _project_dict(proj)
+
+    @app.delete("/api/projects/{project_id}", include_in_schema=False)
+    async def cc_delete_project(project_id: str):
+        store = get_project_store()
+        ok = store.delete(project_id)
+        return {"ok": ok}
+
+    @app.post("/api/projects/{project_id}/advance",
+               include_in_schema=False)
+    async def cc_project_advance(project_id: str, request: Request):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        store = get_project_store()
+        proj = store.advance(
+            project_id,
+            next_phase=body.get("next_phase") or None,
+            artifact_content=body.get("artifact_content"),
+        )
+        return _project_dict(proj)
+
+    @app.put("/api/projects/{project_id}/artifact/{phase}",
+              include_in_schema=False)
+    async def cc_project_set_artifact(
+        project_id: str, phase: str, request: Request,
+    ):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        store = get_project_store()
+        proj = store.set_artifact(
+            project_id, phase, body.get("content", ""),
+        )
+        return _project_dict(proj)
+
+    @app.post("/api/projects/{project_id}/archive",
+               include_in_schema=False)
+    async def cc_project_archive(project_id: str):
+        store = get_project_store()
+        proj = store.archive(project_id)
+        return _project_dict(proj)
+
+    @app.post("/api/projects/{project_id}/activate",
+               include_in_schema=False)
+    async def cc_project_activate(project_id: str):
+        store = get_project_store()
+        proj = store.activate(project_id)
+        return _project_dict(proj)
+
+    @app.post("/api/projects/{project_id}/sessions",
+               include_in_schema=False)
+    async def cc_project_attach_session(
+        project_id: str, request: Request,
+    ):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        store = get_project_store()
+        proj = store.attach_session(
+            project_id, body.get("session_id", ""),
+        )
+        return _project_dict(proj)
+
+    @app.get("/api/projects/phases", include_in_schema=False)
+    async def cc_project_phases():
+        from madcop.server.projects import PHASE_TEMPLATE
+        return {
+            "phases": [
+                {"id": pid, **info, "order": idx}
+                for idx, (pid, info) in enumerate(PHASE_TEMPLATE.items())
+            ],
+            "order": PHASE_ORDER,
+        }
+
+
 # --------------------------------------------------------------------------- #
+
+
+# --------------------------------------------------------------------------- #
+# Catch-all — 200 fallthrough for any /api/* path we haven't registered.
 # Catch-all — 200 fallthrough for any /api/* path we haven't registered.
 # Returns an empty object so destructuring in the React UI never throws.
 # Logs diagnostic events so we can debug client errors.
