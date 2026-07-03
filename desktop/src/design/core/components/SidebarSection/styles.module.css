@@ -1,0 +1,91 @@
+.SidebarSection {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  color: var(--puck-color-text);
+}
+
+.SidebarSection:last-of-type {
+  flex-grow: 1;
+}
+
+.SidebarSection-title {
+  background: var(--_puck-sidebar-section-color-bg, var(--puck-color-surface));
+  padding: var(--puck-space-4);
+  border-bottom: var(--puck-border-width-regular) solid var(--puck-color-border);
+  border-top: var(--puck-border-width-regular) solid var(--puck-color-border);
+  overflow-x: auto;
+}
+
+.SidebarSection--noBorderTop > .SidebarSection-title {
+  border-top: 0px;
+}
+
+.SidebarSection-content:last-child {
+  padding-bottom: var(--puck-space-1);
+}
+
+.SidebarSection:last-of-type .SidebarSection-content {
+  border-bottom: none;
+  flex-grow: 1;
+}
+
+.SidebarSection-breadcrumbLabel {
+  background: none;
+  border: 0;
+  border-radius: var(--puck-radius-xs);
+  color: var(--puck-color-interactive);
+  cursor: pointer;
+  font: inherit;
+  flex-shrink: 0;
+  padding: 0;
+  transition: color var(--puck-duration-fast) var(--puck-ease-exit);
+}
+
+.SidebarSection-breadcrumbLabel:focus-visible {
+  outline: var(--puck-border-width-focus) solid var(--puck-color-focus-ring);
+  outline-offset: var(--puck-border-width-focus);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .SidebarSection-breadcrumbLabel:hover {
+    color: var(--puck-color-interactive-hover);
+    transition: none;
+  }
+}
+
+.SidebarSection-breadcrumbLabel:active {
+  color: var(--puck-color-interactive-active);
+  transition: none;
+}
+
+.SidebarSection-breadcrumbs {
+  align-items: center;
+  display: flex;
+  gap: var(--puck-space-1);
+}
+
+.SidebarSection-breadcrumb {
+  align-items: center;
+  display: flex;
+  gap: var(--puck-space-1);
+}
+
+.SidebarSection-heading {
+  padding-inline-end: var(--puck-space-4);
+}
+
+.SidebarSection-loadingOverlay {
+  background: var(--puck-color-surface);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  top: 0;
+  position: absolute;
+  z-index: 1;
+  pointer-events: all;
+  box-sizing: border-box;
+  opacity: 0.8;
+}

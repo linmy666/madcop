@@ -1,0 +1,127 @@
+.ActionBar {
+  align-items: center;
+  cursor: default;
+  display: flex;
+  width: auto;
+  padding-top: var(--puck-actionbar-space-y, var(--puck-space-1));
+  padding-bottom: var(--puck-actionbar-space-y, var(--puck-space-1));
+  padding-inline-start: var(--puck-actionbar-space-x, 0);
+  padding-inline-end: var(--puck-actionbar-space-x, 0);
+  border-radius: var(--puck-actionbar-radius, var(--puck-radius-l));
+  background: var(--puck-actionbar-color-bg, var(--puck-color-surface-inverse));
+  color: var(--puck-color-text-inverse);
+  font-family: var(--puck-font-family);
+  min-height: 26px;
+}
+
+.ActionBar-label {
+  color: var(--puck-actionbar-color-text, var(--puck-color-text-inverse));
+  font-size: var(--puck-actionbar-font-size, var(--puck-font-size-xxxs));
+  opacity: var(--puck-actionbar-opacity-text, var(--puck-opacity-text-inverse));
+  font-weight: var(--puck-font-weight-medium);
+  padding-inline-start: var(--puck-space-2);
+  padding-inline-end: var(--puck-space-2);
+  margin-inline-start: var(--puck-space-1);
+  margin-inline-end: var(--puck-space-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ActionBarAction + .ActionBar-label {
+  padding-inline-start: 0;
+}
+
+.ActionBar-label + .ActionBarAction {
+  margin-inline-start: calc(var(--puck-space-1) * -1);
+}
+
+.ActionBar-group {
+  align-items: center;
+  border-inline-start: var(--puck-border-width-hairline) solid
+    var(--puck-actionbar-color-separator, var(--puck-color-border-inverse)); /* Fractional value required due to scaling */
+  display: flex;
+  height: 100%;
+  padding-inline-start: var(--puck-space-1);
+  padding-inline-end: var(--puck-space-1);
+}
+
+.ActionBar-group:first-of-type {
+  border-inline-start: 0;
+}
+
+.ActionBar-group:empty {
+  display: none;
+}
+
+.ActionBarAction {
+  background: transparent;
+  border: none;
+  color: var(--puck-actionbar-color-text, var(--puck-color-text-inverse));
+  cursor: pointer;
+  padding: var(--puck-actionbar-action-space, 6px);
+  margin-inline-start: var(--puck-space-1);
+  margin-inline-end: var(--puck-space-1);
+  border-radius: var(--puck-radius-m);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: var(--puck-actionbar-opacity-text, var(--puck-opacity-text-inverse));
+  transition: color var(--puck-duration-fast) var(--puck-ease-exit),
+    opacity var(--puck-duration-fast) var(--puck-ease-exit);
+}
+
+.ActionBarAction--disabled {
+  cursor: auto;
+  color: var(
+    --puck-actionbar-color-action-disabled,
+    var(--puck-color-text-inverse)
+  );
+  opacity: var(--puck-actionbar-opacity-action-disabled, 0.54);
+}
+
+.ActionBarAction svg {
+  max-width: none !important; /* Explicit definition to prevent some SVG style pollution */
+}
+
+.ActionBarAction:focus-visible {
+  outline: var(--puck-border-width-focus) solid var(--puck-color-focus-ring);
+  outline-offset: calc(var(--puck-border-width-focus) * -1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ActionBarAction:hover:not(.ActionBarAction--disabled) {
+    color: var(
+      --puck-actionbar-color-action-hover,
+      var(--puck-color-interactive-inverse-hover)
+    );
+    opacity: 1;
+    transition: none;
+  }
+}
+
+.ActionBarAction:active:not(.ActionBarAction--disabled),
+.ActionBarAction--active {
+  color: var(
+    --puck-actionbar-color-action-active,
+    var(--puck-color-interactive-inverse-active)
+  );
+  opacity: 1;
+  transition: none;
+}
+
+.ActionBar-group * {
+  margin: 0;
+}
+
+.ActionBar-separator {
+  background: var(
+    --puck-actionbar-color-separator,
+    var(--puck-color-border-inverse)
+  );
+  margin-inline: var(--puck-space-1);
+  width: var(
+    --puck-border-width-hairline
+  ); /* Fractional value required due to scaling */
+  height: 100%;
+}

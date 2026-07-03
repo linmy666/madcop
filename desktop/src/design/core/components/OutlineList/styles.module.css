@@ -1,0 +1,71 @@
+.OutlineList {
+  --_puck-outline-list-connector: var(--puck-color-border);
+
+  color: var(--puck-color-text);
+  font-family: var(--puck-font-family);
+  margin: 0;
+  padding-inline-start: var(--puck-space-4);
+  position: relative;
+  list-style: none;
+}
+
+.OutlineList::before {
+  background: var(--_puck-outline-list-connector);
+  position: absolute;
+  left: -1px;
+  top: 0px;
+  width: 1px;
+  height: calc(100% - 9px);
+  content: "";
+}
+
+.OutlineList:dir(rtl)::before {
+  left: unset;
+  right: -1px;
+}
+
+.OutlineListItem {
+  position: relative;
+  margin-bottom: var(--puck-space-1);
+}
+
+.OutlineListItem::before {
+  background: var(--_puck-outline-list-connector);
+  position: absolute;
+  left: -17px;
+  top: 9px;
+  width: 13px;
+  height: 1px;
+  content: "";
+}
+
+.OutlineListItem:dir(rtl)::before {
+  left: unset;
+  right: -17px;
+}
+
+.OutlineListItem--clickable {
+  cursor: pointer;
+  transition: color var(--puck-duration-fast) var(--puck-ease-exit);
+}
+
+.OutlineListItem--clickable:focus-visible {
+  outline: var(--puck-border-width-focus) solid var(--puck-color-focus-ring);
+  outline-offset: var(--puck-border-width-focus);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .OutlineListItem--clickable:hover {
+    color: var(--puck-color-interactive);
+    transition: none;
+  }
+}
+
+.OutlineListItem--clickable:active {
+  color: var(--puck-color-interactive-hover);
+  transition: none;
+}
+
+.OutlineListItem > .OutlineList {
+  margin: var(--puck-space-2) 0;
+}

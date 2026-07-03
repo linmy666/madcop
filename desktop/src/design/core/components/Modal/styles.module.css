@@ -1,0 +1,28 @@
+.Modal {
+  background: var(--puck-color-overlay-backdrop);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 1;
+  padding: 32px;
+}
+
+.Modal--isOpen {
+  display: flex;
+}
+
+.Modal-inner {
+  width: 100%;
+  max-width: 1024px;
+  border-radius: var(--puck-radius-l);
+  overflow: hidden;
+  background: var(--puck-color-surface);
+  display: flex;
+  flex-direction: column;
+  max-height: 90dvh;
+}

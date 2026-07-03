@@ -1,0 +1,66 @@
+/* Prevent user from interacting with underlying component */
+[data-puck-component] * {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-puck-component] {
+  cursor: grab;
+  pointer-events: auto !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-puck-dropzone] {
+  pointer-events: auto !important; /* Ensure DropZones still capture pointer events inside data-puck-components so elementsFromPoint triggers */
+}
+
+[data-puck-disabled] {
+  cursor: pointer;
+}
+
+/* Placeholder */
+[data-dnd-placeholder] {
+  background: var(
+    --puck-slot-component-color-placeholder,
+    var(--puck-color-azure-06)
+  ) !important;
+  border: none !important;
+  color: transparent !important;
+  opacity: 0.3 !important;
+  outline: none !important;
+  transition: none !important;
+}
+
+[data-dnd-placeholder] *,
+[data-dnd-placeholder]::after,
+[data-dnd-placeholder]::before {
+  opacity: 0 !important;
+}
+
+[data-dnd-dragging][data-puck-component] {
+  pointer-events: none !important;
+  outline: var(
+      --puck-slot-component-border-width,
+      var(--puck-border-width-focus)
+    )
+    var(--puck-slot-component-color-border-dragging, var(--puck-color-azure-09))
+    solid !important;
+  outline-offset: calc(
+    var(--puck-slot-component-border-width, var(--puck-border-width-focus)) * -1
+  ) !important;
+}
+
+/*
+ * Drag clones become position: fixed, which stops first/last child margins
+ * from collapsing with the wrapper. Reset those outer margins so the clone
+ * matches the in-flow item.
+ */
+[data-dnd-dragging][data-puck-component] > :first-child {
+  margin-top: 0 !important;
+}
+
+[data-dnd-dragging][data-puck-component] > :last-child {
+  margin-bottom: 0 !important;
+}

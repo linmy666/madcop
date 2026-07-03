@@ -1,0 +1,66 @@
+.Select {
+  position: relative;
+  z-index: 1;
+}
+
+.Select-buttonInner {
+  align-items: center;
+  display: flex;
+}
+
+.Select-buttonIcon {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.Select--standalone .Select-buttonIcon :global(.lucide) {
+  height: var(--puck-icon-size-m);
+  width: var(--puck-icon-size-m);
+}
+
+.Select--actionBar .Select-buttonIcon :global(.lucide) {
+  height: var(--puck-actionbar-action-size, var(--puck-icon-size-s));
+  width: var(--puck-actionbar-action-size, var(--puck-icon-size-s));
+}
+
+.Select-items {
+  background: var(--puck-color-surface);
+  border: var(--puck-border-width-regular) solid var(--puck-color-border);
+  border-radius: var(--puck-radius-l);
+  margin: 10px 8px;
+  margin-left: 0;
+  padding: var(--puck-space-1);
+  z-index: 2;
+  list-style: none;
+}
+
+.SelectItem {
+  background: transparent;
+  border-radius: var(--puck-radius-m);
+  border: none;
+  color: var(--puck-color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  gap: var(--puck-space-2);
+  align-items: center;
+  font-size: var(--puck-font-size-xxs);
+  margin: 0;
+  padding: var(--puck-space-2) var(--puck-space-3);
+  width: 100%;
+}
+
+.SelectItem--isSelected {
+  background: var(--puck-color-interactive-soft);
+  color: var(--puck-color-interactive);
+  font-weight: var(--puck-font-weight-medium);
+}
+
+.SelectItem--isSelected .SelectItem-icon {
+  color: var(--puck-color-interactive);
+}
+
+.SelectItem:hover {
+  background: var(--puck-color-interactive-soft);
+  color: var(--puck-color-interactive);
+}

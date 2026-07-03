@@ -1,0 +1,64 @@
+.Sidebar {
+  border-block-start: var(--puck-border-width-regular) solid
+    var(--puck-color-border);
+  position: relative;
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.Sidebar--isVisible {
+  display: flex;
+}
+
+.Sidebar--left {
+  --_puck-sidebar-section-color-bg: var(
+    --puck-sidebar-left-color-bg,
+    var(--puck-color-surface)
+  );
+  background: var(
+    --puck-sidebar-left-color-bg,
+    var(--puck-color-surface-subtle)
+  );
+  grid-area: left;
+}
+
+@media (min-width: 766px) {
+  .Sidebar--left {
+    border-block-start: 0;
+    border-inline-end: var(--puck-border-width-regular) solid
+      var(--puck-color-border);
+  }
+}
+
+.Sidebar--right {
+  --_puck-sidebar-section-color-bg: var(
+    --puck-sidebar-right-color-bg,
+    var(--puck-color-surface)
+  );
+  background: var(--puck-sidebar-right-color-bg, var(--puck-color-surface));
+  grid-area: right;
+}
+
+@media (min-width: 766px) {
+  .Sidebar--right {
+    border-block-start: 0;
+    border-inline-start: var(--puck-border-width-regular) solid
+      var(--puck-color-border);
+  }
+}
+
+.Sidebar-resizeHandle {
+  position: absolute;
+  height: 100%;
+}
+
+.Sidebar--left + .Sidebar-resizeHandle {
+  grid-area: left;
+  justify-self: end;
+}
+
+.Sidebar--right + .Sidebar-resizeHandle {
+  grid-area: right;
+  justify-self: start;
+}

@@ -1,0 +1,120 @@
+.ViewportControls {
+  position: relative;
+}
+
+.ViewportControls--fullScreen {
+  border-radius: 32px;
+  display: flex;
+  position: absolute;
+  bottom: var(--puck-space-3);
+  right: var(--puck-space-3);
+  overflow: hidden;
+}
+
+.ViewportControls-toggleButton {
+  display: none;
+}
+
+.ViewportControls--fullScreen .ViewportControls-toggleButton {
+  align-items: center;
+  background-color: var(--puck-color-surface-inverse);
+  border: var(--puck-border-width-regular) solid
+    var(--puck-color-border-inverse);
+  border-radius: var(--puck-radius-pill);
+  cursor: pointer;
+  color: var(--puck-color-text-inverse);
+  display: flex;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  z-index: 1;
+}
+
+.ViewportControls--fullScreen .ViewportControls-toggleButton:hover {
+  color: var(--puck-color-interactive-inverse-hover);
+  border: var(--puck-border-width-regular) solid
+    var(--puck-color-interactive-inverse-hover);
+}
+
+.ViewportControls-actions {
+  display: flex;
+}
+
+.ViewportControls-actionsInner {
+  display: flex;
+  box-sizing: border-box;
+  justify-content: center;
+  margin-left: auto;
+  margin-right: auto;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.ViewportControls--fullScreen .ViewportControls-actionsInner {
+  background: var(--puck-color-surface-muted);
+  border: var(--puck-border-width-regular) solid var(--puck-color-border);
+  border-radius: var(--puck-radius-pill);
+  margin-left: none;
+  margin-right: none;
+  padding-right: 42px;
+}
+
+.ViewportControls--fullScreen .ViewportControls-actionsInner {
+  transform: translateX(100%);
+  transition: transform var(--puck-duration-medium) var(--puck-ease-emphasized);
+}
+
+.ViewportControls--fullScreen.ViewportControls--isExpanded
+  .ViewportControls-actionsInner {
+  transform: translateX(42px);
+}
+
+.ViewportControls-divider {
+  border-inline-end: var(--puck-border-width-regular) solid
+    var(--puck-color-border);
+  margin-bottom: var(--puck-space-2);
+  margin-top: var(--puck-space-2);
+}
+
+.ViewportControls-zoomSelect {
+  appearance: none; /* Safari */
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' fill='%23c3c3c3'><polygon points='0,0 100,0 50,50'/></svg>")
+    no-repeat;
+  background-size: 10px;
+  color: currentColor;
+  background-position: calc(100% - 12px) calc(50% + 3px);
+  background-repeat: no-repeat;
+  border: 0;
+  font-size: var(--puck-font-size-xxxs);
+  padding: 0;
+  padding-left: var(--puck-space-2);
+  width: 96px;
+}
+
+.ViewportControls--fullScreen .ViewportControls-zoom {
+  display: none;
+}
+
+@media (min-width: 638px) {
+  .ViewportControls-zoom,
+  .ViewportControls--fullScreen .ViewportControls-zoom {
+    display: flex;
+    justify-content: center;
+  }
+}
+
+.ViewportControls-zoomSelect:dir(rtl) {
+  background-position: 12px calc(50% + 3px);
+}
+
+.ViewportButton-inner {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  height: 32px;
+  width: 32px;
+}
+
+.ViewportButton--isActive .ViewportButton-inner {
+  color: var(--puck-color-interactive);
+}

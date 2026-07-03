@@ -9,6 +9,7 @@ import { TraceList } from '../../pages/TraceList'
 import { TraceSession } from '../../pages/TraceSession'
 import { WorkbenchTab } from '../workbench/WorkbenchTab'
 import { WorkflowsListPage } from '../../pages/WorkflowsListPage'
+import { DesignPage } from '../../pages/DesignPage'
 import { previewBridge } from '../../lib/previewBridge'
 
 export function ContentRouter() {
@@ -41,6 +42,8 @@ export function ContentRouter() {
       : <EmptySession />
   } else if (activeTabType === 'workflows') {
     page = <WorkflowsListPage />
+  } else if (activeTabType === 'design') {
+    page = <DesignPage />
   } else if (activeTabType !== 'terminal') {
     page = <ActiveSession />
   }

@@ -1,0 +1,101 @@
+.PuckCanvas {
+  color: var(--puck-canvas-color-text, var(--puck-color-text));
+  background: var(--puck-canvas-color-bg, var(--puck-color-surface-muted));
+  display: flex;
+  grid-area: editor;
+  flex-direction: column;
+  padding: var(--puck-space-chrome-gutter);
+  position: relative;
+  overflow: auto;
+}
+
+@media (min-width: 1198px) {
+  .PuckCanvas {
+    padding: calc(var(--puck-space-chrome-gutter) * 1.5);
+    padding-top: calc(var(--puck-space-chrome-gutter) * 0.5);
+  }
+
+  .PuckCanvas:not(.PuckCanvas:has(.PuckCanvas-controls)) {
+    padding-top: calc(var(--puck-space-chrome-gutter) * 1.5);
+  }
+}
+
+.PuckCanvas--fullScreen {
+  padding: 0;
+  overflow: hidden;
+}
+
+@media (min-width: 1198px) {
+  .PuckCanvas--fullScreen {
+    padding: 0;
+  }
+}
+
+.PuckCanvas-inner {
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  min-width: 288px;
+  position: relative;
+  width: 100%;
+}
+
+.PuckCanvas-root {
+  background: var(--puck-canvas-preview-color-bg, var(--puck-color-surface));
+  outline: var(--puck-border-width-regular) solid var(--puck-color-border);
+  box-sizing: content-box;
+  min-width: 321px;
+  position: absolute;
+  pointer-events: none;
+  transform-origin: top;
+  top: 0;
+  bottom: 0;
+  opacity: 0;
+}
+
+@media (min-width: 1198px) {
+  .PuckCanvas-root {
+    min-width: unset;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .PuckCanvas-root {
+    transition: none !important;
+  }
+}
+
+.PuckCanvas--ready .PuckCanvas-root {
+  pointer-events: unset;
+  opacity: 1;
+}
+
+.PuckCanvas-loader {
+  align-items: center;
+  color: var(--puck-color-text-subtle);
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  transition: opacity var(--puck-duration-slow) var(--puck-ease-entrance);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.PuckCanvas--showLoader .PuckCanvas-loader {
+  opacity: 1;
+}
+
+.PuckCanvas--showLoader.PuckCanvas--ready .PuckCanvas-loader {
+  opacity: 0;
+  height: 0;
+  transition: none;
+}
+
+.PuckCanvas-controls {
+  padding-bottom: calc(var(--puck-space-chrome-gutter) * 0.5);
+}
+
+.PuckCanvas--fullScreen .PuckCanvas-controls {
+  padding-bottom: 0;
+  z-index: 1;
+}

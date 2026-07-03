@@ -12,7 +12,7 @@ export const TERMINAL_TAB_PREFIX = '__terminal__'
 export const TRACE_TAB_PREFIX = '__trace__'
 export const WORKBENCH_TAB_PREFIX = '__workbench__'
 
-export type TabType = 'session' | 'settings' | 'scheduled' | 'terminal' | 'trace' | 'traces' | 'workbench' | 'workflows'
+export type TabType = 'session' | 'settings' | 'scheduled' | 'terminal' | 'trace' | 'traces' | 'workbench' | 'workflows' | 'design'
 
 export type Tab = {
   sessionId: string
@@ -40,6 +40,7 @@ type TabStore = {
   openTerminalTab: (cwd?: string, terminalRuntimeId?: string) => string
   openWorkflowsTab: () => void
   openWorkbenchTab: (sessionId: string, title?: string) => string
+  openDesignTab: () => void
   closeTab: (sessionId: string) => void
   setActiveTab: (sessionId: string) => void
   updateTabTitle: (sessionId: string, title: string) => void
@@ -135,6 +136,21 @@ export const useTabStore = create<TabStore>((set, get) => ({
       const sessionId = '__workflows__'
       set({
         tabs: [...tabs, { sessionId, title: '工作流', type: 'workflows', status: 'idle' }],
+        activeTabId: sessionId,
+      })
+    }
+    get().saveTabs()
+  },
+
+  openDesignTab: () => {
+    const { tabs } = get()
+    const existing = tabs.find((t) => t.type === 'design')
+    if (existing) {
+      set({ activeTabId: existing.sessionId })
+    } else {
+      const sessionId = '__design__'
+      set({
+        tabs: [...tabs, { sessionId, title: '设计工具', type: 'design', status: 'idle' }],
         activeTabId: sessionId,
       })
     }

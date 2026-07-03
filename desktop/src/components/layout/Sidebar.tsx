@@ -701,6 +701,22 @@ export function Sidebar({ isMobile = false, onRequestClose }: SidebarProps) {
             工作流
           </NavItem>
         )}
+        {/* v2.8.0 — Design tool entry */}
+        {!isMobile && (
+          <NavItem
+            active={activeTabType === 'design'}
+            collapsed={!expanded}
+            label="设计工具"
+            touchFriendly={isMobile}
+            onClick={() => {
+              useTabStore.getState().openDesignTab()
+              closeMobileDrawer()
+            }}
+            icon={<DesignIcon />}
+          >
+            设计工具
+          </NavItem>
+        )}
       </div>
 
       {expanded ? (
@@ -1966,6 +1982,16 @@ function ClockIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" />
       <polyline points="12 6 12 12 16 14" />
+    </svg>
+  )
+}
+
+function DesignIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M9 21V9" />
     </svg>
   )
 }
