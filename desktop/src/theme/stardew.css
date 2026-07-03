@@ -1,420 +1,298 @@
-/* v2.6.3 — Stardew Valley Pixel Theme (REWRITTEN from scratch)
-   v2.6.2 had catastrophic selector bugs: [class*="active"] was
-   matching the entire app (everything has 'active' somewhere),
-   [class*="sidebar"] * was wiping all styles inside the sidebar,
-   [class*="titlebar"] button was hiding the GitHub icon.
-   This file uses surgical selectors only.
+/* v2.6.4 — Stardew Valley Pixel Theme (REWRITTEN, tone WAY down)
+   v2.6.3 was too saturated / clashy (1990s GeoCities look). v2.6.4 uses
+   muted, soft, harmonious colors inspired by the actual SDV in-game
+   menu screens: warm beige, soft wood, cream, faded gold.
 */
 
 body.theme-stardew,
 body.theme-stardew [data-theme="light"],
 body.theme-stardew [data-theme="dark"] {
-  /* Core SDV palette */
-  --stardew-gold: #FFD700;
-  --stardew-gold-dark: #B49000;
-  --stardew-grass: #7AC958;
-  --stardew-grass-dark: #385830;
-  --stardew-wood: #A56A47;
-  --stardew-wood-dark: #4A2010;
-  --stardew-wood-light: #C4926A;
-  --stardew-parchment: #F4E4BC;
-  --stardew-parchment-dark: #C9B381;
-  --stardew-stone: #8A8579;
-  --stardew-stone-dark: #4A4640;
-  --stardew-rose: #E76A85;
-  --stardew-sky: #8DD0E0;
-  --stardew-sky-dark: #284B63;
-  --stardew-coal: #2C2620;
-  --stardew-cream: #FFFCEC;
+  /* Core SDV palette — MUTED versions */
+  --stardew-gold: #C9A847;            /* muted honey gold, not bright yellow */
+  --stardew-gold-dark: #8C7230;
+  --stardew-grass: #6FA85B;            /* soft grass, not lime */
+  --stardew-grass-dark: #4A7340;
+  --stardew-wood: #B6906A;             /* warm light wood, not dark coffee */
+  --stardew-wood-dark: #6B4A30;
+  --stardew-wood-light: #D4B088;       /* soft cream-wood */
+  --stardew-parchment: #F2E8D0;        /* soft cream */
+  --stardew-parchment-dark: #D6C8A2;
+  --stardew-stone: #9C958A;
+  --stardew-stone-dark: #5C5448;
+  --stardew-rose: #C76A85;
+  --stardew-sky: #95BCC8;
+  --stardew-sky-dark: #4A6878;
+  --stardew-coal: #3A2F26;
+  --stardew-cream: #FAF3E0;
 
-  /* Bright sunlit UI tokens */
-  --color-surface: #FFF8E7;
-  --color-surface-container: #F4E4BC;
-  --color-surface-container-low: #FFF8E7;
-  --color-surface-container-lowest: #FFFFF5;
-  --color-surface-container-high: #EBDDB5;
-  --color-surface-container-highest: #DCC496;
-  --color-surface-sidebar: #8B5A2B;
-  --color-surface-sidebar-dark: #5C2A20;
-  --color-surface-topbar: #A56A47;
-  --color-surface-active: #7AC958;
-  --color-surface-hover: #FFE5A8;
-  --color-surface-selected: #FFD700;
-  --color-surface-glass: #F4E4BC;
-  --color-surface-glass-border: #4A2010;
-  --color-surface-bright: #FFFFFF;
+  /* Main UI tokens — soft & muted */
+  --color-surface: #FAF3E0;             /* cream background, not stark white */
+  --color-surface-container: #F0E6CC;
+  --color-surface-container-low: #FAF3E0;
+  --color-surface-container-lowest: #FDFAF0;
+  --color-surface-container-high: #E5D9B8;
+  --color-surface-container-highest: #D6C8A2;
+  --color-surface-sidebar: #B6906A;     /* warm light wood */
+  --color-surface-sidebar-dark: #6B4A30;
+  --color-surface-topbar: #C9A878;
+  --color-surface-active: #6FA85B;      /* soft grass green */
+  --color-surface-hover: #E5D9B8;
+  --color-surface-selected: #C9A847;     /* muted gold for selected */
+  --color-surface-glass: #F2E8D0;
+  --color-surface-glass-border: #6B4A30;
+  --color-surface-bright: #FDFAF0;
 
-  --color-text-primary: #2C2620;
-  --color-text-secondary: #4A2010;
-  --color-text-tertiary: #6B5028;
+  --color-text-primary: #3A2F26;
+  --color-text-secondary: #5C4A38;
+  --color-text-tertiary: #8C7860;
   --color-text-disabled: #B0A088;
-  --color-text-on-brand: #FFFFF5;
-  --color-text-inverse: #F4E4BC;
+  --color-text-on-brand: #FAF3E0;
+  --color-text-inverse: #FAF3E0;
 
-  --color-border: #5C2A20;
-  --color-border-focus: #FFD700;
-  --color-border-separator: #A56A47;
-  --color-border-focus-soft: #B49000;
+  --color-border: #8C7860;
+  --color-border-focus: #C9A847;
+  --color-border-separator: #B6906A;
+  --color-border-focus-soft: #8C7230;
 
-  --color-brand: #385830;
-  --color-brand-soft: #B6D5B3;
-  --color-brand-strong: #1F3818;
-  --color-primary-fixed: #7AC958;
+  --color-brand: #6FA85B;
+  --color-brand-soft: #B0C9A3;
+  --color-brand-strong: #4A7340;
+  --color-primary-fixed: #6FA85B;
 
-  /* v2.6.3: Wider sidebar in stardew. Override the global --sidebar-width
-     (default 280px) so the parent .sidebar-shell also widens, not just
-     the inner panel. */
-  --sidebar-width: 340px;
+  --sidebar-width: 320px;
 }
 
-/* ── SIDEBAR ── */
-
-/* Force wider sidebar in stardew. Use !important to override
-   any width set by flex layout. */
+/* ── Sidebar — soft, harmonious ── */
 body.theme-stardew aside[aria-label="Sidebar"] {
-  width: 320px !important;
-  min-width: 320px !important;
-  max-width: 320px !important;
   background: var(--stardew-wood) !important;
-  border-right: 4px solid var(--stardew-coal) !important;
   color: var(--stardew-cream) !important;
+  border-right: 2px solid var(--stardew-coal) !important;
   font-family: var(--font-body) !important;
 }
 
-/* Title region (mascot + "MadCop Agent" + GitHub + collapse) */
+/* Title region (mascot + MadCop Agent + GitHub + collapse) */
 body.theme-stardew [data-testid="sidebar-title-region"] {
   background: var(--stardew-wood-light) !important;
+  border-bottom: 2px solid var(--stardew-coal) !important;
   padding: 12px 16px !important;
-  border-bottom: 3px solid var(--stardew-coal) !important;
   min-height: 64px !important;
   display: flex !important;
   align-items: center !important;
 }
-body.theme-stardew [data-testid="sidebar-title-region"] > div {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  width: 100% !important;
-  gap: 8px !important;
-}
-/* Make the mascot avatar + "MadCop Agent" text visible */
-body.theme-stardew [data-testid="sidebar-title-region"] img {
-  display: inline-block !important;
-  width: 36px !important;
-  height: 36px !important;
-  vertical-align: middle !important;
-}
 body.theme-stardew [data-testid="sidebar-title-region"] .sidebar-copy--visible {
-  display: inline-block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  color: var(--stardew-cream) !important;
+  color: var(--stardew-coal) !important;
   font-size: 14px !important;
   font-weight: 700 !important;
   white-space: nowrap !important;
 }
 
-/* GitHub icon */
-body.theme-stardew [data-testid="sidebar-title-region"] a[title="GitHub"] {
-  background: var(--stardew-coal) !important;
-  border: 2px solid var(--stardew-gold) !important;
-  border-radius: 0 !important;
-  width: 30px !important;
-  height: 30px !important;
-  min-width: 30px !important;
-  min-height: 30px !important;
-  display: inline-flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  padding: 4px !important;
-}
-body.theme-stardew [data-testid="sidebar-title-region"] a[title="GitHub"] svg {
-  color: var(--stardew-gold) !important;
-  display: inline-block !important;
-}
-
-/* Sidebar collapse/expand toggle */
-body.theme-stardew [data-testid="sidebar-collapse-button"],
-body.theme-stardew [data-testid="sidebar-expand-button"] {
-  background: var(--stardew-coal) !important;
-  color: var(--stardew-gold) !important;
-  border: 2px solid var(--stardew-gold) !important;
-  border-radius: 0 !important;
-  display: inline-flex !important;
-  visibility: visible !important;
-}
-
-/* NavItem buttons (新建会话 / 定时任务) */
+/* NavItem buttons — soft wood */
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="新建会话"],
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="定时任务"] {
   background: var(--stardew-wood-light) !important;
-  color: var(--stardew-cream) !important;
-  border: 2px solid var(--stardew-coal) !important;
+  color: var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
-  box-shadow: 0 3px 0 var(--stardew-coal) !important;
-  font-weight: 600 !important;
-  width: 100% !important;
+  box-shadow: 1px 1px 0 var(--stardew-coal) !important;
+  font-weight: 500 !important;
   padding: 8px 12px !important;
   margin: 4px 0 !important;
-  display: flex !important;
-  visibility: visible !important;
-  text-align: left !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="新建会话"]:hover,
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="定时任务"]:hover {
-  background: var(--stardew-wood-dark) !important;
-  transform: translateY(1px) !important;
-  box-shadow: 0 2px 0 var(--stardew-coal) !important;
+  background: var(--stardew-parchment) !important;
+  color: var(--stardew-coal) !important;
 }
 
 /* Search input */
 body.theme-stardew aside[aria-label="Sidebar"] input {
   background: var(--stardew-cream) !important;
   color: var(--stardew-coal) !important;
-  border: 2px solid var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
-  font-family: var(--font-mono) !important;
-  width: 100% !important;
-  padding: 6px 10px !important;
-  min-width: 0 !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] kbd {
   background: var(--stardew-stone-dark) !important;
   color: var(--stardew-cream) !important;
   border: 1px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
-  font-family: var(--font-mono) !important;
   font-size: 10px !important;
-  padding: 1px 4px !important;
-  white-space: nowrap !important;
 }
 
-/* "项目" label — force horizontal */
+/* "项目" label — small soft chip */
 body.theme-stardew [data-testid="sidebar-projects-header"] {
   writing-mode: horizontal-tb !important;
   text-orientation: mixed !important;
-  display: block !important;
-  padding: 6px 8px !important;
-  background: var(--stardew-grass) !important;
-  border: 2px solid var(--stardew-coal) !important;
-  border-radius: 0 !important;
-  margin: 8px 0 4px 0 !important;
-  box-shadow: 0 2px 0 var(--stardew-coal) !important;
-}
-body.theme-stardew [data-testid="sidebar-projects-header"] > div:first-child {
-  color: var(--stardew-coal) !important;
-  font-weight: 700 !important;
-  font-size: 12px !important;
-  letter-spacing: 2px !important;
-  text-transform: uppercase !important;
-  white-space: nowrap !important;
-  display: inline-block !important;
-  writing-mode: horizontal-tb !important;
-}
-
-/* Project group header (MADCOP / UNKNOWN) — gold bar */
-body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Expand project"],
-body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Collapse project"] {
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-coal) !important;
-  border: 2px solid var(--stardew-coal) !important;
-  border-radius: 0 !important;
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 1px !important;
-  padding: 8px 10px !important;
-  margin: 6px 0 2px 0 !important;
-  box-shadow: 0 3px 0 var(--stardew-coal) !important;
-  width: 100% !important;
   display: flex !important;
   align-items: center !important;
-  gap: 6px !important;
-  text-align: left !important;
-}
-body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Expand project"]:hover,
-body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Collapse project"]:hover {
-  background: var(--stardew-gold-dark) !important;
-  transform: translateY(1px) !important;
-  box-shadow: 0 2px 0 var(--stardew-coal) !important;
-}
-
-/* Project title text inside the header button */
-body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="project"] > span:nth-child(2) {
-  color: var(--stardew-coal) !important;
-  font-weight: 700 !important;
-  font-size: 13px !important;
-  text-transform: uppercase !important;
-  letter-spacing: 1px !important;
-  white-space: nowrap !important;
-  overflow: visible !important;
-}
-
-/* Session list items */
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle,
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active,
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
-  background: var(--stardew-wood) !important;
+  padding: 4px 8px !important;
+  background: var(--stardew-stone-dark) !important;
   color: var(--stardew-cream) !important;
   border: 1px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
+  margin: 8px 0 4px 0 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 1px !important;
+  text-transform: uppercase !important;
+}
+body.theme-stardew [data-testid="sidebar-projects-header"] > div:first-child {
+  color: var(--stardew-cream) !important;
+  white-space: nowrap !important;
+  writing-mode: horizontal-tb !important;
+}
+
+/* Project group header (MADCOP / UNKNOWN) — soft wood chip */
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Expand project"],
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Collapse project"] {
+  background: var(--stardew-wood-light) !important;
+  color: var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-coal) !important;
+  border-radius: 0 !important;
+  font-weight: 600 !important;
   padding: 6px 8px !important;
-  margin: 1px 0 !important;
+  margin: 4px 0 2px 0 !important;
+  font-size: 12px !important;
+  text-align: left !important;
   display: flex !important;
   align-items: center !important;
   gap: 6px !important;
-  min-height: 28px !important;
   width: 100% !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Expand project"]:hover,
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Collapse project"]:hover {
+  background: var(--stardew-parchment) !important;
+}
+
+/* Session list items — soft parchment */
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
+  background: var(--stardew-cream) !important;
+  color: var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-stone) !important;
+  border-radius: 0 !important;
+  padding: 6px 8px !important;
+  margin: 1px 0 !important;
   font-size: 12px !important;
   text-align: left !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 28px !important;
+  width: 100% !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle:hover {
-  background: var(--stardew-wood-dark) !important;
-  outline: 2px solid var(--stardew-gold) !important;
-  outline-offset: -2px !important;
+  background: var(--stardew-parchment) !important;
+  border-color: var(--stardew-coal) !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active,
 body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
   background: var(--stardew-gold) !important;
   color: var(--stardew-coal) !important;
-  font-weight: 700 !important;
   border-color: var(--stardew-coal) !important;
-  box-shadow: inset 4px 0 0 var(--stardew-coal) !important;
-}
-
-/* Session title text */
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle > span > span,
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active > span > span,
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected > span > span {
-  color: inherit !important;
-  font-size: 12px !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  max-width: 180px !important;
-}
-
-/* Timestamp text — match by class on the timestamp element.
-   The Sidebar renders timestamps as a span with the time text,
-   positioned at the right side of the session row. We can't
-   target it via attribute selector (lightningcss minifier rejects
-   the escaped Tailwind class), so we use structural selector
-   targeting the last <span> in the row (which is the timestamp). */
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle,
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active,
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
-  /* Ensure the row is flex with a fixed gap so timestamps sit
-     at the right edge with room to breathe. */
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle > span,
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active > span,
-body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected > span {
-  display: flex !important;
-  align-items: center !important;
-  gap: 4px !important;
+  font-weight: 600 !important;
 }
 
 /* Settings button at bottom */
 body.theme-stardew aside[aria-label="Sidebar"] [class*="sidebar-settings-dock"] button {
-  background: var(--stardew-grass) !important;
-  color: var(--stardew-coal) !important;
-  border-top: 3px solid var(--stardew-coal) !important;
+  background: var(--stardew-stone-dark) !important;
+  color: var(--stardew-cream) !important;
+  border-top: 1px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
-  font-weight: 700 !important;
-  padding: 12px 16px !important;
-  letter-spacing: 1.5px !important;
-  text-transform: uppercase !important;
-  display: flex !important;
-  visibility: visible !important;
+  font-weight: 600 !important;
+  padding: 10px 16px !important;
+  font-size: 13px !important;
   width: 100% !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] [class*="sidebar-settings-dock"] button:hover {
-  background: var(--stardew-grass-dark) !important;
-  color: var(--stardew-cream) !important;
-}
-body.theme-stardew aside[aria-label="Sidebar"] [class*="sidebar-settings-dock"] button span {
-  color: inherit !important;
-  display: inline-block !important;
-  visibility: visible !important;
+  background: var(--stardew-coal) !important;
 }
 
-/* Hide the macOS chrome (the native traffic lights can't be CSS-hidden,
-   but the Webkit drag region is invisible, so we make the title bar
-   look like wood with a 32px "frame" at the top). */
-body.theme-stardew {
-  --title-bar-height: 32px;
+/* GitHub icon top right */
+body.theme-stardew [data-testid="sidebar-title-region"] a[title="GitHub"] {
+  background: transparent !important;
+  color: var(--stardew-coal) !important;
+  border: none !important;
+  padding: 4px 6px !important;
+  width: auto !important;
+  height: auto !important;
 }
-/* The native traffic-light area is at the top. The first child of the
-   root container must have 32px top padding to clear it. We apply this
-   to the entire app shell via a different mechanism — using CSS we
-   can't easily hit the topmost div, but the sidebar title-region
-   already has its own 32px+ padding, so it should be clear. */
+body.theme-stardew [data-testid="sidebar-title-region"] a[title="GitHub"] svg {
+  color: var(--stardew-coal) !important;
+}
 
-/* ── TOP BAR (TabBar) ── */
+/* Sidebar collapse button */
+body.theme-stardew [data-testid="sidebar-collapse-button"],
+body.theme-stardew [data-testid="sidebar-expand-button"] {
+  background: transparent !important;
+  color: var(--stardew-coal) !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+/* ── Top bar (TabBar) — soft wood plank ── */
 body.theme-stardew [data-testid="tab-bar-scroll-region"] {
   background: var(--stardew-wood) !important;
-  border-bottom: 3px solid var(--stardew-coal) !important;
+  border-bottom: 2px solid var(--stardew-coal) !important;
   min-height: 48px !important;
-  padding-left: 80px !important; /* clear macOS traffic lights */
+  padding-left: 80px !important;
 }
 
 body.theme-stardew .tab-bar-interactive {
   background: var(--stardew-parchment) !important;
   color: var(--stardew-coal) !important;
-  border: 2px solid var(--stardew-coal) !important;
-  border-bottom: 2px solid var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
   font-size: 12px !important;
-  font-weight: 600 !important;
-  padding: 8px 14px !important;
-  margin: 6px 2px !important;
+  font-weight: 500 !important;
+  padding: 6px 12px !important;
+  margin: 8px 2px !important;
   min-height: 32px !important;
+  display: flex !important;
+  align-items: center !important;
 }
 body.theme-stardew .tab-bar-interactive:hover {
-  background: var(--stardew-parchment-dark) !important;
+  background: var(--stardew-cream) !important;
 }
 body.theme-stardew .tab-bar-interactive[data-active="true"],
 body.theme-stardew .tab-bar-interactive[aria-selected="true"] {
   background: var(--stardew-gold) !important;
   color: var(--stardew-coal) !important;
   font-weight: 700 !important;
-  box-shadow: 0 -4px 0 var(--stardew-coal) inset, 0 3px 0 var(--stardew-coal) !important;
-  border-color: var(--stardew-coal) !important;
+  border: 2px solid var(--stardew-coal) !important;
+  margin: 7px 1px !important;
 }
 
-/* ── MAIN CONTENT ── */
+/* ── Main content — cream parchment ── */
 body.theme-stardew main,
 body.theme-stardew [class*="main-panel"] {
   background: var(--stardew-cream) !important;
   color: var(--stardew-coal) !important;
 }
 
-/* Generic input fields */
 body.theme-stardew input[type="text"],
 body.theme-stardew input[type="search"],
 body.theme-stardew textarea {
   background: var(--stardew-cream) !important;
   color: var(--stardew-coal) !important;
-  border: 2px solid var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
   font-family: var(--font-mono) !important;
 }
 
-/* Generic buttons */
 body.theme-stardew button {
   border-radius: 0 !important;
   font-family: var(--font-body) !important;
 }
 
-/* Code blocks */
 body.theme-stardew pre,
-body.theme-stardew code,
-body.theme-stardew [class*="code-block"] {
+body.theme-stardew code {
   background: var(--stardew-coal) !important;
-  color: var(--stardew-gold) !important;
-  border: 2px solid var(--stardew-coal) !important;
+  color: var(--stardew-cream) !important;
+  border: 1px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
   font-family: var(--font-mono) !important;
   padding: 8px 12px !important;

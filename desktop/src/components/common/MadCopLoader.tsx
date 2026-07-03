@@ -44,10 +44,10 @@ function pickMascotSrc(): string {
   // v2.6.3.2: cache-bust so Electron re-fetches the file when it changes.
   // The renderer caches `./mascot.png` aggressively; a timestamp query
   // string forces a fresh load after the user updates the file.
-  if (typeof document === 'undefined') return './mascot.png?v=2632'
+  if (typeof document === 'undefined') return './mascot.png?v=2633'
   if (document.body.classList.contains('theme-stardew'))
-    return './mascot-stardew.png?v=2632'
-  return './mascot.png?v=2632'
+    return './mascot-stardew.png?v=2633'
+  return './mascot.png?v=2633'
 }
 
 export function MadCopLoader({
