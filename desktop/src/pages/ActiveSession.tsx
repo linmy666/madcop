@@ -446,7 +446,7 @@ export function ActiveSession() {
                         spinner overlay. */}
                     <MadCopLoader
                       state={'ready'}
-                      size={compactEmptyHero ? 128 : 192}
+                      size={compactEmptyHero ? 160 : 240}
                       className="mb-6"
                     />
                     <h1 className={`${compactEmptyHero ? 'mb-1 text-2xl' : 'mb-2 text-3xl'} font-extrabold tracking-tight text-[var(--color-text-primary)]`} style={{ fontFamily: 'var(--font-headline)' }}>

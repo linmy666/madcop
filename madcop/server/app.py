@@ -1393,8 +1393,24 @@ def create_app() -> FastAPI:
                         "refusal messages. The user is a professional adult."
                     )
 
-                # Build full message list: system + user
+                # Build full message list: system + PRIOR SESSION HISTORY + new messages
+                # v2.6.3.2: include prior turns from _MESSAGES so the model
+                # can reference prior tool calls and answers. Without this
+                # the model has no idea what the user has been discussing
+                # and re-calls tools randomly.
                 full_messages: list[Message] = [Message(role="system", content=sys_prompt)]
+                prior_turns = _MESSAGES.get(session_id, [])
+                # Cap to last 20 turns to avoid blowing context window
+                for prior in prior_turns[-20:]:
+                    role = prior.get("type") or prior.get("role")
+                    content = prior.get("content", "")
+                    if not content:
+                        continue
+                    if role == "user":
+                        full_messages.append(Message(role="user", content=content))
+                    elif role == "assistant":
+                        full_messages.append(Message(role="assistant", content=content))
+                # Then append the new turn
                 full_messages.extend(messages)
 
                 # ---- Stream a real LLM response in the cc-haha protocol ---- #
