@@ -51,6 +51,15 @@ function BaseNode({
     start: '#10b981',
     llm: '#7c3aed',
     tool: '#f97316',
+    code: '#3b82f6',
+    condition: '#ef4444',
+    loop: '#8b5cf6',
+    web_search: '#06b6d4',
+    knowledge: '#ec4899',
+    http_request: '#f59e0b',
+    input: '#6366f1',
+    aggregator: '#14b8a6',
+    variable: '#84cc16',
     end: '#f59e0b',
   }
   const color = colorByType[type] || '#64748b'
@@ -101,6 +110,15 @@ const NODE_TYPE_REGISTRY: NodeTypes = {
   start: BaseNode,
   llm: BaseNode,
   tool: BaseNode,
+  code: BaseNode,
+  condition: BaseNode,
+  loop: BaseNode,
+  web_search: BaseNode,
+  knowledge: BaseNode,
+  http_request: BaseNode,
+  input: BaseNode,
+  aggregator: BaseNode,
+  variable: BaseNode,
   end: BaseNode,
 }
 
@@ -535,6 +553,75 @@ export function WorkflowEditor({
                   }}
                   rows={5}
                   placeholder='{"city": "Hangzhou"}'
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: 13,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    resize: 'vertical',
+                  }}
+                />
+              </>
+            )}
+
+            {/* Generic JSON config for any node type without a specific panel */}
+            {selectedNode.type !== 'llm' && selectedNode.type !== 'tool' && selectedNode.type !== 'start' && selectedNode.type !== 'end' && (
+              <>
+                <label style={{ display: 'block', fontSize: 12, marginBottom: 4, color: 'var(--color-text-secondary)' }}>
+                  节点标签
+                </label>
+                <input
+                  type="text"
+                  value={(selectedNode.data?.label as string) || ''}
+                  onChange={(e) => {
+                    setNodes((nds) =>
+                      nds.map((n) =>
+                        n.id === selectedNode.id
+                          ? { ...n, data: { ...n.data, label: e.target.value } }
+                          : n
+                      )
+                    )
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text-primary)',
+                    marginBottom: 12,
+                    fontSize: 13,
+                  }}
+                />
+                <label style={{ display: 'block', fontSize: 12, marginBottom: 4, color: 'var(--color-text-secondary)' }}>
+                  配置 (JSON, 支持 {'{{input}}'})
+                </label>
+                <textarea
+                  value={JSON.stringify(
+                    Object.fromEntries(
+                      Object.entries(selectedNode.data || {}).filter(([k]) => k !== 'label')
+                    ),
+                    null, 2
+                  ) || '{}'}
+                  onChange={(e) => {
+                    try {
+                      const parsed = JSON.parse(e.target.value)
+                      setNodes((nds) =>
+                        nds.map((n) =>
+                          n.id === selectedNode.id
+                            ? { ...n, data: { ...n.data, ...parsed } }
+                            : n
+                        )
+                      )
+                    } catch {
+                      // Allow typing invalid JSON
+                    }
+                  }}
+                  rows={8}
                   style={{
                     width: '100%',
                     padding: '6px 8px',

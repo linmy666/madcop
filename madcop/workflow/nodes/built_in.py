@@ -170,22 +170,28 @@ _NODE_REGISTRY: dict[str, type[NodeBase]] = {
 
 
 def get_node_class(node_type: str) -> type[NodeBase]:
-    if node_type not in _NODE_REGISTRY:
-        raise KeyError(f"Unknown node type: {node_type}. Available: {list(_NODE_REGISTRY)}")
-    return _NODE_REGISTRY[node_type]
+    # Try built-in first, then advanced
+    if node_type in _NODE_REGISTRY:
+        return _NODE_REGISTRY[node_type]
+    from .advanced import _NODE_REGISTRY as _ADV_REGISTRY
+    if node_type in _ADV_REGISTRY:
+        return _ADV_REGISTRY[node_type]
+    raise KeyError(f"Unknown node type: {node_type}")
 
 
 def list_node_types() -> list[dict[str, str]]:
     """Return metadata for all available node types (used by frontend)."""
+    from .advanced import _NODE_REGISTRY as _ADV_REGISTRY
     out = []
-    for nt, cls in _NODE_REGISTRY.items():
-        # Try to get icon / category from class attribute
-        out.append({
-            "type": nt,
-            "label": cls.label,
-            "description": cls.description,
-            "category": getattr(cls, "category", "built-in"),
-        })
+    all_registries = [_NODE_REGISTRY, _ADV_REGISTRY]
+    for reg in all_registries:
+        for nt, cls in reg.items():
+            out.append({
+                "type": nt,
+                "label": cls.label,
+                "description": cls.description,
+                "category": getattr(cls, "category", "built-in"),
+            })
     return out
 
 
