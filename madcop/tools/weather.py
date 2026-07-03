@@ -27,6 +27,47 @@ _ssl_ctx_unverified.check_hostname = False
 _ssl_ctx_unverified.verify_mode = ssl.CERT_NONE
 
 
+# Common Chinese → English city name mappings. llama-3.1-8b-instruct
+# often hallucinates Chinese city names (e.g. sends "王州" instead of
+# "杭州") — we strip the request and try both the original and the
+# pinyin name to maximize the chance of a successful API call.
+_CHINESE_CITY_MAP: dict[str, str] = {
+    "杭州": "Hangzhou",
+    "上海": "Shanghai",
+    "北京": "Beijing",
+    "广州": "Guangzhou",
+    "深圳": "Shenzhen",
+    "南京": "Nanjing",
+    "苏州": "Suzhou",
+    "成都": "Chengdu",
+    "重庆": "Chongqing",
+    "武汉": "Wuhan",
+    "西安": "Xi'an",
+    "天津": "Tianjin",
+    "长沙": "Changsha",
+    "青岛": "Qingdao",
+    "厦门": "Xiamen",
+    "宁波": "Ningbo",
+    "香港": "Hong Kong",
+    "台北": "Taipei",
+}
+
+
+def _resolve_city(city: str) -> list[str]:
+    """Return a list of city-name variants to try, in priority order.
+
+    If the input is a known Chinese city name, we try:
+      1. the original Chinese name (wttr.in accepts it)
+      2. the English/pinyin name from the lookup table
+    Otherwise we just return [city].
+    """
+    city = city.strip()
+    candidates = [city]
+    if city in _CHINESE_CITY_MAP:
+        candidates.append(_CHINESE_CITY_MAP[city])
+    return candidates
+
+
 class WeatherTool(Tool):
     """Return the current weather for a given city.
 
@@ -37,7 +78,10 @@ class WeatherTool(Tool):
     name = "get_weather"
     description = (
         "Get the current weather for a city. "
-        "Returns temperature, condition, and a short description."
+        "Returns temperature, condition, and a short description. "
+        "ALWAYS pass the city name in English (e.g. 'Hangzhou', 'Shanghai', "
+        "'New York', 'London'). Do NOT pass Chinese characters — the API "
+        "may fail to recognize them."
     )
 
     # configurable for tests
@@ -51,7 +95,11 @@ class WeatherTool(Tool):
             "properties": {
                 "city": {
                     "type": "string",
-                    "description": "City name, e.g. 'Shanghai', 'New York', 'London'",
+                    "description": (
+                        "City name in English (pinyin for Chinese cities). "
+                        "Examples: 'Hangzhou', 'Shanghai', 'Beijing', "
+                        "'New York', 'London', 'Tokyo'."
+                    ),
                 },
             },
             "required": ["city"],
@@ -68,18 +116,28 @@ class WeatherTool(Tool):
     # ------------------------------------------------------------------ #
 
     def _fetch(self, city: str) -> str:
-        """Fetch weather, preferring the JSON endpoint, falling back to text."""
-        # Try JSON format first — it gives structured data
-        try:
-            data = self._fetch_json(city)
-            return self._format_json(data)
-        except Exception:
-            pass
-        # Fallback: the one-line text format (e.g. "Shanghai: ⛅ +22°C")
-        try:
-            return self._fetch_text(city)
-        except Exception as e:  # noqa: BLE001
-            return f"ERROR: could not fetch weather for '{city}': {e}"
+        """Fetch weather, preferring the JSON endpoint, falling back to text.
+
+        Tries each candidate city name (e.g. both 杭州 and Hangzhou)
+        and returns the first successful response.
+        """
+        candidates = _resolve_city(city)
+        last_error: str = ""
+        for candidate in candidates:
+            try:
+                data = self._fetch_json(candidate)
+                return self._format_json(data)
+            except Exception as e:
+                last_error = f"json endpoint for '{candidate}': {e}"
+            try:
+                return self._fetch_text(candidate)
+            except Exception as e:  # noqa: BLE001
+                last_error = f"text endpoint for '{candidate}': {e}"
+                continue
+        return (
+            f"ERROR: could not fetch weather for '{city}' "
+            f"(tried {len(candidates)} variant(s)). Last error: {last_error}"
+        )
 
     def _fetch_json(self, city: str) -> dict[str, Any]:
         """Call wttr.in with format=j1 and return parsed JSON dict."""
