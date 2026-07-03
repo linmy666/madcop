@@ -520,7 +520,7 @@ const TabItem = forwardRef<HTMLDivElement, {
         ${isDragging ? 'z-20 cursor-grabbing' : 'cursor-grab'}
         transition-[background-color,box-shadow,opacity,transform] duration-150 ease-out
         ${isActive
-          ? 'bg-[var(--color-surface)] shadow-[inset_0_-2px_0_var(--color-brand)]'
+          ? 'bg-[var(--color-surface)] shadow-[inset_0_-4px_0_var(--color-brand)] ring-2 ring-[var(--color-brand)]/30'
           : 'bg-transparent hover:bg-[var(--color-surface-hover)]'
         }
         ${isDragging ? 'opacity-95 shadow-[0_10px_24px_rgba(0,0,0,0.18)] ring-1 ring-[var(--color-border)]' : ''}

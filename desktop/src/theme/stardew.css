@@ -31,7 +31,10 @@ body.theme-stardew [data-theme="dark"] {
   --color-surface-container-lowest: #FFFFF5;       /* near white */
   --color-surface-container-high: #EBDDB5;        /* slightly darker */
   --color-surface-container-highest: #DCC496;      /* darker parchment */
-  --color-surface-sidebar: #5C2A20;               /* dark wood (stays) */
+  --color-surface-sidebar: #8B5A2B;               /* medium wood (stardew!) */
+  --color-surface-sidebar-dark: #5C2A20;          /* dark wood for borders */
+  --color-surface-topbar: #A56A47;                /* light wood top bar */
+  --color-surface-active: #7AC958;                /* grass green for selected */
   --color-surface-hover: #FFE5A8;                 /* gold hover */
   --color-surface-selected: #FFD700;              /* gold selected */
   --color-surface-glass: #F4E4BC;
@@ -276,7 +279,8 @@ body.theme-stardew textarea:focus {
 
 /* ── Fix #8: Tab indicator — solid gold block, not thin line ── */
 body.theme-stardew [role="tab"],
-body.theme-stardew [class*="tab"] {
+body.theme-stardew [class*="tab"],
+body.theme-stardew [class*="tab-bar-interactive"] {
   background: var(--stardew-parchment-dark) !important;
   border: 2px solid var(--stardew-wood) !important;
   border-bottom: 2px solid var(--stardew-wood-dark) !important;
@@ -287,7 +291,8 @@ body.theme-stardew [class*="tab"] {
 }
 
 body.theme-stardew [role="tab"][aria-selected="true"],
-body.theme-stardew [class*="tab"][aria-selected="true"] {
+body.theme-stardew [class*="tab"][aria-selected="true"],
+body.theme-stardew .tab-bar-interactive[data-active="true"] {
   background: var(--stardew-gold) !important;
   color: var(--stardew-coal) !important;
   border-color: var(--stardew-coal) !important;
@@ -415,4 +420,25 @@ body.theme-stardew [role="tab"][aria-selected="true"]::after {
   font-family: "Press Start 2P";
   src: local("Press Start 2P"), local("PressStart2P-Regular");
   font-display: swap;
+}
+
+/* ── Top bar (TabBar) — wood plank ── */
+body.theme-stardew [data-testid="tab-bar-scroll-region"] {
+  background: var(--stardew-wood) !important;
+  border-bottom: 3px solid var(--stardew-coal) !important;
+}
+
+/* Hide the macOS traffic-light buttons in SDV (they look out of place) */
+body.theme-stardew [class*="WindowControls"] {
+  display: none !important;
+}
+
+/* mac traffic light buttons (the three red/yellow/green dots) — hide in SDV */
+body.theme-stardew .window-controls {
+  display: none !important;
+}
+body.theme-stardew [aria-label="Close window"],
+body.theme-stardew [aria-label="Minimize window"],
+body.theme-stardew [aria-label="Maximize window"] {
+  display: none !important;
 }
