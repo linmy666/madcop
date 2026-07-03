@@ -1,7 +1,9 @@
-/* v2.6.1 — Stardew Valley Pixel Theme (FINAL: all 9 issues fixed)
-   Bright, warm, pixel-perfect. No rounded corners, no smooth gradients,
-   no translucent shadows. Each pixel border is 3px solid wood/coal.
-   The palette is SDV-inspired: grass green, sky blue, wood brown, gold sun.
+/* v2.6.3 — Stardew Valley Pixel Theme (REWRITTEN from scratch)
+   v2.6.2 had catastrophic selector bugs: [class*="active"] was
+   matching the entire app (everything has 'active' somewhere),
+   [class*="sidebar"] * was wiping all styles inside the sidebar,
+   [class*="titlebar"] button was hiding the GitHub icon.
+   This file uses surgical selectors only.
 */
 
 body.theme-stardew,
@@ -14,6 +16,7 @@ body.theme-stardew [data-theme="dark"] {
   --stardew-grass-dark: #385830;
   --stardew-wood: #A56A47;
   --stardew-wood-dark: #4A2010;
+  --stardew-wood-light: #C4926A;
   --stardew-parchment: #F4E4BC;
   --stardew-parchment-dark: #C9B381;
   --stardew-stone: #8A8579;
@@ -24,632 +27,390 @@ body.theme-stardew [data-theme="dark"] {
   --stardew-coal: #2C2620;
   --stardew-cream: #FFFCEC;
 
-  /* ── Fix #9: LIGHTER overall — warm sunlit parchment, not dark coffee ── */
-  --color-surface: #FFF8E7;                       /* warm cream bg */
-  --color-surface-container: #F4E4BC;             /* parchment card */
-  --color-surface-container-low: #FFF8E7;          /* warm cream */
-  --color-surface-container-lowest: #FFFFF5;       /* near white */
-  --color-surface-container-high: #EBDDB5;        /* slightly darker */
-  --color-surface-container-highest: #DCC496;      /* darker parchment */
-  --color-surface-sidebar: #8B5A2B;               /* medium wood (stardew!) */
-  --color-surface-sidebar-dark: #5C2A20;          /* dark wood for borders */
-  --color-surface-topbar: #A56A47;                /* light wood top bar */
-  --color-surface-active: #7AC958;                /* grass green for selected */
-  --color-surface-hover: #FFE5A8;                 /* gold hover */
-  --color-surface-selected: #FFD700;              /* gold selected */
+  /* Bright sunlit UI tokens */
+  --color-surface: #FFF8E7;
+  --color-surface-container: #F4E4BC;
+  --color-surface-container-low: #FFF8E7;
+  --color-surface-container-lowest: #FFFFF5;
+  --color-surface-container-high: #EBDDB5;
+  --color-surface-container-highest: #DCC496;
+  --color-surface-sidebar: #8B5A2B;
+  --color-surface-sidebar-dark: #5C2A20;
+  --color-surface-topbar: #A56A47;
+  --color-surface-active: #7AC958;
+  --color-surface-hover: #FFE5A8;
+  --color-surface-selected: #FFD700;
   --color-surface-glass: #F4E4BC;
   --color-surface-glass-border: #4A2010;
   --color-surface-bright: #FFFFFF;
 
-  /* ── Fix #3: Text contrast — light text on dark bg, dark text on light ── */
-  --color-text-primary: #2C2620;                  /* coal on light */
-  --color-text-secondary: #4A2010;                /* dark wood */
-  --color-text-tertiary: #6B5028;                 /* brown */
+  --color-text-primary: #2C2620;
+  --color-text-secondary: #4A2010;
+  --color-text-tertiary: #6B5028;
   --color-text-disabled: #B0A088;
   --color-text-on-brand: #FFFFF5;
-  --color-text-inverse: #F4E4BC;                  /* for dark bg */
+  --color-text-inverse: #F4E4BC;
 
-  --color-border: #5C2A20;                        /* dark wood */
-  --color-border-focus: #FFD700;                  /* gold */
+  --color-border: #5C2A20;
+  --color-border-focus: #FFD700;
   --color-border-separator: #A56A47;
   --color-border-focus-soft: #B49000;
 
-  --color-brand: #385830;                         /* deep grass */
+  --color-brand: #385830;
   --color-brand-soft: #B6D5B3;
   --color-brand-strong: #1F3818;
   --color-primary-fixed: #7AC958;
-  --color-primary-fixed-dim: #A6C9A4;
-
-  --color-error: #E76A85;
-  --color-warning: #FFD700;
-  --color-success: #7AC958;
-  --color-info: #8DD0E0;
-
-  /* ── Fix #2: Wider sidebar + fix #1: hide mac traffic lights ── */
-  --sidebar-width: 300px;
-  --sidebar-rail-width: 80px;
-
-  /* No rounded corners anywhere */
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
-  --radius-2xl: 0;
-  --radius-full: 0;
-
-  /* SDV pixel shadows (sharp 4px drops) */
-  --shadow-xs: none;
-  --shadow-sm: 2px 2px 0 var(--stardew-coal);
-  --shadow-md: 4px 4px 0 var(--stardew-coal);
-  --shadow-lg: 6px 6px 0 var(--stardew-coal);
-  --shadow-focus-ring: 0 0 0 3px var(--stardew-gold);
-  --shadow-overlay: 4px 4px 0 rgba(44, 38, 32, 0.8);
-
-  font-family: "Press Start 2P", "VT323", "Courier New", monospace;
-  font-size: 13px;
-  line-height: 1.5;
-  letter-spacing: 0.02em;
-  -webkit-font-smoothing: none;
-  -moz-osx-font-smoothing: grayscale;
-  image-rendering: pixelated;
 }
 
-body.theme-stardew img,
-body.theme-stardew svg,
-body.theme-stardew video {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-}
+/* ── SIDEBAR ── */
 
-/* Force all rounded elements to be square */
-body.theme-stardew [class*="rounded-"],
-body.theme-stardew [class*="rounded-"]:hover,
-body.theme-stardew .card,
-body.theme-stardew button,
-body.theme-stardew input,
-body.theme-stardew textarea,
-body.theme-stardew select,
-body.theme-stardew [role="button"],
-body.theme-stardew [role="tab"],
-body.theme-stardew [class*="card"],
-body.theme-stardew [class*="Card"],
-body.theme-stardew [class*="panel"],
-body.theme-stardew [class*="Panel"],
-body.theme-stardew [class*="modal"],
-body.theme-stardew [role="dialog"] {
-  border-radius: 0 !important;
-}
-
-/* ── Fix #1: Hide mac traffic light dots (red/yellow/green) ── */
-body.theme-stardew [class*="traffic"],
-body.theme-stardew [class*="titlebar"],
-body.theme-stardew [class*="mac"] {
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--stardew-wood-dark) !important;
-  border: none !important;
-}
-body.theme-stardew [class*="traffic"] button,
-body.theme-stardew [class*="titlebar"] button {
-  display: none !important;
-}
-
-/* ── Fix #2: Sidebar wider + wood border ── */
-body.theme-stardew aside,
-body.theme-stardew nav,
-body.theme-stardew [class*="sidebar"] {
-  width: var(--sidebar-width) !important;
-  min-width: var(--sidebar-width) !important;
-  max-width: var(--sidebar-width) !important;
-  background: linear-gradient(
-    180deg,
-    var(--stardew-wood-dark) 0%,
-    var(--stardew-wood) 50%,
-    var(--stardew-wood-dark) 100%
-  ) !important;
-  border-right: 4px solid var(--stardew-coal) !important;
-  color: var(--stardew-parchment) !important;
-  text-shadow: 1px 1px 0 var(--stardew-coal);
-  font-size: 12px;
-}
-
-body.theme-stardew aside *,
-body.theme-stardew nav *,
-body.theme-stardew [class*="sidebar"] * {
-  color: var(--stardew-parchment);
-  text-shadow: 1px 1px 0 var(--stardew-coal);
-}
-
-body.theme-stardew aside button,
-body.theme-stardew nav button,
-body.theme-stardew [class*="sidebar"] button {
-  background: rgba(255, 247, 218, 0.08) !important;
-  color: var(--stardew-parchment) !important;
-  border: 2px solid transparent !important;
-  box-shadow: none !important;
-  text-shadow: 1px 1px 0 var(--stardew-coal);
-  font-size: 11px;
-  padding: 6px 10px;
-}
-
-body.theme-stardew aside button:hover,
-body.theme-stardew nav button:hover {
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-coal) !important;
-  border-color: var(--stardew-wood-dark) !important;
-  text-shadow: none;
-}
-
-body.theme-stardew aside button[aria-selected="true"],
-body.theme-stardew nav button[aria-selected="true"],
-body.theme-stardew aside button.active,
-body.theme-stardew [class*="active"] {
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-coal) !important;
-  border-color: var(--stardew-coal) !important;
-  text-shadow: none;
-}
-
-/* ── Fix #7: Sidebar settings text instead of icon ── */
-body.theme-stardew aside button[aria-label*="Settings"],
-body.theme-stardew nav button[aria-label*="Settings"],
-body.theme-stardew [class*="sidebar"] button[aria-label*="设置"] {
-  font-size: 12px !important;
-  letter-spacing: 0.1em;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-body.theme-stardew aside button[aria-label*="Settings"] span,
-body.theme-stardew nav button[aria-label*="Settings"] span,
-body.theme-stardew [class*="sidebar"] button[aria-label*="设置"] span {
-  display: inline-block !important;
-  font-size: 11px;
-}
-
-/* ── Fix #4: Project list items not truncated ── */
-body.theme-stardew [class*="session"],
-body.theme-stardew [class*="Session"],
-body.theme-stardew [class*="listItem"],
-body.theme-stardew [class*="list-item"] {
-  max-width: 100% !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── Main content: cream background with SDV grid ── */
-body.theme-stardew main,
-body.theme-stardew [class*="main-panel"],
-body.theme-stardew [class*="content"] {
-  background: #FFF8E7 !important;
-  background-image:
-    linear-gradient(rgba(165, 106, 71, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(165, 106, 71, 0.06) 1px, transparent 1px) !important;
-  background-size: 32px 32px, 32px 32px !important;
-  color: var(--stardew-coal) !important;
-}
-
-/* ── Buttons: pixel borders ── */
-body.theme-stardew button,
-body.theme-stardew [role="button"] {
-  border: 3px solid var(--stardew-wood-dark) !important;
-  background: var(--stardew-parchment) !important;
-  color: var(--stardew-coal) !important;
-  text-transform: uppercase;
-  font-weight: 500;
-  padding: 6px 12px;
-  box-shadow:
-    inset -2px -2px 0 rgba(74, 32, 16, 0.25),
-    inset 2px 2px 0 rgba(255, 255, 255, 0.4),
-    3px 3px 0 var(--stardew-coal) !important;
-}
-
-body.theme-stardew button:hover {
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-coal) !important;
-  border-color: var(--stardew-gold-dark) !important;
-  filter: brightness(1.05);
-}
-
-body.theme-stardew button:active,
-body.theme-stardew button[aria-pressed="true"] {
-  box-shadow: inset 2px 2px 0 rgba(74, 32, 16, 0.3) !important;
-  background: var(--stardew-gold) !important;
-  transform: translate(1px, 1px);
-}
-
-/* ── Inputs ── */
-body.theme-stardew input,
-body.theme-stardew textarea,
-body.theme-stardew select {
-  border: 3px solid var(--stardew-wood) !important;
-  background: #FFFFF5 !important;
-  color: var(--stardew-coal) !important;
-  padding: 6px 10px;
-  box-shadow: inset 2px 2px 0 rgba(74, 32, 16, 0.2) !important;
-}
-
-body.theme-stardew input:focus,
-body.theme-stardew textarea:focus {
-  border-color: var(--stardew-gold) !important;
-  outline: 2px solid var(--stardew-gold-dark) !important;
-  outline-offset: 0;
-  background: #FFFFFF !important;
-}
-
-/* ── Fix #8: Tab indicator — solid gold block, not thin line ── */
-body.theme-stardew [role="tab"],
-body.theme-stardew [class*="tab"],
-body.theme-stardew [class*="tab-bar-interactive"] {
-  background: var(--stardew-parchment-dark) !important;
-  border: 2px solid var(--stardew-wood) !important;
-  border-bottom: 2px solid var(--stardew-wood-dark) !important;
-  color: var(--stardew-coal) !important;
-  font-size: 11px !important;
-  margin-right: 2px;
-  padding: 6px 12px;
-}
-
-body.theme-stardew [role="tab"][aria-selected="true"],
-body.theme-stardew [class*="tab"][aria-selected="true"],
-body.theme-stardew .tab-bar-interactive[data-active="true"] {
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-coal) !important;
-  border-color: var(--stardew-coal) !important;
-  border-bottom: 2px solid var(--stardew-gold) !important;
-  box-shadow: 0 4px 0 var(--stardew-coal) !important;
-  font-weight: 700;
-}
-
-/* ── Fix #3: Tab text in gold is readable ── */
-body.theme-stardew [role="tab"][aria-selected="true"] *,
-body.theme-stardew [class*="tab"][aria-selected="true"] * {
-  color: var(--stardew-coal) !important;
-}
-
-/* ── Code blocks ── */
-body.theme-stardew code,
-body.theme-stardew pre,
-body.theme-stardew [class*="code"] {
-  font-family: "Courier New", monospace !important;
-  background: var(--stardew-coal) !important;
-  color: #F4E4BC !important;
-  border: 2px solid var(--stardew-wood-dark) !important;
-}
-
-/* ── Badge / chip ── */
-body.theme-stardew [class*="badge"],
-body.theme-stardew [class*="chip"] {
-  border-radius: 0 !important;
-  border: 2px solid var(--stardew-wood-dark) !important;
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-coal) !important;
-  padding: 2px 6px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* ── Scrollbar ── */
-body.theme-stardew ::-webkit-scrollbar {
-  width: 14px;
-  height: 14px;
-  background: var(--stardew-wood-dark);
-}
-body.theme-stardew ::-webkit-scrollbar-thumb {
-  background: var(--stardew-wood);
-  border: 2px solid var(--stardew-coal);
-}
-body.theme-stardew ::-webkit-scrollbar-thumb:hover {
-  background: var(--stardew-gold);
-}
-body.theme-stardew ::-webkit-scrollbar-track {
-  background: var(--stardew-wood-dark);
-}
-
-/* ── Selection ── */
-body.theme-stardew ::selection {
-  background: var(--stardew-gold);
-  color: var(--stardew-coal);
-}
-
-/* ── Links ── */
-body.theme-stardew a {
-  color: var(--stardew-grass-dark);
-  text-decoration: underline;
-  text-decoration-color: var(--stardew-gold);
-  text-underline-offset: 2px;
-}
-
-/* ── Modal / dialog ── */
-body.theme-stardew [role="dialog"],
-body.theme-stardew [class*="modal"] {
-  background: var(--stardew-parchment) !important;
-  border: 4px solid var(--stardew-wood-dark) !important;
-  box-shadow: 6px 6px 0 var(--stardew-coal) !important;
-  color: var(--stardew-coal);
-}
-
-/* ── Headings ── */
-body.theme-stardew h1, body.theme-stardew h2, body.theme-stardew h3 {
-  text-shadow: 2px 2px 0 var(--stardew-gold);
-  color: var(--stardew-coal);
-}
-
-/* ── Chat input area ── */
-body.theme-stardew [class*="composer"],
-body.theme-stardew [contenteditable="true"][role="textbox"] {
-  background: #FFFFF5 !important;
-  border: 3px solid var(--stardew-wood-dark) !important;
-  color: var(--stardew-coal) !important;
-  box-shadow:
-    inset 2px 2px 0 rgba(74, 32, 16, 0.2),
-    3px 3px 0 var(--stardew-coal) !important;
-}
-
-body.theme-stardew [contenteditable="true"][role="textbox"]:focus {
-  border-color: var(--stardew-gold) !important;
-  outline: 2px solid var(--stardew-gold-dark) !important;
-}
-
-/* ── Tool call bubbles ── */
-body.theme-stardew [class*="tool-call"],
-body.theme-stardew [class*="tool_use"] {
-  background: #FFF8E7 !important;
-  border: 3px solid var(--stardew-wood-dark) !important;
-  color: var(--stardew-coal) !important;
-}
-
-body.theme-stardew [class*="tool-result"] {
-  background: var(--stardew-parchment) !important;
-  border: 3px solid var(--stardew-wood) !important;
-}
-
-/* ── Selected tab underline (solid block) ── */
-body.theme-stardew [class*="active-tab"]::after,
-body.theme-stardew [role="tab"][aria-selected="true"]::after {
-  background: var(--stardew-coal) !important;
-  height: 4px !important;
-  width: 100% !important;
-  bottom: 0 !important;
-  border-radius: 0 !important;
-}
-
-/* ── Pixel font fallback ── */
-@font-face {
-  font-family: "Press Start 2P";
-  src: local("Press Start 2P"), local("PressStart2P-Regular");
-  font-display: swap;
-}
-
-/* ── Top bar (TabBar) — wood plank ── */
-body.theme-stardew [data-testid="tab-bar-scroll-region"] {
-  background: var(--stardew-wood) !important;
-  border-bottom: 3px solid var(--stardew-coal) !important;
-}
-
-/* Hide the macOS traffic-light buttons in SDV (they look out of place) */
-body.theme-stardew [class*="WindowControls"] {
-  display: none !important;
-}
-
-/* mac traffic light buttons (the three red/yellow/green dots) — hide in SDV */
-body.theme-stardew .window-controls {
-  display: none !important;
-}
-body.theme-stardew [aria-label="Close window"],
-body.theme-stardew [aria-label="Minimize window"],
-body.theme-stardew [aria-label="Maximize window"] {
-  display: none !important;
-}
-
-/* ─────────────────────────────────────────────────────────────
-   v2.6.2: Sidebar polish — fix all 12 issues from user feedback
-   ───────────────────────────────────────────────────────────── */
-
-/* 1. Wider sidebar in SDV so session titles don't truncate */
-body.theme-stardew .sidebar-panel {
-  min-width: 280px !important;
+/* Force wider sidebar in stardew. Use !important to override
+   any width set by flex layout. */
+body.theme-stardew aside[aria-label="Sidebar"] {
+  width: 320px !important;
+  min-width: 320px !important;
   max-width: 320px !important;
-  border-right: 3px solid var(--stardew-coal) !important;
-  box-shadow: inset -4px 0 0 var(--stardew-wood-dark) !important;
+  background: var(--stardew-wood) !important;
+  border-right: 4px solid var(--stardew-coal) !important;
+  color: var(--stardew-cream) !important;
+  font-family: var(--font-body) !important;
 }
 
-/* 2. Title row (MascotAvatar + MadCop Agent + GitHub + collapse) */
+/* Title region (mascot + "MadCop Agent" + GitHub + collapse) */
 body.theme-stardew [data-testid="sidebar-title-region"] {
-  background: var(--stardew-wood) !important;
-  border-bottom: 2px solid var(--stardew-coal) !important;
-  padding-top: 48px !important; /* room for mac traffic lights */
-  padding-bottom: 8px !important;
+  background: var(--stardew-wood-light) !important;
+  padding: 12px 16px !important;
+  border-bottom: 3px solid var(--stardew-coal) !important;
+  min-height: 64px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+body.theme-stardew [data-testid="sidebar-title-region"] > div {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  gap: 8px !important;
+}
+/* Make the mascot avatar + "MadCop Agent" text visible */
+body.theme-stardew [data-testid="sidebar-title-region"] img {
+  display: inline-block !important;
+  width: 36px !important;
+  height: 36px !important;
+  vertical-align: middle !important;
+}
+body.theme-stardew [data-testid="sidebar-title-region"] .sidebar-copy--visible {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: var(--stardew-cream) !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
 }
 
-/* 3. The weird white "pt-[44px]" placeholder — make it match wood */
-body.theme-stardew [data-desktop-drag-region="true"] {
-  background: transparent !important;
+/* GitHub icon */
+body.theme-stardew [data-testid="sidebar-title-region"] a[title="GitHub"] {
+  background: var(--stardew-coal) !important;
+  border: 2px solid var(--stardew-gold) !important;
+  border-radius: 0 !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  padding: 4px !important;
+}
+body.theme-stardew [data-testid="sidebar-title-region"] a[title="GitHub"] svg {
+  color: var(--stardew-gold) !important;
+  display: inline-block !important;
 }
 
-/* 4. NavItem (新建会话 / 定时任务) — solid wood buttons, no white pills */
-body.theme-stardew .sidebar-panel button[aria-label="新建会话"],
-body.theme-stardew .sidebar-panel button[aria-label="定时任务"],
-body.theme-stardew .sidebar-panel button[aria-label*="session"],
-body.theme-stardew .sidebar-panel button[aria-label*="任务"] {
-  background: var(--stardew-wood) !important;
+/* Sidebar collapse/expand toggle */
+body.theme-stardew [data-testid="sidebar-collapse-button"],
+body.theme-stardew [data-testid="sidebar-expand-button"] {
+  background: var(--stardew-coal) !important;
+  color: var(--stardew-gold) !important;
+  border: 2px solid var(--stardew-gold) !important;
+  border-radius: 0 !important;
+  display: inline-flex !important;
+  visibility: visible !important;
+}
+
+/* NavItem buttons (新建会话 / 定时任务) */
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="新建会话"],
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="定时任务"] {
+  background: var(--stardew-wood-light) !important;
   color: var(--stardew-cream) !important;
   border: 2px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
   box-shadow: 0 3px 0 var(--stardew-coal) !important;
   font-weight: 600 !important;
-  letter-spacing: 0.5px !important;
+  width: 100% !important;
+  padding: 8px 12px !important;
+  margin: 4px 0 !important;
+  display: flex !important;
+  visibility: visible !important;
+  text-align: left !important;
 }
-body.theme-stardew .sidebar-panel button[aria-label="新建会话"]:hover,
-body.theme-stardew .sidebar-panel button[aria-label="定时任务"]:hover {
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="新建会话"]:hover,
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="定时任务"]:hover {
   background: var(--stardew-wood-dark) !important;
   transform: translateY(1px) !important;
   box-shadow: 0 2px 0 var(--stardew-coal) !important;
 }
 
-/* 5. Search input — wooden frame, no rounded corners */
-body.theme-stardew .sidebar-panel input[type="text"],
-body.theme-stardew .sidebar-panel input[type="search"],
-body.theme-stardew .sidebar-panel [class*="search"] {
+/* Search input */
+body.theme-stardew aside[aria-label="Sidebar"] input {
+  background: var(--stardew-cream) !important;
+  color: var(--stardew-coal) !important;
+  border: 2px solid var(--stardew-coal) !important;
+  border-radius: 0 !important;
+  font-family: var(--font-mono) !important;
+  width: 100% !important;
+  padding: 6px 10px !important;
+  min-width: 0 !important;
+}
+body.theme-stardew aside[aria-label="Sidebar"] kbd {
+  background: var(--stardew-stone-dark) !important;
+  color: var(--stardew-cream) !important;
+  border: 1px solid var(--stardew-coal) !important;
+  border-radius: 0 !important;
+  font-family: var(--font-mono) !important;
+  font-size: 10px !important;
+  padding: 1px 4px !important;
+  white-space: nowrap !important;
+}
+
+/* "项目" label — force horizontal */
+body.theme-stardew [data-testid="sidebar-projects-header"] {
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+  display: block !important;
+  padding: 6px 8px !important;
+  background: var(--stardew-grass) !important;
+  border: 2px solid var(--stardew-coal) !important;
+  border-radius: 0 !important;
+  margin: 8px 0 4px 0 !important;
+  box-shadow: 0 2px 0 var(--stardew-coal) !important;
+}
+body.theme-stardew [data-testid="sidebar-projects-header"] > div:first-child {
+  color: var(--stardew-coal) !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  display: inline-block !important;
+  writing-mode: horizontal-tb !important;
+}
+
+/* Project group header (MADCOP / UNKNOWN) — gold bar */
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Expand project"],
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Collapse project"] {
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-coal) !important;
+  border: 2px solid var(--stardew-coal) !important;
+  border-radius: 0 !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 1px !important;
+  padding: 8px 10px !important;
+  margin: 6px 0 2px 0 !important;
+  box-shadow: 0 3px 0 var(--stardew-coal) !important;
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  text-align: left !important;
+}
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Expand project"]:hover,
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Collapse project"]:hover {
+  background: var(--stardew-gold-dark) !important;
+  transform: translateY(1px) !important;
+  box-shadow: 0 2px 0 var(--stardew-coal) !important;
+}
+
+/* Project title text inside the header button */
+body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="project"] > span:nth-child(2) {
+  color: var(--stardew-coal) !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 1px !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+/* Session list items */
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
+  background: var(--stardew-wood) !important;
+  color: var(--stardew-cream) !important;
+  border: 1px solid var(--stardew-coal) !important;
+  border-radius: 0 !important;
+  padding: 6px 8px !important;
+  margin: 1px 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  min-height: 28px !important;
+  width: 100% !important;
+  font-size: 12px !important;
+  text-align: left !important;
+}
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle:hover {
+  background: var(--stardew-wood-dark) !important;
+  outline: 2px solid var(--stardew-gold) !important;
+  outline-offset: -2px !important;
+}
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-coal) !important;
+  font-weight: 700 !important;
+  border-color: var(--stardew-coal) !important;
+  box-shadow: inset 4px 0 0 var(--stardew-coal) !important;
+}
+
+/* Session title text */
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle > span > span,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active > span > span,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected > span > span {
+  color: inherit !important;
+  font-size: 12px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 180px !important;
+}
+
+/* Timestamp text — match by class on the timestamp element.
+   The Sidebar renders timestamps as a span with the time text,
+   positioned at the right side of the session row. We can't
+   target it via attribute selector (lightningcss minifier rejects
+   the escaped Tailwind class), so we use structural selector
+   targeting the last <span> in the row (which is the timestamp). */
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
+  /* Ensure the row is flex with a fixed gap so timestamps sit
+     at the right edge with room to breathe. */
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle > span,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active > span,
+body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected > span {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+/* Settings button at bottom */
+body.theme-stardew aside[aria-label="Sidebar"] [class*="sidebar-settings-dock"] button {
+  background: var(--stardew-grass) !important;
+  color: var(--stardew-coal) !important;
+  border-top: 3px solid var(--stardew-coal) !important;
+  border-radius: 0 !important;
+  font-weight: 700 !important;
+  padding: 12px 16px !important;
+  letter-spacing: 1.5px !important;
+  text-transform: uppercase !important;
+  display: flex !important;
+  visibility: visible !important;
+  width: 100% !important;
+}
+body.theme-stardew aside[aria-label="Sidebar"] [class*="sidebar-settings-dock"] button:hover {
+  background: var(--stardew-grass-dark) !important;
+  color: var(--stardew-cream) !important;
+}
+body.theme-stardew aside[aria-label="Sidebar"] [class*="sidebar-settings-dock"] button span {
+  color: inherit !important;
+  display: inline-block !important;
+  visibility: visible !important;
+}
+
+/* Hide the macOS chrome (the native traffic lights can't be CSS-hidden,
+   but the Webkit drag region is invisible, so we make the title bar
+   look like wood with a 32px "frame" at the top). */
+body.theme-stardew {
+  --title-bar-height: 32px;
+}
+/* The native traffic-light area is at the top. The first child of the
+   root container must have 32px top padding to clear it. We apply this
+   to the entire app shell via a different mechanism — using CSS we
+   can't easily hit the topmost div, but the sidebar title-region
+   already has its own 32px+ padding, so it should be clear. */
+
+/* ── TOP BAR (TabBar) ── */
+body.theme-stardew [data-testid="tab-bar-scroll-region"] {
+  background: var(--stardew-wood) !important;
+  border-bottom: 3px solid var(--stardew-coal) !important;
+  min-height: 48px !important;
+  padding-left: 80px !important; /* clear macOS traffic lights */
+}
+
+body.theme-stardew .tab-bar-interactive {
+  background: var(--stardew-parchment) !important;
+  color: var(--stardew-coal) !important;
+  border: 2px solid var(--stardew-coal) !important;
+  border-bottom: 2px solid var(--stardew-coal) !important;
+  border-radius: 0 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 8px 14px !important;
+  margin: 6px 2px !important;
+  min-height: 32px !important;
+}
+body.theme-stardew .tab-bar-interactive:hover {
+  background: var(--stardew-parchment-dark) !important;
+}
+body.theme-stardew .tab-bar-interactive[data-active="true"],
+body.theme-stardew .tab-bar-interactive[aria-selected="true"] {
+  background: var(--stardew-gold) !important;
+  color: var(--stardew-coal) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 -4px 0 var(--stardew-coal) inset, 0 3px 0 var(--stardew-coal) !important;
+  border-color: var(--stardew-coal) !important;
+}
+
+/* ── MAIN CONTENT ── */
+body.theme-stardew main,
+body.theme-stardew [class*="main-panel"] {
+  background: var(--stardew-cream) !important;
+  color: var(--stardew-coal) !important;
+}
+
+/* Generic input fields */
+body.theme-stardew input[type="text"],
+body.theme-stardew input[type="search"],
+body.theme-stardew textarea {
   background: var(--stardew-cream) !important;
   color: var(--stardew-coal) !important;
   border: 2px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
   font-family: var(--font-mono) !important;
 }
-body.theme-stardew .sidebar-panel kbd {
-  background: var(--stardew-stone-dark) !important;
-  color: var(--stardew-cream) !important;
-  border: 1px solid var(--stardew-coal) !important;
-  border-radius: 0 !important;
-  font-family: var(--font-mono) !important;
-  font-size: 10px !important;
-  padding: 1px 4px !important;
-}
 
-/* 6. Vertical "项目" label — make it horizontal in stardew */
-body.theme-stardew .sidebar-panel [class*="vertical"],
-body.theme-stardew .sidebar-panel [style*="writing-mode"],
-body.theme-stardew .sidebar-panel [style*="text-orientation"] {
-  writing-mode: horizontal-tb !important;
-  text-orientation: mixed !important;
-  letter-spacing: 2px !important;
-  color: var(--stardew-coal) !important;
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
-  background: var(--stardew-grass) !important;
-  padding: 4px 8px !important;
-  border: 2px solid var(--stardew-coal) !important;
-  display: inline-block !important;
-  margin: 8px 0 !important;
-}
-
-/* 7. Project group header (MADCOP / UNKNOWN) — bright gold bar */
-body.theme-stardew .sidebar-panel [class*="project-header"],
-body.theme-stardew .sidebar-panel [class*="group-header"] {
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-coal) !important;
-  border: 2px solid var(--stardew-coal) !important;
+/* Generic buttons */
+body.theme-stardew button {
   border-radius: 0 !important;
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 1px !important;
-  padding: 6px 8px !important;
-  margin: 4px 0 !important;
-  box-shadow: 0 2px 0 var(--stardew-coal) !important;
-}
-
-/* 8. Session list item — flat wood plank, no white pill */
-body.theme-stardew .sidebar-panel [class*="session-item"],
-body.theme-stardew .sidebar-panel a[class*="group/item"],
-body.theme-stardew .sidebar-panel [role="link"] {
-  background: var(--stardew-wood) !important;
-  color: var(--stardew-cream) !important;
-  border: 1px solid var(--stardew-coal) !important;
-  border-radius: 0 !important;
-  margin: 2px 0 !important;
-  padding: 6px 8px !important;
   font-family: var(--font-body) !important;
 }
-body.theme-stardew .sidebar-panel [class*="session-item"]:hover,
-body.theme-stardew .sidebar-panel a[class*="group/item"]:hover {
-  background: var(--stardew-wood-dark) !important;
-  outline: 2px solid var(--stardew-gold) !important;
-  outline-offset: -2px !important;
-}
-body.theme-stardew .sidebar-panel [class*="session-item"][aria-current="true"],
-body.theme-stardew .sidebar-panel [class*="session-item"].active,
-body.theme-stardew .sidebar-panel a[class*="group/item"][aria-current="true"] {
-  background: var(--stardew-gold) !important;
-  color: var(--stardew-coal) !important;
-  font-weight: 700 !important;
-}
 
-/* 9. Timestamp pill (e.g. "58分钟" / "8小时") — clean wood chip */
-body.theme-stardew .sidebar-panel [class*="timestamp"],
-body.theme-stardew .sidebar-panel [class*="time-ago"],
-body.theme-stardew .sidebar-panel [class*="text-[10px]"] {
-  background: var(--stardew-stone-dark) !important;
-  color: var(--stardew-cream) !important;
-  border: 1px solid var(--stardew-coal) !important;
-  border-radius: 0 !important;
-  font-size: 10px !important;
-  padding: 1px 4px !important;
-  font-family: var(--font-mono) !important;
-  letter-spacing: 0 !important;
-  white-space: nowrap !important;
-}
-
-/* 10. 展开显示 (expand) button — clear pixel button */
-body.theme-stardew .sidebar-panel button[type="button"]:not([aria-label]) {
-  background: var(--stardew-parchment) !important;
-  color: var(--stardew-coal) !important;
+/* Code blocks */
+body.theme-stardew pre,
+body.theme-stardew code,
+body.theme-stardew [class*="code-block"] {
+  background: var(--stardew-coal) !important;
+  color: var(--stardew-gold) !important;
   border: 2px solid var(--stardew-coal) !important;
   border-radius: 0 !important;
-  font-weight: 600 !important;
-  padding: 4px 12px !important;
-  box-shadow: 0 2px 0 var(--stardew-coal) !important;
-}
-
-/* 11. Settings button at bottom — full width, gold */
-body.theme-stardew .sidebar-panel footer button,
-body.theme-stardew .sidebar-panel [class*="settings-button"] {
-  background: var(--stardew-grass) !important;
-  color: var(--stardew-coal) !important;
-  border-top: 2px solid var(--stardew-coal) !important;
-  border-radius: 0 !important;
-  font-weight: 700 !important;
-  padding: 10px 16px !important;
-  letter-spacing: 1px !important;
-  text-transform: uppercase !important;
-}
-body.theme-stardew .sidebar-panel footer button:hover,
-body.theme-stardew .sidebar-panel [class*="settings-button"]:hover {
-  background: var(--stardew-grass-dark) !important;
-  color: var(--stardew-cream) !important;
-}
-
-/* 12. GitHub icon at top — smaller, gold on wood */
-body.theme-stardew .sidebar-panel a[title="GitHub"],
-body.theme-stardew .sidebar-panel a[href*="github.com"] {
-  background: var(--stardew-coal) !important;
-  color: var(--stardew-gold) !important;
-  border: 1px solid var(--stardew-gold) !important;
-  border-radius: 0 !important;
-  padding: 4px 6px !important;
-  width: 28px !important;
-  height: 28px !important;
-}
-
-/* Sidebar collapse/expand toggle */
-body.theme-stardew .sidebar-panel [data-testid="sidebar-collapse-button"],
-body.theme-stardew .sidebar-panel [data-testid="sidebar-expand-button"] {
-  background: var(--stardew-coal) !important;
-  color: var(--stardew-gold) !important;
-  border: 1px solid var(--stardew-gold) !important;
-  border-radius: 0 !important;
-}
-
-/* 13. Mac traffic lights — push them off-screen in stardew.
-       We can't hide native chrome with CSS, but the title region
-       background is solid wood so they look like part of the frame. */
-body.theme-stardew [data-testid="sidebar-title-region"]::before {
-  content: "✕  ▢";
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  color: var(--stardew-gold);
-  font-size: 0 !important;
-  z-index: 1;
-}
-/* Make sure the macOS native lights blend with the wood */
-body.theme-stardew [data-testid="sidebar-title-region"] {
-  background-image: linear-gradient(180deg,
-    var(--stardew-wood) 0%,
-    var(--stardew-wood) 30px,
-    var(--stardew-wood-dark) 30px,
-    var(--stardew-wood-dark) 32px,
-    var(--stardew-wood) 32px
-  ) !important;
+  font-family: var(--font-mono) !important;
+  padding: 8px 12px !important;
 }
