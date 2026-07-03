@@ -4390,7 +4390,7 @@ function AboutSettings() {
     <div className="w-full min-w-0 max-w-lg mx-auto flex flex-col items-center py-6">
       {/* Logo + App Name + Version */}
       <img
-        src={publicAssetPath((document.body.classList.contains('theme-stardew') ? 'mascot-stardew.png' : 'mascot.png') + '?v=2633')}
+        src={publicAssetPath('mascot.png?v=2633')}
         alt="MadCop Agent"
         className="w-20 h-20 mb-4"
       />

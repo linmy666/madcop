@@ -41,12 +41,12 @@ const STAGE_LABELS: Record<MadCopState, string> = {
 }
 
 function pickMascotSrc(): string {
-  // v2.6.3.2: cache-bust so Electron re-fetches the file when it changes.
-  // The renderer caches `./mascot.png` aggressively; a timestamp query
-  // string forces a fresh load after the user updates the file.
+  // v2.6.3.3: ALWAYS use the default purple-drop mascot.png. The
+  // pixel-stardew variant kept breaking (transparent bg, off-center
+  // composition, etc.), and the user asked us to just use the same
+  // mascot across all themes. The stardew theme's CSS palette does
+  // the heavy lifting visually; the mascot itself stays the same.
   if (typeof document === 'undefined') return './mascot.png?v=2633'
-  if (document.body.classList.contains('theme-stardew'))
-    return './mascot-stardew.png?v=2633'
   return './mascot.png?v=2633'
 }
 
