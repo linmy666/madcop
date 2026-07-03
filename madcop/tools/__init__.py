@@ -43,6 +43,7 @@ from .eventbus import (
 )
 # v2.1.0 — weather tool for chat
 from .weather import WeatherTool
+from .clarify import ClarifyTool
 
 
 def default_registry(store: MemoryStore | None = None) -> ToolRegistry:
@@ -57,6 +58,7 @@ def default_registry(store: MemoryStore | None = None) -> ToolRegistry:
     reg.register(WebSearchTool())
     reg.register(WebFetchTool())
     reg.register(WeatherTool())
+    reg.register(ClarifyTool())  # v2.6.3.3 — ask_user for clarifying questions
     if store is not None:
         from .memory import default_memory_tools
         for tool in default_memory_tools(store):
@@ -113,5 +115,7 @@ __all__ = [
     "emit",
     # v2.1.0
     "WeatherTool",
+    # v2.6.3.3
+    "ClarifyTool",
     "default_registry",
 ]

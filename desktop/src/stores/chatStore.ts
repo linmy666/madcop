@@ -88,6 +88,12 @@ export type PerSessionState = {
     requestId: string
     request: ComputerUsePermissionRequest
   } | null
+  pendingClarification?: {
+    toolUseId: string
+    question: string
+    options: string[]
+    allowFreeText: boolean
+  } | null
   tokenUsage: TokenUsage
   /**
    * Bumped each time a compact boundary arrives. The context usage indicator
@@ -136,6 +142,7 @@ const DEFAULT_SESSION_STATE: PerSessionState = {
   activeThinkingId: null,
   pendingPermission: null,
   pendingComputerUsePermission: null,
+  pendingClarification: null,
   tokenUsage: { input_tokens: 0, output_tokens: 0 },
   compactCount: 0,
   streamingResponseChars: 0,
@@ -1781,6 +1788,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           const useId = msg.toolUseId || session?.activeToolUseId
           if (useId) addPendingTaskToolUseId(sessionId, useId)
         }
+        break
+      }
+
+      // v2.6.3.3: agent clarification question (LLM called ask_user tool).
+      // Store the pending question so the chat input can render an option
+      // panel. When the user picks one, chatStore.submitClarification()
+      // sends a clarification_response back to the server.
+      case 'clarification_request': {
+        update(() => ({
+          pendingClarification: {
+            toolUseId: msg.toolUseId,
+            question: msg.question,
+            options: msg.options,
+            allowFreeText: msg.allowFreeText,
+          },
+          chatState: 'tool_executing' as ChatState,
+        }))
         break
       }
 

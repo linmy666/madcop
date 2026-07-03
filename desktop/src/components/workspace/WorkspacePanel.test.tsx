@@ -1488,6 +1488,7 @@ describe('WorkspacePanel', () => {
           activeThinkingId: null,
           pendingPermission: null,
           pendingComputerUsePermission: null,
+          pendingClarification: null,
           tokenUsage: { input_tokens: 0, output_tokens: 0 },
           streamingResponseChars: 0,
           elapsedSeconds: 0,

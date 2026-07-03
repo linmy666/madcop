@@ -827,7 +827,7 @@ def create_app() -> FastAPI:
                     ))
 
                 # -- Phase 2: second call with tool results ------------ #
-                # v2.6.3: Force synthesis — without this, llama-3.1-8b-instruct
+                # v2.6.3.3: Force synthesis — without this, llama-3.1-8b-instruct
                 # often just echoes the tool result as a new tool call, leaving
                 # the user staring at "recall_memory ✓ echo ✓" with no final
                 # answer. v2.6.3.1: Tell the model to be DETAILED, not concise,
@@ -839,7 +839,16 @@ def create_app() -> FastAPI:
                     "the data you got from the tools (numbers, names, links) into "
                     "a clear, well-formatted response. Use bullet points or short "
                     "paragraphs as appropriate. Do NOT call any more tools. Do "
-                    "NOT output JSON. Aim for 3-6 sentences or a few bullet points.",
+                    "NOT output JSON. Aim for 3-6 sentences or a few bullet points.\n\n"
+                    "CRITICAL: If a user asks a question that is missing required "
+                    "information (e.g. 'how is the weather' with no city, 'translate "
+                    "this' with no source language, 'fix the bug' with no code "
+                    "context), DO NOT GUESS. Instead, call the `ask_user` tool "
+                    "with a short question and 2-6 short options so the user "
+                    "can pick one. Examples:\n"
+                    "  - Weather query without city: ask_user(question='哪个城市？', options=['北京','上海','杭州','深圳'])\n"
+                    "  - File refactor without path: ask_user(question='哪个文件？', options=['src/main.py','tests/test_x.py'])\n"
+                    "Only fall back to guessing if the user says '随便' or 'you pick'."
                 ))
 
                 # Create phase 2 trace node
@@ -1553,6 +1562,56 @@ def create_app() -> FastAPI:
                                 "content": result_str,
                                 "isError": False,
                             })
+                            # v2.6.3.3: handle ask_user specially — pause the
+                            # loop, send a clarification_request to the UI,
+                            # wait for the user's response, then resume.
+                            if call.name == "ask_user":
+                                args = call.arguments or {}
+                                question = args.get("question", "请确认")
+                                options = args.get("options", [])
+                                allow_free_text = args.get("allow_free_text", True)
+                                await ws.send_json({
+                                    "type": "clarification_request",
+                                    "toolUseId": call.id or "",
+                                    "question": question,
+                                    "options": options,
+                                    "allowFreeText": allow_free_text,
+                                })
+                                # Wait for the user's response
+                                try:
+                                    while True:
+                                        reply_raw = await asyncio.wait_for(
+                                            ws.receive_json(),
+                                            timeout=300.0,  # 5 min
+                                        )
+                                        rtype = reply_raw.get("type", "")
+                                        if rtype == "clarification_response":
+                                            choice = reply_raw.get("choice", "")
+                                            if not choice:
+                                                choice = "(no answer)"
+                                            full_messages.append(_Msg(
+                                                role="tool",
+                                                content=f"User answered: {choice}",
+                                                name="ask_user",
+                                                tool_call_id=call.id,
+                                            ))
+                                            # Break out of the inner tool loop
+                                            # so the next LLM call sees the answer.
+                                            break
+                                        # Ignore other message types while
+                                        # we're waiting for clarification.
+                                except asyncio.TimeoutError:
+                                    full_messages.append(_Msg(
+                                        role="tool",
+                                        content="User did not answer (timeout). "
+                                                "Make a reasonable guess and proceed.",
+                                        name="ask_user",
+                                        tool_call_id=call.id,
+                                    ))
+                                # Skip the rest of the tool dispatch for this
+                                # call — we don't need to send tool_use_complete
+                                # for a clarification. (Already sent above.)
+                                continue
                             full_messages.append(_Msg(
                                 role="tool",
                                 content=result_str,
