@@ -441,7 +441,7 @@ export function ActiveSession() {
                 ) : (
                   <>
                     <img
-                      src={publicAssetPath('app-icon.png')}
+                      src={publicAssetPath(document.body.classList.contains('theme-stardew') ? 'mascot-stardew.png' : 'mascot.png')}
                       alt="MadCop Agent"
                       className={compactEmptyHero ? 'mb-4 h-16 w-16' : 'mb-6 h-24 w-24'}
                     />
