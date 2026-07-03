@@ -827,12 +827,24 @@ def create_app() -> FastAPI:
                     ))
 
                 # -- Phase 2: second call with tool results ------------ #
+                # v2.6.3: Force synthesis — without this, llama-3.1-8b-instruct
+                # often just echoes the tool result as a new tool call, leaving
+                # the user staring at "recall_memory ✓ echo ✓" with no final
+                # answer. We append a strict "now synthesize" instruction.
+                messages.append(Message(
+                    role="system",
+                    content="You have received the tool results above. Now write a "
+                    "concise natural-language answer to the user's question in "
+                    "their language. Do NOT call any more tools. Do NOT output "
+                    "JSON. Just answer directly.",
+                ))
+
                 # Create phase 2 trace node
                 phase2_node = trace_store.create_node(
                     conversation_id=conv_id,
                     parent_id=phase1_node.id,
                     node_type="llm_call",
-                    label="Second LLM call (with tool results)",
+                    label="Second LLM call (synthesize final answer)",
                 )
                 trace_store.mark_running(phase2_node.id)
                 yield f"data: {json.dumps({'type': 'trace', 'node': phase2_node.to_dict()}, ensure_ascii=False)}\n\n"
@@ -1546,6 +1558,38 @@ def create_app() -> FastAPI:
                             # Continue to next round
                             resp = resp2
                             content = content2
+
+                        # ---- Final synthesis call (no tools) ----
+                        # v2.6.3: Force a final tool-free call so the model
+                        # must give a natural-language answer instead of
+                        # looping on more tool calls. Without this, llama-3.1
+                        # often keeps calling tools and the user sees a
+                        # session stuck on "recall_memory ✓" with no answer.
+                        if resp.tool_calls:
+                            await ws.send_json({
+                                "type": "status", "state": "thinking",
+                                "verb": "Composing answer",
+                            })
+                            final = await asyncio.to_thread(
+                                client.chat,
+                                full_messages + [_Msg(
+                                    role="system",
+                                    content="You have all the tool results you need. "
+                                    "Now write a concise natural-language answer in the "
+                                    "user's language. Do NOT call any more tools.",
+                                )],
+                                model=model,
+                                temperature=temperature,
+                                tools=None,  # no tools — must answer
+                            )
+                            final_content = final.content or ""
+                            if final_content:
+                                await ws.send_json({
+                                    "type": "content_delta",
+                                    "text": final_content,
+                                })
+                            resp = final
+                            content = final_content
                     # ---- Save assistant message to history ---- #
                     asst_entry = {
                         "id": _uuid.uuid4().hex,
