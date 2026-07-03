@@ -170,12 +170,20 @@ _NODE_REGISTRY: dict[str, type[NodeBase]] = {
 
 
 def get_node_class(node_type: str) -> type[NodeBase]:
-    # Try built-in first, then advanced
+    # Try built-in first, then advanced, then orchestrator
     if node_type in _NODE_REGISTRY:
         return _NODE_REGISTRY[node_type]
     from .advanced import _NODE_REGISTRY as _ADV_REGISTRY
     if node_type in _ADV_REGISTRY:
         return _ADV_REGISTRY[node_type]
+    from .orchestrator import RequirementAnalysisNode, DynamicExpertNode, SynthesisNode
+    _ORCH_REGISTRY = {
+        "requirement_analysis": RequirementAnalysisNode,
+        "dynamic_expert": DynamicExpertNode,
+        "synthesis": SynthesisNode,
+    }
+    if node_type in _ORCH_REGISTRY:
+        return _ORCH_REGISTRY[node_type]
     raise KeyError(f"Unknown node type: {node_type}")
 
 

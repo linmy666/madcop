@@ -12,6 +12,16 @@ import {
 import { listNodeTypes } from '../api/workflow'
 import { WorkflowEditor } from '../components/workflow/WorkflowEditor'
 import type { Edge, Node } from '@xyflow/react'
+import { getApiUrl } from '../api/client'
+
+interface AgentMode {
+  id: string
+  name: string
+  description: string
+  category: string
+  icon: string
+  node_count: number
+}
 
 export function WorkflowsListPage() {
   const [workflows, setWorkflows] = useState<Workflow[]>([])
@@ -24,13 +34,19 @@ export function WorkflowsListPage() {
   const [isRunning, setIsRunning] = useState(false)
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null)
   const [runResult, setRunResult] = useState<string | null>(null)
+  const [modes, setModes] = useState<AgentMode[]>([])
 
   const refresh = async () => {
     setLoading(true)
     try {
-      const [list, types] = await Promise.all([listWorkflows(), listNodeTypes()])
+      const [list, types, modesData] = await Promise.all([
+        listWorkflows(),
+        listNodeTypes(),
+        fetch(getApiUrl('/api/workflows/modes')).then(r => r.json()).then(d => d.modes || []).catch(() => []),
+      ])
       setWorkflows(list)
       setNodeTypes(types)
+      setModes(modesData)
     } finally {
       setLoading(false)
     }
@@ -274,6 +290,57 @@ export function WorkflowsListPage() {
           ))}
         </div>
       )}
+
+      {/* 模式库 */}
+      <h2 style={{ fontSize: 18, fontWeight: 700, margin: '32px 0 16px' }}>🧠 模式库</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+        {modes.map((mode) => (
+          <div
+            key={mode.id}
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              padding: 14,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 18 }}>{mode.icon}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{mode.name}</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 10, lineHeight: 1.4 }}>
+              {mode.description}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-disabled)', marginBottom: 8 }}>
+              {mode.node_count} 节点 · {mode.category === 'basic' ? '基础' : mode.category === 'multi_agent' ? '多 Agent' : '高级'}
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const r = await fetch(getApiUrl(`/api/workflows/modes/${mode.id}/instantiate`), { method: 'POST' })
+                  if (r.ok) {
+                    const wf = await r.json()
+                    handleEdit(wf)
+                    await refresh()
+                  }
+                } catch {}
+              }}
+              style={{
+                padding: '4px 12px',
+                background: 'var(--color-brand)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              使用此模式
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
