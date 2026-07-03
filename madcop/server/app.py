@@ -1464,7 +1464,7 @@ def create_app() -> FastAPI:
                 # ---- Stream a real LLM response in the cc-haha protocol ---- #
                 # 1) status: thinking
                 await ws.send_json({"type": "status", "state": "thinking",
-                                    "verb": "Thinking"})
+                                    "verb": "Thinking", "stage": "reading"})
                 # 2) content_start: text
                 await ws.send_json({
                     "type": "content_start",
@@ -1626,7 +1626,7 @@ def create_app() -> FastAPI:
                         for _round in range(3):
                             await ws.send_json({
                                 "type": "status", "state": "thinking",
-                                "verb": "Composing",
+                                "verb": "Composing", "stage": "searching",
                             })
                             resp2 = await asyncio.to_thread(
                                 client.chat,
@@ -1704,7 +1704,7 @@ def create_app() -> FastAPI:
                         if resp.tool_calls:
                             await ws.send_json({
                                 "type": "status", "state": "thinking",
-                                "verb": "Composing answer",
+                                "verb": "Composing answer", "stage": "ready",
                             })
                             final = await asyncio.to_thread(
                                 client.chat,

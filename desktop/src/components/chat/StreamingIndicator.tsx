@@ -49,6 +49,7 @@ export function StreamingIndicator() {
   // v2.6.0: Track when the LLM has actually emitted its first text delta
   // (used to decide when to hide the ThinkingAnimation).
   const streamingText = sessionState?.streamingText ?? ''
+  const thinkingStage = sessionState?.thinkingStage ?? null
 
   useEffect(() => {
     if (!apiRetry) return undefined
@@ -145,7 +146,7 @@ export function StreamingIndicator() {
           fast models like MiniMax M2.7 stream 50+ tokens in the first
           delta, making token-count-based logic too eager. */}
       {!streamingText && (chatState === 'thinking' || chatState === 'tool_executing' || chatState === 'compacting') && (
-        <ThinkingAnimation active={true} />
+        <ThinkingAnimation active={true} stage={thinkingStage} />
       )}
       <div className="flex w-fit items-center gap-2 rounded-full border border-[var(--color-border)]/40 bg-[var(--color-surface-container-low)] px-3 py-1">
         <span className="text-[var(--color-brand)] animate-shimmer text-xs">✦</span>

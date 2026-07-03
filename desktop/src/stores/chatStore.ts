@@ -110,6 +110,7 @@ export type PerSessionState = {
   streamingResponseChars: number
   elapsedSeconds: number
   statusVerb: string
+  thinkingStage?: string | null
   apiRetry?: ApiRetryState | null
   // 流式→非流式降级提示（活动回合状态，与 apiRetry 同清除时机）。
   streamingFallback?: StreamingFallbackState | null
@@ -148,6 +149,7 @@ const DEFAULT_SESSION_STATE: PerSessionState = {
   streamingResponseChars: 0,
   elapsedSeconds: 0,
   statusVerb: '',
+  thinkingStage: null,
   apiRetry: null,
   streamingFallback: null,
   slashCommands: [],
@@ -1537,6 +1539,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               : msg.verb && msg.verb !== 'Thinking'
                 ? msg.verb
                 : '',
+            thinkingStage: msg.state === 'idle'
+              ? null
+              : (msg as any).stage || null,
             ...(msg.state === 'idle' ? { activeThinkingId: null } : {}),
             ...(msg.state === 'idle' ? { apiRetry: null, streamingFallback: null } : {}),
             ...(nextMessages !== session.messages ? { messages: nextMessages } : {}),

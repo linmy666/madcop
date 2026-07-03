@@ -33,12 +33,17 @@ const STAGE_LABELS: Record<Stage, string> = {
   ready: '正在写答案',
 }
 
-export function ThinkingAnimation({ active = true }: { active?: boolean }) {
+export function ThinkingAnimation({ active = true, stage: forcedStage }: { active?: boolean; stage?: string | null }) {
   const [stage, setStage] = useState<Stage>('reading')
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
     if (!active) return
+    // If the backend provides a real stage, use it instead of cycling
+    if (forcedStage && STAGES.includes(forcedStage as Stage)) {
+      setStage(forcedStage as Stage)
+      return
+    }
     let cancelled = false
     let i = 0
     const advance = () => {
@@ -52,7 +57,7 @@ export function ThinkingAnimation({ active = true }: { active?: boolean }) {
       cancelled = true
       window.clearInterval(t)
     }
-  }, [active])
+  }, [active, forcedStage])
 
   return (
     <>
