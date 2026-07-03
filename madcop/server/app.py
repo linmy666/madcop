@@ -1281,6 +1281,45 @@ def create_app() -> FastAPI:
         # Lazy import to share _MESSAGES dict with cc_haha_compat
         from madcop.server.cc_haha_compat import _MESSAGES, _SESSIONS
 
+        # v2.6.3.3: per-session middleware chain. Wires the Qian control
+        # theory middleware into the WebSocket chat path so every
+        # step outcome goes through 闭环反馈 / 早纠偏 / 可控性.
+        # The chain observes HOOK_STEP_END events (each LLM call +
+        # tool result counts as a step) and emits HALT directives
+        # on stuck patterns / rate-limit / deviation. This makes
+        # the "思维链路" observable and the agent recoverable
+        # instead of stuck silently.
+        from madcop.agent.middleware import (
+            QianControlMiddleware, MiddlewareChain, HookContext,
+            HOOK_PLAN_START, HOOK_STEP_START, HOOK_STEP_END,
+            HOOK_PLAN_END, Directive,
+        )
+        middleware_chain = MiddlewareChain([QianControlMiddleware()])
+        step_count_per_session: dict[str, int] = {}
+
+        def ws_step(hook: str, outcome=None, step_name: str = "ws_chat") -> None:
+            """Run a middleware step on the session's chain.
+            Emits a status event if the chain produced a HALT."""
+            ctx = HookContext(
+                hook=hook,
+                goal=f"session:{session_id}",
+                step=type("S", (), {"name": step_name})(),
+                outcome=outcome,
+            )
+            try:
+                middleware_chain(ctx)
+            except Exception as e:
+                print(f"[ws/mw] error: {e}", file=sys.stderr, flush=True)
+            # Check directives for HALT
+            for d in ctx.directives:
+                if d.kind == "HALT":
+                    print(f"[ws/mw] HALT: {d.detail}", file=sys.stderr, flush=True)
+            step_count_per_session[session_id] = (
+                step_count_per_session.get(session_id, 0) + 1
+            )
+        # Emit HOOK_PLAN_START for this turn
+        ws_step(HOOK_PLAN_START, step_name="turn_start")
+
         try:
             while True:
                 msg = await ws.receive_json()
@@ -1488,8 +1527,25 @@ def create_app() -> FastAPI:
                                 result = await asyncio.to_thread(
                                     registry.dispatch, call)
                                 result_str = result.to_message_content()
+                                tool_ok = True
                             except Exception as exc:
                                 result_str = f"Tool error: {exc}"
+                                tool_ok = False
+                            # v2.6.3.3: emit HOOK_STEP_END so the Qian control
+                            # middleware can apply 闭环反馈 / 早纠偏 /
+                            # 可控性 to the tool result. Without this the
+                            # tool result disappears from the observability
+                            # layer.
+                            ws_step(
+                                HOOK_STEP_END,
+                                outcome=type("O", (), {
+                                    "success": tool_ok,
+                                    "cost_usd": 0.0,
+                                    "error": "" if tool_ok else result_str,
+                                    "output": result_str[:200],
+                                })(),
+                                step_name=f"tool:{call.name}",
+                            )
                             await ws.send_json({
                                 "type": "tool_result",
                                 "toolUseId": call.id or "",
@@ -1617,6 +1673,20 @@ def create_app() -> FastAPI:
                             resp = final
                             content = final_content
                     # ---- Save assistant message to history ---- #
+                    # v2.6.3.3: emit HOOK_STEP_END for the final LLM call so
+                    # the Qian middleware sees the completed answer and
+                    # emits any HALT directive based on drift / deviation.
+                    ws_step(
+                        HOOK_STEP_END,
+                        outcome=type("O", (), {
+                            "success": bool(content),
+                            "cost_usd": 0.0,
+                            "error": "",
+                            "output": content or "",
+                        })(),
+                        step_name="llm_final",
+                    )
+                    ws_step(HOOK_PLAN_END, step_name="turn_end")
                     asst_entry = {
                         "id": _uuid.uuid4().hex,
                         "type": "assistant",
