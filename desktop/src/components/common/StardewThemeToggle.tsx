@@ -43,10 +43,6 @@ export function StardewThemeToggle() {
         <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
           像素 Pixel
         </h3>
-        <p className="text-xs text-[var(--color-text-tertiary)]">
-          16-bit 像素风皮肤 — 暖羊皮纸 + 棕木 + 草地 + 金色高亮
-          （致敬复古 RPG 美术风格）。
-        </p>
       </div>
       <button
         type="button"

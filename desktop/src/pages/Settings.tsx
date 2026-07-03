@@ -2477,16 +2477,18 @@ export function GeneralSettings() {
   return (
     <div className="max-w-xl">
       {/* Appearance selector */}
-      <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-1">{t('settings.general.appearanceTitle')}</h2>
-      <p className="text-sm text-[var(--color-text-tertiary)] mb-3">{t('settings.general.appearanceDescription')}</p>
+      <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-3">{t('settings.general.appearanceTitle')}</h2>
       <div className="flex gap-2 mb-8">
-        {THEMES.map(({ value, label }) => (
+        {THEMES.map(({ value, label }) => {
+          const isPixelOn = localStorage.getItem('madcop-theme-stardew') === '1'
+          const isSelected = value === 'pixel' ? isPixelOn : theme === value
+          return (
           <button
             key={value}
             onClick={() => {
               if (value === 'pixel') {
                 // Toggle stardew pixel theme
-                const next = localStorage.getItem('madcop-theme-stardew') !== '1'
+                const next = !isPixelOn
                 localStorage.setItem('madcop-theme-stardew', next ? '1' : '0')
                 document.body.classList.toggle('theme-stardew', next)
                 // Also set theme to white as base
@@ -2498,21 +2500,18 @@ export function GeneralSettings() {
                 document.body.classList.remove('theme-stardew')
               }
             }}
-            aria-pressed={value === 'pixel'
-              ? localStorage.getItem('madcop-theme-stardew') === '1'
-              : theme === value}
+            aria-pressed={isSelected}
             className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all flex flex-col items-center gap-0.5 ${
-              theme === value
+              isSelected
                 ? 'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] border-transparent shadow-[var(--shadow-button-primary)]'
                 : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
             }`}
           >
             <span>{label}</span>
           </button>
-        ))}
+          )
+        })}
       </div>
-
-      {/* v2.6.0: Bauhaus geometric toggle (for 纯白 / pure white) */}
 
       {/* v2.6.0: Stardew-style pixel toggle */}
       <StardewThemeToggle />
