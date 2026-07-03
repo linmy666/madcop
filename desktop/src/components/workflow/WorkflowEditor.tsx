@@ -50,6 +50,7 @@ function BaseNode({
   const colorByType: Record<string, string> = {
     start: '#10b981',
     llm: '#7c3aed',
+    tool: '#f97316',
     end: '#f59e0b',
   }
   const color = colorByType[type] || '#64748b'
@@ -99,6 +100,7 @@ function BaseNode({
 const NODE_TYPE_REGISTRY: NodeTypes = {
   start: BaseNode,
   llm: BaseNode,
+  tool: BaseNode,
   end: BaseNode,
 }
 
@@ -442,6 +444,97 @@ export function WorkflowEditor({
                   }}
                   rows={6}
                   placeholder="用一句话回答: {{input}}"
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: 13,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    resize: 'vertical',
+                  }}
+                />
+              </>
+            )}
+
+            {selectedNode.type === 'tool' && (
+              <>
+                <label style={{ display: 'block', fontSize: 12, marginBottom: 4, color: 'var(--color-text-secondary)' }}>
+                  节点标签
+                </label>
+                <input
+                  type="text"
+                  value={(selectedNode.data?.label as string) || ''}
+                  onChange={(e) => {
+                    setNodes((nds) =>
+                      nds.map((n) =>
+                        n.id === selectedNode.id
+                          ? { ...n, data: { ...n.data, label: e.target.value } }
+                          : n
+                      )
+                    )
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text-primary)',
+                    marginBottom: 12,
+                    fontSize: 13,
+                  }}
+                />
+                <label style={{ display: 'block', fontSize: 12, marginBottom: 4, color: 'var(--color-text-secondary)' }}>
+                  工具名
+                </label>
+                <input
+                  type="text"
+                  value={(selectedNode.data?.tool as string) || ''}
+                  onChange={(e) => {
+                    setNodes((nds) =>
+                      nds.map((n) =>
+                        n.id === selectedNode.id
+                          ? { ...n, data: { ...n.data, tool: e.target.value } }
+                          : n
+                      )
+                    )
+                  }}
+                  placeholder="get_weather"
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text-primary)',
+                    marginBottom: 12,
+                    fontSize: 13,
+                  }}
+                />
+                <label style={{ display: 'block', fontSize: 12, marginBottom: 4, color: 'var(--color-text-secondary)' }}>
+                  参数 (JSON, 支持 {'{{input}}'})
+                </label>
+                <textarea
+                  value={(selectedNode.data?.params ? JSON.stringify(selectedNode.data.params, null, 2) : '') || ''}
+                  onChange={(e) => {
+                    try {
+                      const parsed = JSON.parse(e.target.value)
+                      setNodes((nds) =>
+                        nds.map((n) =>
+                          n.id === selectedNode.id
+                            ? { ...n, data: { ...n.data, params: parsed } }
+                            : n
+                        )
+                      )
+                    } catch {
+                      // Allow typing invalid JSON — stored as raw string
+                    }
+                  }}
+                  rows={5}
+                  placeholder='{"city": "Hangzhou"}'
                   style={{
                     width: '100%',
                     padding: '6px 8px',

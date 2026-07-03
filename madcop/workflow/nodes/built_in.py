@@ -7,6 +7,7 @@ Three node types:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -100,14 +101,60 @@ class LLMNode(NodeBase):
 # --------------------------------------------------------------------------- #
 
 class EndNode(NodeBase):
-    """Workflow exit point. Returns the final output."""
+    """Workflow exit point. Returns the final output from upstream."""
     type = "end"
     label = "结束"
-    description = "工作流出口, 返回最终结果"
+    description = "工作流出口, 返回上游节点输出"
 
     async def execute(self, context: NodeContext) -> NodeResult:
-        # The end node's output is the upstream's output
-        return NodeResult(success=True, output=context.workflow_input)
+        # Return the last upstream node's output
+        outputs = context.upstream_outputs
+        if not outputs:
+            return NodeResult(success=True, output=context.workflow_input)
+        # Find the last node that produced output (the one connected to us)
+        last_key = list(outputs.keys())[-1]
+        last_output = outputs[last_key]
+        return NodeResult(success=True, output=last_output)
+
+
+# --------------------------------------------------------------------------- #
+# ToolNode
+# --------------------------------------------------------------------------- #
+
+class ToolNode(NodeBase):
+    """Call a registered tool from madcop/tools/registry.
+
+    Data fields:
+      - tool:     str (tool name, e.g. 'get_weather', 'web_search', 'echo')
+      - params:   dict (tool parameters, supports {{var}} resolution)
+    """
+    type = "tool"
+    label = "工具调用"
+    description = "调用 MadCop 注册的工具 (天气 / 搜索 / 记忆 / 文件等)"
+    category = "built-in"
+
+    async def execute(self, context: NodeContext) -> NodeResult:
+        data = context.node.get("data", {})
+        tool_name = data.get("tool", "")
+        if not tool_name:
+            return NodeResult(success=False, error="Missing 'tool' field in node data")
+        raw_params = data.get("params", {})
+        params = resolve_variables(raw_params, context)
+
+        try:
+            from madcop.tools import default_registry
+            registry = default_registry()
+            from madcop.llm import ToolCall
+            call = ToolCall(
+                id=f"wf_tool_{tool_name}",
+                name=tool_name,
+                arguments=params,
+            )
+            result = await asyncio.to_thread(registry.dispatch, call)
+            result_str = result.to_message_content()
+            return NodeResult(success=True, output={"result": result_str, "tool": tool_name})
+        except Exception as e:
+            return NodeResult(success=False, error=f"Tool {tool_name} failed: {e}")
 
 
 # --------------------------------------------------------------------------- #
@@ -117,6 +164,7 @@ class EndNode(NodeBase):
 _NODE_REGISTRY: dict[str, type[NodeBase]] = {
     "start": StartNode,
     "llm": LLMNode,
+    "tool": ToolNode,
     "end": EndNode,
 }
 
