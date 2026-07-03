@@ -41,15 +41,16 @@ export function WorkflowsListPage() {
   }, [])
 
   const handleNew = async () => {
+    // v2.7.0: Always include start + end nodes; LLM node added in editor.
+    // Don't depend on nodeTypes.length — if the metadata API was
+    // slow / failed, the user can still create a workflow.
     const wf = await createWorkflow({
       name: '未命名工作流',
       description: '',
-      nodes: nodeTypes.length
-        ? [
-            { id: 'start-1', type: 'start', position: { x: 100, y: 200 }, data: { label: '开始' } },
-            { id: 'end-1', type: 'end', position: { x: 500, y: 200 }, data: { label: '结束' } },
-          ]
-        : [],
+      nodes: [
+        { id: 'start-1', type: 'start', position: { x: 100, y: 200 }, data: { label: '开始' } },
+        { id: 'end-1', type: 'end', position: { x: 500, y: 200 }, data: { label: '结束' } },
+      ],
       edges: [],
     })
     await refresh()
@@ -185,17 +186,16 @@ export function WorkflowsListPage() {
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>工作流</h1>
         <button
           onClick={handleNew}
-          disabled={nodeTypes.length === 0}
           style={{
             padding: '8px 16px',
             background: 'var(--color-brand)',
             color: '#fff',
             border: 'none',
             borderRadius: 4,
-            cursor: nodeTypes.length === 0 ? 'default' : 'pointer',
+            cursor: 'pointer',
             fontWeight: 600,
             fontSize: 14,
-            opacity: nodeTypes.length === 0 ? 0.5 : 1,
+            opacity: nodeTypes.length === 0 ? 0.7 : 1,
           }}
         >
           + 新建工作流

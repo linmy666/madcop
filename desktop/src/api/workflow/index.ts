@@ -1,7 +1,10 @@
 // v2.7.0 — Workflow REST API client.
-import type { WorkflowNode, WorkflowEdge, WorkflowRun } from '../../types/workflow'
+// Uses the shared getApiUrl() + api helper from api/client.ts so
+// Electron correctly resolves http://127.0.0.1:8765 (the real backend
+// port) instead of the default 3456.
 
-const BASE = '/api/workflows'
+import { getApiUrl } from '../client'
+import type { WorkflowNode, WorkflowEdge, WorkflowRun } from '../../types/workflow'
 
 export interface Workflow {
   id: string
@@ -22,64 +25,84 @@ export interface NodeTypeMeta {
   category: string
 }
 
-export async function listWorkflows(): Promise<Workflow[]> {
-  const r = await fetch(BASE)
-  const d = await r.json()
-  return d.workflows || []
-}
+const BASE = '/api/workflows'
 
-export async function getWorkflow(id: string): Promise<Workflow | null> {
-  const r = await fetch(`${BASE}/${id}`)
-  if (r.status === 404) return null
+async function apiGet(path: string): Promise<any> {
+  const url = getApiUrl(path)
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`GET ${path} failed: ${r.status}`)
   return r.json()
 }
 
-export async function createWorkflow(body: Partial<Workflow>): Promise<Workflow> {
-  const r = await fetch(BASE, {
+async function apiPost(path: string, body: any): Promise<any> {
+  const url = getApiUrl(path)
+  const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  if (!r.ok) {
+    const t = await r.text().catch(() => '')
+    throw new Error(`POST ${path} failed: ${r.status} ${t}`)
+  }
   return r.json()
 }
 
-export async function updateWorkflow(id: string, body: Partial<Workflow>): Promise<Workflow> {
-  const r = await fetch(`${BASE}/${id}`, {
+async function apiPut(path: string, body: any): Promise<any> {
+  const url = getApiUrl(path)
+  const r = await fetch(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  if (!r.ok) throw new Error(`PUT ${path} failed: ${r.status}`)
   return r.json()
 }
 
+async function apiDelete(path: string): Promise<void> {
+  const url = getApiUrl(path)
+  const r = await fetch(url, { method: 'DELETE' })
+  if (!r.ok) throw new Error(`DELETE ${path} failed: ${r.status}`)
+}
+
+export async function listWorkflows(): Promise<Workflow[]> {
+  const d = await apiGet(BASE)
+  return d.workflows || []
+}
+
+export async function getWorkflow(id: string): Promise<Workflow | null> {
+  try {
+    return await apiGet(`${BASE}/${id}`)
+  } catch {
+    return null
+  }
+}
+
+export async function createWorkflow(body: Partial<Workflow>): Promise<Workflow> {
+  return apiPost(BASE, body)
+}
+
+export async function updateWorkflow(id: string, body: Partial<Workflow>): Promise<Workflow> {
+  return apiPut(`${BASE}/${id}`, body)
+}
+
 export async function deleteWorkflow(id: string): Promise<void> {
-  await fetch(`${BASE}/${id}`, { method: 'DELETE' })
+  await apiDelete(`${BASE}/${id}`)
 }
 
 export async function runWorkflow(
   id: string,
   input: Record<string, unknown> = {}
 ): Promise<WorkflowRun> {
-  const r = await fetch(`${BASE}/${id}/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input }),
-  })
-  if (!r.ok) {
-    const t = await r.text()
-    throw new Error(`Run failed: ${r.status} ${t}`)
-  }
-  return r.json()
+  return apiPost(`${BASE}/${id}/run`, { input })
 }
 
 export async function listRuns(workflowId: string): Promise<WorkflowRun[]> {
-  const r = await fetch(`${BASE}/${workflowId}/runs`)
-  const d = await r.json()
+  const d = await apiGet(`${BASE}/${workflowId}/runs`)
   return d.runs || []
 }
 
 export async function listNodeTypes(): Promise<NodeTypeMeta[]> {
-  const r = await fetch(`${BASE}/_meta/node-types`)
-  const d = await r.json()
+  const d = await apiGet(`${BASE}/_meta/node-types`)
   return d.node_types || []
 }
