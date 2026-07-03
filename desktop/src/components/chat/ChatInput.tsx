@@ -16,6 +16,7 @@ import { sessionsApi, type SessionGitInfo } from '../../api/sessions'
 import { agentsApi } from '../../api/agents'
 import { PermissionModeSelector } from '../controls/PermissionModeSelector'
 import { ModelSelector } from '../controls/ModelSelector'
+import { ModeSelector } from './ModeSelector'
 import type { AttachmentRef } from '../../types/chat'
 import { AttachmentGallery } from './AttachmentGallery'
 import { ComposerDropOverlay } from './ComposerDropOverlay'
@@ -94,6 +95,7 @@ export function ChatInput({ variant = 'default', compact = false }: ChatInputPro
   const [fileSearchOpen, setFileSearchOpen] = useState(false)
   const [localSlashPanel, setLocalSlashPanel] = useState<LocalSlashCommandName | null>(null)
   const [atFilter, setAtFilter] = useState('')
+  const [selectedMode, setSelectedMode] = useState('react')
   const [atCursorPos, setAtCursorPos] = useState(-1)
   const [slashFilter, setSlashFilter] = useState('')
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0)
@@ -1281,6 +1283,10 @@ export function ChatInput({ variant = 'default', compact = false }: ChatInputPro
               )}
               {!isMemberSession && activeTabId && (
                 <ModelSelector runtimeKey={activeTabId} disabled={isActive} compact={useCompactControls} />
+              )}
+              {/* v2.8.0 — Agent mode selector */}
+              {!isMemberSession && activeTabId && (
+                <ModeSelector currentMode={selectedMode} onModeChange={setSelectedMode} />
               )}
               <button
                 onClick={!isMemberSession && isActive ? () => stopGeneration(activeTabId!) : handleSubmit}

@@ -142,6 +142,43 @@ async def instantiate_template(template_id: str) -> dict[str, Any]:
     return wf.to_dict()
 
 
+# --------------------------------------------------------------------------- #
+# v2.8.0 — Agent design modes (Google 12 patterns) — MUST be before {workflow_id}
+# --------------------------------------------------------------------------- #
+
+@router.get("/modes")
+async def list_modes() -> dict[str, Any]:
+    from .modes import list_modes as _list
+    return {"modes": _list()}
+
+
+@router.get("/modes/{mode_id}")
+async def get_mode(mode_id: str) -> dict[str, Any]:
+    from .modes import get_mode as _get
+    mode = _get(mode_id)
+    if not mode:
+        raise HTTPException(status_code=404, detail="Mode not found")
+    return mode
+
+
+@router.post("/modes/{mode_id}/instantiate")
+async def instantiate_mode(mode_id: str) -> dict[str, Any]:
+    """Create a workflow from a mode template."""
+    from .modes import get_mode as _get
+    mode = _get(mode_id)
+    if not mode:
+        raise HTTPException(status_code=404, detail="Mode not found")
+    wf = p.Workflow(
+        id=uuid.uuid4().hex,
+        name=mode["name"],
+        description=mode["description"],
+        nodes=mode["nodes"],
+        edges=mode["edges"],
+    )
+    p.save_workflow(wf)
+    return wf.to_dict()
+
+
 # === Everything below here is the original CRUD API ===
 
 @router.get("")
