@@ -121,7 +121,7 @@ MadCop 维护 5 层 (实际是 6 层 L0-L5) 的持久化 memory:
 | L0 | episodic | 时间序列事件 | "2026-07-03 用户问了杭州天气" |
 | L1 | semantic | 用户事实 | "用户的工作领域 / 技术偏好" (具体身份不进 memory) |
 | L2 | reflective | 用户的偏好 / 习惯 | "用户喜欢中文回答, 偏好详细数据" |
-| L3 | scenario | 场景化指令 | "用户做编程任务时偏好 qoder-work 风格" |
+| L3 | scenario | 场景化指令 | "用户在编程任务时的工作流偏好 (e.g. plan → small commits → test)" |
 | L4 | persona | 角色模型 | "用户专业, 不要给免责声明" |
 | L5 | insight | 跨层洞察 | "用户长期用某种工作流, 应该推荐..." |
 
@@ -135,7 +135,7 @@ MadCop 维护 5 层 (实际是 6 层 L0-L5) 的持久化 memory:
 
 ## ⚡ 8. 完成 UI / 功能后必须自检
 
-参考 Qoder 的 `npm run ui-check` 规范, MadCop 也需要自检:
+MadCop 的自检清单:
 - 改了 `madcop/tools/*.py` → 跑对应的 test (`tests/test_tools_*.py`)
 - 改了 `madcop/server/app.py` → 跑 `pytest tests/test_server.py -v`
 - 改了 `desktop/src/components/...` → 跑 `bun run build` 确认 type-check 通过

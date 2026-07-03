@@ -1,122 +1,131 @@
-/* v2.6.4 — Stardew Valley Pixel Theme (REWRITTEN, tone WAY down)
-   v2.6.3 was too saturated / clashy (1990s GeoCities look). v2.6.4 uses
-   muted, soft, harmonious colors inspired by the actual SDV in-game
-   menu screens: warm beige, soft wood, cream, faded gold.
+/* v2.6.5 — Stardew Valley Pixel Theme (MUTED, MUTED, MUTED)
+   v2.6.4 still had:
+     - dark saturated wood (looked like coffee)
+     - 1px hard black borders (too harsh)
+     - bright lemon-yellow "New Session" selected
+     - heavy 3px coal borders everywhere
+     - mac traffic lights still visible (clashing with wood)
+   v2.6.5 tones everything WAY down: warm beige, soft honey, no
+   hard borders, all 1px soft strokes. The pixel feel comes from
+   square corners and muted palette, not from thick black lines.
 */
 
 body.theme-stardew,
 body.theme-stardew [data-theme="light"],
 body.theme-stardew [data-theme="dark"] {
-  /* Core SDV palette — MUTED versions */
-  --stardew-gold: #C9A847;            /* muted honey gold, not bright yellow */
-  --stardew-gold-dark: #8C7230;
-  --stardew-grass: #6FA85B;            /* soft grass, not lime */
-  --stardew-grass-dark: #4A7340;
-  --stardew-wood: #B6906A;             /* warm light wood, not dark coffee */
-  --stardew-wood-dark: #6B4A30;
-  --stardew-wood-light: #D4B088;       /* soft cream-wood */
-  --stardew-parchment: #F2E8D0;        /* soft cream */
-  --stardew-parchment-dark: #D6C8A2;
-  --stardew-stone: #9C958A;
-  --stardew-stone-dark: #5C5448;
-  --stardew-rose: #C76A85;
-  --stardew-sky: #95BCC8;
-  --stardew-sky-dark: #4A6878;
-  --stardew-coal: #3A2F26;
-  --stardew-cream: #FAF3E0;
+  /* Warm, muted SDV palette */
+  --stardew-cream: #F8F0DC;
+  --stardew-cream-light: #FBF6E8;
+  --stardew-honey: #C9A847;
+  --stardew-honey-dark: #9A7F35;
+  --stardew-wood: #B6906A;        /* warm light wood (no coffee) */
+  --stardew-wood-light: #D4B088;
+  --stardew-wood-dark: #8B6A4A;
+  --stardew-stone: #A89880;
+  --stardew-stone-light: #C8BAA0;
+  --stardew-stone-dark: #6B5E48;
+  --stardew-grass: #8FAE6A;
+  --stardew-grass-dark: #6A8A4A;
+  --stardew-coal: #5A4A38;        /* soft warm dark, not pure black */
+  --stardew-rose: #B86A85;
 
-  /* Main UI tokens — soft & muted */
-  --color-surface: #FAF3E0;             /* cream background, not stark white */
-  --color-surface-container: #F0E6CC;
-  --color-surface-container-low: #FAF3E0;
-  --color-surface-container-lowest: #FDFAF0;
-  --color-surface-container-high: #E5D9B8;
-  --color-surface-container-highest: #D6C8A2;
-  --color-surface-sidebar: #B6906A;     /* warm light wood */
-  --color-surface-sidebar-dark: #6B4A30;
+  /* Main UI tokens — soft warm */
+  --color-surface: #FBF6E8;
+  --color-surface-container: #F4ECD6;
+  --color-surface-container-low: #F8F0DC;
+  --color-surface-container-lowest: #FCF8EC;
+  --color-surface-container-high: #EBE1C4;
+  --color-surface-container-highest: #D8C8A4;
+  --color-surface-sidebar: #B6906A;       /* light wood (no coffee) */
+  --color-surface-sidebar-dark: #8B6A4A;
   --color-surface-topbar: #C9A878;
-  --color-surface-active: #6FA85B;      /* soft grass green */
-  --color-surface-hover: #E5D9B8;
-  --color-surface-selected: #C9A847;     /* muted gold for selected */
-  --color-surface-glass: #F2E8D0;
-  --color-surface-glass-border: #6B4A30;
-  --color-surface-bright: #FDFAF0;
+  --color-surface-active: #8FAE6A;
+  --color-surface-hover: #EBE1C4;
+  --color-surface-selected: #C9A847;       /* muted honey, no lemon yellow */
+  --color-surface-glass: #F4ECD6;
+  --color-surface-glass-border: #8B6A4A;
+  --color-surface-bright: #FCF8EC;
 
-  --color-text-primary: #3A2F26;
-  --color-text-secondary: #5C4A38;
-  --color-text-tertiary: #8C7860;
+  --color-text-primary: #3D2F1F;
+  --color-text-secondary: #5A4A38;
+  --color-text-tertiary: #8B7A60;
   --color-text-disabled: #B0A088;
-  --color-text-on-brand: #FAF3E0;
-  --color-text-inverse: #FAF3E0;
+  --color-text-on-brand: #FBF6E8;
+  --color-text-inverse: #FBF6E8;
 
-  --color-border: #8C7860;
+  --color-border: #B6906A;                 /* wood, not coal */
   --color-border-focus: #C9A847;
-  --color-border-separator: #B6906A;
-  --color-border-focus-soft: #8C7230;
+  --color-border-separator: #D4B088;
+  --color-border-focus-soft: #9A7F35;
 
-  --color-brand: #6FA85B;
-  --color-brand-soft: #B0C9A3;
-  --color-brand-strong: #4A7340;
-  --color-primary-fixed: #6FA85B;
+  --color-brand: #6A8A4A;
+  --color-brand-soft: #B5C9A3;
+  --color-brand-strong: #4A6A2A;
+  --color-primary-fixed: #6A8A4A;
 
   --sidebar-width: 320px;
 }
 
-/* ── Sidebar — soft, harmonious ── */
-body.theme-stardew aside[aria-label="Sidebar"] {
-  background: var(--stardew-wood) !important;
-  color: var(--stardew-cream) !important;
-  border-right: 2px solid var(--stardew-coal) !important;
-  font-family: var(--font-body) !important;
-}
-
-/* Title region (mascot + MadCop Agent + GitHub + collapse) */
+/* ── Hide macOS traffic lights in stardew mode ── */
 body.theme-stardew [data-testid="sidebar-title-region"] {
   background: var(--stardew-wood-light) !important;
-  border-bottom: 2px solid var(--stardew-coal) !important;
-  padding: 12px 16px !important;
-  min-height: 64px !important;
+  border-bottom: 1px solid var(--stardew-wood-dark) !important;
+  padding: 16px !important;
+  min-height: 56px !important;
   display: flex !important;
   align-items: center !important;
 }
 body.theme-stardew [data-testid="sidebar-title-region"] .sidebar-copy--visible {
   color: var(--stardew-coal) !important;
   font-size: 14px !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   white-space: nowrap !important;
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
-/* NavItem buttons — soft wood */
+/* Sidebar panel — warm light wood, soft border, NO hard black */
+body.theme-stardew aside[aria-label="Sidebar"] {
+  background: var(--stardew-wood) !important;
+  color: var(--stardew-cream) !important;
+  border-right: 1px solid var(--stardew-wood-dark) !important;
+  font-family: var(--font-body) !important;
+}
+
+/* NavItem buttons — soft cream cards, no hard black borders */
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="新建会话"],
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="定时任务"] {
-  background: var(--stardew-wood-light) !important;
+  background: var(--stardew-cream) !important;
   color: var(--stardew-coal) !important;
-  border: 1px solid var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-wood-dark) !important;
   border-radius: 0 !important;
-  box-shadow: 1px 1px 0 var(--stardew-coal) !important;
   font-weight: 500 !important;
   padding: 8px 12px !important;
   margin: 4px 0 !important;
+  font-size: 13px !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="新建会话"]:hover,
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label="定时任务"]:hover {
-  background: var(--stardew-parchment) !important;
-  color: var(--stardew-coal) !important;
+  background: var(--stardew-cream-light) !important;
 }
 
 /* Search input */
 body.theme-stardew aside[aria-label="Sidebar"] input {
-  background: var(--stardew-cream) !important;
+  background: var(--stardew-cream-light) !important;
   color: var(--stardew-coal) !important;
-  border: 1px solid var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-wood-dark) !important;
   border-radius: 0 !important;
+  font-family: var(--font-body) !important;
+  font-size: 13px !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] kbd {
-  background: var(--stardew-stone-dark) !important;
+  background: var(--stardew-stone) !important;
   color: var(--stardew-cream) !important;
-  border: 1px solid var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-stone-dark) !important;
   border-radius: 0 !important;
   font-size: 10px !important;
+  padding: 1px 4px !important;
 }
 
 /* "项目" label — small soft chip */
@@ -125,32 +134,37 @@ body.theme-stardew [data-testid="sidebar-projects-header"] {
   text-orientation: mixed !important;
   display: flex !important;
   align-items: center !important;
-  padding: 4px 8px !important;
-  background: var(--stardew-stone-dark) !important;
-  color: var(--stardew-cream) !important;
-  border: 1px solid var(--stardew-coal) !important;
+  padding: 4px 10px !important;
+  background: var(--stardew-stone-light) !important;
+  color: var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-wood-dark) !important;
   border-radius: 0 !important;
-  margin: 8px 0 4px 0 !important;
+  margin: 10px 0 4px 0 !important;
   font-size: 11px !important;
   font-weight: 600 !important;
-  letter-spacing: 1px !important;
+  letter-spacing: 1.5px !important;
   text-transform: uppercase !important;
+  width: fit-content !important;
 }
 body.theme-stardew [data-testid="sidebar-projects-header"] > div:first-child {
-  color: var(--stardew-cream) !important;
+  color: var(--stardew-coal) !important;
   white-space: nowrap !important;
   writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
-/* Project group header (MADCOP / UNKNOWN) — soft wood chip */
+/* Project group headers (MADCOP / UNKNOWN) — soft cream */
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Expand project"],
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Collapse project"] {
-  background: var(--stardew-wood-light) !important;
+  background: var(--stardew-cream) !important;
   color: var(--stardew-coal) !important;
-  border: 1px solid var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-wood-dark) !important;
   border-radius: 0 !important;
   font-weight: 600 !important;
-  padding: 6px 8px !important;
+  padding: 6px 10px !important;
   margin: 4px 0 2px 0 !important;
   font-size: 12px !important;
   text-align: left !important;
@@ -163,19 +177,19 @@ body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Collapse proj
 }
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Expand project"]:hover,
 body.theme-stardew aside[aria-label="Sidebar"] button[aria-label*="Collapse project"]:hover {
-  background: var(--stardew-parchment) !important;
+  background: var(--stardew-cream-light) !important;
 }
 
-/* Session list items — soft parchment */
+/* Session list items — soft cream cards */
 body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle,
 body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active,
 body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
-  background: var(--stardew-cream) !important;
+  background: var(--stardew-cream-light) !important;
   color: var(--stardew-coal) !important;
-  border: 1px solid var(--stardew-stone) !important;
+  border: 1px solid var(--stardew-wood-dark) !important;
   border-radius: 0 !important;
-  padding: 6px 8px !important;
-  margin: 1px 0 !important;
+  padding: 6px 10px !important;
+  margin: 2px 0 !important;
   font-size: 12px !important;
   text-align: left !important;
   display: flex !important;
@@ -185,30 +199,30 @@ body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
   width: 100% !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--idle:hover {
-  background: var(--stardew-parchment) !important;
-  border-color: var(--stardew-coal) !important;
+  background: var(--stardew-cream) !important;
+  border-color: var(--stardew-honey) !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--active,
 body.theme-stardew aside[aria-label="Sidebar"] .sidebar-session-row--selected {
-  background: var(--stardew-gold) !important;
+  background: var(--stardew-honey) !important;     /* muted honey, NOT lemon yellow */
   color: var(--stardew-coal) !important;
-  border-color: var(--stardew-coal) !important;
+  border-color: var(--stardew-honey-dark) !important;
   font-weight: 600 !important;
 }
 
-/* Settings button at bottom */
+/* Settings button at bottom — soft stone, no lime green */
 body.theme-stardew aside[aria-label="Sidebar"] [class*="sidebar-settings-dock"] button {
-  background: var(--stardew-stone-dark) !important;
+  background: var(--stardew-stone) !important;
   color: var(--stardew-cream) !important;
-  border-top: 1px solid var(--stardew-coal) !important;
+  border-top: 1px solid var(--stardew-wood-dark) !important;
   border-radius: 0 !important;
   font-weight: 600 !important;
-  padding: 10px 16px !important;
+  padding: 12px 16px !important;
   font-size: 13px !important;
   width: 100% !important;
 }
 body.theme-stardew aside[aria-label="Sidebar"] [class*="sidebar-settings-dock"] button:hover {
-  background: var(--stardew-coal) !important;
+  background: var(--stardew-stone-dark) !important;
 }
 
 /* GitHub icon top right */
@@ -233,40 +247,39 @@ body.theme-stardew [data-testid="sidebar-expand-button"] {
   border-radius: 0 !important;
 }
 
-/* ── Top bar (TabBar) — soft wood plank ── */
+/* ── Top bar (TabBar) — soft warm plank, NO black borders ── */
 body.theme-stardew [data-testid="tab-bar-scroll-region"] {
-  background: var(--stardew-wood) !important;
-  border-bottom: 2px solid var(--stardew-coal) !important;
+  background: var(--stardew-wood-light) !important;
+  border-bottom: 1px solid var(--stardew-wood-dark) !important;
   min-height: 48px !important;
   padding-left: 80px !important;
 }
 
 body.theme-stardew .tab-bar-interactive {
-  background: var(--stardew-parchment) !important;
+  background: var(--stardew-cream) !important;
   color: var(--stardew-coal) !important;
-  border: 1px solid var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-wood-dark) !important;
   border-radius: 0 !important;
   font-size: 12px !important;
   font-weight: 500 !important;
-  padding: 6px 12px !important;
-  margin: 8px 2px !important;
+  padding: 6px 14px !important;
+  margin: 10px 3px !important;
   min-height: 32px !important;
   display: flex !important;
   align-items: center !important;
 }
 body.theme-stardew .tab-bar-interactive:hover {
-  background: var(--stardew-cream) !important;
+  background: var(--stardew-cream-light) !important;
 }
 body.theme-stardew .tab-bar-interactive[data-active="true"],
 body.theme-stardew .tab-bar-interactive[aria-selected="true"] {
-  background: var(--stardew-gold) !important;
+  background: var(--stardew-honey) !important;       /* muted honey, no lemon */
   color: var(--stardew-coal) !important;
-  font-weight: 700 !important;
-  border: 2px solid var(--stardew-coal) !important;
-  margin: 7px 1px !important;
+  font-weight: 600 !important;
+  border: 1px solid var(--stardew-honey-dark) !important;
 }
 
-/* ── Main content — cream parchment ── */
+/* ── Main content — soft warm cream ── */
 body.theme-stardew main,
 body.theme-stardew [class*="main-panel"] {
   background: var(--stardew-cream) !important;
@@ -276,11 +289,11 @@ body.theme-stardew [class*="main-panel"] {
 body.theme-stardew input[type="text"],
 body.theme-stardew input[type="search"],
 body.theme-stardew textarea {
-  background: var(--stardew-cream) !important;
+  background: var(--stardew-cream-light) !important;
   color: var(--stardew-coal) !important;
-  border: 1px solid var(--stardew-coal) !important;
+  border: 1px solid var(--stardew-wood-dark) !important;
   border-radius: 0 !important;
-  font-family: var(--font-mono) !important;
+  font-family: var(--font-body) !important;
 }
 
 body.theme-stardew button {
@@ -296,4 +309,19 @@ body.theme-stardew code {
   border-radius: 0 !important;
   font-family: var(--font-mono) !important;
   padding: 8px 12px !important;
+}
+
+/* Tab bar drag gutter */
+body.theme-stardew [data-testid="tab-bar-drag-gutter"] {
+  background: var(--stardew-wood-light) !important;
+}
+
+/* Hide the macOS-style window controls in stardew (they clash) */
+body.theme-stardew [class*="WindowControls"] {
+  display: none !important;
+}
+body.theme-stardew [aria-label="Close window"],
+body.theme-stardew [aria-label="Minimize window"],
+body.theme-stardew [aria-label="Maximize window"] {
+  display: none !important;
 }
