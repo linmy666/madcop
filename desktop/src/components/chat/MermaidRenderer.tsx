@@ -665,6 +665,42 @@ export function MermaidRenderer({ code }: Props) {
               text={code}
               className="rounded-md border border-[var(--color-outline-variant)]/40 bg-[var(--color-surface-container-lowest)] px-2 py-1 text-[11px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-container-high)] hover:text-[var(--color-text-primary)]"
             />
+            <button
+              onClick={async () => {
+                try {
+                  const svgEl = containerRef.current?.querySelector('svg')
+                  if (!svgEl) return
+                  const svgData = new XMLSerializer().serializeToString(svgEl)
+                  const canvas = document.createElement('canvas')
+                  const ctx = canvas.getContext('2d')
+                  if (!ctx) return
+                  const img = new Image()
+                  const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+                  const url = URL.createObjectURL(svgBlob)
+                  img.onload = () => {
+                    canvas.width = img.width * 2
+                    canvas.height = img.height * 2
+                    ctx.scale(2, 2)
+                    ctx.fillStyle = '#fff'
+                    ctx.fillRect(0, 0, canvas.width, canvas.height)
+                    ctx.drawImage(img, 0, 0)
+                    URL.revokeObjectURL(url)
+                    canvas.toBlob((blob) => {
+                      if (!blob) return
+                      const a = document.createElement('a')
+                      a.href = URL.createObjectURL(blob)
+                      a.download = `madcop-chart-${Date.now()}.png`
+                      a.click()
+                      URL.revokeObjectURL(a.href)
+                    }, 'image/png')
+                  }
+                  img.src = url
+                } catch { /* noop */ }
+              }}
+              className="rounded-md border border-[var(--color-outline-variant)]/40 bg-[var(--color-surface-container-lowest)] px-2 py-1 text-[11px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-container-high)] hover:text-[var(--color-text-primary)]"
+            >
+              💾 保存
+            </button>
           </div>
         </div>
 
