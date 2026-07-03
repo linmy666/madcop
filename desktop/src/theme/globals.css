@@ -336,14 +336,14 @@
 
 /* ─── Tailwind Theme Override (MadCop Agent — emerald teal) ─── */
 @theme {
-  --color-primary: #0F766E;
-  --color-primary-container: #14B8A6;
-  --color-primary-fixed: #CCFBF1;
-  --color-primary-fixed-dim: #99F6E4;
+  --color-primary: #7C3AED;
+  --color-primary-container: #A78BFA;
+  --color-primary-fixed: #F3E8FF;
+  --color-primary-fixed-dim: #E9D5FF;
 
   --color-on-primary: #FFFFFF;
   --color-on-surface: #1B1C1A;
-  --color-on-surface-variant: #2D5F5A;
+  --color-on-surface-variant: #4C1D95;
 
   --color-surface: #FAF9F5;
   --color-surface-bright: #FAF9F5;
@@ -371,7 +371,7 @@
 
   --color-inverse-surface: #2F312E;
   --color-inverse-on-surface: #F2F1ED;
-  --color-inverse-primary: #99F6E4;
+  --color-inverse-primary: #A78BFA;
 
   --color-success: #16A34A;
   --color-success-container: #E8F5E2;
@@ -423,7 +423,7 @@
   --color-activity-cell-border: rgba(135, 115, 109, 0.3);
   --color-activity-cell-border-hover: rgba(15, 118, 110, 0.58);
   --color-activity-cell-border-active: var(--color-text-primary);
-  --shadow-activity-cell-hover: 0 0 0 2px rgba(15, 118, 110, 0.12), 0 8px 18px rgba(65, 54, 48, 0.16);
+  --shadow-activity-cell-hover: 0 0 0 2px rgba(124, 58, 237, 0.12), 0 8px 18px rgba(65, 54, 48, 0.16);
   --color-activity-tooltip-surface: #2F312E;
   --color-activity-tooltip-border: rgba(255, 255, 255, 0.12);
   --color-activity-tooltip-text: #F2F1ED;
@@ -460,7 +460,7 @@
   --color-sidebar-search-border: rgba(218, 193, 186, 0.88);
   --color-sidebar-item-hover: rgba(239, 238, 234, 0.82);
   --color-sidebar-item-active: rgba(239, 238, 234, 0.94);
-  --color-sidebar-item-active-border: rgba(15, 118, 110, 0.12);
+  --color-sidebar-item-active-border: rgba(124, 58, 237, 0.12);
   --sidebar-panel-bg-image: none;
 
   /* Border aliases */
@@ -483,9 +483,9 @@
   /* Shadows */
   --shadow-dropdown: 0 4px 20px rgba(27, 28, 26, 0.04), 0 12px 40px rgba(27, 28, 26, 0.08);
   --shadow-sidebar-filter: none;
-  --shadow-focus-ring: 0 0 0 1px rgba(15, 118, 110, 0.16);
+  --shadow-focus-ring: 0 0 0 1px rgba(124, 58, 237, 0.16);
   --shadow-error-ring: 0 0 0 1px rgba(186, 26, 26, 0.18);
-  --shadow-button-primary: 0 8px 24px rgba(15, 118, 110, 0.18);
+  --shadow-button-primary: 0 8px 24px rgba(124, 58, 237, 0.18);
 
   /* Button colors */
   --color-btn-primary-fg: var(--color-on-primary);
@@ -565,10 +565,10 @@
 [data-theme="white"] {
   color-scheme: light;
 
-  --color-primary: #0F766E;
-  --color-primary-container: #14B8A6;
-  --color-primary-fixed: #CCFBF1;
-  --color-primary-fixed-dim: #99F6E4;
+  --color-primary: #7C3AED;
+  --color-primary-container: #A78BFA;
+  --color-primary-fixed: #F3E8FF;
+  --color-primary-fixed-dim: #E9D5FF;
 
   --color-on-primary: #FFFFFF;
   --color-on-surface: #111827;
@@ -599,7 +599,7 @@
 
   --color-inverse-surface: #111827;
   --color-inverse-on-surface: #F9FAFB;
-  --color-inverse-primary: #99F6E4;
+  --color-inverse-primary: #A78BFA;
 
   --color-success: #087E4F;
   --color-success-container: #DCFAE6;
@@ -631,7 +631,7 @@
   --color-activity-cell-border: rgba(139, 152, 167, 0.32);
   --color-activity-cell-border-hover: rgba(15, 118, 110, 0.55);
   --color-activity-cell-border-active: var(--color-text-primary);
-  --shadow-activity-cell-hover: 0 0 0 2px rgba(15, 118, 110, 0.11), 0 8px 18px rgba(15, 23, 42, 0.14);
+  --shadow-activity-cell-hover: 0 0 0 2px rgba(124, 58, 237, 0.11), 0 8px 18px rgba(15, 23, 42, 0.14);
   --color-activity-tooltip-surface: #111827;
   --color-activity-tooltip-border: rgba(255, 255, 255, 0.14);
   --color-activity-tooltip-text: #F9FAFB;
@@ -664,7 +664,7 @@
   --color-sidebar-search-border: rgba(203, 213, 225, 0.88);
   --color-sidebar-item-hover: rgba(255, 255, 255, 0.78);
   --color-sidebar-item-active: rgba(255, 255, 255, 0.94);
-  --color-sidebar-item-active-border: rgba(15, 118, 110, 0.16);
+  --color-sidebar-item-active-border: rgba(124, 58, 237, 0.16);
   --sidebar-panel-bg-image: none;
 
   --color-border: #DDE3EA;
@@ -683,7 +683,7 @@
   --shadow-sidebar-filter: 0 1px 2px rgba(15, 23, 42, 0.04);
   --shadow-focus-ring: 0 0 0 1px rgba(139, 152, 167, 0.42), 0 0 0 4px rgba(221, 227, 234, 0.56);
   --shadow-error-ring: 0 0 0 1px rgba(180, 35, 24, 0.22), 0 0 0 4px rgba(254, 228, 226, 0.86);
-  --shadow-button-primary: 0 10px 24px rgba(15, 118, 110, 0.18);
+  --shadow-button-primary: 0 10px 24px rgba(124, 58, 237, 0.18);
 
   --color-btn-primary-fg: var(--color-on-primary);
   --gradient-btn-primary: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
@@ -750,10 +750,10 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --color-primary: #5EEAD4;
-  --color-primary-container: #2DD4BF;
-  --color-primary-fixed: #134E4A;
-  --color-primary-fixed-dim: #0F766E;
+  --color-primary: #A78BFA;
+  --color-primary-container: #7C3AED;
+  --color-primary-fixed: #2E1065;
+  --color-primary-fixed-dim: #4C1D95;
 
   --color-on-primary: #042F2E;
   --color-on-surface: #E5E2E1;
@@ -868,9 +868,9 @@
 
   --shadow-dropdown: 0 16px 40px rgba(0, 0, 0, 0.42);
   --shadow-sidebar-filter: none;
-  --shadow-focus-ring: 0 0 0 1px rgba(94, 234, 212, 0.32);
+  --shadow-focus-ring: 0 0 0 1px rgba(167, 139, 250, 0.32);
   --shadow-error-ring: 0 0 0 1px rgba(248, 113, 113), 0.26);
-  --shadow-button-primary: 0 12px 24px rgba(45, 212, 191, 0.18);
+  --shadow-button-primary: 0 12px 24px rgba(124, 58, 237, 0.18);
 
   --gradient-btn-primary: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
   --gradient-btn-primary-hover: linear-gradient(135deg, var(--color-primary-container), var(--color-primary));
@@ -901,7 +901,7 @@
   --color-diff-added-text: #8EEA9A;
   --color-diff-removed-bg: rgba(45, 212, 191, 0.12);
   --color-diff-removed-word: rgba(45, 212, 191, 0.24);
-  --color-diff-removed-gutter: rgba(45, 212, 191, 0.18);
+  --color-diff-removed-gutter: rgba(124, 58, 237, 0.18);
   --color-diff-removed-text: #5EEAD4;
   --color-diff-highlight-bg: rgba(205, 189, 255, 0.12);
   --color-diff-highlight-gutter: rgba(205, 189, 255, 0.16);
@@ -919,7 +919,7 @@
   --color-terminal-warning: #F8C55F;
 
   --color-window-close-hover: #C63B44;
-  --color-selection-bg: rgba(94, 234, 212, 0.32);
+  --color-selection-bg: rgba(167, 139, 250, 0.32);
   --color-selection-fg: #FBE7E1;
   --color-text-secondary-a72: rgba(183, 170, 165, 0.72);
   --color-text-secondary-a68: rgba(183, 170, 165, 0.68);
