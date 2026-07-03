@@ -1269,6 +1269,16 @@ def create_app() -> FastAPI:
     from .cc_haha_compat import register as register_cc_haha_compat
     from .cc_haha_compat import install_catch_all
     register_cc_haha_compat(app)
+
+    # ------------------------------------------------------------------- #
+    # v2.7.0 — Visual workflow orchestration API.
+    # MUST be mounted BEFORE install_catch_all, because catch_all
+    # has path /api/{path:path} and would otherwise intercept
+    # /api/workflows/* routes.
+    # ------------------------------------------------------------------- #
+    from madcop.workflow.api import router as workflow_router
+    app.include_router(workflow_router)
+
     install_catch_all(app)
 
     # ------------------------------------------------------------------- #
