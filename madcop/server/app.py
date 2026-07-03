@@ -167,7 +167,33 @@ def _build_memory_system_prompt(
         "OUTPUT FORMAT: Give the user-facing answer only. Do NOT preface "
         "with phrases like 'The user is asking...', 'I should recall...', "
         "'Let me think about...', 'Based on my memory...'. Start with the "
-        "actual answer. No meta-commentary."
+        "actual answer. No meta-commentary.\n\n"
+        "BI ANALYSIS / RESEARCH REPORTS: When the user asks you to generate "
+        "a BI report, analysis, industry overview, or research document:\n"
+        "1. Call web_search 2-3 times with different queries to gather "
+        "comprehensive data (e.g. 'market size' + 'competitive landscape' + "
+        "'trends'). Include year keywords like '2025 2026'.\n"
+        "2. Call web_fetch on the most promising result URLs to get detailed "
+        "data if needed.\n"
+        "3. Synthesize the findings into a structured Markdown report with:\n"
+        "   - Tables (| 指标 | 数据 | 来源 | format)\n"
+        "   - Bullet-point key findings\n"
+        "   - A brief trend analysis paragraph\n"
+        "4. If the user asks for a comparison (e.g. '对比A和B'), build a "
+        "comparison table.\n"
+        "5. Always cite sources with simple inline references.\n"
+        "6. The report should be 300-800 words, self-contained, and visually "
+        "readable in the chat. Use headers (##, ###).\n"
+        "7. If you need more data than a single search provides, do multiple "
+        "rounds of web_search with refined queries. Don't settle for one search.\n\n"
+        "EXAMPLES of BI reports the user wants:\n"
+        "  - '帮我生成一份新能源汽车行业的BI分析报告' → search 3 times, "
+        "produce a structured report with market size table, competitor table, trends\n"
+        "  - '对比抖音和快手的电商数据' → search both, build comparison table\n"
+        "  - '分析AI芯片行业的竞争格局' → search multiple angles, produce analysis\n\n"
+        "FLOW: The user just says what they want. YOU decide the search strategy. "
+        "Do NOT ask the user for clarification on BI/report tasks — just search, "
+        "analyze, and deliver."
     ]
 
     # --- user-profile facts (always injected, token-capped) ----------- #
@@ -617,10 +643,14 @@ def create_app() -> FastAPI:
 
     def _stream_chunks(client, messages, body):
         """Yield SSE formatted strings from a streaming LLM call."""
+        max_tokens = getattr(body, "max_tokens", None)
+        tools = getattr(body, "tools", None)
         for chunk in client.stream(
             messages,
             model=body.model,
             temperature=body.temperature,
+            max_tokens=max_tokens,
+            tools=tools,
         ):
             if chunk.reasoning:
                 yield f"data: {json.dumps({'type': 'reasoning', 'content': chunk.reasoning})}\n\n"
@@ -861,8 +891,20 @@ def create_app() -> FastAPI:
                 trace_store.mark_running(phase2_node.id)
                 yield f"data: {json.dumps({'type': 'trace', 'node': phase2_node.to_dict()}, ensure_ascii=False)}\n\n"
 
-                # Stream the final response normally.
-                for sse in _stream_chunks(client, messages, body):
+                # Stream the final response normally but WITHOUT tools,
+                # so the model MUST answer instead of calling more tools.
+                # Also set max_tokens explicitly to avoid the model producing
+                # empty responses (sensenova tends to return 0 tokens when
+                # it has no guidance about output length).
+                from dataclasses import dataclass
+                @dataclass
+                class _BareBody:
+                    model: str
+                    temperature: float
+                    max_tokens: int = 1024
+                    tools: None = None
+                no_tools_body = _BareBody(model=body.model or "", temperature=body.temperature or 0.7)
+                for sse in _stream_chunks(client, messages, no_tools_body):
                     yield sse
 
                 # Mark phase 2 done
