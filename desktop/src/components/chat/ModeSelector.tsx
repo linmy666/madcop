@@ -72,7 +72,7 @@ export function ModeSelector({ currentMode, onModeChange }: Props) {
         }}
         title={current?.description || '选择模式'}
       >
-        <span>{current?.icon || '🧠'}</span>
+        <span style={{ fontSize: 9, opacity: 0.6 }}>▾</span>
         <span>{current?.name || 'ReAct'}</span>
         <span style={{ fontSize: 9, opacity: 0.6 }}>▾</span>
       </button>
@@ -144,7 +144,9 @@ export function ModeSelector({ currentMode, onModeChange }: Props) {
                           : 'transparent'
                     }}
                   >
-                    <span style={{ fontSize: 16, flexShrink: 0 }}>{m.icon}</span>
+                    <span style={{ fontSize: 16, flexShrink: 0 }}>
+                      {m.id === 'single_agent' ? '1' : m.id === 'sequential' ? '→' : m.id === 'parallel' ? '∥' : m.id === 'loop' ? '↻' : m.id === 'review_critique' ? '✓' : m.id === 'iterative_refine' ? '↑' : m.id === 'coordinator' ? '◎' : m.id === 'hierarchical' ? '⊞' : m.id === 'swarm' ? '∞' : m.id === 'react' ? '◉' : m.id === 'human_in_loop' ? '◎' : '⚙'}
+                    </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{m.name}</div>
                       <div

@@ -189,6 +189,8 @@ export function WorkflowsListPage() {
         margin: '0 auto',
         padding: '40px 20px',
         color: 'var(--color-text-primary)',
+        height: '100%',
+        overflowY: 'auto',
       }}
     >
       <div
@@ -292,7 +294,7 @@ export function WorkflowsListPage() {
       )}
 
       {/* 模式库 */}
-      <h2 style={{ fontSize: 18, fontWeight: 700, margin: '32px 0 16px' }}>🧠 模式库</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 700, margin: '32px 0 16px' }}>模式库</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
         {modes.map((mode) => (
           <div
@@ -305,7 +307,7 @@ export function WorkflowsListPage() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 18 }}>{mode.icon}</span>
+              <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-brand)' }}>{mode.id === 'single_agent' ? '1' : mode.id === 'sequential' ? '→' : mode.id === 'parallel' ? '∥' : mode.id === 'loop' ? '↻' : mode.id === 'review_critique' ? '✓' : mode.id === 'iterative_refine' ? '↑' : mode.id === 'coordinator' ? '◎' : mode.id === 'hierarchical' ? '⊞' : mode.id === 'swarm' ? '∞' : mode.id === 'react' ? '◉' : mode.id === 'human_in_loop' ? '◎' : '⚙'}</span>
               <span style={{ fontSize: 14, fontWeight: 600 }}>{mode.name}</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 10, lineHeight: 1.4 }}>
