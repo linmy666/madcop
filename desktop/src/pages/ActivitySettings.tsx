@@ -77,7 +77,7 @@ const DEFAULT_PROFILE: DesktopProfilePreferences = {
 // v2.6.3.1: Use the new purple-drop mascot instead of the old detective
 // app-icon. The app-icon was a 3D detective character; the new mascot
 // is the purple drop with halo that the rest of the app uses.
-const DEFAULT_AVATAR_SRC = publicAssetPath('mascot.png')
+const DEFAULT_AVATAR_SRC = publicAssetPath('mascot.png?v=2632')
 
 function localDateKey(date: Date) {
   const year = date.getFullYear()

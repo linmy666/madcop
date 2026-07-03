@@ -53,7 +53,7 @@ export function MascotAvatar({ size = 32 }: { size?: number }) {
         style={{ width: size, height: size }}
       >
         <img
-          src="./mascot.png"
+          src="./mascot.png?v=2632"
           alt="MadCop mascot"
           className="absolute inset-0 h-full w-full"
           style={style}

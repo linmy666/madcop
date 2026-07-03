@@ -6,14 +6,19 @@ import { useEffect, useState } from 'react'
  *
  * Renders the new MadCop mascot (a friendly purple-drop creature
  * with a halo + smile) in three animation states:
- *   - 'ready'    : halo gently rotates (mascot scanning)
+ *   - 'ready'    : mascot gently breathes
  *   - 'thinking' : mascot tilts left-right (considering)
  *   - 'working'  : mascot bobs up and down (executing)
+ *
+ * v2.6.3.2: simplified to JUST the mascot image with breathing
+ * animation. No separate halo layer (mascot already has its own
+ * halo baked into the PNG). No sparkle particles. No status
+ * icon (user said '不要加任何icon'). Just a clean mascot + a
+ * plain text label.
  *
  * The mascot image is selected by theme:
  *   - default / white / dark / light → mascot.png (purple creature)
  *   - theme-stardew                  → mascot-stardew.png
- *   - theme-bauhaus                  → mascot-bauhaus.png
  *
  * Uses inline SVG animations (no external assets, no videos)
  * so it renders instantly, scales perfectly at any size, and
@@ -35,25 +40,20 @@ const STAGE_LABELS: Record<MadCopState, string> = {
   working: 'MadCop 正在工作',
 }
 
-const STAGE_ICONS: Record<MadCopState, string> = {
-  ready: '🔍',
-  thinking: '✏️',
-  working: '⚡',
-}
-
 function pickMascotSrc(): string {
-  if (typeof document === 'undefined') return './mascot.png'
-  if (document.body.classList.contains('theme-bauhaus'))
-    return './mascot-bauhaus.png'
+  // v2.6.3.2: cache-bust so Electron re-fetches the file when it changes.
+  // The renderer caches `./mascot.png` aggressively; a timestamp query
+  // string forces a fresh load after the user updates the file.
+  if (typeof document === 'undefined') return './mascot.png?v=2632'
   if (document.body.classList.contains('theme-stardew'))
-    return './mascot-stardew.png'
-  return './mascot.png'
+    return './mascot-stardew.png?v=2632'
+  return './mascot.png?v=2632'
 }
 
 export function MadCopLoader({
   state,
   className = '',
-  size = 80,
+  size = 192,
   label,
 }: Props) {
   const [mascotSrc, setMascotSrc] = useState('./mascot.png')
@@ -81,8 +81,14 @@ export function MadCopLoader({
     <div
       role="img"
       aria-label={label ?? STAGE_LABELS[state]}
-      className={`inline-flex flex-col items-center gap-3 ${className}`}
-      style={{ width: size + 32 }}
+      className={`madcop-loader ${className}`}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 12,
+        background: 'transparent',
+      }}
     >
       <div
         className={animClass}
@@ -93,38 +99,33 @@ export function MadCopLoader({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          margin: '0 auto',
+          flexShrink: 0,
         }}
       >
         <img
           src={mascotSrc}
           alt="MadCop mascot"
-          className="block w-full h-full"
+          className="block"
           style={{
-            imageRendering: 'pixelated',
+            width: '100%',
+            height: '100%',
+            imageRendering: 'auto',
             objectFit: 'contain',
+            background: 'transparent',
+            display: 'block',
           }}
           draggable={false}
         />
-        {/* Halo — separate animated layer, always present */}
-        <div className="madcop-loader-halo" aria-hidden="true" />
-        {/* Sparkle particles — visible only in 'working' state via CSS */}
-        <div className="madcop-loader-sparkle" aria-hidden="true" />
-        <div className="madcop-loader-sparkle" aria-hidden="true" />
-        <div className="madcop-loader-sparkle" aria-hidden="true" />
-        <div className="madcop-loader-sparkle" aria-hidden="true" />
       </div>
 
       <div
-        className="text-center"
         style={{
-          fontSize: 13,
+          fontSize: 16,
           color: 'var(--color-text-secondary)',
           fontWeight: 500,
-          maxWidth: size + 32,
+          textAlign: 'center',
         }}
       >
-        <span style={{ marginRight: 6 }}>{STAGE_ICONS[state]}</span>
         {label ?? STAGE_LABELS[state]}
       </div>
 
@@ -134,111 +135,33 @@ export function MadCopLoader({
 }
 
 const mascotLoaderStyles = `
-/* The mascot image is rendered inside an animated wrapper div.
-   The wrapper handles rotation/scale, the image does the halo. */
+/* v2.6.3.2: simplified animations. No separate halo, no sparkles.
+   The mascot PNG already has its own halo. */
 .madcop-anim-breathe {
   animation: madcop-anim-breathe 3s ease-in-out infinite;
   transform-origin: center;
-  position: relative;
 }
 .madcop-anim-think {
   animation: madcop-anim-think 1.6s ease-in-out infinite;
   transform-origin: center bottom;
-  position: relative;
 }
 .madcop-anim-work {
   animation: madcop-anim-work 0.8s ease-in-out infinite;
   transform-origin: center;
-  position: relative;
-}
-
-/* Halo floats above the mascot — separate animated layer.
-   v2.6.3.2: changed from gold to purple to match the mascot's
-   color palette. The halo is a thin purple ring with a soft
-   glow. In stardew theme, we hide it (mascot-stardew.png already
-   has its own halo drawn into the artwork). */
-.madcop-loader-halo {
-  position: absolute;
-  top: -2%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 42%;
-  height: 16%;
-  border: 3px solid rgba(180, 130, 230, 0.9);
-  border-radius: 50%;
-  box-shadow:
-    0 0 14px rgba(180, 130, 230, 0.55),
-    inset 0 0 6px rgba(220, 200, 255, 0.5);
-  pointer-events: none;
-  animation: madcop-halo-pulse 3s ease-in-out infinite;
-  background: transparent;
-}
-.madcop-anim-think .madcop-loader-halo {
-  animation: madcop-halo-think 1.6s ease-in-out infinite;
-}
-.madcop-anim-work .madcop-loader-halo {
-  animation: madcop-halo-work 0.8s ease-in-out infinite;
-}
-
-/* In stardew theme, the mascot-stardew.png is a 16-bit pixel
-   sprite that already includes its own halo baked into the
-   artwork. Hide the CSS halo layer so we don't get a floating
-   ring on top of the sprite's own halo. */
-body.theme-stardew .madcop-loader-halo {
-  display: none !important;
 }
 
 @keyframes madcop-anim-breathe {
   0%, 100% { transform: scale(1)    translateY(0); }
-  50%      { transform: scale(1.05) translateY(-3px); }
+  50%      { transform: scale(1.04) translateY(-3px); }
 }
 @keyframes madcop-anim-think {
-  0%, 100% { transform: rotate(-4deg)  scale(1); }
-  25%      { transform: rotate(-6deg)  scale(1.03); }
-  50%      { transform: rotate(0deg)   scale(1.06); }
-  75%      { transform: rotate(6deg)   scale(1.03); }
+  0%, 100% { transform: rotate(-3deg); }
+  25%      { transform: rotate(-5deg); }
+  50%      { transform: rotate(0deg); }
+  75%      { transform: rotate(5deg); }
 }
 @keyframes madcop-anim-work {
-  0%, 100% { transform: translateY(0)    scale(1); }
-  50%      { transform: translateY(-10px) scale(0.94); }
-}
-@keyframes madcop-halo-pulse {
-  0%, 100% { transform: translateX(-50%) scale(1)    rotate(0deg);   opacity: 0.85; }
-  50%      { transform: translateX(-50%) scale(1.15) rotate(15deg);  opacity: 1;    }
-}
-@keyframes madcop-halo-think {
-  0%, 100% { transform: translateX(-50%) rotate(0deg); }
-  25%      { transform: translateX(-50%) rotate(-20deg); }
-  50%      { transform: translateX(-50%) rotate(0deg); }
-  75%      { transform: translateX(-50%) rotate(20deg); }
-}
-@keyframes madcop-halo-work {
-  0%, 100% { transform: translateX(-50%) scale(1); }
-  50%      { transform: translateX(-50%) scale(1.3); }
-}
-
-/* Sparkle particles around the mascot in 'working' state.
-   v2.6.3.2: changed to purple to match the new halo color. */
-.madcop-loader-sparkle {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  background: rgba(180, 130, 230, 0.95);
-  border-radius: 50%;
-  opacity: 0;
-  pointer-events: none;
-  box-shadow: 0 0 6px rgba(180, 130, 230, 0.7);
-}
-.madcop-anim-work .madcop-loader-sparkle {
-  animation: madcop-sparkle 0.8s ease-out infinite;
-}
-.madcop-loader-sparkle:nth-child(2) { top: 10%; left: 10%; animation-delay: 0.1s; }
-.madcop-loader-sparkle:nth-child(3) { top: 10%; right: 10%; animation-delay: 0.3s; }
-.madcop-loader-sparkle:nth-child(4) { bottom: 20%; left: 5%; animation-delay: 0.5s; }
-.madcop-loader-sparkle:nth-child(5) { bottom: 20%; right: 5%; animation-delay: 0.7s; }
-@keyframes madcop-sparkle {
-  0%   { opacity: 0; transform: scale(0.5) translateY(0); }
-  50%  { opacity: 1; transform: scale(1.2) translateY(-6px); }
-  100% { opacity: 0; transform: scale(0.5) translateY(-12px); }
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
 }
 `
