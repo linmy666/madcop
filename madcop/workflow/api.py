@@ -59,8 +59,90 @@ class RunRequest(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Routes
+# Workflow templates (MUST come before {workflow_id} routes)
 # --------------------------------------------------------------------------- #
+
+_TEMPLATES: dict[str, dict[str, Any]] = {
+    "research_report": {
+        "name": "调查报告",
+        "description": "自动搜索资料 → 分析整理 → 生成本地 Markdown 报告",
+        "nodes": [
+            {"id": "start-1", "type": "start", "position": {"x": 50, "y": 200}, "data": {"label": "开始"}},
+            {"id": "search-1", "type": "web_search", "position": {"x": 280, "y": 200}, "data": {"label": "搜索资料", "query": "{{input}}"}},
+            {"id": "llm-1", "type": "llm", "position": {"x": 510, "y": 200}, "data": {"label": "分析整理", "prompt": "请根据以下搜索结果, 写一份详细的分析报告(中文):\n\n{{search-1.output.results}}", "system": "你是专业的行业分析师, 擅长从信息中提炼洞察。"}},
+            {"id": "tool-write", "type": "tool", "position": {"x": 740, "y": 200}, "data": {"label": "写入文件", "tool": "write_file", "params": {"path": "/Users/linruihan/Desktop/{{input}}_报告.md", "content": "{{llm-1.output.text}}"}}},
+            {"id": "end-1", "type": "end", "position": {"x": 970, "y": 200}, "data": {"label": "完成"}},
+        ],
+        "edges": [
+            {"id": "e1", "source": "start-1", "target": "search-1"},
+            {"id": "e2", "source": "search-1", "target": "llm-1"},
+            {"id": "e3", "source": "llm-1", "target": "tool-write"},
+            {"id": "e4", "source": "tool-write", "target": "end-1"},
+        ],
+    },
+    "bi_analysis": {
+        "name": "BI 数据分析",
+        "description": "搜索行业数据 → 生成 BI 分析报告 → 保存 Markdown",
+        "nodes": [
+            {"id": "start-1", "type": "start", "position": {"x": 50, "y": 200}, "data": {"label": "开始"}},
+            {"id": "search-1", "type": "web_search", "position": {"x": 280, "y": 200}, "data": {"label": "搜索行业数据", "query": "{{input}} 行业数据 2025 2026 市场规模 增长率"}},
+            {"id": "search-2", "type": "web_search", "position": {"x": 280, "y": 350}, "data": {"label": "搜索竞品分析", "query": "{{input}} 竞争格局 市场份额 头部企业"}},
+            {"id": "agg-1", "type": "aggregator", "position": {"x": 510, "y": 275}, "data": {"label": "合并搜索结果", "mode": "merge"}},
+            {"id": "llm-bi", "type": "llm", "position": {"x": 740, "y": 275}, "data": {"label": "BI 分析", "prompt": "请根据以下数据, 写一份专业的BI分析报告(中文Markdown格式):\n\n搜索数据: {{agg-1.output.combined}}\n\n报告结构要求:\n1. 行业概览 (市场规模、增速)\n2. 竞争格局 (头部玩家、市场份额)\n3. 趋势分析 (增长点、风险)\n4. 数据可视化建议 (什么图表适合展示什么数据)\n5. 结论与建议", "system": "你是资深的BI分析师, 擅长从数据中提取商业洞察。"}},
+            {"id": "tool-write", "type": "tool", "position": {"x": 970, "y": 275}, "data": {"label": "保存报告", "tool": "write_file", "params": {"path": "/Users/linruihan/Desktop/BI_分析_{{input}}_2026.md", "content": "{{llm-bi.output.text}}"}}},
+            {"id": "end-1", "type": "end", "position": {"x": 1200, "y": 275}, "data": {"label": "完成"}},
+        ],
+        "edges": [
+            {"id": "e1", "source": "start-1", "target": "search-1"},
+            {"id": "e2", "source": "start-1", "target": "search-2"},
+            {"id": "e3", "source": "search-1", "target": "agg-1"},
+            {"id": "e4", "source": "search-2", "target": "agg-1"},
+            {"id": "e5", "source": "agg-1", "target": "llm-bi"},
+            {"id": "e6", "source": "llm-bi", "target": "tool-write"},
+            {"id": "e7", "source": "tool-write", "target": "end-1"},
+        ],
+    },
+}
+
+
+@router.get("/templates")
+async def list_templates() -> dict[str, Any]:
+    out = []
+    for tid, tmpl in _TEMPLATES.items():
+        out.append({
+            "id": tid,
+            "name": tmpl["name"],
+            "description": tmpl["description"],
+            "node_count": len(tmpl["nodes"]),
+            "edge_count": len(tmpl["edges"]),
+        })
+    return {"templates": out}
+
+
+@router.get("/templates/{template_id}")
+async def get_template(template_id: str) -> dict[str, Any]:
+    if template_id not in _TEMPLATES:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return {"id": template_id, **_TEMPLATES[template_id]}
+
+
+@router.post("/templates/{template_id}/instantiate")
+async def instantiate_template(template_id: str) -> dict[str, Any]:
+    if template_id not in _TEMPLATES:
+        raise HTTPException(status_code=404, detail="Template not found")
+    tmpl = _TEMPLATES[template_id]
+    wf = p.Workflow(
+        id=uuid.uuid4().hex,
+        name=tmpl["name"],
+        description=tmpl["description"],
+        nodes=tmpl["nodes"],
+        edges=tmpl["edges"],
+    )
+    p.save_workflow(wf)
+    return wf.to_dict()
+
+
+# === Everything below here is the original CRUD API ===
 
 @router.get("")
 async def list_all() -> dict[str, Any]:
@@ -116,11 +198,6 @@ async def delete_one(workflow_id: str) -> dict[str, Any]:
 
 @router.post("/{workflow_id}/run")
 async def run_workflow(workflow_id: str, body: RunRequest) -> dict[str, Any]:
-    """Run the workflow synchronously. Returns the final run + output.
-
-    For Phase 1, we use a sync executor. Phase 2 will switch to
-    async streaming via WebSocket for live progress.
-    """
     wf = p.get_workflow(workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
@@ -148,10 +225,6 @@ async def get_run(run_id: str) -> dict[str, Any]:
         "node_runs": [nr.to_dict() for nr in node_runs],
     }
 
-
-# --------------------------------------------------------------------------- #
-# Node types metadata (used by frontend for the component library)
-# --------------------------------------------------------------------------- #
 
 @router.get("/_meta/node-types")
 async def get_node_types() -> dict[str, Any]:

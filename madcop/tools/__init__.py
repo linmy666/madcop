@@ -59,6 +59,9 @@ def default_registry(store: MemoryStore | None = None) -> ToolRegistry:
     reg.register(WebFetchTool())
     reg.register(WeatherTool())
     reg.register(ClarifyTool())  # v2.6.3.3 — ask_user for clarifying questions
+    reg.register(ReadFileTool())   # v2.7.0 — file read for workflows
+    reg.register(WriteFileTool())  # v2.7.0 — file write for workflows & BI
+    reg.register(EditFileTool())   # v2.7.0 — edit files
     if store is not None:
         from .memory import default_memory_tools
         for tool in default_memory_tools(store):
