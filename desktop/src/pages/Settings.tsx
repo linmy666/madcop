@@ -26,7 +26,6 @@ import { ConfirmDialog } from '../components/shared/ConfirmDialog'
 import { AnimationPlayer } from '../components/animations/AnimationPlayer'
 import { Input } from '../components/shared/Input'
 import { Button } from '../components/shared/Button'
-import { StardewThemeToggle } from '../components/common/StardewThemeToggle'
 import { Dropdown } from '../components/shared/Dropdown'
 import type { ThemeMode, UpdateProxyMode, NetworkProxyMode, WebSearchMode, AppMode, ChatSendBehavior, OutputStyleSource } from '../types/settings'
 import type { Locale } from '../i18n'
@@ -2512,9 +2511,6 @@ export function GeneralSettings() {
           )
         })}
       </div>
-
-      {/* v2.6.0: Stardew-style pixel toggle */}
-      <StardewThemeToggle />
 
       {/* Language selector */}
       <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-1">{t('settings.general.languageTitle')}</h2>

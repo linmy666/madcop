@@ -89,6 +89,11 @@ export function MadCopLoader({
         style={{
           width: size,
           height: size,
+          background: 'transparent',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto',
         }}
       >
         <img
@@ -147,27 +152,40 @@ const mascotLoaderStyles = `
   position: relative;
 }
 
-/* Halo floats above the mascot — separate animated layer */
+/* Halo floats above the mascot — separate animated layer.
+   v2.6.3.2: changed from gold to purple to match the mascot's
+   color palette. The halo is a thin purple ring with a soft
+   glow. In stardew theme, we hide it (mascot-stardew.png already
+   has its own halo drawn into the artwork). */
 .madcop-loader-halo {
   position: absolute;
-  top: 4%;
+  top: -2%;
   left: 50%;
   transform: translateX(-50%);
-  width: 38%;
-  height: 14%;
-  border: 3px solid rgba(255, 200, 100, 0.85);
+  width: 42%;
+  height: 16%;
+  border: 3px solid rgba(180, 130, 230, 0.9);
   border-radius: 50%;
   box-shadow:
-    0 0 12px rgba(255, 200, 100, 0.4),
-    inset 0 0 6px rgba(255, 240, 180, 0.5);
+    0 0 14px rgba(180, 130, 230, 0.55),
+    inset 0 0 6px rgba(220, 200, 255, 0.5);
   pointer-events: none;
   animation: madcop-halo-pulse 3s ease-in-out infinite;
+  background: transparent;
 }
 .madcop-anim-think .madcop-loader-halo {
   animation: madcop-halo-think 1.6s ease-in-out infinite;
 }
 .madcop-anim-work .madcop-loader-halo {
   animation: madcop-halo-work 0.8s ease-in-out infinite;
+}
+
+/* In stardew theme, the mascot-stardew.png is a 16-bit pixel
+   sprite that already includes its own halo baked into the
+   artwork. Hide the CSS halo layer so we don't get a floating
+   ring on top of the sprite's own halo. */
+body.theme-stardew .madcop-loader-halo {
+  display: none !important;
 }
 
 @keyframes madcop-anim-breathe {
@@ -199,15 +217,17 @@ const mascotLoaderStyles = `
   50%      { transform: translateX(-50%) scale(1.3); }
 }
 
-/* Sparkle particles around the mascot in 'working' state */
+/* Sparkle particles around the mascot in 'working' state.
+   v2.6.3.2: changed to purple to match the new halo color. */
 .madcop-loader-sparkle {
   position: absolute;
   width: 6px;
   height: 6px;
-  background: var(--stardew-gold, #FFD700);
+  background: rgba(180, 130, 230, 0.95);
   border-radius: 50%;
   opacity: 0;
   pointer-events: none;
+  box-shadow: 0 0 6px rgba(180, 130, 230, 0.7);
 }
 .madcop-anim-work .madcop-loader-sparkle {
   animation: madcop-sparkle 0.8s ease-out infinite;
