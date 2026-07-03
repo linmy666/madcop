@@ -24,6 +24,7 @@ import { useTranslation } from '../i18n'
 import { MessageList } from '../components/chat/MessageList'
 import { ChatInput } from '../components/chat/ChatInput'
 import { ComputerUsePermissionModal } from '../components/chat/ComputerUsePermissionModal'
+import { ClarificationPanel } from '../components/chat/ClarificationPanel'
 import { SessionTaskBar } from '../components/chat/SessionTaskBar'
 import { MadCopLoader } from '../components/common/MadCopLoader'
 import { WorkbenchPanel } from '../components/workbench/WorkbenchPanel'
@@ -603,6 +604,10 @@ export function ActiveSession() {
           sessionId={activeTabId}
           request={pendingComputerUsePermission?.request ?? null}
         />
+      ) : null}
+
+      {!isMemberSession && activeTabId ? (
+        <ClarificationPanel sessionId={activeTabId} />
       ) : null}
     </div>
   )

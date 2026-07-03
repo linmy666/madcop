@@ -26,6 +26,12 @@ export type ClientMessage =
   | ({ type: 'set_runtime_config' } & RuntimeSelection)
   | { type: 'stop_generation' }
   | { type: 'ping' }
+  // v2.6.3.3: user's answer to an LLM clarification question
+  | {
+      type: 'clarification_response'
+      toolUseId: string
+      choice: string
+    }
 
 export type AttachmentRef = {
   type: 'file' | 'image'
