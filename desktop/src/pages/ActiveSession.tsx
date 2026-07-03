@@ -25,6 +25,7 @@ import { MessageList } from '../components/chat/MessageList'
 import { ChatInput } from '../components/chat/ChatInput'
 import { ComputerUsePermissionModal } from '../components/chat/ComputerUsePermissionModal'
 import { SessionTaskBar } from '../components/chat/SessionTaskBar'
+import { MadCopLoader } from '../components/common/MadCopLoader'
 import { WorkbenchPanel } from '../components/workbench/WorkbenchPanel'
 import { TeamStatusBar } from '../components/teams/TeamStatusBar'
 import { TerminalSettings } from './TerminalSettings'
@@ -33,7 +34,6 @@ import type { ActiveGoalState } from '../types/chat'
 import { useMobileViewport } from '../hooks/useMobileViewport'
 import { isDesktopRuntime } from '../lib/desktopRuntime'
 import { formatTokenCount } from '../lib/formatTokenCount'
-import { publicAssetPath } from '../lib/publicAsset'
 
 const TASK_POLL_INTERVAL_MS = 1000
 const WORKSPACE_RESIZE_STEP = 32
@@ -440,10 +440,14 @@ export function ActiveSession() {
                   </>
                 ) : (
                   <>
-                    <img
-                      src={publicAssetPath(document.body.classList.contains('theme-stardew') ? 'mascot-stardew.png' : 'mascot.png')}
-                      alt="MadCop Agent"
-                      className={compactEmptyHero ? 'mb-4 h-16 w-16' : 'mb-6 h-24 w-24'}
+                    {/* v2.6.3.1: Use MadCopLoader instead of plain <img> so
+                        the mascot animates (breathe/thinking/working states)
+                        with halo + sparkles. Larger default size and a
+                        spinner overlay. */}
+                    <MadCopLoader
+                      state={'ready'}
+                      size={compactEmptyHero ? 128 : 192}
+                      className="mb-6"
                     />
                     <h1 className={`${compactEmptyHero ? 'mb-1 text-2xl' : 'mb-2 text-3xl'} font-extrabold tracking-tight text-[var(--color-text-primary)]`} style={{ fontFamily: 'var(--font-headline)' }}>
                       {t('empty.title')}
