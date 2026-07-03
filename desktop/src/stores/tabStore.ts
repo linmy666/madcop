@@ -12,7 +12,7 @@ export const TERMINAL_TAB_PREFIX = '__terminal__'
 export const TRACE_TAB_PREFIX = '__trace__'
 export const WORKBENCH_TAB_PREFIX = '__workbench__'
 
-export type TabType = 'session' | 'settings' | 'scheduled' | 'terminal' | 'trace' | 'traces' | 'workbench'
+export type TabType = 'session' | 'settings' | 'scheduled' | 'terminal' | 'trace' | 'traces' | 'workbench' | 'workflows'
 
 export type Tab = {
   sessionId: string
@@ -38,6 +38,7 @@ type TabStore = {
   openTracesTab: (title?: string) => string
   openTraceTab: (sessionId: string, title?: string) => string
   openTerminalTab: (cwd?: string, terminalRuntimeId?: string) => string
+  openWorkflowsTab: () => void
   openWorkbenchTab: (sessionId: string, title?: string) => string
   closeTab: (sessionId: string) => void
   setActiveTab: (sessionId: string) => void
@@ -122,6 +123,22 @@ export const useTabStore = create<TabStore>((set, get) => ({
     }
     get().saveTabs()
     return traceTabId
+  },
+
+  openWorkflowsTab: () => {
+    // v2.7.0: open the workflow editor (singleton tab, type 'workflows')
+    const { tabs } = get()
+    const existing = tabs.find((t) => t.type === 'workflows')
+    if (existing) {
+      set({ activeTabId: existing.sessionId })
+    } else {
+      const sessionId = '__workflows__'
+      set({
+        tabs: [...tabs, { sessionId, title: '工作流', type: 'workflows', status: 'idle' }],
+        activeTabId: sessionId,
+      })
+    }
+    get().saveTabs()
   },
 
   openTerminalTab: (cwd, terminalRuntimeId) => {

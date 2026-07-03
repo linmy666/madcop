@@ -69,6 +69,7 @@ export function Sidebar({ isMobile = false, onRequestClose }: SidebarProps) {
   const closeModal = useUIStore((s) => s.closeModal)
   const activeTabId = useTabStore((s) => s.activeTabId)
   const tabs = useTabStore((s) => s.tabs)
+  const activeTabType = tabs.find((t) => t.sessionId === activeTabId)?.type
   const chatSessions = useChatStore((s) => s.sessions)
   const closeTab = useTabStore((s) => s.closeTab)
   const disconnectSession = useChatStore((s) => s.disconnectSession)
@@ -682,6 +683,22 @@ export function Sidebar({ isMobile = false, onRequestClose }: SidebarProps) {
             icon={<ClockIcon />}
           >
             {t('sidebar.scheduled')}
+          </NavItem>
+        )}
+        {/* v2.7.0 — Workflow editor entry */}
+        {!isMobile && (
+          <NavItem
+            active={activeTabType === 'workflows'}
+            collapsed={!expanded}
+            label="工作流"
+            touchFriendly={isMobile}
+            onClick={() => {
+              useTabStore.getState().openWorkflowsTab()
+              closeMobileDrawer()
+            }}
+            icon={<GitBranchIcon />}
+          >
+            工作流
           </NavItem>
         )}
       </div>
@@ -1929,6 +1946,17 @@ function PlusIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  )
+}
+
+function GitBranchIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="6" y1="3" x2="6" y2="15" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M18 9a9 9 0 0 1-9 9" />
     </svg>
   )
 }

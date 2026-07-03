@@ -8,6 +8,7 @@ import { TerminalSettings } from '../../pages/TerminalSettings'
 import { TraceList } from '../../pages/TraceList'
 import { TraceSession } from '../../pages/TraceSession'
 import { WorkbenchTab } from '../workbench/WorkbenchTab'
+import { WorkflowsListPage } from '../../pages/WorkflowsListPage'
 import { previewBridge } from '../../lib/previewBridge'
 
 export function ContentRouter() {
@@ -38,6 +39,8 @@ export function ContentRouter() {
     page = workbenchTab?.workbenchSessionId
       ? <WorkbenchTab tabId={activeTabId} sessionId={workbenchTab.workbenchSessionId} />
       : <EmptySession />
+  } else if (activeTabType === 'workflows') {
+    page = <WorkflowsListPage />
   } else if (activeTabType !== 'terminal') {
     page = <ActiveSession />
   }
