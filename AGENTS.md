@@ -214,7 +214,8 @@ MadCop 的自检清单:
 - **项目根目录**: `/Users/linruihan/PycharmProjects/madcop/`
 - **后端**: Python 3.11 + FastAPI + WebSocket, 启动命令 `python3 -m madcop.server` (端口 8765)
 - **前端**: Electron + React + TypeScript + Vite, 启动 `bun run build` 然后 `electron dist/electron-dist/main.cjs`
-- **默认模型**: `qwen/qwen3-next-80b-a3b-instruct` (NVIDIA NIM, 上一代 minimax-m2.7 / minimax-m3 都 DEGRADED)
+- **默认模型**: `sensenova-6.7-flash-lite` (Sensenova 日日新, 商汤科技), 已注册 provider, 可在 UI 设置中切换
+- **备用模型**: `qwen/qwen3-next-80b-a3b-instruct` (NVIDIA NIM), 上一代 minimax-m2.7/minimax-m3 均 DEGRADED
 - **数据库**: SQLite (`~/.madcop/brain.db`, `memory.db`, `trace.db`, `projects.db`, `cron.db`)
 - **设置文件**: `~/.madcop/settings.json`
 - **记忆 db**: `~/.madcop/memory.db` (6 层: L0-L5)
