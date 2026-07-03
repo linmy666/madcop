@@ -60,6 +60,11 @@ body.theme-stardew [data-theme="dark"] {
   --color-brand-soft: #B6D5B3;
   --color-brand-strong: #1F3818;
   --color-primary-fixed: #7AC958;
+
+  /* v2.6.3: Wider sidebar in stardew. Override the global --sidebar-width
+     (default 280px) so the parent .sidebar-shell also widens, not just
+     the inner panel. */
+  --sidebar-width: 340px;
 }
 
 /* ── SIDEBAR ── */

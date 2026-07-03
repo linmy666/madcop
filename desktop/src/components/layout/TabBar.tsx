@@ -106,6 +106,23 @@ export function TabBar() {
     for (const sessionId of activeChatSessionIds) {
       ids.add(sessionId)
     }
+    // v2.6.3.1: Stale-state guard. The chatStore may keep chatState
+    // non-idle forever if the WebSocket was closed mid-stream. We
+    // detect stale "running" sessions: if the most recent assistant
+    // message is more than 60s old, the session is not actually
+    // running — it's just stale state. Drop it from the set so the
+    // tab indicator clears.
+    const now = Date.now()
+    for (const sessionId of [...ids]) {
+      const session = useSessionStore.getState().sessions.find(s => s.id === sessionId)
+      const lastModified = session?.modifiedAt
+      if (lastModified) {
+        const updated = new Date(lastModified).getTime()
+        if (Number.isFinite(updated) && (now - updated) > 60_000) {
+          ids.delete(sessionId)
+        }
+      }
+    }
     return ids
   }, [activeChatSessionIds, tabs])
 

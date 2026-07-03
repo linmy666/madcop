@@ -830,13 +830,16 @@ def create_app() -> FastAPI:
                 # v2.6.3: Force synthesis — without this, llama-3.1-8b-instruct
                 # often just echoes the tool result as a new tool call, leaving
                 # the user staring at "recall_memory ✓ echo ✓" with no final
-                # answer. We append a strict "now synthesize" instruction.
+                # answer. v2.6.3.1: Tell the model to be DETAILED, not concise,
+                # because users want the tool data summarized, not a one-liner.
                 messages.append(Message(
                     role="system",
                     content="You have received the tool results above. Now write a "
-                    "concise natural-language answer to the user's question in "
-                    "their language. Do NOT call any more tools. Do NOT output "
-                    "JSON. Just answer directly.",
+                    "detailed, helpful answer in the user's language. Summarize "
+                    "the data you got from the tools (numbers, names, links) into "
+                    "a clear, well-formatted response. Use bullet points or short "
+                    "paragraphs as appropriate. Do NOT call any more tools. Do "
+                    "NOT output JSON. Aim for 3-6 sentences or a few bullet points.",
                 ))
 
                 # Create phase 2 trace node
@@ -1565,6 +1568,8 @@ def create_app() -> FastAPI:
                         # looping on more tool calls. Without this, llama-3.1
                         # often keeps calling tools and the user sees a
                         # session stuck on "recall_memory ✓" with no answer.
+                        # v2.6.3.1: Tell it to be DETAILED so users see the
+                        # tool data summarized, not a one-liner.
                         if resp.tool_calls:
                             await ws.send_json({
                                 "type": "status", "state": "thinking",
@@ -1575,8 +1580,13 @@ def create_app() -> FastAPI:
                                 full_messages + [_Msg(
                                     role="system",
                                     content="You have all the tool results you need. "
-                                    "Now write a concise natural-language answer in the "
-                                    "user's language. Do NOT call any more tools.",
+                                    "Now write a detailed, helpful answer in the "
+                                    "user's language. Summarize the data from the "
+                                    "tools (numbers, names, links) into a clear, "
+                                    "well-formatted response. Use bullet points or "
+                                    "short paragraphs as appropriate. Do NOT call "
+                                    "any more tools. Aim for 3-6 sentences or a "
+                                    "few bullet points.",
                                 )],
                                 model=model,
                                 temperature=temperature,
