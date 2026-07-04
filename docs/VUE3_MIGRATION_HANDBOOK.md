@@ -206,6 +206,90 @@ ca53d09 chore: untrack ./frontend/
 
 ## 三、剩余工作（73 个文件未翻译）
 
+> **所有 React 源文件都在 `/Users/linruihan/PycharmProjects/madcop/desktop/src/` 下。**
+> **所有 Vue 输出文件应放在 `/Users/linruihan/PycharmProjects/madcop/desktop/src/vue/` 下，保持相同目录结构。**
+
+### 完整路径对照表（按行数从少到多排序）
+
+| 行数 | React 源文件（完整绝对路径） | Vue 输出路径 |
+|---:|---|---|
+| 69 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/main.tsx` | `desktop/src/vue/main.ts` |
+| 84 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/InlineVideoGallery.tsx` | `desktop/src/vue/components/chat/InlineVideoGallery.vue` |
+| 97 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/workspace/WorkspaceFileOpenWith.tsx` | `desktop/src/vue/components/workspace/WorkspaceFileOpenWith.vue` |
+| 107 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/settings/ClaudeOfficialLogin.tsx` | `desktop/src/vue/components/settings/OfficialLogin.vue`（已合并，可删原文件） |
+| 121 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/workbench/WorkbenchPanel.tsx` | `desktop/src/vue/components/workbench/WorkbenchPanel.vue` |
+| 141 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/trace/detail/SessionOverview.tsx` | `desktop/src/vue/components/trace/detail/SessionOverview.vue` |
+| 144 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/settings/ChatGPTOfficialLogin.tsx` | `desktop/src/vue/components/settings/OfficialLogin.vue`（已合并，可删原文件） |
+| 152 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/ScheduledTasksEmpty.tsx` | `desktop/src/vue/pages/ScheduledTasksEmpty.vue` |
+| 156 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/InlineImageGallery.tsx` | `desktop/src/vue/components/chat/InlineImageGallery.vue` |
+| 159 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/DiffViewer.tsx` | `desktop/src/vue/components/chat/DiffViewer.vue` |
+| 159 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/SessionTaskBar.tsx` | `desktop/src/vue/components/chat/SessionTaskBar.vue` |
+| 167 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/StreamingIndicator.tsx` | `desktop/src/vue/components/chat/StreamingIndicator.vue` |
+| 167 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/common/MadCopLoader.tsx` | `desktop/src/vue/components/common/MadCopLoader.vue` |
+| 173 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/ModeSelector.tsx` | `desktop/src/vue/components/chat/ModeSelector.vue` |
+| 173 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/PlanModePreview.tsx` | `desktop/src/vue/components/chat/PlanModePreview.vue` |
+| 175 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/trace/TraceBadges.tsx` | `desktop/src/vue/components/trace/TraceBadges.vue` |
+| 178 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/trace/TraceDetail.tsx` | `desktop/src/vue/components/trace/TraceDetail.vue` |
+| 188 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/AttachmentGallery.tsx` | `desktop/src/vue/components/chat/AttachmentGallery.vue` |
+| 189 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/trace/detail/MessageBlocks.tsx` | `desktop/src/vue/components/trace/detail/MessageBlocks.vue` |
+| 192 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/workspace/WorkspaceCodeSurface.tsx` | `desktop/src/vue/components/workspace/WorkspaceCodeSurface.vue` |
+| 199 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/tasks/TaskRunsPanel.tsx` | `desktop/src/vue/components/tasks/TaskRunsPanel.vue` |
+| 200 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/AgentTeams.tsx` | `desktop/src/vue/pages/AgentTeams.vue` |
+| 219 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/tasks/TaskRow.tsx` | `desktop/src/vue/components/tasks/TaskRow.vue` |
+| 235 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/ToolInspection.tsx` | `desktop/src/vue/pages/ToolInspection.vue` |
+| 241 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/browser/BrowserSurface.tsx` | `desktop/src/vue/components/browser/BrowserSurface.vue` |
+| 242 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/CurrentTurnChangeCard.tsx` | `desktop/src/vue/components/chat/CurrentTurnChangeCard.vue` |
+| 272 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/controls/PermissionModeSelector.tsx` | `desktop/src/vue/components/controls/PermissionModeSelector.vue` |
+| 277 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/DiagnosticsSettings.tsx` | `desktop/src/vue/pages/DiagnosticsSettings.vue` |
+| 287 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/ThinkingAnimation.tsx` | `desktop/src/vue/components/chat/ThinkingAnimation.vue` |
+| 305 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/layout/AppShell.tsx` | `desktop/src/vue/components/layout/AppShell.vue`（已有 MadcopShell.vue 简化版） |
+| 311 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/ComputerUsePermissionModal.tsx` | `desktop/src/vue/components/chat/ComputerUsePermissionModal.vue` |
+| 325 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/skills/SkillList.tsx` | `desktop/src/vue/components/skills/SkillList.vue` |
+| 329 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/CodeViewer.tsx` | `desktop/src/vue/components/chat/CodeViewer.vue` |
+| 330 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/FileSearchMenu.tsx` | `desktop/src/vue/components/chat/FileSearchMenu.vue` |
+| 335 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/NewTaskModal.tsx` | `desktop/src/vue/pages/NewTaskModal.vue` |
+| 348 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/WorkflowsListPage.tsx` | `desktop/src/vue/pages/WorkflowsListPage.vue` |
+| 361 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/trace/TraceTree.tsx` | `desktop/src/vue/components/trace/TraceTree.vue` |
+| 362 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/shared/DirectoryPicker.tsx` | `desktop/src/vue/components/shared/DirectoryPicker.vue` |
+| 363 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/trace/detail/LlmCallDetail.tsx` | `desktop/src/vue/components/trace/detail/LlmCallDetail.vue` |
+| 377 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/AskUserQuestion.tsx` | `desktop/src/vue/components/chat/AskUserQuestion.vue` |
+| 383 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/PermissionDialog.tsx` | `desktop/src/vue/components/chat/PermissionDialog.vue` |
+| 395 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/search/GlobalSearchModal.tsx` | `desktop/src/vue/components/search/GlobalSearchModal.vue` |
+| 412 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/skills/SkillDetail.tsx` | `desktop/src/vue/components/skills/SkillDetail.vue` |
+| 416 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/ScheduledTasksList.tsx` | `desktop/src/vue/pages/ScheduledTasksList.vue` |
+| 428 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/tasks/NewTaskModal.tsx` | `desktop/src/vue/components/tasks/NewTaskModal.vue` |
+| 433 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/TraceList.tsx` | `desktop/src/vue/pages/TraceList.vue` |
+| 439 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/ContextUsageIndicator.tsx` | `desktop/src/vue/components/chat/ContextUsageIndicator.vue` |
+| 460 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/SessionControls.tsx` | `desktop/src/vue/pages/SessionControls.vue` |
+| 496 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/TraceSession.tsx` | `desktop/src/vue/pages/TraceSession.vue` |
+| 566 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/markdown/MarkdownRenderer.tsx` | `desktop/src/vue/components/markdown/MarkdownRenderer.vue` |
+| 580 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/plugins/PluginList.tsx` | `desktop/src/vue/components/plugins/PluginList.vue` |
+| 592 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/ComputerUseSettings.tsx` | `desktop/src/vue/pages/ComputerUseSettings.vue` |
+| 607 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/controls/ModelSelector.tsx` | `desktop/src/vue/components/controls/ModelSelector.vue` |
+| 614 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/ActiveSession.tsx` | `desktop/src/vue/pages/ActiveSession.vue` |
+| 620 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/layout/TabBar.tsx` | `desktop/src/vue/components/layout/TabBar.vue` |
+| 640 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/design/DesignCanvas.tsx` | `desktop/src/vue/components/design/DesignCanvas.vue` |
+| 664 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/shared/RepositoryLaunchControls.tsx` | `desktop/src/vue/components/shared/RepositoryLaunchControls.vue` |
+| 665 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/workflow/WorkflowEditor.tsx` | `desktop/src/vue/components/workflow/WorkflowEditor.vue` |
+| 755 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/plugins/PluginDetail.tsx` | `desktop/src/vue/components/plugins/PluginDetail.vue` |
+| 770 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/ToolCallBlock.tsx` | `desktop/src/vue/components/chat/ToolCallBlock.vue` |
+| 798 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/TerminalSettings.tsx` | `desktop/src/vue/pages/TerminalSettings.vue` |
+| 810 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/MermaidRenderer.tsx` | `desktop/src/vue/components/chat/MermaidRenderer.vue` |
+| 911 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/MemorySettings.tsx` | `desktop/src/vue/pages/MemorySettings.vue` |
+| 1034 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/AdapterSettings.tsx` | `desktop/src/vue/pages/AdapterSettings.vue` |
+| 1088 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/ToolCallGroup.tsx` | `desktop/src/vue/components/chat/ToolCallGroup.vue` |
+| 1103 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/ActivitySettings.tsx` | `desktop/src/vue/pages/ActivitySettings.vue` |
+| 1118 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/LocalSlashCommandPanel.tsx` | `desktop/src/vue/components/chat/LocalSlashCommandPanel.vue` |
+| 1157 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/pages/McpSettings.tsx` | `desktop/src/vue/pages/McpSettings.vue` |
+| 1369 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/ChatInput.tsx` | `desktop/src/vue/components/chat/ChatInput.vue` |
+| 1558 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/workspace/WorkspacePanel.tsx` | `desktop/src/vue/components/workspace/WorkspacePanel.vue` |
+| 2024 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/layout/Sidebar.tsx` | `desktop/src/vue/components/layout/Sidebar.vue` |
+| 2223 | `/Users/linruihan/PycharmProjects/madcop/desktop/src/components/chat/MessageList.tsx` | `desktop/src/vue/components/chat/MessageList.vue` |
+
+> **提示**: `ClaudeOfficialLogin.tsx` 和 `ChatGPTOfficialLogin.tsx` 已经合并成 `OfficialLogin.vue`（通过 `providerName` prop 区分），原文件可以直接删除。
+
+> **注意**: `pages/Settings.tsx` (4661行) 不在上表中因为它的子页面太多（40+ panels），建议拆成多个小 Vue 页面而不是一次性翻译。
+
 ### 3.1 优先级 P0（必须翻译，否则功能缺失）
 
 | React 文件 | 行数 | 功能 | 难度 |
