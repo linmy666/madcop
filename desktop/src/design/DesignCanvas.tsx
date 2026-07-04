@@ -6,13 +6,14 @@
 
 import { useState, useCallback, useEffect, Suspense, lazy } from 'react'
 
-// Lazy load Puck so it doesn't crash the whole app if it fails
+// Lazy load Puck JS only (not CSS) so it doesn't crash the whole app
 const Puck = lazy(async () => {
   const mod = await import('@measured/puck')
-  // Also import CSS
-  await import('@measured/puck/dist/index.css')
   return { default: mod.Puck }
 })
+
+// Static CSS import — Vite bundles this into the main stylesheet
+import '@measured/puck/dist/index.css'
 
 import type { Config, Data } from '@measured/puck'
 
@@ -180,7 +181,12 @@ const config: Config = {
 }
 
 // Simple error boundary to catch Puck runtime errors
-class PuckErrorBoundary extends (require('react').Component as any) {
+import React from 'react'
+
+class PuckErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: any }
+> {
   state: { hasError: boolean; error: any } = { hasError: false, error: null }
 
   static getDerivedStateFromError(error: any) {
@@ -216,7 +222,7 @@ class PuckErrorBoundary extends (require('react').Component as any) {
         </div>
       )
     }
-    return (this.props as any).children
+    return this.props.children
   }
 }
 
