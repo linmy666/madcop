@@ -16,8 +16,7 @@ import {
   Puck,
   type Config,
   type Data,
-} from './core/bundle/core'
-import { DesignComponent } from './types'
+} from '@measured/puck'
 
 interface DesignCanvasProps {
   /** Initial component tree data */
