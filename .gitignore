@@ -23,3 +23,6 @@ docs/img/*.html
 
 # cc-haha original Next.js project (not used by MadCop)
 frontend/
+
+# Vue 3 parallel build output (not loaded by Electron)
+dist-vue/
