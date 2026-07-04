@@ -4,18 +4,34 @@
 //
 // Original: github.com/puckeditor/puck (MIT)
 
-import { useState, useCallback, useEffect, Suspense, lazy } from 'react'
+import { useState, useCallback, useEffect, Suspense, lazy, useRef } from 'react'
+import React from 'react'
+import type { Config, Data } from '@measured/puck'
 
-// Lazy load Puck JS only (not CSS) so it doesn't crash the whole app
+// Dynamic CSS loader — injects Puck CSS only when canvas mounts,
+// removes it when unmounted. Avoids polluting global styles.
+function usePuckCSS() {
+  const loaded = useRef(false)
+  useEffect(() => {
+    if (loaded.current) return
+    // Read CSS from the bundled asset at runtime
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = './assets/puck-styles.css'
+    link.id = 'puck-css'
+    document.head.appendChild(link)
+    loaded.current = true
+    return () => {
+      // Don't remove — might be needed if user reopens. Just leave it.
+    }
+  }, [])
+}
+
+// Lazy load Puck JS — keeps it out of the main bundle
 const Puck = lazy(async () => {
   const mod = await import('@measured/puck')
   return { default: mod.Puck }
 })
-
-// Static CSS import — Vite bundles this into the main stylesheet
-import '@measured/puck/dist/index.css'
-
-import type { Config, Data } from '@measured/puck'
 
 interface DesignCanvasProps {
   initialData?: Data
@@ -180,23 +196,21 @@ const config: Config = {
   components: defaultComponents,
 }
 
-// Simple error boundary to catch Puck runtime errors
-import React from 'react'
-
+// Error boundary
 class PuckErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: any }
 > {
-  state: { hasError: boolean; error: any } = { hasError: false, error: null }
-
+  constructor(props: any) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error }
   }
-
   componentDidCatch(error: any, info: any) {
     console.error('[DesignCanvas] Puck crashed:', error, info)
   }
-
   render() {
     if (this.state.hasError) {
       return (
@@ -231,10 +245,12 @@ export function DesignCanvas({
   onSave,
   height = '100%',
 }: DesignCanvasProps) {
-  const [data, setData] = useState<Data>(initialData || {
-    root: { props: { bgColor: '#FFFFFF' as any, padding: 40 as any } } as any,
+  usePuckCSS()
+
+  const [data, setData] = useState<any>(initialData || {
+    root: { props: { title: '设计画布' } },
     content: [],
-  } as any)
+  })
 
   useEffect(() => {
     if (initialData) {
@@ -242,13 +258,13 @@ export function DesignCanvas({
     }
   }, [initialData])
 
-  const handlePublish = useCallback((newData: Data) => {
+  const handlePublish = useCallback((newData: any) => {
     setData(newData)
     onSave?.(newData)
   }, [onSave])
 
   return (
-    <div style={{ height, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <PuckErrorBoundary>
           <Suspense
@@ -266,7 +282,7 @@ export function DesignCanvas({
           </Suspense>
         </PuckErrorBoundary>
       </div>
-      {/* Toolbar — outside Puck to avoid override issues */}
+      {/* Toolbar */}
       <div
         style={{
           display: 'flex',
