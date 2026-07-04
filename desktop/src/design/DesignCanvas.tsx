@@ -4,13 +4,17 @@
 //
 // Original: github.com/puckeditor/puck (MIT)
 
-import { useState, useCallback, useEffect } from 'react'
-import {
-  Puck,
-  type Config,
-  type Data,
-} from '@measured/puck'
-import '@measured/puck/dist/index.css'
+import { useState, useCallback, useEffect, Suspense, lazy } from 'react'
+
+// Lazy load Puck so it doesn't crash the whole app if it fails
+const Puck = lazy(async () => {
+  const mod = await import('@measured/puck')
+  // Also import CSS
+  await import('@measured/puck/dist/index.css')
+  return { default: mod.Puck }
+})
+
+import type { Config, Data } from '@measured/puck'
 
 interface DesignCanvasProps {
   initialData?: Data
@@ -21,7 +25,7 @@ interface DesignCanvasProps {
 // Default components available in the canvas
 const defaultComponents: Config['components'] = {
   Header: {
-    render: ({ text, level, color, fontSize }) => {
+    render: ({ text, level, color, fontSize }: any) => {
       const lvl = level || 2
       const Tag = `h${lvl}` as any
       return (
@@ -51,7 +55,7 @@ const defaultComponents: Config['components'] = {
     defaultProps: { text: '新标题', level: '2', fontSize: 24 },
   },
   Paragraph: {
-    render: ({ text, color, fontSize }) => (
+    render: ({ text, color, fontSize }: any) => (
       <p style={{
         margin: '0 0 12px 0',
         fontSize: fontSize || 14,
@@ -69,7 +73,7 @@ const defaultComponents: Config['components'] = {
     defaultProps: { text: '这是一段文字', fontSize: 14 },
   },
   Button: {
-    render: ({ text, variant, width }) => (
+    render: ({ text, variant, width }: any) => (
       <button
         style={{
           padding: '10px 24px',
@@ -100,7 +104,7 @@ const defaultComponents: Config['components'] = {
     defaultProps: { text: '提交', variant: 'primary' },
   },
   Image: {
-    render: ({ src, alt, width, height }) => (
+    render: ({ src, alt, width, height }: any) => (
       <img
         src={src || 'https://via.placeholder.com/400x200'}
         alt={alt || ''}
@@ -121,7 +125,7 @@ const defaultComponents: Config['components'] = {
     defaultProps: { src: '', alt: '' },
   },
   Input: {
-    render: ({ placeholder, width }) => (
+    render: ({ placeholder, width }: any) => (
       <input
         placeholder={placeholder || '输入...'}
         style={{
@@ -141,7 +145,7 @@ const defaultComponents: Config['components'] = {
     defaultProps: { placeholder: '请输入...', width: 300 },
   },
   Card: {
-    render: ({ children, padding, bgColor }) => (
+    render: ({ children, padding, bgColor }: any) => (
       <div
         style={{
           padding: padding || 20,
@@ -150,7 +154,7 @@ const defaultComponents: Config['components'] = {
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
         }}
       >
-        {children as any}
+        {children}
       </div>
     ),
     fields: {
@@ -175,17 +179,57 @@ const config: Config = {
   components: defaultComponents,
 }
 
+// Simple error boundary to catch Puck runtime errors
+class PuckErrorBoundary extends (require('react').Component as any) {
+  state: { hasError: boolean; error: any } = { hasError: false, error: null }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: any, info: any) {
+    console.error('[DesignCanvas] Puck crashed:', error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center', color: '#EF4444' }}>
+          <h3 style={{ marginBottom: 12 }}>设计画布加载失败</h3>
+          <pre style={{ fontSize: 12, color: '#6B7280', whiteSpace: 'pre-wrap' }}>
+            {String(this.state.error)}
+          </pre>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{
+              marginTop: 16,
+              padding: '8px 20px',
+              background: '#7C3AED',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+            }}
+          >
+            重试
+          </button>
+        </div>
+      )
+    }
+    return (this.props as any).children
+  }
+}
+
 export function DesignCanvas({
   initialData,
   onSave,
   height = '100%',
 }: DesignCanvasProps) {
   const [data, setData] = useState<Data>(initialData || {
-    root: { props: { bgColor: '#FFFFFF', padding: 40 } },
+    root: { props: { bgColor: '#FFFFFF' as any, padding: 40 as any } } as any,
     content: [],
-  })
+  } as any)
 
-  // Update data when initialData changes (e.g. after LLM generates new design)
   useEffect(() => {
     if (initialData) {
       setData(initialData)
@@ -200,67 +244,70 @@ export function DesignCanvas({
   return (
     <div style={{ height, display: 'flex', flexDirection: 'column' }}>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <Puck
-          config={config}
-          data={data}
-          onPublish={handlePublish}
-          overrides={{
-            header: ({ children }) => (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 16px',
-                  borderBottom: '1px solid #E2E8F0',
-                  background: '#fff',
-                  zIndex: 100,
-                }}
-              >
-                <span style={{ fontWeight: 600, fontSize: 14 }}>
-                  MadCop 设计工具
-                </span>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => {
-                      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-                      const a = document.createElement('a')
-                      a.href = URL.createObjectURL(blob)
-                      a.download = `design-${Date.now()}.madcop`
-                      a.click()
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      background: 'transparent',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                      fontSize: 12,
-                    }}
-                  >
-                    导出 .madcop
-                  </button>
-                  <button
-                    onClick={() => handlePublish(data)}
-                    style={{
-                      padding: '6px 12px',
-                      background: '#7C3AED',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      fontWeight: 600,
-                    }}
-                  >
-                    保存
-                  </button>
-                </div>
-                {children}
+        <PuckErrorBoundary>
+          <Suspense
+            fallback={
+              <div style={{ padding: 40, textAlign: 'center', color: '#6B7280' }}>
+                加载设计画布...
               </div>
-            ),
+            }
+          >
+            <Puck
+              config={config}
+              data={data}
+              onPublish={handlePublish}
+            />
+          </Suspense>
+        </PuckErrorBoundary>
+      </div>
+      {/* Toolbar — outside Puck to avoid override issues */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 8,
+          padding: '8px 16px',
+          borderTop: '1px solid #E2E8F0',
+          background: '#fff',
+          flexShrink: 0,
+        }}
+      >
+        <button
+          onClick={() => {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+            const a = document.createElement('a')
+            a.href = URL.createObjectURL(blob)
+            a.download = `design-${Date.now()}.madcop`
+            a.click()
           }}
-        />
+          style={{
+            padding: '6px 12px',
+            background: 'transparent',
+            border: '1px solid #E2E8F0',
+            borderRadius: 4,
+            cursor: 'pointer',
+            fontSize: 12,
+            color: '#374151',
+          }}
+        >
+          导出 .madcop
+        </button>
+        <button
+          onClick={() => onSave?.(data)}
+          style={{
+            padding: '6px 12px',
+            background: '#7C3AED',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 4,
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          保存
+        </button>
       </div>
     </div>
   )
