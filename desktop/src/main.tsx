@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import './theme/madcop.css'
+import './theme/globals.css'
 import './theme/stardew.css'
 import { initializeAppZoom } from './lib/appZoom'
 import { initializeTouchH5 } from './lib/touchH5'
