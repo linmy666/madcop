@@ -20,3 +20,6 @@ venv/
 # screenshot intermediate artifacts (keep .png, ignore .html)
 docs/img/_html/
 docs/img/*.html
+
+# cc-haha original Next.js project (not used by MadCop)
+frontend/
