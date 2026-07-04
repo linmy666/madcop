@@ -1,4 +1,4 @@
-"""madcop.server.cc_haha_compat — Comprehensive REST compatibility shim.
+"""madcop.server.webui_compat — Comprehensive REST compatibility shim.
 
 This module registers ~110 FastAPI handlers under ``/api/*`` that the
 cc-haha React UI expects.  Unlike a pure stub layer, every handler that
@@ -758,7 +758,7 @@ def _list_traces_proper(limit: int = 50, offset: int = 0,
                         q: str = "") -> dict[str, Any]:
     """Build TraceSessionList shape from in-memory sessions + trace store."""
     import datetime as _dt
-    from madcop.server.cc_haha_compat import _SESSIONS, _MESSAGES
+    from madcop.server.webui_compat import _SESSIONS, _MESSAGES
     storage_dir = str(Path.home() / ".madcop" / "traces")
     storage_path = Path(storage_dir)
     items: list[dict[str, Any]] = []
@@ -1728,29 +1728,29 @@ def register(app: FastAPI) -> None:
     # ---- OAuth stubs ------------------------------------------------ #
 
     @app.get("/api/haha-oauth", include_in_schema=False)
-    async def cc_haha_oauth() -> dict[str, Any]:
+    async def webui_oauth() -> dict[str, Any]:
         return {"loggedIn": False}
 
     @app.post("/api/haha-oauth/start", include_in_schema=False)
-    async def cc_haha_oauth_start() -> dict[str, Any]:
+    async def webui_oauth_start() -> dict[str, Any]:
         return {"status": "skipped",
                 "reason": "MadCop does not use Claude OAuth"}
 
     @app.delete("/api/haha-oauth", include_in_schema=False)
-    async def cc_haha_oauth_delete() -> dict[str, Any]:
+    async def webui_oauth_delete() -> dict[str, Any]:
         return {"ok": True}
 
     @app.get("/api/haha-openai-oauth", include_in_schema=False)
-    async def cc_haha_openai_oauth() -> dict[str, Any]:
+    async def webui_openai_oauth() -> dict[str, Any]:
         return {"loggedIn": False}
 
     @app.post("/api/haha-openai-oauth/start", include_in_schema=False)
-    async def cc_haha_openai_oauth_start() -> dict[str, Any]:
+    async def webui_openai_oauth_start() -> dict[str, Any]:
         return {"status": "skipped",
                 "reason": "MadCop does not use ChatGPT OAuth"}
 
     @app.delete("/api/haha-openai-oauth", include_in_schema=False)
-    async def cc_haha_openai_oauth_delete() -> dict[str, Any]:
+    async def webui_openai_oauth_delete() -> dict[str, Any]:
         return {"ok": True}
 
     # ---- Activity / Traces / Diagnostics / Doctor ---------------- #
@@ -3318,7 +3318,7 @@ def _save_mcp_servers(servers: list[dict[str, Any]]) -> None:
 
 def fetch_provider_models(base_url: str, api_key: str) -> list[dict[str, Any]]:
     """Module-level public API: fetch models from a provider's
-    /v1/models endpoint. Used by app.py's legacy list_models_cc_haha.
+    /v1/models endpoint. Used by app.py's legacy list_models_webui.
     """
     return _fetch_provider_models(base_url, api_key)
 
@@ -3498,7 +3498,7 @@ def _build_activity_stats(range_filter: str = "all") -> dict[str, Any]:
         from madcop.agent.trace import get_trace_store
         trace_store = get_trace_store()
         # Use the in-memory sessions + messages
-        from madcop.server.cc_haha_compat import _SESSIONS, _MESSAGES
+        from madcop.server.webui_compat import _SESSIONS, _MESSAGES
         # Get all conversation IDs from sessions
         conversation_ids = list(_SESSIONS.keys())
         if not conversation_ids:
@@ -3874,7 +3874,7 @@ def _register_project_endpoints(app: FastAPI) -> None:
 def install_catch_all(app: FastAPI) -> None:
     @app.api_route("/api/{path:path}",
                    methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-    async def _cc_haha_compat_catch_all(
+    async def _webui_compat_catch_all(
         path: str, request: Request,
     ) -> dict[str, Any]:
         if path.startswith("diagnostics") and request.method == "POST":
