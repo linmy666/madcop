@@ -81,21 +81,18 @@ export function DesignPage() {
     setLastPrompt(prompt)
 
     try {
-      const r = await fetch(getApiUrl('/api/chat'), {
+      // Use the dedicated /api/design/generate endpoint (no tools, no memory,
+      // no streaming — just a clean LLM call for JSON generation)
+      const r = await fetch(getApiUrl('/api/design/generate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            { role: 'system', content: DESIGN_SYSTEM_PROMPT },
-            { role: 'user', content: `根据以下需求生成 UI 设计 JSON（只返回 JSON，不要解释）：\n\n${prompt}` },
-          ],
-          model: 'glm-5.2',
-          stream: false,
-          max_tokens: 4096,
-        }),
+        body: JSON.stringify({ prompt, system_prompt: DESIGN_SYSTEM_PROMPT }),
       })
+      if (!r.ok) {
+        throw new Error(`HTTP ${r.status}`)
+      }
       const data = await r.json()
-      const text = data.choices?.[0]?.message?.content || ''
+      const text = data.content || data.choices?.[0]?.message?.content || ''
 
       // Try to extract JSON from the response
       const jsonMatch = text.match(/\{[\s\S]*\}/)
@@ -109,12 +106,13 @@ export function DesignPage() {
         }
       }
       // If we get here, parsing failed — use fallback
-      console.warn('LLM did not return valid design data, using fallback', text.slice(0, 200))
+      console.warn('LLM did not return valid design data, using fallback. Raw:', text.slice(0, 300))
+      setError('AI 返回格式有误，已使用默认模板')
       setDesignData(FALLBACK_LOGIN_DATA)
       setShowCanvas(true)
-    } catch (e) {
+    } catch (e: any) {
       console.error('Design generation failed:', e)
-      setError('生成失败，已使用默认模板')
+      setError(`生成失败 (${e?.message || e})，已使用默认模板`)
       setDesignData(FALLBACK_LOGIN_DATA)
       setShowCanvas(true)
     } finally {

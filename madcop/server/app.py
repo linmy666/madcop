@@ -383,6 +383,32 @@ def _store_extracted_facts(messages: list[Message]) -> int:
     return count
 
 
+# ── Design tool: default system prompt ─────────────────────────────────── #
+_DESIGN_DEFAULT_SYSTEM_PROMPT = (
+    "你是 MadCop 设计工具的前端组件生成器。"
+    "你根据用户的需求生成符合 Puck 编辑器格式的 JSON 数据。"
+    "\n\n"
+    "Puck Data 的 JSON 格式："
+    '{"root":{"props":{"bgColor":"背景色,十六进制","padding":"数字px"}},'
+    '"content":[{"type":"组件名","props":{"属性名":"属性值"}}]}'
+    "\n\n"
+    "可用组件列表：\n"
+    "1. Header — props: text(文字), level(级别:1|2|3), color(颜色), fontSize(字号,数字)\n"
+    "2. Paragraph — props: text(文字), color(颜色), fontSize(字号,数字)\n"
+    "3. Button — props: text(文字), variant(样式:primary|secondary), width(宽度,数字)\n"
+    "4. Image — props: src(图片地址), alt(替代文字), width(宽度), height(高度)\n"
+    "5. Input — props: placeholder(占位文字), width(宽度,数字)\n"
+    "6. Card — props: padding(内边距,数字), bgColor(背景色)"
+    "\n\n"
+    "【规则】\n"
+    "1. 内容要真实，不要用占位词\n"
+    "2. 颜色搭配要合理美观（如白色背景 #FFFFFF，紫色主色 #7C3AED）\n"
+    "3. 只返回 JSON，不要任何解释文字\n"
+    "4. 根据需求合理组合组件，登录页推荐：Header→Paragraph→Input×2→Button\n"
+    "5. 仪表盘推荐：Header→Card×4（每个Card嵌套Header+Paragraph）"
+)
+
+
 # --------------------------------------------------------------------------- #
 # App factory
 # --------------------------------------------------------------------------- #
@@ -1335,6 +1361,44 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------- #
     from madcop.workflow.api import router as workflow_router
     app.include_router(workflow_router)
+
+    # ── Design generation endpoint ────────────────────────────────────── #
+    # MUST be registered BEFORE install_catch_all, otherwise the catch-all
+    # /api/{path:path} route will intercept /api/design/generate and
+    # return an empty {} response.
+    @app.post("/api/design/generate")
+    async def design_generate(body: dict):
+        """Lightweight endpoint for UI design generation.
+        Calls the LLM directly without tools/memory/streaming.
+        """
+        prompt = body.get("prompt", "")
+        if not prompt:
+            raise HTTPException(400, "prompt is required")
+
+        system_prompt = body.get("system_prompt", _DESIGN_DEFAULT_SYSTEM_PROMPT)
+
+        client = _get_client()
+        from madcop.llm import Message
+        messages = [
+            Message(role="system", content=system_prompt),
+            Message(role="user", content=f"根据以下需求生成 UI 设计 JSON（只返回 JSON，不要解释）：\n\n{prompt}"),
+        ]
+
+        try:
+            resp = client.chat(
+                messages=messages,
+                tools=None,
+                temperature=0.3,
+                max_tokens=4096,
+            )
+            text = (getattr(resp, "content", "") or "")
+        except Exception as e:
+            import sys as _err_sys, traceback as _tb
+            print(f"[design_generate] ERROR: {type(e).__name__}: {e}", file=_err_sys.stderr, flush=True)
+            _tb.print_exc(file=_err_sys.stderr)
+            raise HTTPException(502, f"LLM call failed: {type(e).__name__}: {e}")
+
+        return {"content": text, "model": getattr(client, "model", "unknown")}
 
     install_catch_all(app)
 
