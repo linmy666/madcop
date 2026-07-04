@@ -1,48 +1,48 @@
-// v2.8.0 — MadCop Design Canvas
-// Wraps Puck (MIT license) as MadCop's built-in design tool.
-// License: MIT — see LICENSE file in this directory.
-//
-// Original: github.com/puckeditor/puck (MIT)
+// v2.8.0 — MadCop Design Canvas (native, zero-dependency)
+// Inspired by Puck's Data format (MIT, github.com/puckeditor/puck)
+// but reimplemented with native HTML5 drag & drop + inline styles.
+// No external CSS, no dnd-kit, no global style pollution.
 
-import { useState, useCallback, useEffect, Suspense, lazy, useRef } from 'react'
-import React from 'react'
-import type { Config, Data } from '@measured/puck'
+import { useState, useCallback, useRef } from 'react'
 
-// Dynamic CSS loader — injects Puck CSS only when canvas mounts,
-// removes it when unmounted. Avoids polluting global styles.
-function usePuckCSS() {
-  const loaded = useRef(false)
-  useEffect(() => {
-    if (loaded.current) return
-    // Read CSS from the bundled asset at runtime
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
-    link.href = './assets/puck-styles.css'
-    link.id = 'puck-css'
-    document.head.appendChild(link)
-    loaded.current = true
-    return () => {
-      // Don't remove — might be needed if user reopens. Just leave it.
-    }
-  }, [])
+// ── Types (compatible with Puck Data format) ────────────────────────── //
+
+export interface DesignData {
+  root: { props: Record<string, any> }
+  content: DesignItem[]
+  zones?: Record<string, DesignItem[]>
 }
 
-// Lazy load Puck JS — keeps it out of the main bundle
-const Puck = lazy(async () => {
-  const mod = await import('@measured/puck')
-  return { default: mod.Puck }
-})
-
-interface DesignCanvasProps {
-  initialData?: Data
-  onSave?: (data: Data) => void
-  height?: string | number
+export interface DesignItem {
+  type: string
+  props: Record<string, any>
 }
 
-// Default components available in the canvas
-const defaultComponents: Config['components'] = {
+export interface FieldConfig {
+  type: 'text' | 'textarea' | 'number' | 'select' | 'radio' | 'color'
+  label: string
+  options?: { label: string; value: string }[]
+}
+
+export interface ComponentConfig {
+  render: (props: Record<string, any>) => React.ReactNode
+  fields: Record<string, FieldConfig>
+  defaultProps: Record<string, any>
+}
+
+export interface DesignConfig {
+  root?: {
+    fields: Record<string, FieldConfig>
+    defaultProps: Record<string, any>
+  }
+  components: Record<string, ComponentConfig>
+}
+
+// ── Component registry ──────────────────────────────────────────────── //
+
+const componentRegistry: Record<string, ComponentConfig> = {
   Header: {
-    render: ({ text, level, color, fontSize }: any) => {
+    render: ({ text, level, color, fontSize }) => {
       const lvl = level || 2
       const Tag = `h${lvl}` as any
       return (
@@ -58,21 +58,18 @@ const defaultComponents: Config['components'] = {
     },
     fields: {
       text: { type: 'text', label: '文字' },
-      level: {
-        type: 'select', label: '级别',
-        options: [
-          { label: 'H1', value: '1' },
-          { label: 'H2', value: '2' },
-          { label: 'H3', value: '3' },
-        ],
-      },
-      color: { type: 'text', label: '颜色' },
+      level: { type: 'select', label: '级别', options: [
+        { label: 'H1', value: '1' },
+        { label: 'H2', value: '2' },
+        { label: 'H3', value: '3' },
+      ] },
+      color: { type: 'color', label: '颜色' },
       fontSize: { type: 'number', label: '字号' },
     },
     defaultProps: { text: '新标题', level: '2', fontSize: 24 },
   },
   Paragraph: {
-    render: ({ text, color, fontSize }: any) => (
+    render: ({ text, color, fontSize }) => (
       <p style={{
         margin: '0 0 12px 0',
         fontSize: fontSize || 14,
@@ -84,13 +81,13 @@ const defaultComponents: Config['components'] = {
     ),
     fields: {
       text: { type: 'textarea', label: '文字' },
-      color: { type: 'text', label: '颜色' },
+      color: { type: 'color', label: '颜色' },
       fontSize: { type: 'number', label: '字号' },
     },
     defaultProps: { text: '这是一段文字', fontSize: 14 },
   },
   Button: {
-    render: ({ text, variant, width }: any) => (
+    render: ({ text, variant, width, color }) => (
       <button
         style={{
           padding: '10px 24px',
@@ -100,7 +97,7 @@ const defaultComponents: Config['components'] = {
           fontWeight: 600,
           fontSize: 14,
           width: width ? `${width}px` : 'auto',
-          background: variant === 'primary' ? '#7C3AED' : '#E2E8F0',
+          background: variant === 'primary' ? (color || '#7C3AED') : '#E2E8F0',
           color: variant === 'primary' ? '#fff' : '#1A1A1A',
         }}
       >
@@ -109,19 +106,17 @@ const defaultComponents: Config['components'] = {
     ),
     fields: {
       text: { type: 'text', label: '文字' },
-      variant: {
-        type: 'radio', label: '样式',
-        options: [
-          { label: '主要', value: 'primary' },
-          { label: '次要', value: 'secondary' },
-        ],
-      },
+      variant: { type: 'radio', label: '样式', options: [
+        { label: '主要', value: 'primary' },
+        { label: '次要', value: 'secondary' },
+      ] },
+      color: { type: 'color', label: '主色' },
       width: { type: 'number', label: '宽度' },
     },
-    defaultProps: { text: '提交', variant: 'primary' },
+    defaultProps: { text: '提交', variant: 'primary', color: '#7C3AED' },
   },
   Image: {
-    render: ({ src, alt, width, height }: any) => (
+    render: ({ src, alt, width, height }) => (
       <img
         src={src || 'https://via.placeholder.com/400x200'}
         alt={alt || ''}
@@ -142,9 +137,10 @@ const defaultComponents: Config['components'] = {
     defaultProps: { src: '', alt: '' },
   },
   Input: {
-    render: ({ placeholder, width }: any) => (
+    render: ({ placeholder, width }) => (
       <input
         placeholder={placeholder || '输入...'}
+        readOnly
         style={{
           padding: '10px 14px',
           border: '1px solid #D1D5DB',
@@ -152,6 +148,7 @@ const defaultComponents: Config['components'] = {
           fontSize: 14,
           width: width ? `${width}px` : '100%',
           outline: 'none',
+          background: '#F9FAFB',
         }}
       />
     ),
@@ -162,139 +159,476 @@ const defaultComponents: Config['components'] = {
     defaultProps: { placeholder: '请输入...', width: 300 },
   },
   Card: {
-    render: ({ children, padding, bgColor }: any) => (
-      <div
-        style={{
-          padding: padding || 20,
-          borderRadius: 12,
-          background: bgColor || '#fff',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        }}
-      >
-        {children}
+    render: ({ padding, bgColor, borderWidth, borderColor, radius }) => (
+      <div style={{
+        padding: padding || 20,
+        borderRadius: radius || 12,
+        background: bgColor || '#F9FAFB',
+        border: `${borderWidth || 1}px solid ${borderColor || '#E5E7EB'}`,
+      }}>
+        <span style={{ fontSize: 12, color: '#9CA3AF' }}>卡片容器</span>
       </div>
     ),
     fields: {
       padding: { type: 'number', label: '内边距' },
-      bgColor: { type: 'text', label: '背景色' },
+      bgColor: { type: 'color', label: '背景色' },
+      radius: { type: 'number', label: '圆角' },
+      borderWidth: { type: 'number', label: '边框粗细' },
+      borderColor: { type: 'color', label: '边框色' },
     },
-    defaultProps: { padding: 20 },
+    defaultProps: { padding: 20, bgColor: '#F9FAFB', radius: 12, borderWidth: 1, borderColor: '#E5E7EB' },
   },
 }
 
-const config: Config = {
-  root: {
-    fields: {
-      bgColor: { type: 'text', label: '背景色' },
-      padding: { type: 'number', label: '内边距' },
-    },
-    defaultProps: {
-      bgColor: '#FFFFFF',
-      padding: 40,
-    },
-  },
-  components: defaultComponents,
-}
+// ── Field renderer ──────────────────────────────────────────────────── //
 
-// Error boundary
-class PuckErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error: any }
-> {
-  constructor(props: any) {
-    super(props)
-    this.state = { hasError: false, error: null }
+function FieldEditor({
+  field,
+  value,
+  onChange,
+}: {
+  field: FieldConfig
+  value: any
+  onChange: (v: any) => void
+}) {
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '6px 10px',
+    border: '1px solid #D1D5DB',
+    borderRadius: 4,
+    fontSize: 13,
+    background: '#fff',
+    boxSizing: 'border-box',
   }
-  static getDerivedStateFromError(error: any) {
-    return { hasError: true, error }
-  }
-  componentDidCatch(error: any, info: any) {
-    console.error('[DesignCanvas] Puck crashed:', error, info)
-  }
-  render() {
-    if (this.state.hasError) {
+
+  switch (field.type) {
+    case 'textarea':
       return (
-        <div style={{ padding: 40, textAlign: 'center', color: '#EF4444' }}>
-          <h3 style={{ marginBottom: 12 }}>设计画布加载失败</h3>
-          <pre style={{ fontSize: 12, color: '#6B7280', whiteSpace: 'pre-wrap' }}>
-            {String(this.state.error)}
-          </pre>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            style={{
-              marginTop: 16,
-              padding: '8px 20px',
-              background: '#7C3AED',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
+        <textarea
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          rows={3}
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+        />
+      )
+    case 'number':
+      return (
+        <input
+          type="number"
+          value={value ?? 0}
+          onChange={(e) => onChange(Number(e.target.value) || 0)}
+          style={inputStyle}
+        />
+      )
+    case 'select':
+      return (
+        <select
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          style={inputStyle}
+        >
+          {(field.options || []).map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      )
+    case 'radio':
+      return (
+        <div style={{ display: 'flex', gap: 12 }}>
+          {(field.options || []).map((opt) => (
+            <label key={opt.value} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 13,
               cursor: 'pointer',
-            }}
-          >
-            重试
-          </button>
+            }}>
+              <input
+                type="radio"
+                checked={value === opt.value}
+                onChange={() => onChange(opt.value)}
+              />
+              {opt.label}
+            </label>
+          ))}
         </div>
       )
-    }
-    return this.props.children
+    case 'color':
+      return (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input
+            type="color"
+            value={value || '#000000'}
+            onChange={(e) => onChange(e.target.value)}
+            style={{
+              width: 32, height: 32,
+              border: '1px solid #D1D5DB',
+              borderRadius: 4,
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          />
+          <input
+            type="text"
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            style={{ ...inputStyle, width: 100 }}
+          />
+        </div>
+      )
+    default:
+      return (
+        <input
+          type="text"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          style={inputStyle}
+        />
+      )
   }
 }
 
-export function DesignCanvas({
-  initialData,
-  onSave,
-  height = '100%',
-}: DesignCanvasProps) {
-  usePuckCSS()
+// ── Main Canvas Component ───────────────────────────────────────────── //
 
-  const [data, setData] = useState<any>(initialData || {
-    root: { props: { title: '设计画布' } },
+interface DesignCanvasProps {
+  initialData?: DesignData
+  onSave?: (data: DesignData) => void
+}
+
+export function DesignCanvas({ initialData, onSave }: DesignCanvasProps) {
+  const [data, setData] = useState<DesignData>(initialData || {
+    root: { props: { bgColor: '#FFFFFF', padding: 40 } },
     content: [],
   })
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const canvasRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (initialData) {
-      setData(initialData)
-    }
-  }, [initialData])
+  // Sync external data
+  const lastInitial = useRef<DesignData | null>(null)
+  if (initialData && initialData !== lastInitial.current) {
+    lastInitial.current = initialData
+    setData(initialData)
+    setSelectedIdx(null)
+  }
 
-  const handlePublish = useCallback((newData: any) => {
-    setData(newData)
-    onSave?.(newData)
-  }, [onSave])
+  // ── Mutations ── //
+  const updateItem = useCallback((idx: number, props: Record<string, any>) => {
+    setData((prev) => {
+      const content = [...prev.content]
+      content[idx] = { ...content[idx], props: { ...content[idx].props, ...props } }
+      return { ...prev, content }
+    })
+  }, [])
+
+  const deleteItem = useCallback((idx: number) => {
+    setData((prev) => ({
+      ...prev,
+      content: prev.content.filter((_, i) => i !== idx),
+    }))
+    setSelectedIdx(null)
+  }, [])
+
+  const addComponent = useCallback((type: string) => {
+    const cfg = componentRegistry[type]
+    if (!cfg) return
+    const newItem: DesignItem = { type, props: { ...cfg.defaultProps } }
+    setData((prev) => ({
+      ...prev,
+      content: [...prev.content, newItem],
+    }))
+    setSelectedIdx(data.content.length) // select the new item
+  }, [data.content.length])
+
+  const reorder = useCallback((from: number, to: number) => {
+    if (from === to) return
+    setData((prev) => {
+      const content = [...prev.content]
+      const [moved] = content.splice(from, 1)
+      content.splice(to, 0, moved)
+      return { ...prev, content }
+    })
+    setSelectedIdx(to)
+  }, [])
+
+  // ── Drag handlers ── //
+  const onDragStart = (idx: number) => setDragIdx(idx)
+  const onDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault()
+    setDragOverIdx(idx)
+  }
+  const onDrop = (e: React.DragEvent, idx: number) => {
+    e.preventDefault()
+    if (dragIdx !== null) reorder(dragIdx, idx)
+    setDragIdx(null)
+    setDragOverIdx(null)
+  }
+
+  const bgColor = data.root?.props?.bgColor || '#FFFFFF'
+  const padding = data.root?.props?.padding || 40
+  const selectedItem = selectedIdx !== null ? data.content[selectedIdx] : null
+  const selectedCfg = selectedItem ? componentRegistry[selectedItem.type] : null
 
   return (
-    <div style={{ height, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        <PuckErrorBoundary>
-          <Suspense
-            fallback={
-              <div style={{ padding: 40, textAlign: 'center', color: '#6B7280' }}>
-                加载设计画布...
-              </div>
-            }
+    <div style={{ display: 'flex', height: '100%', background: '#F3F4F6' }}>
+      {/* ── Left: Component palette ── */}
+      <div style={{
+        width: 180,
+        flexShrink: 0,
+        borderRight: '1px solid #E5E7EB',
+        background: '#fff',
+        padding: '12px 8px',
+        overflowY: 'auto',
+      }}>
+        <div style={{
+          fontSize: 11, fontWeight: 700, color: '#9CA3AF',
+          textTransform: 'uppercase', letterSpacing: 0.5,
+          marginBottom: 10, padding: '0 4px',
+        }}>
+          组件
+        </div>
+        {Object.keys(componentRegistry).map((type) => (
+          <button
+            key={type}
+            onClick={() => addComponent(type)}
+            style={{
+              display: 'block',
+              width: '100%',
+              textAlign: 'left',
+              padding: '8px 12px',
+              marginBottom: 4,
+              background: '#F9FAFB',
+              border: '1px solid #E5E7EB',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: 13,
+              color: '#374151',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#EEF2FF'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#F9FAFB'}
           >
-            <Puck
-              config={config}
-              data={data}
-              onPublish={handlePublish}
-            />
-          </Suspense>
-        </PuckErrorBoundary>
+            {type}
+          </button>
+        ))}
       </div>
-      {/* Toolbar */}
+
+      {/* ── Center: Canvas ── */}
       <div
+        ref={canvasRef}
         style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: 24,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: 8,
-          padding: '8px 16px',
-          borderTop: '1px solid #E2E8F0',
-          background: '#fff',
-          flexShrink: 0,
+          justifyContent: 'center',
         }}
       >
+        <div
+          style={{
+            width: '100%',
+            maxWidth: 720,
+            minHeight: '100%',
+            background: bgColor,
+            borderRadius: 8,
+            padding,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+          }}
+          onClick={() => setSelectedIdx(null)}
+        >
+          {data.content.length === 0 && (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              color: '#9CA3AF',
+              fontSize: 14,
+            }}>
+              从左侧添加组件，或用 AI 生成设计
+            </div>
+          )}
+          {data.content.map((item, idx) => {
+            const cfg = componentRegistry[item.type]
+            if (!cfg) return null
+            const isSelected = selectedIdx === idx
+            const isDragOver = dragOverIdx === idx
+            return (
+              <div
+                key={idx}
+                draggable
+                onDragStart={() => onDragStart(idx)}
+                onDragOver={(e) => onDragOver(e, idx)}
+                onDrop={(e) => onDrop(e, idx)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedIdx(idx)
+                }}
+                style={{
+                  marginBottom: 8,
+                  padding: 4,
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  border: isSelected
+                    ? '2px solid #7C3AED'
+                    : isDragOver
+                    ? '2px dashed #A78BFA'
+                    : '2px solid transparent',
+                  transition: 'border-color 0.15s',
+                }}
+              >
+                {/* Drag handle */}
+                <div style={{
+                  display: isSelected ? 'flex' : 'none',
+                  justifyContent: 'flex-end',
+                  fontSize: 10,
+                  color: '#9CA3AF',
+                  marginBottom: 2,
+                }}>
+                  ⠿ 拖拽排序
+                </div>
+                {cfg.render(item.props)}
+                {/* Delete button */}
+                {isSelected && (
+                  <div style={{ textAlign: 'right', marginTop: 4 }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteItem(idx)
+                      }}
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: 11,
+                        background: '#FEE2E2',
+                        color: '#DC2626',
+                        border: 'none',
+                        borderRadius: 3,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Right: Properties panel ── */}
+      <div style={{
+        width: 260,
+        flexShrink: 0,
+        borderLeft: '1px solid #E5E7EB',
+        background: '#fff',
+        padding: '12px 12px',
+        overflowY: 'auto',
+      }}>
+        {selectedItem && selectedCfg ? (
+          <>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 14,
+            }}>
+              <span style={{
+                fontSize: 13, fontWeight: 700, color: '#1F2937',
+              }}>
+                {selectedItem.type} 属性
+              </span>
+              <span style={{
+                fontSize: 11, color: '#9CA3AF',
+              }}>
+                #{(selectedIdx ?? 0) + 1}
+              </span>
+            </div>
+            {Object.entries(selectedCfg.fields).map(([key, field]) => (
+              <div key={key} style={{ marginBottom: 12 }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: 12,
+                  color: '#6B7280',
+                  marginBottom: 4,
+                  fontWeight: 500,
+                }}>
+                  {field.label}
+                </label>
+                <FieldEditor
+                  field={field}
+                  value={selectedItem.props[key]}
+                  onChange={(v) => {
+                    if (selectedIdx !== null) {
+                      updateItem(selectedIdx, { [key]: v })
+                    }
+                  }}
+                />
+              </div>
+            ))}
+          </>
+        ) : (
+          <>
+            <div style={{
+              fontSize: 11, fontWeight: 700, color: '#9CA3AF',
+              textTransform: 'uppercase', letterSpacing: 0.5,
+              marginBottom: 10,
+            }}>
+              画布设置
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{
+                display: 'block', fontSize: 12, color: '#6B7280', marginBottom: 4,
+              }}>
+                背景色
+              </label>
+              <FieldEditor
+                field={{ type: 'color', label: '背景色' }}
+                value={data.root?.props?.bgColor}
+                onChange={(v) => {
+                  setData((prev) => ({
+                    ...prev,
+                    root: { props: { ...prev.root.props, bgColor: v } },
+                  }))
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{
+                display: 'block', fontSize: 12, color: '#6B7280', marginBottom: 4,
+              }}>
+                内边距
+              </label>
+              <FieldEditor
+                field={{ type: 'number', label: '内边距' }}
+                value={data.root?.props?.padding}
+                onChange={(v) => {
+                  setData((prev) => ({
+                    ...prev,
+                    root: { props: { ...prev.root.props, padding: v } },
+                  }))
+                }}
+              />
+            </div>
+            <div style={{
+              marginTop: 20, padding: 10,
+              background: '#F3F4F6', borderRadius: 6,
+              fontSize: 12, color: '#9CA3AF', lineHeight: 1.5,
+            }}>
+              点击组件编辑属性
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Bottom toolbar ── */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        display: 'flex',
+        gap: 8,
+        padding: '8px 16px',
+      }}>
         <button
           onClick={() => {
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -305,12 +639,13 @@ export function DesignCanvas({
           }}
           style={{
             padding: '6px 12px',
-            background: 'transparent',
-            border: '1px solid #E2E8F0',
+            background: 'rgba(255,255,255,0.9)',
+            border: '1px solid #E5E7EB',
             borderRadius: 4,
             cursor: 'pointer',
             fontSize: 12,
             color: '#374151',
+            backdropFilter: 'blur(4px)',
           }}
         >
           导出 .madcop
@@ -319,13 +654,14 @@ export function DesignCanvas({
           onClick={() => onSave?.(data)}
           style={{
             padding: '6px 12px',
-            background: '#7C3AED',
+            background: 'rgba(124,58,237,0.9)',
             color: '#fff',
             border: 'none',
             borderRadius: 4,
             cursor: 'pointer',
             fontSize: 12,
             fontWeight: 600,
+            backdropFilter: 'blur(4px)',
           }}
         >
           保存
@@ -335,4 +671,4 @@ export function DesignCanvas({
   )
 }
 
-export type { Config, Data as DesignData }
+export type { Config as DesignConfig }

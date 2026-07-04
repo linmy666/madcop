@@ -1,9 +1,0 @@
-.Control :global(.lucide) {
-  height: var(--puck-icon-size-m);
-  width: var(--puck-icon-size-m);
-}
-
-.Control--inline :global(.lucide) {
-  height: var(--puck-actionbar-action-size, var(--puck-icon-size-s));
-  width: var(--puck-actionbar-action-size, var(--puck-icon-size-s));
-}
