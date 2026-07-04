@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!--
+    MadCop Agent mascot — hand-drawn line-art style
+    A friendly detective/cop character with a magnifying glass
+    (representing investigation & search).
+    Animated: eye blinks every 4-5 seconds.
+  -->
+  <defs>
+    <style>
+      :root { --stroke: #2c3e50; }
+      .stroke { stroke: #2c3e50; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .stroke-thin { stroke: #2c3e50; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .accent { stroke: #14b8a6; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .glow { fill: #fef3c7; }
+      .hat { fill: #2c3e50; }
+      .glass { fill: #dbeafe; stroke: #14b8a6; stroke-width: 2; }
+      .handle { stroke: #2c3e50; stroke-width: 3; fill: none; stroke-linecap: round; }
+      .badge { fill: #14b8a6; }
+      .badge-text { fill: white; font-family: sans-serif; font-size: 12px; font-weight: 700; }
+
+      /* Breathing */
+      @keyframes breathe {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.03); }
+      }
+      .madcop-mascot { animation: breathe 3.5s ease-in-out infinite; transform-origin: 100px 110px; }
+
+      /* Blink */
+      @keyframes blink {
+        0%, 90%, 100% { transform: scaleY(1); }
+        93%, 97% { transform: scaleY(0.05); }
+      }
+      .eye { animation: blink 5s ease-in-out infinite; transform-origin: center; }
+      .eye-right { transform-origin: 117px 92px; }
+      .eye-left  { transform-origin:  78px 92px; }
+
+      /* Magnifying glass idle sway */
+      @keyframes glass-sway {
+        0%, 100% { transform: rotate(-3deg); }
+        50%      { transform: rotate(3deg); }
+      }
+      .glass-arm { animation: glass-sway 4s ease-in-out infinite; transform-origin: 100px 130px; }
+
+      /* Sparkle */
+      @keyframes twinkle {
+        0%, 100% { opacity: 0; }
+        50%      { opacity: 1; }
+      }
+      .sparkle { animation: twinkle 2.4s ease-in-out infinite; }
+      .sparkle-2 { animation-delay: 0.8s; }
+      .sparkle-3 { animation-delay: 1.6s; }
+    </style>
+  </defs>
+
+  <g class="madcop-mascot">
+    <!-- Background glow (subtle) -->
+    <circle cx="100" cy="100" r="85" class="glow" opacity="0.45"/>
+
+    <!-- Detective hat (fedora) -->
+    <ellipse class="hat" cx="100" cy="62" rx="44" ry="6"/>
+    <path class="hat" d="M 64 62 Q 64 38 100 38 Q 136 38 136 62 Z"/>
+    <path d="M 70 50 Q 100 46 130 50" stroke="#14b8a6" stroke-width="2" fill="none"/>
+
+    <!-- Head (round) -->
+    <circle class="stroke" cx="100" cy="98" r="34"/>
+
+    <!-- Eyes -->
+    <g class="eye eye-left">
+      <circle cx="78" cy="92" r="4.5" fill="#2c3e50"/>
+      <circle cx="79.5" cy="90.5" r="1.5" fill="white"/>
+    </g>
+    <g class="eye eye-right">
+      <circle cx="117" cy="92" r="4.5" fill="#2c3e50"/>
+      <circle cx="118.5" cy="90.5" r="1.5" fill="white"/>
+    </g>
+
+    <!-- Eyebrows (focused / thinking) -->
+    <path class="stroke-thin" d="M 70 82 L 86 80"/>
+    <path class="stroke-thin" d="M 109 80 L 125 82"/>
+
+    <!-- Mouth (slight smile) -->
+    <path class="stroke" d="M 88 110 Q 100 117 112 110"/>
+
+    <!-- Body / coat collar -->
+    <path class="stroke" d="M 100 132 L 100 178"/>
+    <path class="stroke" d="M 75 145 L 100 132 L 125 145"/>
+    <path class="stroke" d="M 70 178 L 100 178 L 130 178"/>
+    <!-- Coat lapels -->
+    <path class="accent" d="M 92 138 L 100 145 L 108 138"/>
+
+    <!-- Tie (subtle) -->
+    <path d="M 100 145 L 96 168 L 100 175 L 104 168 Z" fill="#14b8a6"/>
+    <path d="M 96 152 L 104 152" stroke="white" stroke-width="0.8"/>
+
+    <!-- Arm holding magnifier -->
+    <g class="glass-arm">
+      <path class="stroke" d="M 110 145 L 140 158"/>
+      <!-- Magnifying glass -->
+      <circle class="glass" cx="148" cy="165" r="14"/>
+      <circle cx="148" cy="165" r="11" stroke="#14b8a6" stroke-width="1.2" fill="none" opacity="0.6"/>
+      <!-- Highlight on glass -->
+      <ellipse cx="143" cy="160" rx="4" ry="2" fill="white" opacity="0.6"/>
+      <!-- Handle -->
+      <line class="handle" x1="159" y1="176" x2="167" y2="184"/>
+    </g>
+
+    <!-- Badge on chest -->
+    <circle class="badge" cx="76" cy="160" r="9"/>
+    <text x="76" y="164" text-anchor="middle" class="badge-text">M</text>
+
+    <!-- Sparkles around the magnifying glass -->
+    <g class="sparkle" fill="#14b8a6">
+      <circle cx="125" cy="190" r="1.8"/>
+    </g>
+    <g class="sparkle sparkle-2" fill="#fbbf24">
+      <circle cx="160" cy="195" r="1.5"/>
+    </g>
+    <g class="sparkle sparkle-3" fill="#14b8a6">
+      <circle cx="40" cy="175" r="1.5"/>
+    </g>
+  </g>
+</svg>

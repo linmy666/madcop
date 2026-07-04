@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MadCop Mascot — Stardew Valley pixel-art variant
+  Source: 紫色水滴小生物 with halo + smile
+  Reinterpretation: 16-bit SDV color palette, pixelated.
+  Replaces the previous detective variant.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
+     shape-rendering="crispEdges">
+  <style>
+    @keyframes bl { 0%,90%,100%{transform:scaleY(1)} 93%,97%{transform:scaleY(0.05)} }
+    @keyframes ha { 0%,100%{transform:rotate(-3deg)} 50%{transform:rotate(3deg)} }
+    .eye { animation: bl 5s ease-in-out infinite; transform-origin: center; }
+    .halo { animation: ha 4s ease-in-out infinite; transform-origin: 32px 8px; }
+  </style>
+
+  <!-- Halo (gold) -->
+  <ellipse class="halo" cx="32" cy="9" rx="11" ry="2.5"
+           fill="none" stroke="#FFD700" stroke-width="2"/>
+  <ellipse class="halo" cx="32" cy="9" rx="13" ry="1.5"
+           fill="none" stroke="#FFCE00" stroke-width="1.2" opacity="0.5"/>
+
+  <!-- Body (purple drop) - pixel art -->
+  <path d="M 32 14
+           L 50 38
+           Q 50 56 32 58
+           Q 14 56 14 38
+           Z" fill="#9F86E0" stroke="#5C2A20" stroke-width="1.5"/>
+  <!-- Highlight (lighter purple) -->
+  <ellipse cx="22" cy="46" rx="3" ry="5" fill="#B8A7F0" opacity="0.6"/>
+  <!-- Belly (lighter) -->
+  <path d="M 22 32
+           Q 22 50 32 52
+           Q 42 50 42 32
+           Q 42 26 32 22
+           Q 22 26 22 32
+           Z" fill="#C9B381" opacity="0.5"/>
+
+  <!-- Face mask (darker purple) - pixel style -->
+  <rect x="18" y="28" width="28" height="14" fill="#6B4FA0" stroke="#5C2A20" stroke-width="1.5" rx="1"/>
+
+  <!-- Eyes (whites) - pixel blocks -->
+  <rect class="eye" x="21" y="30" width="6" height="8" fill="#F4E4BC" stroke="#5C2A20" stroke-width="1"/>
+  <rect class="eye" x="37" y="30" width="6" height="8" fill="#F4E4BC" stroke="#5C2A20" stroke-width="1"/>
+  <!-- Pupils -->
+  <rect x="23" y="32" width="3" height="3" fill="#5C2A20"/>
+  <rect x="39" y="32" width="3" height="3" fill="#5C2A20"/>
+  <!-- Eye highlights -->
+  <rect x="22" y="32" width="1" height="1" fill="#F4E4BC"/>
+  <rect x="38" y="32" width="1" height="1" fill="#F4E4BC"/>
+
+  <!-- Smile (pink) - pixel curve -->
+  <path d="M 28 41
+           Q 32 44 36 41"
+        stroke="#E76A85" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Halo dot above (small highlight) -->
+  <ellipse cx="26" cy="6" rx="2" ry="1" fill="#FFD700"/>
+
+  <!-- Animation: subtle breathing -->
+  <g style="animation: br 3s ease-in-out infinite; transform-origin: 32px 40px;">
+    <animateTransform attributeName="transform" type="scale"
+      values="1;1.03;1" dur="3s" repeatCount="indefinite" additive="sum"/>
+  </g>
+</svg>

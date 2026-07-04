@@ -459,7 +459,7 @@ def create_app() -> FastAPI:
     # Session persistence (background task)
     # ------------------------------------------------------------------- #
     import asyncio as _aio
-    from madcop.server.webui_compat import _persist_sessions
+    from madcop.server.madcop_compat import _persist_sessions
 
     @app.on_event("startup")
     async def _start_persist_task() -> None:
@@ -502,7 +502,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": __version__}
 
     @app.get("/api/providers")
-    async def list_providers_webui() -> dict[str, Any]:
+    async def list_providers_madcop() -> dict[str, Any]:
         """cc-haha React 客户端期望的 providers 列表端点
         返回 {providers: [...], activeId: ...} 格式
 
@@ -510,21 +510,21 @@ def create_app() -> FastAPI:
         apiFormat, authStrategy, presetId, etc.) so the Edit-Provider
         form in the Settings UI can pre-fill all fields.
         """
-        # Use the webui_compat helper which returns the full shape
-        from madcop.server.webui_compat import _list_providers as _cc_list
+        # Use the madcop_compat helper which returns the full shape
+        from madcop.server.madcop_compat import _list_providers as _cc_list
         return _cc_list()
 
     @app.get("/api/providers/presets")
-    async def list_provider_presets_webui() -> dict[str, Any]:
+    async def list_provider_presets_madcop() -> dict[str, Any]:
         """cc-haha React 客户端期望的 provider presets 列表端点.
         Returns the full ProviderPreset shape: id, name, baseUrl,
         apiFormat, defaultModels, needsApiKey, websiteUrl, authStrategy.
         """
-        from madcop.server.webui_compat import _list_provider_presets as _cc_presets
+        from madcop.server.madcop_compat import _list_provider_presets as _cc_presets
         return _cc_presets()
 
     @app.get("/api/models")
-    async def list_models_webui() -> dict[str, Any]:
+    async def list_models_madcop() -> dict[str, Any]:
         """cc-haha React 客户端期望的 models 列表端点
 
         v2.6.0: AUTO-FETCHES from each provider's /v1/models endpoint
@@ -535,7 +535,7 @@ def create_app() -> FastAPI:
         # Use the raw settings object (has decrypted api_key) rather
         # than settings_to_public_dict (which only exposes masked keys).
         try:
-            from madcop.server.webui_compat import fetch_provider_models
+            from madcop.server.madcop_compat import fetch_provider_models
         except ImportError:
             fetch_provider_models = None  # type: ignore
         out: list[dict[str, Any]] = []
@@ -548,7 +548,7 @@ def create_app() -> FastAPI:
                 if api_key.startswith("fernet:"):
                     api_key = ""  # can't decrypt; skip
             if fetch_provider_models and base and api_key:
-                # Auto-fetch live model list (5-min cache in webui_compat)
+                # Auto-fetch live model list (5-min cache in madcop_compat)
                 live = fetch_provider_models(base, api_key)
                 for m in live:
                     mid = m.get("id", "")
@@ -608,7 +608,7 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/api/models/current")
-    async def get_current_model_webui() -> dict[str, Any]:
+    async def get_current_model_madcop() -> dict[str, Any]:
         """cc-haha React 客户端期望的 current model 端点"""
         s = settings_store.load_settings()
         public = settings_store.settings_to_public_dict(s)
@@ -625,12 +625,12 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/api/permissions/mode")
-    async def get_permission_mode_webui() -> dict[str, str]:
+    async def get_permission_mode_madcop() -> dict[str, str]:
         """cc-haha React 客户端期望的 permission mode 端点"""
         return {"mode": "bypassPermissions"}
 
     @app.get("/api/effort")
-    async def get_effort_webui() -> dict[str, Any]:
+    async def get_effort_madcop() -> dict[str, Any]:
         """cc-haha React 客户端期望的 effort level 端点"""
         return {
             "level": "medium",
@@ -638,7 +638,7 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/api/settings/user")
-    async def get_user_settings_webui() -> dict[str, Any]:
+    async def get_user_settings_madcop() -> dict[str, Any]:
         """cc-haha React 客户端期望的 user settings 端点"""
         return {
             "theme": "white",
@@ -1380,9 +1380,9 @@ def create_app() -> FastAPI:
     # Surfaces madcop's real data (skills, memory, sessions, channels)
     # through the endpoints the cc-haha UI expects.
     # ------------------------------------------------------------------- #
-    from .webui_compat import register as register_webui_compat
-    from .webui_compat import install_catch_all
-    register_webui_compat(app)
+    from .madcop_compat import register as register_madcop_compat
+    from .madcop_compat import install_catch_all
+    register_madcop_compat(app)
 
     # ------------------------------------------------------------------- #
     # v2.7.0 — Visual workflow orchestration API.
@@ -1462,8 +1462,8 @@ def create_app() -> FastAPI:
         await ws.accept()
         await ws.send_json({"type": "connected", "sessionId": session_id})
 
-        # Lazy import to share _MESSAGES dict with webui_compat
-        from madcop.server.webui_compat import _MESSAGES, _SESSIONS
+        # Lazy import to share _MESSAGES dict with madcop_compat
+        from madcop.server.madcop_compat import _MESSAGES, _SESSIONS
 
         # v2.6.3.3: per-session middleware chain. Wires the Qian control
         # theory middleware into the WebSocket chat path so every
@@ -1567,7 +1567,7 @@ def create_app() -> FastAPI:
                     continue
 
                 # ---- Save user message to session history (cc-haha compat) ---- #
-                # Persist into webui_compat._MESSAGES[session_id] so the
+                # Persist into madcop_compat._MESSAGES[session_id] so the
                 # Electron UI can re-fetch it via /api/sessions/{id}/messages.
                 import time as _time, uuid as _uuid
                 now_iso = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
