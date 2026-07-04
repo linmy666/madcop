@@ -423,7 +423,7 @@ _DESIGN_DEFAULT_SYSTEM_PROMPT = (
     "5. Flex 的 direction=row 时内容水平排列，column 时垂直排列\n"
     "6. 复杂布局：外层用 Section → 内层用 Flex/Card → 最内层用文本/输入组件\n"
     "\n\n"
-    "【FEW-SHOT 样例 1 — 登录页】\n"
+    "【FEW-SHOT 样例 — 登录页】\n"
     '{\n'
     '  "root": { "props": { "bgColor": "#FFFFFF", "padding": 40 } },\n'
     '  "content": [\n'
@@ -435,58 +435,6 @@ _DESIGN_DEFAULT_SYSTEM_PROMPT = (
     '    { "type": "Input", "props": { "placeholder": "密码", "width": 320, "type": "password" } },\n'
     '    { "type": "Space", "props": { "height": 24 } },\n'
     '    { "type": "Button", "props": { "text": "登录", "variant": "primary", "color": "#7C3AED", "width": 320 } }\n'
-    '  ]\n'
-    '}\n'
-    "\n\n"
-    "【FEW-SHOT 样例 2 — 仪表盘】\n"
-    '{\n'
-    '  "root": { "props": { "bgColor": "#F3F4F6", "padding": 32 } },\n'
-    '  "content": [\n'
-    '    { "type": "Header", "props": { "text": "数据概览", "level": "2", "fontSize": 24 } },\n'
-    '    { "type": "Space", "props": { "height": 16 } },\n'
-    '    { "type": "Grid", "props": { "columns": 2, "gap": 16 },\n'
-    '      "children": [\n'
-    '        { "type": "Card", "props": { "bgColor": "#EEF2FF", "padding": 20, "radius": 12 },\n'
-    '          "children": [\n'
-    '            { "type": "Header", "props": { "text": "1,234", "level": "3", "fontSize": 32, "color": "#4F46E5" } },\n'
-    '            { "type": "Paragraph", "props": { "text": "今日订单", "fontSize": 12, "color": "#6B7280" } }\n'
-    '          ]\n'
-    '        },\n'
-    '        { "type": "Card", "props": { "bgColor": "#FEF2F2", "padding": 20, "radius": 12 },\n'
-    '          "children": [\n'
-    '            { "type": "Header", "props": { "text": "¥56,780", "level": "3", "fontSize": 32, "color": "#DC2626" } },\n'
-    '            { "type": "Paragraph", "props": { "text": "今日收入", "fontSize": 12, "color": "#6B7280" } }\n'
-    '          ]\n'
-    '        }\n'
-    '      ]\n'
-    '    }\n'
-    '  ]\n'
-    '}\n'
-    "\n\n"
-    "【FEW-SHOT 样例 3 — 个人中心】\n"
-    '{\n'
-    '  "root": { "props": { "bgColor": "#FFFFFF", "padding": 24 } },\n'
-    '  "content": [\n'
-    '    { "type": "Flex", "props": { "direction": "row", "gap": 16, "align": "center" },\n'
-    '      "children": [\n'
-    '        { "type": "Image", "props": { "src": "https://via.placeholder.com/80", "width": 80, "height": 80, "borderRadius": 40 } },\n'
-    '        { "type": "Flex", "props": { "direction": "column", "gap": 4 },\n'
-    '          "children": [\n'
-    '            { "type": "Header", "props": { "text": "张三", "level": "3", "fontSize": 20 } },\n'
-    '            { "type": "Paragraph", "props": { "text": "产品经理 | 杭州", "fontSize": 13, "color": "#6B7280" } }\n'
-    '          ]\n'
-    '        }\n'
-    '      ]\n'
-    '    },\n'
-    '    { "type": "Divider", "props": { "color": "#E5E7EB", "thickness": 1, "margin": 24 } },\n'
-    '    { "type": "Header", "props": { "text": "设置", "level": "3", "fontSize": 16, "color": "#374151" } },\n'
-    '    { "type": "Card", "props": { "padding": 16, "bgColor": "#F9FAFB", "radius": 8 },\n'
-    '      "children": [\n'
-    '        { "type": "Paragraph", "props": { "text": "个人信息", "fontSize": 14 } },\n'
-    '        { "type": "Paragraph", "props": { "text": "通知设置", "fontSize": 14 } },\n'
-    '        { "type": "Paragraph", "props": { "text": "隐私与安全", "fontSize": 14 } }\n'
-    '      ]\n'
-    '    }\n'
     '  ]\n'
     '}\n'
 )
@@ -1461,6 +1409,16 @@ def create_app() -> FastAPI:
         system_prompt = body.get("system_prompt", _DESIGN_DEFAULT_SYSTEM_PROMPT)
 
         client = _get_client()
+        # Bump timeout for design generation (LLM needs more time for JSON)
+        if hasattr(client, '_client'):
+            try:
+                client._client = client._client.__class__(
+                    api_key=client.api_key,
+                    base_url=client.base_url,
+                    timeout=90.0,
+                )
+            except Exception:
+                pass
         from madcop.llm import Message
         messages = [
             Message(role="system", content=system_prompt),
@@ -1472,14 +1430,17 @@ def create_app() -> FastAPI:
                 messages=messages,
                 tools=None,
                 temperature=0.3,
-                max_tokens=4096,
+                max_tokens=2048,
             )
             text = (getattr(resp, "content", "") or "")
         except Exception as e:
             import sys as _err_sys, traceback as _tb
-            print(f"[design_generate] ERROR: {type(e).__name__}: {e}", file=_err_sys.stderr, flush=True)
-            _tb.print_exc(file=_err_sys.stderr)
-            raise HTTPException(502, f"LLM call failed: {type(e).__name__}: {e}")
+            err_msg = str(e)
+            print(f"[design_generate] ERROR: {type(e).__name__}: {err_msg[:200]}", file=_err_sys.stderr, flush=True)
+            # Return error info instead of 502 — frontend can show useful message
+            if "timeout" in err_msg.lower() or "timed out" in err_msg.lower():
+                raise HTTPException(504, "AI 响应超时，请稍后重试")
+            raise HTTPException(502, f"LLM 调用失败: {type(e).__name__}")
 
         return {"content": text, "model": getattr(client, "model", "unknown")}
 
