@@ -11,7 +11,7 @@ vi.mock('./lib/persistenceMigrations', () => ({
   runDesktopPersistenceMigrations: mocks.runDesktopPersistenceMigrations,
 }))
 
-vi.mock('./theme/globals.css', () => ({}))
+vi.mock('./theme/madcop.css', () => ({}))
 
 vi.mock('./App', () => ({
   App: () => <div>Auto boot app</div>,
