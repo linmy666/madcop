@@ -8,9 +8,9 @@ import { useSettingsStore } from './settingsStore'
 import { OFFICIAL_DEFAULT_MODEL_ID } from '../constants/modelCatalog'
 import {
   BUILT_IN_PROVIDER_IDS,
-  OPENAI_OFFICIAL_DEFAULT_MODEL_ID,
-  OPENAI_OFFICIAL_PROVIDER_ID,
-} from '../constants/openaiOfficialProvider'
+  MADCOP_BUILT_IN_PROVIDER_B_DEFAULT_MODEL,
+  MADCOP_BUILT_IN_PROVIDER_B,
+} from '../constants/builtInProviderIds'
 import type {
   SavedProvider,
   CreateProviderInput,
@@ -279,8 +279,8 @@ export const useProviderStore = create<ProviderStore>((set, get) => ({
     // 更新默认 provider 时，同步刷新默认 model，避免 settings.json 里残留
     // 旧 provider 的 model id 导致默认选择指向不存在的模型。
     const settings = useSettingsStore.getState()
-    if (id === OPENAI_OFFICIAL_PROVIDER_ID) {
-      await settings.setModel(OPENAI_OFFICIAL_DEFAULT_MODEL_ID)
+    if (id === MADCOP_BUILT_IN_PROVIDER_B) {
+      await settings.setModel(MADCOP_BUILT_IN_PROVIDER_B_DEFAULT_MODEL)
       await settings.fetchAll()
       return
     }

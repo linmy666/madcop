@@ -2,10 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import { OFFICIAL_DEFAULT_MODEL_ID, OFFICIAL_MODELS } from '../../constants/modelCatalog'
 import {
-  OPENAI_OFFICIAL_DEFAULT_MODEL_ID,
-  OPENAI_OFFICIAL_MODELS,
-  OPENAI_OFFICIAL_PROVIDER_ID,
-} from '../../constants/openaiOfficialProvider'
+  MADCOP_BUILT_IN_PROVIDER_B_DEFAULT_MODEL,
+  MADCOP_BUILT_IN_PROVIDER_B_MODELS,
+  MADCOP_BUILT_IN_PROVIDER_B,
+} from '../../constants/builtInProviderIds'
 import { useTranslation } from '../../i18n'
 import { useChatStore } from '../../stores/chatStore'
 import { useProviderStore } from '../../stores/providerStore'
@@ -124,9 +124,9 @@ function buildProviderChoices(
   const claudeOfficialModels = activeId === null && availableModels.length > 0
     ? availableModels
     : OFFICIAL_MODELS
-  const openAIOfficialModels = activeId === OPENAI_OFFICIAL_PROVIDER_ID && availableModels.length > 0
+  const openAIOfficialModels = activeId === MADCOP_BUILT_IN_PROVIDER_B && availableModels.length > 0
     ? availableModels
-    : OPENAI_OFFICIAL_MODELS
+    : MADCOP_BUILT_IN_PROVIDER_B_MODELS
 
   const choices: ProviderChoice[] = []
 
@@ -135,9 +135,9 @@ function buildProviderChoices(
   }
   if (openAIOfficialLoggedIn) {
     choices.push(officialChoices(
-      OPENAI_OFFICIAL_PROVIDER_ID,
+      MADCOP_BUILT_IN_PROVIDER_B,
       openAIOfficialModels,
-      activeId === OPENAI_OFFICIAL_PROVIDER_ID,
+      activeId === MADCOP_BUILT_IN_PROVIDER_B,
       openAIOfficialName,
     ))
   }
@@ -174,8 +174,8 @@ function resolveDefaultRuntimeSelection(
   return {
     providerId: inferredProviderId,
     modelId: providerMainModelId || currentModelId || (
-      inferredProviderId === OPENAI_OFFICIAL_PROVIDER_ID
-        ? OPENAI_OFFICIAL_DEFAULT_MODEL_ID
+      inferredProviderId === MADCOP_BUILT_IN_PROVIDER_B
+        ? MADCOP_BUILT_IN_PROVIDER_B_DEFAULT_MODEL
         : OFFICIAL_DEFAULT_MODEL_ID
     ),
   }

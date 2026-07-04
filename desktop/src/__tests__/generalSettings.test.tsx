@@ -81,7 +81,7 @@ vi.mock('qrcode', () => ({
 }))
 
 vi.mock('../components/settings/ClaudeOfficialLogin', () => ({
-  ClaudeOfficialLogin: () => <div data-testid="claude-official-login" />,
+  ClaudeOfficialLogin: () => <div data-testid="provider-0-login" />,
 }))
 
 vi.mock('../components/settings/ChatGPTOfficialLogin', () => ({
@@ -1484,7 +1484,7 @@ describe('Settings > Providers tab', () => {
         notes: '',
       },
     ]
-    providerStoreState.providerOrder = ['provider-1', 'claude-official', 'openai-official']
+    providerStoreState.providerOrder = ['provider-1', 'provider-0', 'provider-1']
     providerStoreState.activeId = null
     providerStoreState.hasLoadedProviders = true
   })
@@ -1496,12 +1496,12 @@ describe('Settings > Providers tab', () => {
 
     render(<Settings />)
 
-    expect(screen.queryByTestId('claude-official-login')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('provider-0-login')).not.toBeInTheDocument()
   })
 
   it('does not query ChatGPT OAuth status before providers finish loading', () => {
     providerStoreState.providers = []
-    providerStoreState.activeId = 'openai-official'
+    providerStoreState.activeId = 'provider-1'
     providerStoreState.hasLoadedProviders = false
 
     render(<Settings />)
@@ -1516,25 +1516,25 @@ describe('Settings > Providers tab', () => {
 
     render(<Settings />)
 
-    expect(screen.getByTestId('claude-official-login')).toBeInTheDocument()
+    expect(screen.getByTestId('provider-0-login')).toBeInTheDocument()
   })
 
   it('shows ChatGPT Official as the active built-in provider', () => {
     providerStoreState.providers = []
-    providerStoreState.activeId = 'openai-official'
+    providerStoreState.activeId = 'provider-1'
     providerStoreState.hasLoadedProviders = true
 
     render(<Settings />)
 
-    const openAIProvider = screen.getByTestId('openai-official-provider')
+    const openAIProvider = screen.getByTestId('provider-1-provider')
     expect(within(openAIProvider).getByText('ChatGPT Official')).toBeInTheDocument()
     expect(within(openAIProvider).getByText('Default')).toBeInTheDocument()
     expect(screen.getByTestId('chatgpt-official-login')).toBeInTheDocument()
-    expect(screen.queryByTestId('claude-official-login')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('provider-0-login')).not.toBeInTheDocument()
   })
 
   it('renders saved and official providers in the stored sortable order', () => {
-    providerStoreState.providerOrder = ['provider-1', 'openai-official', 'claude-official']
+    providerStoreState.providerOrder = ['provider-1', 'provider-1', 'provider-0']
 
     render(<Settings />)
 
@@ -1542,8 +1542,8 @@ describe('Settings > Providers tab', () => {
       .map((handle) => handle.closest('[data-testid]')?.getAttribute('data-testid'))
     expect(rows).toEqual([
       'provider-provider-1',
-      'openai-official-provider',
-      'claude-official-provider',
+      'provider-1-provider',
+      'provider-0-provider',
     ])
   })
 
@@ -1556,8 +1556,8 @@ describe('Settings > Providers tab', () => {
       .map((handle) => handle.closest('[data-testid]')?.getAttribute('data-testid'))
     expect(rows).toEqual([
       'provider-provider-1',
-      'claude-official-provider',
-      'openai-official-provider',
+      'provider-0-provider',
+      'provider-1-provider',
     ])
   })
 

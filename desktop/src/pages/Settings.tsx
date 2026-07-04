@@ -54,9 +54,9 @@ import { ClaudeOfficialLogin } from '../components/settings/ClaudeOfficialLogin'
 import { ChatGPTOfficialLogin } from '../components/settings/ChatGPTOfficialLogin'
 import {
   BUILT_IN_PROVIDER_IDS,
-  CLAUDE_OFFICIAL_PROVIDER_ID,
-  OPENAI_OFFICIAL_PROVIDER_ID,
-} from '../constants/openaiOfficialProvider'
+  MADCOP_BUILT_IN_PROVIDER_A,
+  MADCOP_BUILT_IN_PROVIDER_B,
+} from '../constants/builtInProviderIds'
 import { useUpdateStore } from '../stores/updateStore'
 import { getBaseUrl } from '../api/client'
 import { formatBytes } from '../lib/formatBytes'
@@ -260,8 +260,8 @@ function TabButton({ icon, label, active, onClick }: { icon: ReactNode; label: s
 // ─── Provider Settings ──────────────────────────────────────
 
 type ProviderListItem =
-  | { id: typeof CLAUDE_OFFICIAL_PROVIDER_ID; kind: 'claude-official' }
-  | { id: typeof OPENAI_OFFICIAL_PROVIDER_ID; kind: 'openai-official' }
+  | { id: typeof MADCOP_BUILT_IN_PROVIDER_A; kind: 'provider-0' }
+  | { id: typeof MADCOP_BUILT_IN_PROVIDER_B; kind: 'provider-1' }
   | { id: string; kind: 'saved'; provider: SavedProvider }
 
 function defaultProviderOrder(providers: SavedProvider[]): string[] {
@@ -316,10 +316,10 @@ function buildProviderListItems(
 
 function providerItemTestId(item: ProviderListItem): string {
   switch (item.kind) {
-    case 'claude-official':
-      return 'claude-official-provider'
-    case 'openai-official':
-      return 'openai-official-provider'
+    case 'provider-0':
+      return 'provider-0-card'
+    case 'provider-1':
+      return 'provider-1-card'
     case 'saved':
       return `provider-${item.provider.id}`
   }
@@ -424,7 +424,7 @@ function ProviderSettings() {
   }
 
   const isClaudeOfficialActive = hasLoadedProviders && activeId === null
-  const isOpenAIOfficialActive = hasLoadedProviders && activeId === OPENAI_OFFICIAL_PROVIDER_ID
+  const isBuiltinProviderActive = hasLoadedProviders && activeId === MADCOP_BUILT_IN_PROVIDER_B
 
   return (
     <div className="max-w-2xl">
@@ -450,7 +450,7 @@ function ProviderSettings() {
         >
           <div className="flex flex-col gap-2">
             {providerItems.map((item) => {
-              if (item.kind === 'claude-official') {
+              if (item.kind === 'provider-0') {
                 return (
                   <SortableProviderCard
                     key={item.id}
@@ -472,20 +472,20 @@ function ProviderSettings() {
                 )
               }
 
-              if (item.kind === 'openai-official') {
+              if (item.kind === 'provider-1') {
                 return (
                   <SortableProviderCard
                     key={item.id}
                     item={item}
-                    isActive={isOpenAIOfficialActive}
+                    isActive={isBuiltinProviderActive}
                     dragLabel={t('settings.providers.dragToReorder')}
-                    onActivate={!isOpenAIOfficialActive ? () => handleActivate(OPENAI_OFFICIAL_PROVIDER_ID) : undefined}
+                    onActivate={!isBuiltinProviderActive ? () => handleActivate(MADCOP_BUILT_IN_PROVIDER_B) : undefined}
                     title={t('settings.providers.openaiOfficialName')}
                     subtitle={t('settings.providers.openaiOfficialDesc')}
-                    badges={isOpenAIOfficialActive ? (
+                    badges={isBuiltinProviderActive ? (
                       <span className="rounded border border-[var(--color-brand)]/18 bg-[var(--color-brand)]/12 px-1.5 py-0.5 text-[10px] font-bold leading-none text-[var(--color-brand)]">{t('settings.providers.default')}</span>
                     ) : null}
-                    details={isOpenAIOfficialActive ? (
+                    details={isBuiltinProviderActive ? (
                       <div className="border-t border-[var(--color-border-separator)] px-4 pb-4 pt-3">
                         <ChatGPTOfficialLogin />
                       </div>

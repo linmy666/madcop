@@ -386,6 +386,51 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
+/* v3.0 — MadCop namespace aliases.
+ * Same hex values as --color-*, but names that don't leak the
+ * upstream Material You vocabulary. Components written in
+ * MadCop's own style use these; legacy code keeps using --color-*.
+ * The visual output is identical.
+ */
+:root,
+[data-madcop-theme] {
+  --madcop-primary:          #7C3AED;
+  --madcop-primary-container: #A78BFA;
+  --madcop-primary-fixed:     #F3E8FF;
+  --madcop-primary-fixed-dim: #E9D5FF;
+  --madcop-on-primary:        #FFFFFF;
+  --madcop-on-surface:        #1B1C1A;
+  --madcop-on-surface-variant:#4C1D95;
+  --madcop-surface:           #FAF9F5;
+  --madcop-surface-bright:    #FAF9F5;
+  --madcop-surface-dim:       #DBDAD6;
+  --madcop-surface-container: #EFEEEA;
+  --madcop-surface-container-low:    #F4F4F0;
+  --madcop-surface-container-high:   #E9E8E4;
+  --madcop-surface-container-highest:#E3E2DF;
+  --madcop-surface-container-lowest: #FFFFFF;
+  --madcop-surface-variant:   #E3E2DF;
+  --madcop-background:        #FAF9F5;
+  --madcop-outline:           #87736D;
+  --madcop-outline-variant:   #DAC1BA;
+  --madcop-secondary:         #2D628F;
+  --madcop-secondary-container:#9ACBFE;
+  --madcop-tertiary:          #4F6237;
+  --madcop-tertiary-container:#677B4E;
+  --madcop-error:             #BA1A1A;
+  --madcop-error-container:   #FFDAD6;
+  --madcop-on-error-container:#410002;
+  --madcop-inverse-surface:   #2F312E;
+  --madcop-inverse-on-surface:#F2F1ED;
+  --madcop-inverse-primary:   #A78BFA;
+  --madcop-success:           #16A34A;
+  --madcop-success-container: #E8F5E2;
+  --madcop-info:              #2D628F;
+  --madcop-info-container:    #E4F1FF;
+  --madcop-warning:           #CA8A04;
+  --madcop-warning-container: #FFF3D6;
+}
+
 /* ─── Semantic Aliases (used by layout & infrastructure components) ── */
 :root,
 [data-theme="light"] {

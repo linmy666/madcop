@@ -158,11 +158,11 @@ describe('providerStore runtime refresh', () => {
     providersApiMock.activate.mockResolvedValue({ ok: true })
     providersApiMock.list.mockResolvedValue({
       providers: [],
-      activeId: 'openai-official',
+      activeId: 'provider-1',
     })
 
     const { useProviderStore } = await import('./providerStore')
-    await useProviderStore.getState().activateProvider('openai-official')
+    await useProviderStore.getState().activateProvider('provider-1')
 
     expect(settingsSetModelMock).toHaveBeenCalledWith('gpt-5.3-codex')
     expect(settingsFetchAllMock).toHaveBeenCalled()
@@ -239,20 +239,20 @@ describe('providerStore reorderProviders', () => {
     const b = makeProvider({ id: 'b', name: 'B' })
     providersApiMock.reorder.mockResolvedValue({
       providers: [b, a],
-      providerOrder: ['openai-official', 'b', 'claude-official', 'a'],
+      providerOrder: ['provider-1', 'b', 'provider-0', 'a'],
     })
 
     const { useProviderStore } = await import('./providerStore')
     useProviderStore.setState({
       providers: [a, b],
-      providerOrder: ['a', 'b', 'claude-official', 'openai-official'],
+      providerOrder: ['a', 'b', 'provider-0', 'provider-1'],
       activeId: null,
     })
 
-    await useProviderStore.getState().reorderProviders(['openai-official', 'b', 'claude-official', 'a'])
+    await useProviderStore.getState().reorderProviders(['provider-1', 'b', 'provider-0', 'a'])
 
-    expect(providersApiMock.reorder).toHaveBeenCalledWith(['openai-official', 'b', 'claude-official', 'a'])
-    expect(useProviderStore.getState().providerOrder).toEqual(['openai-official', 'b', 'claude-official', 'a'])
+    expect(providersApiMock.reorder).toHaveBeenCalledWith(['provider-1', 'b', 'provider-0', 'a'])
+    expect(useProviderStore.getState().providerOrder).toEqual(['provider-1', 'b', 'provider-0', 'a'])
     expect(useProviderStore.getState().providers.map((p) => p.id)).toEqual(['b', 'a'])
   })
 
