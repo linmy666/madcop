@@ -2,37 +2,38 @@
 // Wraps Puck (MIT license) as MadCop's built-in design tool.
 // License: MIT — see LICENSE file in this directory.
 //
-// The DesignCanvas lets users:
-// 1. Describe a UI with natural language
-// 2. LLM generates a component tree
-// 3. Render in a drag-and-drop canvas
-// 4. Edit properties directly
-// 5. Export as .madcop / HTML / Markdown
-//
 // Original: github.com/puckeditor/puck (MIT)
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Puck,
   type Config,
   type Data,
 } from '@measured/puck'
+import '@measured/puck/dist/index.css'
 
 interface DesignCanvasProps {
-  /** Initial component tree data */
   initialData?: Data
-  /** Called when the user saves/exports */
   onSave?: (data: Data) => void
-  /** Height of the canvas */
   height?: string | number
 }
 
 // Default components available in the canvas
-const defaultComponents = {
+const defaultComponents: Config['components'] = {
   Header: {
-    render: ({ text, level, ...props }) => {
-      const Tag = `h${level || 2}` as keyof JSX.IntrinsicElements
-      return <Tag style={{ ...props }}>{text || '标题'}</Tag>
+    render: ({ text, level, color, fontSize }) => {
+      const lvl = level || 2
+      const Tag = `h${lvl}` as any
+      return (
+        <Tag style={{
+          margin: '0 0 8px 0',
+          color: color || '#1A1A1A',
+          fontSize: fontSize || 24,
+          fontWeight: 700,
+        }}>
+          {text || '标题'}
+        </Tag>
+      )
     },
     fields: {
       text: { type: 'text', label: '文字' },
@@ -50,8 +51,15 @@ const defaultComponents = {
     defaultProps: { text: '新标题', level: '2', fontSize: 24 },
   },
   Paragraph: {
-    render: ({ text, ...props }) => (
-      <p style={{ fontSize: 14, lineHeight: 1.6, ...props }}>{text || '段落文字'}</p>
+    render: ({ text, color, fontSize }) => (
+      <p style={{
+        margin: '0 0 12px 0',
+        fontSize: fontSize || 14,
+        lineHeight: 1.6,
+        color: color || '#4B5563',
+      }}>
+        {text || '段落文字'}
+      </p>
     ),
     fields: {
       text: { type: 'textarea', label: '文字' },
@@ -61,17 +69,18 @@ const defaultComponents = {
     defaultProps: { text: '这是一段文字', fontSize: 14 },
   },
   Button: {
-    render: ({ text, variant, ...props }) => (
+    render: ({ text, variant, width }) => (
       <button
         style={{
-          padding: '8px 20px',
+          padding: '10px 24px',
           borderRadius: 6,
           border: 'none',
           cursor: 'pointer',
           fontWeight: 600,
+          fontSize: 14,
+          width: width ? `${width}px` : 'auto',
           background: variant === 'primary' ? '#7C3AED' : '#E2E8F0',
           color: variant === 'primary' ? '#fff' : '#1A1A1A',
-          ...props,
         }}
       >
         {text || '按钮'}
@@ -91,11 +100,16 @@ const defaultComponents = {
     defaultProps: { text: '提交', variant: 'primary' },
   },
   Image: {
-    render: ({ src, alt, ...props }) => (
+    render: ({ src, alt, width, height }) => (
       <img
         src={src || 'https://via.placeholder.com/400x200'}
         alt={alt || ''}
-        style={{ maxWidth: '100%', borderRadius: 8, ...props }}
+        style={{
+          maxWidth: '100%',
+          borderRadius: 8,
+          width: width ? `${width}px` : 'auto',
+          height: height ? `${height}px` : 'auto',
+        }}
       />
     ),
     fields: {
@@ -104,19 +118,19 @@ const defaultComponents = {
       width: { type: 'number', label: '宽度' },
       height: { type: 'number', label: '高度' },
     },
-    defaultProps: { src: 'https://via.placeholder.com/400x200', alt: '' },
+    defaultProps: { src: '', alt: '' },
   },
   Input: {
-    render: ({ placeholder, ...props }) => (
+    render: ({ placeholder, width }) => (
       <input
         placeholder={placeholder || '输入...'}
         style={{
-          padding: '8px 12px',
-          border: '1px solid #E2E8F0',
+          padding: '10px 14px',
+          border: '1px solid #D1D5DB',
           borderRadius: 6,
           fontSize: 14,
-          width: '100%',
-          ...props,
+          width: width ? `${width}px` : '100%',
+          outline: 'none',
         }}
       />
     ),
@@ -127,17 +141,16 @@ const defaultComponents = {
     defaultProps: { placeholder: '请输入...', width: 300 },
   },
   Card: {
-    render: ({ children, ...props }) => (
+    render: ({ children, padding, bgColor }) => (
       <div
         style={{
-          padding: 20,
+          padding: padding || 20,
           borderRadius: 12,
-          background: '#fff',
+          background: bgColor || '#fff',
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-          ...props,
         }}
       >
-        {children}
+        {children as any}
       </div>
     ),
     fields: {
@@ -155,7 +168,7 @@ const config: Config = {
       padding: { type: 'number', label: '内边距' },
     },
     defaultProps: {
-      bgColor: '#FAFAFA',
+      bgColor: '#FFFFFF',
       padding: 40,
     },
   },
@@ -168,12 +181,18 @@ export function DesignCanvas({
   height = '100%',
 }: DesignCanvasProps) {
   const [data, setData] = useState<Data>(initialData || {
-    root: { props: { bgColor: '#FAFAFA', padding: 40 } },
+    root: { props: { bgColor: '#FFFFFF', padding: 40 } },
     content: [],
-    zones: {},
   })
 
-  const handleSave = useCallback((newData: Data) => {
+  // Update data when initialData changes (e.g. after LLM generates new design)
+  useEffect(() => {
+    if (initialData) {
+      setData(initialData)
+    }
+  }, [initialData])
+
+  const handlePublish = useCallback((newData: Data) => {
     setData(newData)
     onSave?.(newData)
   }, [onSave])
@@ -184,9 +203,9 @@ export function DesignCanvas({
         <Puck
           config={config}
           data={data}
-          onPublish={handleSave}
+          onPublish={handlePublish}
           overrides={{
-            header: ({ publish }) => (
+            header: ({ children }) => (
               <div
                 style={{
                   display: 'flex',
@@ -195,6 +214,7 @@ export function DesignCanvas({
                   padding: '8px 16px',
                   borderBottom: '1px solid #E2E8F0',
                   background: '#fff',
+                  zIndex: 100,
                 }}
               >
                 <span style={{ fontWeight: 600, fontSize: 14 }}>
@@ -221,7 +241,7 @@ export function DesignCanvas({
                     导出 .madcop
                   </button>
                   <button
-                    onClick={() => publish()}
+                    onClick={() => handlePublish(data)}
                     style={{
                       padding: '6px 12px',
                       background: '#7C3AED',
@@ -236,6 +256,7 @@ export function DesignCanvas({
                     保存
                   </button>
                 </div>
+                {children}
               </div>
             ),
           }}
@@ -246,4 +267,3 @@ export function DesignCanvas({
 }
 
 export type { Config, Data as DesignData }
-export { defaultComponents }
