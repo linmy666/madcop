@@ -20,6 +20,7 @@ export default defineConfig({
     target: ['es2021', 'safari15'],
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
+      input: 'vue-preview.html',
       onwarn(warning, warn) {
         if (warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT') return
         warn(warning)

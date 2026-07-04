@@ -3,11 +3,13 @@
 // Vue 3 Composition API. Replaces the React App.tsx with the same
 // functionality: a top-level shell with sidebar + tab strip + main.
 import { ref, computed } from 'vue'
-import { MadcopShell } from './components/layout/MadcopShell.vue'
-import { MadcopSidebar, type MadcopSection } from './components/layout/MadcopSidebar.vue'
-import { MadcopTitlebar } from './components/layout/MadcopTitlebar.vue'
-import { MadcopTabstrip, type MadcopTab } from './components/layout/MadcopTabstrip.vue'
-import { MadcopStatusbar } from './components/layout/MadcopStatusbar.vue'
+import MadcopShell from './components/layout/MadcopShell.vue'
+import MadcopSidebar from './components/layout/MadcopSidebar.vue'
+import type { MadcopSection } from './components/layout/MadcopSidebar.vue'
+import MadcopTitlebar from './components/layout/MadcopTitlebar.vue'
+import MadcopTabstrip from './components/layout/MadcopTabstrip.vue'
+import type { MadcopTab } from './components/layout/MadcopTabstrip.vue'
+import MadcopStatusbar from './components/layout/MadcopStatusbar.vue'
 import { useAppearance, type Appearance } from './composables/useAppearance'
 import { useTabs } from './stores/tabs'
 
@@ -84,8 +86,8 @@ function onCommand(cmd: string) {
 // Import the page-level components in a second <script> block so the
 // imports are not duplicated by the Composition API script block.
 import { defineAsyncComponent } from 'vue'
-const DesignPage = defineAsyncComponent(() => import('../pages/DesignPage.vue'))
-const EmptyPage = defineAsyncComponent(() => import('../pages/EmptyPage.vue'))
-const ChatPage = defineAsyncComponent(() => import('../pages/ChatPage.vue'))
+const DesignPage = defineAsyncComponent(() => import('./pages/DesignPage.vue'))
+const EmptyPage = defineAsyncComponent(() => import('./pages/EmptyPage.vue'))
+const ChatPage = defineAsyncComponent(() => import('./pages/ChatPage.vue'))
 export default { components: { DesignPage, EmptyPage, ChatPage } }
 </script>

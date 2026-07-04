@@ -1,0 +1,407 @@
+/*
+ * MadCop Design System — CSS surface
+ *
+ * This file replaces the old @theme block. The token namespace is
+ * `madcop.*` to keep it unambiguous from any upstream library.
+ *
+ * The TS source of truth lives in src/foundations/tokens.ts and
+ * the theme-switcher in src/state applies [data-madcop-theme] on <html>.
+ *
+ * Three themes are first-class: light, dark, sepia (a softer
+ * "engineering notebook" look). The fourth — pixel — is the
+ * legacy Stardown copy that we still keep for nostalgia, but it
+ * is no longer wired into the design system.
+ *
+ * To change a value, edit both tokens.ts and this file in lockstep
+ * (or wire tokens.ts to emit CSS at build time — TODO if it ever
+ * becomes a chore).
+ */
+
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+@plugin "@tailwindcss/typography";
+
+/* ── Self-hosted fonts ────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../../public/fonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../../public/fonts/inter-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Geist Mono — downloaded separately by build, falls back to JetBrains */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../../public/fonts/geist-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../../public/fonts/geist-mono-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ── 1. Reset & base ────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border: 0 solid var(--madcop-line);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
+}
+
+body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--madcop-ink);
+  background-color: var(--madcop-panel);
+  background-image: var(--madcop-bg-image);
+  background-attachment: fixed;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+a {
+  color: var(--madcop-accent);
+  text-decoration: none;
+}
+
+code, pre, kbd, samp {
+  font-family: 'Geist Mono', 'JetBrains Mono', Menlo, monospace;
+  font-size: 0.92em;
+}
+
+::selection {
+  background-color: var(--madcop-selection-bg);
+  color: var(--madcop-ink);
+}
+
+/* ── 2. Light theme (default) ──────────────────────────────────────── */
+
+:root,
+[data-madcop-theme="light"] {
+  color-scheme: light;
+
+  /* surfaces */
+  --madcop-panel:           #F8FAFC;
+  --madcop-panel-raised:    #FFFFFF;
+  --madcop-panel-sunken:    #F1F5F9;
+  --madcop-overlay:         rgba(15, 23, 42, 0.32);
+  --madcop-glass:           rgba(255, 255, 255, 0.78);
+  --madcop-glass-line:      rgba(15, 23, 42, 0.10);
+  --madcop-bg-image:        linear-gradient(var(--madcop-grid) 1px, transparent 1px),
+                            linear-gradient(90deg, var(--madcop-grid) 1px, transparent 1px);
+  --madcop-grid:            rgba(15, 23, 42, 0.035);
+
+  /* ink */
+  --madcop-ink:             #0F172A;
+  --madcop-ink-body:        #334155;
+  --madcop-ink-muted:       #64748B;
+  --madcop-ink-subtle:      #94A3B8;
+  --madcop-ink-invert:      #F8FAFC;
+
+  /* line */
+  --madcop-line:            #CBD5E1;
+  --madcop-line-strong:     #94A3B8;
+  --madcop-line-focus:      #0E7490;
+
+  /* accent */
+  --madcop-accent:          #0E7490;
+  --madcop-accent-hover:    #0C627A;
+  --madcop-accent-active:   #0A5165;
+  --madcop-accent-subtle:   #C2E9F0;
+  --madcop-accent-ink:      #FFFFFF;
+  --madcop-accent-rail:     #0E7490;
+
+  /* status */
+  --madcop-success:         #059669;
+  --madcop-success-subtle:  #D1FAE5;
+  --madcop-warn:            #B45309;
+  --madcop-warn-subtle:     #FCF0D2;
+  --madcop-danger:          #DC2626;
+  --madcop-danger-subtle:   #FEE2E2;
+
+  /* selection */
+  --madcop-selection-bg:    rgba(14, 116, 144, 0.18);
+
+  /* shadows */
+  --madcop-shadow-hair:     0 0 0 1px rgba(15, 23, 42, 0.06);
+  --madcop-shadow-panel:    0 1px 0 rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.04);
+  --madcop-shadow-raised:   0 1px 2px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.04);
+  --madcop-shadow-pop:      0 8px 24px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.04);
+  --madcop-shadow-modal:    0 16px 48px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.04);
+  --madcop-shadow-focus:    0 0 0 2px rgba(14, 116, 144, 0.32);
+  --madcop-shadow-ring:     0 0 0 3px rgba(14, 116, 144, 0.18);
+
+  /* layout */
+  --madcop-titlebar:        32px;
+  --madcop-statusbar:       28px;
+  --madcop-sidebar:         240px;
+  --madcop-sidebar-rail:    52px;
+  --madcop-tabstrip:        36px;
+  --madcop-content:         1080px;
+  --madcop-duration:        140ms;
+  --madcop-easing:          cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── 3. Dark theme ─────────────────────────────────────────────────── */
+
+[data-madcop-theme="dark"] {
+  color-scheme: dark;
+
+  --madcop-panel:           #03060C;
+  --madcop-panel-raised:    #070C16;
+  --madcop-panel-sunken:    #010A11;
+  --madcop-overlay:         rgba(0, 0, 0, 0.6);
+  --madcop-glass:           rgba(7, 12, 22, 0.78);
+  --madcop-glass-line:      rgba(255, 255, 255, 0.08);
+  --madcop-grid:            rgba(94, 234, 212, 0.04);
+
+  --madcop-ink:             #E2E8F0;
+  --madcop-ink-body:        #CBD5E1;
+  --madcop-ink-muted:       #64748B;
+  --madcop-ink-subtle:      #475569;
+  --madcop-ink-invert:      #03060C;
+
+  --madcop-line:            #1E293B;
+  --madcop-line-strong:     #334155;
+  --madcop-line-focus:      #2EA6BC;
+
+  --madcop-accent:          #2EA6BC;
+  --madcop-accent-hover:    #5DBED0;
+  --madcop-accent-active:   #8FD4E0;
+  --madcop-accent-subtle:   #052F3A;
+  --madcop-accent-ink:      #03060C;
+  --madcop-accent-rail:     #2EA6BC;
+
+  --madcop-success:         #34D399;
+  --madcop-success-subtle:  #022C22;
+  --madcop-warn:            #F0B83D;
+  --madcop-warn-subtle:     #432002;
+  --madcop-danger:          #F87171;
+  --madcop-danger-subtle:   #450A0A;
+
+  --madcop-selection-bg:    rgba(46, 166, 188, 0.28);
+
+  --madcop-shadow-hair:     0 0 0 1px rgba(255, 255, 255, 0.04);
+  --madcop-shadow-panel:    0 0 0 1px rgba(255, 255, 255, 0.06);
+  --madcop-shadow-raised:   0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --madcop-shadow-pop:      0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --madcop-shadow-modal:    0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --madcop-shadow-focus:    0 0 0 2px rgba(46, 166, 188, 0.5);
+  --madcop-shadow-ring:     0 0 0 3px rgba(46, 166, 188, 0.24);
+}
+
+/* ── 4. Sepia theme (engineering notebook) ─────────────────────────── */
+
+[data-madcop-theme="sepia"] {
+  color-scheme: light;
+
+  --madcop-panel:           #F4ECD8;
+  --madcop-panel-raised:    #FBF5E6;
+  --madcop-panel-sunken:    #EAE0C7;
+  --madcop-overlay:         rgba(58, 40, 12, 0.32);
+  --madcop-glass:           rgba(251, 245, 230, 0.78);
+  --madcop-glass-line:      rgba(58, 40, 12, 0.12);
+  --madcop-grid:            rgba(58, 40, 12, 0.04);
+
+  --madcop-ink:             #3A2810;
+  --madcop-ink-body:        #5B4527;
+  --madcop-ink-muted:       #7A6238;
+  --madcop-ink-subtle:      #9C8553;
+  --madcop-ink-invert:      #FBF5E6;
+
+  --madcop-line:            #D4C49A;
+  --madcop-line-strong:     #B7A47A;
+  --madcop-line-focus:      #8E5B1E;
+
+  --madcop-accent:          #8E5B1E;
+  --madcop-accent-hover:    #A06A26;
+  --madcop-accent-active:   #724716;
+  --madcop-accent-subtle:   #E8D4A8;
+  --madcop-accent-ink:      #FBF5E6;
+  --madcop-accent-rail:     #8E5B1E;
+
+  --madcop-success:         #4A6B25;
+  --madcop-success-subtle:  #D5DEC1;
+  --madcop-warn:            #B45309;
+  --madcop-warn-subtle:     #F3DCB0;
+  --madcop-danger:          #993B1B;
+  --madcop-danger-subtle:   #E8C8B8;
+
+  --madcop-selection-bg:    rgba(142, 91, 30, 0.18);
+}
+
+/* ── 5. Tailwind theme bridge ──────────────────────────────────────── */
+/* Map our tokens to Tailwind v4 @theme so utility classes work. */
+
+@theme {
+  --color-madcop-panel:           var(--madcop-panel);
+  --color-madcop-panel-raised:    var(--madcop-panel-raised);
+  --color-madcop-panel-sunken:    var(--madcop-panel-sunken);
+  --color-madcop-ink:             var(--madcop-ink);
+  --color-madcop-ink-body:        var(--madcop-ink-body);
+  --color-madcop-ink-muted:       var(--madcop-ink-muted);
+  --color-madcop-ink-subtle:      var(--madcop-ink-subtle);
+  --color-madcop-line:            var(--madcop-line);
+  --color-madcop-line-strong:     var(--madcop-line-strong);
+  --color-madcop-accent:          var(--madcop-accent);
+  --color-madcop-accent-subtle:   var(--madcop-accent-subtle);
+  --color-madcop-success:         var(--madcop-success);
+  --color-madcop-warn:            var(--madcop-warn);
+  --color-madcop-danger:          var(--madcop-danger);
+  --font-madcop-ui:    'Inter', system-ui, sans-serif;
+  --font-madcop-mono:  'Geist Mono', 'JetBrains Mono', monospace;
+}
+
+/* ── 6. Reusable patterns (no component-specific styles) ─────────────── */
+
+.madcop-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--madcop-ink-muted);
+}
+
+.madcop-mono {
+  font-family: 'Geist Mono', 'JetBrains Mono', Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.madcop-rule {
+  border: 0;
+  border-top: 1.5px solid var(--madcop-line);
+  margin: 0;
+}
+
+/* ── 7. Scrollbar — engineering thin track ─────────────────────────── */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--madcop-line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--madcop-line);
+  border-radius: 0;
+  border: 2px solid var(--madcop-panel);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--madcop-line-strong);
+}
+
+/* ── 8. AppShell scaffolding (the only place we touch layout) ───────── */
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+.madcop-shell {
+  display: grid;
+  grid-template-rows: var(--madcop-titlebar) 1fr var(--madcop-statusbar);
+  grid-template-columns: var(--madcop-sidebar) 1fr;
+  grid-template-areas:
+    "title  title"
+    "side   main"
+    "status status";
+  height: 100vh;
+  width: 100vw;
+}
+
+.madcop-shell--collapsed {
+  grid-template-columns: var(--madcop-sidebar-rail) 1fr;
+}
+
+.madcop-shell__titlebar  { grid-area: title;  border-bottom: 1.5px solid var(--madcop-line); background: var(--madcop-panel-raised); }
+.madcop-shell__sidebar   { grid-area: side;   border-right:  1.5px solid var(--madcop-line); background: var(--madcop-panel-raised); overflow: hidden; }
+.madcop-shell__main      { grid-area: main;   overflow: hidden; }
+.madcop-shell__statusbar { grid-area: status; border-top:    1.5px solid var(--madcop-line); background: var(--madcop-panel-raised); }
+
+/* ── 9. Code block (used by AssistantMessage) ───────────────────────── */
+
+.madcop-code {
+  font-family: 'Geist Mono', 'JetBrains Mono', Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  background: var(--madcop-panel-sunken);
+  border: 1.5px solid var(--madcop-line);
+  color: var(--madcop-ink);
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: 6px;
+}
+
+[data-madcop-theme="dark"] .madcop-code {
+  background: var(--madcop-panel-sunken);
+  color: var(--madcop-ink);
+}
+
+/* ── 10. Touch / H5 modes (from previous shell) ────────────────────── */
+
+html[data-touch-h5][data-touch-h5-keyboard] .madcop-shell__main {
+  padding-bottom: 0px;
+}
+html[data-touch-h5] [data-message-actions] {
+  opacity: 1;
+  pointer-events: auto;
+}
+html[data-touch-h5],
+html[data-touch-h5] * {
+  -webkit-tap-highlight-color: transparent;
+}
+html[data-touch-h5] body {
+  overscroll-behavior-y: none;
+}
+
+/* ── 11. Motion safety ─────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

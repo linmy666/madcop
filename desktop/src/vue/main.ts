@@ -5,7 +5,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
-import './theme/madcop.css'  // reuse the existing MadCop CSS so visual identity carries over
+import '../theme/madcop.css'  // reuse the existing MadCop CSS so visual identity carries over
 
 const app = createApp(App)
 app.use(createPinia())

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, ipcMain, Notification, screen, session, WebContentsView } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import path from 'node:path'
+import fs from 'node:fs'
 import { ELECTRON_EVENT_CHANNELS, ELECTRON_INTERNAL_CHANNELS, ELECTRON_IPC_CHANNELS, type ElectronIpcChannel } from './ipc/channels'
 import { isElectronIpcChannel, validateElectronIpcPayload } from './ipc/capabilities'
 import { ElectronServerRuntime } from './services/serverRuntime'
@@ -84,7 +85,13 @@ function previewAgentPath() {
 }
 
 function rendererEntry() {
-  return path.join(appRoot(), "dist", "index.html")
+  // v3.0: prefer dist-vue/ (Vue 3 build) if it exists, fall back to dist/ (React)
+  const vueEntry = path.join(appRoot(), "dist-vue", "index.html")
+  const reactEntry = path.join(appRoot(), "dist", "index.html")
+  try {
+    if (fs.existsSync(vueEntry)) return vueEntry
+  } catch {}
+  return reactEntry
 }
 
 async function loadRendererEntry(
