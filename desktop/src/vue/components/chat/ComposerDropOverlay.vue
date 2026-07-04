@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// v3.0 — Composer drop overlay (Vue 3)
-// Shown when a file is dragged over the chat composer area.
+// v3.0 — ComposerDropOverlay (Vue 3)
+// Direct translation — same Tailwind classes, same structure.
 defineProps<{
   title: string
   description: string
@@ -11,46 +11,17 @@ defineProps<{
 <template>
   <div
     :data-testid="testId"
-    class="composer-drop-overlay"
+    class="composer-drop-overlay pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-[inherit] border border-[var(--color-brand)]/45 bg-[var(--color-surface-container-lowest)]/88 p-4 backdrop-blur-[2px]"
     aria-hidden="true"
   >
-    <div class="composer-drop-overlay__card">
-      <span class="composer-drop-overlay__icon">↑</span>
-      <span class="composer-drop-overlay__text">
-        <span class="composer-drop-overlay__title">{{ title }}</span>
-        <span class="composer-drop-overlay__desc">{{ description }}</span>
+    <div class="flex max-w-[280px] items-center gap-3 rounded-[10px] border border-[var(--color-brand)]/30 bg-[var(--color-surface-container-low)] px-4 py-3 text-left shadow-[var(--shadow-dropdown)]">
+      <span class="material-symbols-outlined flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand)]/12 text-[20px] text-[var(--color-brand)]">
+        upload_file
+      </span>
+      <span class="min-w-0">
+        <span class="block text-sm font-semibold leading-5 text-[var(--color-text-primary)]">{{ title }}</span>
+        <span class="block text-xs leading-5 text-[var(--color-text-tertiary)]">{{ description }}</span>
       </span>
     </div>
   </div>
 </template>
-
-<style scoped>
-.composer-drop-overlay {
-  position: absolute; inset: 0; z-index: 40;
-  display: flex; align-items: center; justify-content: center;
-  padding: 16px;
-  background: rgba(248, 250, 252, 0.88);
-  border: 1.5px solid var(--madcop-accent);
-  border-radius: inherit;
-  pointer-events: none;
-  backdrop-filter: blur(2px);
-}
-.composer-drop-overlay__card {
-  display: flex; align-items: center; gap: 12px;
-  max-width: 280px; padding: 12px 16px;
-  border: 1.5px solid var(--madcop-accent);
-  background: var(--madcop-panel-raised);
-  text-align: left;
-}
-.composer-drop-overlay__icon {
-  display: flex; width: 36px; height: 36px; flex-shrink: 0;
-  align-items: center; justify-content: center;
-  background: var(--madcop-accent-subtle);
-  color: var(--madcop-accent);
-  border-radius: 50%;
-  font-size: 18px; font-weight: 700;
-}
-.composer-drop-overlay__text { display: flex; flex-direction: column; min-width: 0; }
-.composer-drop-overlay__title { font-size: 13px; font-weight: 600; color: var(--madcop-ink); line-height: 1.4; }
-.composer-drop-overlay__desc  { font-size: 11px; color: var(--madcop-ink-muted); line-height: 1.4; }
-</style>

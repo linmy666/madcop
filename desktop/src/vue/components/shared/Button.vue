@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // v3.0 — Button (Vue 3)
-import { computed } from 'vue'
-
+// Direct translation of Button.tsx — same Tailwind classes, same variants.
 withDefaults(defineProps<{
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
   disabled?: boolean
   type?: 'button' | 'submit' | 'reset'
+  class?: string
 }>(), {
   variant: 'primary',
   size: 'md',
@@ -23,62 +23,28 @@ defineEmits<{ (e: 'click', ev: MouseEvent): void }>()
   <button
     :type="type"
     :disabled="disabled || loading"
-    :class="['madcop-btn', `madcop-btn--${variant}`, `madcop-btn--${size}`, { 'madcop-btn--loading': loading }]"
+    :class="[
+      'inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-md)] font-medium transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
+      {
+        'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] hover:bg-[image:var(--gradient-btn-primary-hover)] hover:brightness-105 active:translate-y-[1px]': variant === 'primary',
+        'bg-[var(--color-surface)] text-[var(--color-text-primary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]': variant === 'secondary',
+        'bg-[var(--color-error)] text-white hover:opacity-90': variant === 'danger',
+        'bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]': variant === 'ghost',
+      },
+      {
+        'px-2 py-1 text-xs': size === 'sm',
+        'px-4 py-2 text-sm': size === 'md',
+        'px-5 py-2.5 text-sm': size === 'lg',
+      },
+      $props.class
+    ]"
     @click="(e) => $emit('click', e)"
   >
-    <span v-if="loading" class="madcop-btn__spinner" />
+    <svg v-if="loading" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
     <slot v-else name="icon" />
     <slot />
   </button>
 </template>
-
-<style scoped>
-.madcop-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  font-weight: 500; cursor: pointer;
-  border: 1.5px solid transparent;
-  transition: filter 140ms;
-  font-family: 'Geist Mono', monospace;
-  font-size: 12px;
-}
-.madcop-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.madcop-btn--sm { padding: 4px 8px; font-size: 11px; }
-.madcop-btn--md { padding: 6px 14px; font-size: 12px; }
-.madcop-btn--lg { padding: 8px 20px; font-size: 13px; }
-
-.madcop-btn--primary {
-  background: var(--madcop-accent);
-  color: var(--madcop-accent-ink);
-  border-color: var(--madcop-accent);
-}
-.madcop-btn--primary:hover:not(:disabled) { background: var(--madcop-accent-hover); }
-
-.madcop-btn--secondary {
-  background: var(--madcop-panel-raised);
-  color: var(--madcop-ink);
-  border-color: var(--madcop-line);
-}
-.madcop-btn--secondary:hover:not(:disabled) { background: var(--madcop-panel-sunken); }
-
-.madcop-btn--danger {
-  background: var(--madcop-danger);
-  color: #fff;
-  border-color: var(--madcop-danger);
-}
-
-.madcop-btn--ghost {
-  background: transparent;
-  color: var(--madcop-ink-body);
-  border-color: transparent;
-}
-.madcop-btn--ghost:hover:not(:disabled) { background: var(--madcop-panel-sunken); color: var(--madcop-ink); }
-
-.madcop-btn__spinner {
-  width: 12px; height: 12px;
-  border: 1.5px solid currentColor; border-top-color: transparent;
-  border-radius: 50%;
-  animation: madcop-btn-spin 0.6s linear infinite;
-}
-@keyframes madcop-btn-spin { to { transform: rotate(360deg); } }
-</style>

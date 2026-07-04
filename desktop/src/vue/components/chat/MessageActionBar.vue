@@ -1,10 +1,8 @@
 <script setup lang="ts">
-// v3.0 — Message action bar (Vue 3)
-// Hover-revealed bar with copy + branch buttons and timestamp.
-// Vue's @mouseenter / @mouseleave on the parent group triggers
-// opacity transition (no need for CSS :hover pseudo-class on .group).
+// v3.0 — MessageActionBar (Vue 3)
+// Direct translation of MessageActionBar.tsx — same Tailwind classes.
 import { ref, computed } from 'vue'
-import { CopyButton } from '../shared/CopyButton.vue'
+import CopyButton from '../shared/CopyButton.vue'
 
 const props = withDefaults(defineProps<{
   copyText?: string
@@ -12,18 +10,19 @@ const props = withDefaults(defineProps<{
   align?: 'start' | 'end'
   timestamp?: number
   branchLabel?: string
+  branchLoading?: boolean
 }>(), {
-  copyLabel: '复制',
+  copyLabel: 'Copy',
   align: 'start',
-  branchLabel: '从这分支',
+  branchLabel: '',
+  branchLoading: false,
 })
 
-defineEmits<{ (e: 'branch'): void }>()
+const emit = defineEmits<{ (e: 'branch'): void }>()
 
-const hovered = ref(false)
-const focused = ref(false)
-const visible = computed(() => hovered.value || focused.value)
 const hasCopy = computed(() => Boolean(props.copyText?.trim()))
+const hasBranch = computed(() => Boolean(props.branchLabel))
+
 const ts = computed(() => {
   if (typeof props.timestamp !== 'number') return ''
   return new Date(props.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -36,57 +35,42 @@ const tsFull = computed(() => {
 
 <template>
   <div
-    v-if="hasCopy || $slots.default"
-    :class="['madcop-action', `madcop-action--${align}`, { 'madcop-action--show': visible }]"
-    @mouseenter="hovered = true"
-    @mouseleave="hovered = false"
+    v-if="hasCopy || hasBranch"
+    data-message-actions
+    :data-align="align"
+    :class="[
+      'pointer-events-none mt-2 flex h-7 w-full opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+      align === 'end' ? 'justify-end' : 'justify-start',
+    ]"
   >
-    <div class="madcop-action__inner">
+    <div class="flex min-h-7 items-center gap-1.5">
       <CopyButton
         v-if="hasCopy"
         :text="copyText!"
         :label="copyLabel"
-        class="madcop-action__btn"
-      />
+        class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent bg-transparent text-[var(--color-text-tertiary)] transition-colors hover:border-[var(--color-brand)]/30 hover:bg-[var(--color-surface-container-low)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35"
+      >
+        <template #default="{ copied }">
+          <span v-if="copied" class="material-symbols-outlined text-[13px]">check</span>
+          <span v-else class="material-symbols-outlined text-[13px]">content_copy</span>
+        </template>
+      </CopyButton>
       <button
-        v-if="$slots.default"
+        v-if="hasBranch"
         type="button"
-        :title="branchLabel"
+        :disabled="branchLoading"
         :aria-label="branchLabel"
-        @click="$emit('branch')"
-        class="madcop-action__btn madcop-action__btn--icon"
-      >⎇</button>
-      <span v-if="ts" class="madcop-action__ts" :title="tsFull">{{ ts }}</span>
+        :title="branchLabel"
+        class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent bg-transparent text-[var(--color-text-tertiary)] transition-colors hover:border-[var(--color-brand)]/30 hover:bg-[var(--color-surface-container-low)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35 disabled:cursor-wait disabled:opacity-60"
+        @click="emit('branch')"
+      >
+        <span class="material-symbols-outlined text-[13px]">git_fork</span>
+      </button>
+      <span
+        v-if="ts"
+        class="ml-1 inline-flex items-center text-[11px] font-medium tabular-nums text-[var(--color-text-tertiary)]"
+        :title="tsFull"
+      >{{ ts }}</span>
     </div>
   </div>
 </template>
-
-<style scoped>
-.madcop-action {
-  display: flex; width: 100%; height: 28px; margin-top: 4px;
-  opacity: 0; pointer-events: none;
-  transition: opacity 140ms;
-}
-.madcop-action--show { opacity: 1; pointer-events: auto; }
-.madcop-action--end { justify-content: flex-end; }
-.madcop-action--start { justify-content: flex-start; }
-.madcop-action__inner { display: flex; align-items: center; gap: 6px; min-height: 28px; }
-.madcop-action__btn {
-  width: 28px; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1.5px solid transparent; background: transparent;
-  color: var(--madcop-ink-muted);
-  font-size: 13px; cursor: pointer; border-radius: 50%;
-  font-family: 'Geist Mono', monospace;
-}
-.madcop-action__btn:hover {
-  border-color: var(--madcop-accent);
-  background: var(--madcop-panel-sunken);
-  color: var(--madcop-ink);
-}
-.madcop-action__ts {
-  font-size: 11px; color: var(--madcop-ink-muted);
-  margin-left: 4px; font-family: 'Geist Mono', monospace;
-  font-variant-numeric: tabular-nums;
-}
-</style>

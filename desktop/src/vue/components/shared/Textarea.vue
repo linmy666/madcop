@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // v3.0 — Textarea (Vue 3)
+// Direct translation of Textarea.tsx — same Tailwind classes.
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
@@ -10,6 +11,7 @@ const props = withDefaults(defineProps<{
   rows?: number
   id?: string
   placeholder?: string
+  class?: string
 }>(), {
   rows: 5,
 })
@@ -20,35 +22,24 @@ const inputId = computed(() => props.id || (props.label ? props.label.toLowerCas
 </script>
 
 <template>
-  <div class="madcop-textarea">
-    <label v-if="label" :for="inputId" class="madcop-textarea__label">
-      {{ label }}<span v-if="required" class="madcop-textarea__req">*</span>
+  <div class="flex flex-col gap-1">
+    <label v-if="label" :for="inputId" class="text-sm font-medium text-[var(--color-text-primary)]">
+      {{ label }}<span v-if="required" class="text-[var(--color-error)] ml-0.5">*</span>
     </label>
     <textarea
       :id="inputId"
       :value="modelValue"
       :rows="rows"
       :placeholder="placeholder"
-      :class="['madcop-textarea__field', { 'madcop-textarea__field--err': error }]"
+      :class="[
+        'min-h-[120px] px-3 py-2 rounded-[var(--radius-lg)] border text-sm resize-y bg-[var(--color-surface)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] transition-colors duration-150 outline-none',
+        error
+          ? 'border-[var(--color-error)]'
+          : 'border-[var(--color-border)] focus:border-[var(--color-border-focus)] focus:shadow-[var(--shadow-focus-ring)]',
+        $props.class
+      ]"
       @input="(e) => $emit('update:modelValue', (e.target as HTMLTextAreaElement).value)"
     />
-    <p v-if="error" class="madcop-textarea__error">{{ error }}</p>
+    <p v-if="error" class="text-xs text-[var(--color-error)]">{{ error }}</p>
   </div>
 </template>
-
-<style scoped>
-.madcop-textarea { display: flex; flex-direction: column; gap: 4px; }
-.madcop-textarea__label { font-size: 13px; font-weight: 500; color: var(--madcop-ink); }
-.madcop-textarea__req  { color: var(--madcop-danger); margin-left: 2px; }
-.madcop-textarea__field {
-  min-height: 100px; padding: 8px 12px;
-  font-size: 13px; outline: none; resize: vertical;
-  border: 1.5px solid var(--madcop-line);
-  background: var(--madcop-panel-raised);
-  color: var(--madcop-ink);
-  font-family: 'Geist Mono', monospace;
-}
-.madcop-textarea__field:focus { border-color: var(--madcop-accent); }
-.madcop-textarea__field--err { border-color: var(--madcop-danger); }
-.madcop-textarea__error { font-size: 11px; color: var(--madcop-danger); }
-</style>
