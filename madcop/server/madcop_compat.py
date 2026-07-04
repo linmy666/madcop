@@ -1734,7 +1734,7 @@ def register(app: FastAPI) -> None:
     @app.post("/api/haha-oauth/start", include_in_schema=False)
     async def madcop_oauth_start() -> dict[str, Any]:
         return {"status": "skipped",
-                "reason": "MadCop does not use Claude OAuth"}
+                "reason": "MadCop does not use the upstream OAuth flow"}
 
     @app.delete("/api/haha-oauth", include_in_schema=False)
     async def madcop_oauth_delete() -> dict[str, Any]:
@@ -2718,7 +2718,7 @@ def register(app: FastAPI) -> None:
                 "fileCount": n,
                 "isCurrent": False,
             })
-        # Per-session workDir memory (cwd/.claude/memory or cwd/MEMORY.md)
+        # Per-session workDir memory (cwd/.claude/memory or cwd/MEMORY.md, where .claude is the upstream CLI's own memory dir)
         for s in _SESSIONS.values():
             wd = s.get("workDir")
             if not wd or wd in seen:
@@ -2920,7 +2920,7 @@ def register(app: FastAPI) -> None:
     async def cc_adapter_reg_poll(platform: str) -> dict[str, Any]:
         return {"ok": False, "status": "expired"}
 
-    # ---- OAuth flows (Claude / OpenAI) ------------------------- #
+    # ---- OAuth flows (MadCop external auth) ------------------- #
 
     @app.post("/api/haha-oauth/start", include_in_schema=False)
     async def cc_oauth_start() -> dict[str, Any]:
