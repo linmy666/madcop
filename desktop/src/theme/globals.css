@@ -835,9 +835,9 @@
   --color-inspector-success: #7EDB8B;
   --color-inspector-success-bg: rgba(126, 219, 139, 0.16);
   --color-inspector-danger: #FFB4AB;
-  --color-inspector-danger-bg: rgba(248, 113, 113), 0.16);
-  --color-inspector-danger-surface: rgba(248, 113, 113), 0.08);
-  --color-inspector-danger-border: rgba(248, 113, 113), 0.22);
+  --color-inspector-danger-bg: rgba(248, 113, 113, 0.16);
+  --color-inspector-danger-surface: rgba(248, 113, 113, 0.08);
+  --color-inspector-danger-border: rgba(248, 113, 113, 0.22);
   --color-inspector-capacity: #8F8683;
   --shadow-inspector: 0 28px 80px rgba(0, 0, 0, 0.58);
   --color-switch-checked-bg: rgba(116, 224, 247, 0.36);
@@ -869,7 +869,7 @@
   --shadow-dropdown: 0 16px 40px rgba(0, 0, 0, 0.42);
   --shadow-sidebar-filter: none;
   --shadow-focus-ring: 0 0 0 1px rgba(167, 139, 250, 0.32);
-  --shadow-error-ring: 0 0 0 1px rgba(248, 113, 113), 0.26);
+  --shadow-error-ring: 0 0 0 1px rgba(248, 113, 113, 0.26);
   --shadow-button-primary: 0 12px 24px rgba(124, 58, 237, 0.18);
 
   --gradient-btn-primary: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
