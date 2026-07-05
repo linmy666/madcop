@@ -5,12 +5,12 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { tracesApi } from '../../api/traces'
+import { tracesApi } from '../api/traces'
 import { SETTINGS_TAB_ID, useTabStore } from '../stores/tabStore'
 import { useUIStore } from '../stores/uiStore'
-import { useTranslation } from '../../i18n'
-import { getDesktopHost } from '../../lib/desktopHost'
-import type { TraceSessionList, TraceSessionListItem } from '../../types/trace'
+import { useTranslation } from '../i18n'
+import { getDesktopHost } from '../lib/desktopHost'
+import type { TraceSessionList, TraceSessionListItem } from '../types/trace'
 
 const POLL_MS = 5_000
 const PAGE_SIZE = 50
@@ -136,12 +136,12 @@ onBeforeUnmount(() => {
 
 // ── Actions ─────────────────────────────────────────────────────────
 function openTrace(sessionId: string, title: string) {
-  useTabStore.getState().openTraceTab(sessionId, `${t('trace.title')}: ${title}`)
+  useTabStore().openTraceTab(sessionId, `${t('trace.title')}: ${title}`)
 }
 
 function openTraceSettings() {
-  useUIStore.getState().setPendingSettingsTab('general')
-  useTabStore.getState().openTab(SETTINGS_TAB_ID, t('sidebar.settings'), 'settings')
+  useUIStore().setPendingSettingsTab('general')
+  useTabStore().openTab(SETTINGS_TAB_ID, t('sidebar.settings'), 'settings')
 }
 
 function handleRowKeydown(e: KeyboardEvent, trace: TraceSessionListItem) {

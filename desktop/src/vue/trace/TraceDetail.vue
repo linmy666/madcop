@@ -6,13 +6,13 @@
  * Renders TypeIcon, StatusPill, HeaderChips + DetailBody (LlmCallDetail/ToolDetail/
  * MessageDetail/EventDetail/SessionOverview) based on span.kind.
  */
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../i18n'
 import type { TraceSpan, TraceViewModel } from '../../../lib/traceViewModel'
 import { formatTraceJson } from '../../../lib/traceViewModel'
 import { formatClockTime, formatDurationMs, formatTokenCount, formatUsageBrief } from '../../../lib/trace/formatters'
 import { formatBytes } from '../../../lib/formatBytes'
 import CodeViewer from '../../components/chat/CodeViewer.vue'
-import { spanDisplayTitle, traceEventPhaseLabel, MetaChip, StatusPill, TypeIcon } from './TraceBadges'
+import { spanDisplayTitle, traceEventPhaseLabel, MetaChip, StatusPill, TypeIcon } from './TraceBadges.vue'
 import Section from '../../components/trace/detail/Section.vue'
 import LlmCallDetail from '../../components/trace/detail/LlmCallDetail.vue'
 import ToolDetail from '../../components/trace/detail/ToolDetail.vue'
@@ -84,12 +84,12 @@ const call = props.span.call ?? null
 // ── Sub-components (defined in non-setup script for import/export) ────
 import type { Component } from 'vue'
 import { computed } from 'vue'
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../i18n'
 import type { TraceSpan, TraceViewModel } from '../../../lib/traceViewModel'
 import { formatTraceJson } from '../../../lib/traceViewModel'
 import { formatClockTime, formatDurationMs } from '../../../lib/trace/formatters'
 import CodeViewer from '../../components/chat/CodeViewer.vue'
-import { MetaChip, StatusPill, TypeIcon, spanDisplayTitle, traceEventPhaseLabel } from './TraceBadges'
+import { MetaChip, StatusPill, TypeIcon, spanDisplayTitle, traceEventPhaseLabel } from './TraceBadges.vue'
 import Section from '../../components/trace/detail/Section.vue'
 import LlmCallDetail from '../../components/trace/detail/LlmCallDetail.vue'
 import ToolDetail from '../../components/trace/detail/ToolDetail.vue'

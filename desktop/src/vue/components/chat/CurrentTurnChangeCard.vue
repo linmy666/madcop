@@ -3,7 +3,7 @@
 // Full translation of src/components/chat/CurrentTurnChangeCard.tsx (242 lines).
 // Displays changed files card during/after a turn with undo and "Open With" menu.
 import { ref, computed, onMounted, onBeforeUnmount, watch, type Ref } from 'vue'
-import { useTranslation, type TranslationKey } from '../../../i18n'
+import { useTranslation, type TranslationKey } from '../../i18n'
 import OpenWithMenu from '../common/OpenWithMenu.vue'
 import type { OpenWithItem } from '../../../lib/openWithItems'
 

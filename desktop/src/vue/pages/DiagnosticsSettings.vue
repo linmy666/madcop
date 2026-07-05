@@ -16,11 +16,11 @@
 -->
 
 <script setup lang="ts">
-import type { DiagnosticEvent, DiagnosticsStatus } from '../../api/diagnostics'
-import { diagnosticsApi } from '../../api/diagnostics'
-import { formatBytes } from '../../lib/formatBytes'
+import type { DiagnosticEvent, DiagnosticsStatus } from '../api/diagnostics'
+import { diagnosticsApi } from '../api/diagnostics'
+import { formatBytes } from '../lib/formatBytes'
 import { copyTextToClipboard } from '../components/chat/clipboard'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import { useUIStore } from '../stores/uiStore'
 import Button from '../components/shared/Button.vue'
 import DoctorPanel from '../components/doctor/DoctorPanel.vue'

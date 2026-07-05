@@ -361,7 +361,7 @@ export async function installDesktopNotificationClickListener(
 }
 
 export async function notifyDesktop(options: DesktopNotificationOptions): Promise<boolean> {
-  if (!useSettingsStore.getState().desktopNotificationsEnabled) {
+  if (!useSettingsStore().desktopNotificationsEnabled) {
     return false
   }
 

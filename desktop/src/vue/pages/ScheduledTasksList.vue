@@ -12,7 +12,7 @@
  */
 
 import { ref, computed } from 'vue'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import { mockScheduledTasks, mockStatusBar } from '../../mocks/data'
 
 const t = useTranslation()

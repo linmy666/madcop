@@ -3,7 +3,7 @@
 // Agent detail page with header, description, detail stats, tools, and system prompt.
 
 import { computed } from 'vue'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 
 // ─── Props ───────────────────────────────────────────────────
 interface Props {

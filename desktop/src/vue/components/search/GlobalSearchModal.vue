@@ -136,7 +136,7 @@ watch(activeIndex, () => {
 
 // ─── Row interaction ───────────────────────────────────────────────
 function openRow(row: Row) {
-  useTabStore.getState().openTab(row.sessionId, row.title)
+  useTabStore().openTab(row.sessionId, row.title)
   emit('close')
 }
 

@@ -22,12 +22,12 @@ export const zh: Record<TranslationKey, string> = {
   'common.copied': '已复制',
 
   // ─── Sidebar ──────────────────────────────────────
-  'sidebar.newSession': '新建会话',
+  'sidebar.newSession': '新对话',
   'sidebar.workflows': '工作流',
   'sidebar.scheduled': '定时任务',
   'sidebar.terminal': '终端',
   'sidebar.settings': '设置',
-  'sidebar.searchPlaceholder': '搜索会话...',
+  'sidebar.searchPlaceholder': '搜索对话、技能、记忆...',
   'sidebar.noSessions': '暂无会话',
   'sidebar.noMatching': '没有匹配的会话',
   'sidebar.sessionListFailed': '会话列表加载失败',
@@ -43,7 +43,7 @@ export const zh: Record<TranslationKey, string> = {
   'search.global.loading': '搜索中…',
   'search.global.error': '搜索失败',
   'search.global.close': '关闭',
-  'sidebar.projects': '项目',
+  'sidebar.projects': '工作空间',
   'sidebar.projectMenu': '项目菜单',
   'sidebar.newProject': '新建项目',
   'sidebar.archiveAllChats': '归档所有聊天',
@@ -1139,8 +1139,8 @@ export const zh: Record<TranslationKey, string> = {
   'settings.general.uiZoomReset': '重置界面缩放到 100%',
 
   // ─── Empty Session ──────────────────────────────────────
-  'empty.title': '新建会话',
-  'empty.subtitle': '开始一个新的编码会话。MadCop 已准备好帮你构建、调试和架构你的项目。',
+  'empty.title': '你好，我是 MadCop',
+  'empty.subtitle': '我可以帮你写代码、设计方案、分析数据、管理 Agent。试试在下面输入你的需求。',
   'empty.placeholder': '随便问点什么...',
   'empty.addFiles': '添加文件或图片',
   'empty.slashCommands': '斜杠命令',

@@ -9,7 +9,7 @@ import CopyButton from '../shared/CopyButton.vue'
 import InlineImageGallery from './InlineImageGallery.vue'
 import type { AgentTaskNotification } from '../../types/chat'
 import PlanPreviewCard from './PlanModePreview.vue'
-import { extractPlanPreview, isExitPlanModeTool } from './PlanModePreviewHelpers'
+import { extractPlanPreview, isExitPlanModeTool } from './planModePreviewHelpers'
 import PlanToolCallBlock from './PlanToolCallBlock.vue'
 
 // ─── Props ────────────────────────────────────────────────────

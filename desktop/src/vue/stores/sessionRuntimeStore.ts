@@ -1,3 +1,5 @@
+export const DRAFT_RUNTIME_SELECTION_KEY = '__draft__'
+
 import { defineStore } from 'pinia'
 
 /**

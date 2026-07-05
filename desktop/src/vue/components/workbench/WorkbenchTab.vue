@@ -14,7 +14,7 @@ const emit = defineEmits<{
 const wsStore = useWorkspacePanelStore()
 
 // Close the parent tab via the emit event (mirrors React's
-// useTabStore.getState().closeTab(tabId)).
+// useTabStore().closeTab(tabId)).
 function onClose() {
   emit('close')
 }

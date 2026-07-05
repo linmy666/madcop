@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { usePluginStore } from '../stores/pluginStore'
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../i18n'
 import PluginList from './PluginList.vue'
 import PluginDetail from './PluginDetail.vue'
 

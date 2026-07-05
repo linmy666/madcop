@@ -12,7 +12,7 @@ import {
   nextTick,
 } from 'vue'
 import { sessionsApi, type SessionContextSnapshot } from '../../../api/sessions'
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../../i18n'
 import MobileBottomSheet from '../shared/MobileBottomSheet.vue'
 
 // ── Constants ─────────────────────────────────────────────────────────

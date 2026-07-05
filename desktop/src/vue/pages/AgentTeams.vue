@@ -11,7 +11,7 @@
  */
 
 import { ref } from 'vue'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import { mockTeam, mockTeamMessages } from '../mocks/data'
 
 const t = useTranslation()

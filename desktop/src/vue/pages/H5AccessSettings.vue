@@ -8,7 +8,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useUIStore } from '../stores/uiStore'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import Input from '../components/shared/Input.vue'
 import Button from '../components/shared/Button.vue'
 import Modal from '../components/shared/Modal.vue'

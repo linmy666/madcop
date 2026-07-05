@@ -17,7 +17,7 @@
 -->
 
 <script setup lang="ts">
-import type { McpServerRecord, McpWritableScope, McpUpsertPayload } from '../../types/mcp'
+import type { McpServerRecord, McpWritableScope, McpUpsertPayload } from '../types/mcp'
 
 import {
   ref,

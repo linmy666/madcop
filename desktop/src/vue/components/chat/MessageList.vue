@@ -26,7 +26,7 @@ import { useTeamStore } from '../../stores/teamStore'
 import { useUIStore } from '../../stores/uiStore'
 
 // ─── i18n ─────────────────────────────────────────────────────
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../../i18n'
 
 // ─── Utilities (extracted from MessageList.tsx) ───────────────
 import {

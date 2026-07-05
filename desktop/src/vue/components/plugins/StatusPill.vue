@@ -2,7 +2,7 @@
 // v3.0 — StatusPill (Vue 3)
 // Direct translation of StatusPill component from PluginDetail.tsx
 import { computed } from 'vue'
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../../i18n'
 
 const props = defineProps<{
   enabled: boolean

@@ -1,4 +1,4 @@
-import type { Locale, TranslationKey } from '../../i18n'
+import type { Locale, TranslationKey } from '../i18n'
 
 type Translator = (key: TranslationKey, params?: Record<string, string | number>) => string
 

@@ -6,7 +6,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useAgentStore } from '../stores/agentStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useUIStore } from '../stores/uiStore'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import AgentDetailView from './AgentDetailView.vue'
 
 // ─── Constants (from React lines 3705-3724) ──────────────────

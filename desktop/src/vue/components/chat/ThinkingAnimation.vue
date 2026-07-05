@@ -137,7 +137,7 @@ watch(() => [props.active, props.stage] as const, () => { startCycle() })
     </div>
     <div class="flex flex-col leading-tight">
       <span class="text-[12px] font-medium text-[var(--color-brand)]">
-        MadCop 正在思考
+        正在分析...
       </span>
       <span
         :key="stage"

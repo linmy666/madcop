@@ -5,7 +5,7 @@
  * Prop-driven: parent passes a NormalizedMessage.
  */
 import { ref } from 'vue'
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../../i18n'
 import type { NormalizedBlock, NormalizedMessage } from '../../../lib/trace/types'
 import MarkdownRenderer from '../../components/shared/MarkdownRenderer.vue'
 import CopyButton from '../../components/shared/CopyButton.vue'
@@ -140,7 +140,7 @@ function extractPlainText(content: unknown): string | null {
 // ── Sub-components defined in non-setup script ───────────────────────
 import type { Component } from 'vue'
 import { ref } from 'vue'
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../../i18n'
 import CodeViewer from '../../components/chat/CodeViewer.vue'
 
 // ThinkingBlock — collapsible thinking content

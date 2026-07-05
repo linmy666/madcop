@@ -28,10 +28,10 @@ import {
 /* ────────────────────────────────────────────────────────────────────
    Imports (APIs, stores, hooks, components)
    ──────────────────────────────────────────────────────────────────── */
-import { ApiError } from '../../api/client'
-import { agentsApi } from '../../api/agents'
-import { skillsApi } from '../../api/skills'
-import { useTranslation } from '../../i18n'
+import { ApiError } from '../api/client'
+import { agentsApi } from '../api/agents'
+import { skillsApi } from '../api/skills'
+import { useTranslation } from '../i18n'
 import { useSessionStore } from '../stores/sessionStore'
 import { useChatStore } from '../stores/chatStore'
 import { usePluginStore } from '../stores/pluginStore'
@@ -40,23 +40,23 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useUIStore } from '../stores/uiStore'
 import { SETTINGS_TAB_ID, useTabStore } from '../stores/tabStore'
 import RepositoryLaunchControls from '../components/shared/RepositoryLaunchControls.vue'
-import PermissionModeSelector from '../../components/controls/PermissionModeSelector'
-import ModelSelector from '../../components/controls/ModelSelector'
-import AttachmentGallery from '../../components/chat/AttachmentGallery'
-import ComposerDropOverlay from '../../components/chat/ComposerDropOverlay'
-import ContextUsageIndicator from '../../components/chat/ContextUsageIndicator'
+import PermissionModeSelector from '../components/controls/PermissionModeSelector.vue'
+import ModelSelector from '../components/controls/ModelSelector.vue'
+import AttachmentGallery from '../components/chat/AttachmentGallery.vue'
+import ComposerDropOverlay from '../components/chat/ComposerDropOverlay.vue'
+import ContextUsageIndicator from '../components/chat/ContextUsageIndicator.vue'
 import FileSearchMenu from '../components/chat/FileSearchMenu.vue'
 import LocalSlashCommandPanel from '../components/chat/LocalSlashCommandPanel.vue'
-import { useMobileViewport } from '../../hooks/useMobileViewport'
-import { isDesktopRuntime } from '../../lib/desktopRuntime'
-import MadCopLoader from '../../components/common/MadCopLoader'
+import { useMobileViewport } from '../hooks/useMobileViewport'
+import { isDesktopRuntime } from '../lib/desktopRuntime'
+import MadCopLoader from '../components/common/MadCopLoader.vue'
 import {
   filesToComposerAttachments,
   selectNativeFileAttachments,
   type ComposerAttachment,
-} from '../../lib/composerAttachments'
-import { useComposerFileDrop } from '../../components/chat/useComposerFileDrop'
-import { shouldSubmitOnEnter } from '../../components/chat/sendShortcut'
+} from '../lib/composerAttachments'
+import { useComposerFileDrop } from '../components/chat/useComposerFileDrop'
+import { shouldSubmitOnEnter } from '../components/chat/sendShortcut'
 import {
   appendAgentSlashCommands,
   buildAgentSlashCommands,
@@ -67,10 +67,10 @@ import {
   mergeSlashCommands,
   replaceSlashCommand,
   resolveSlashUiAction,
-} from '../../components/chat/composerUtils'
-import type { AttachmentRef } from '../../types/chat'
-import type { PermissionMode } from '../../types/settings'
-import type { SlashCommandOption } from '../../components/chat/composerUtils'
+} from '../components/chat/composerUtils'
+import type { AttachmentRef } from '../types/chat'
+import type { PermissionMode } from '../types/settings'
+import type { SlashCommandOption } from '../components/chat/composerUtils'
 
 type Attachment = ComposerAttachment
 
@@ -159,22 +159,22 @@ const slashItemRefs = ref<(HTMLButtonElement | null)[]>([])
 /* ────────────────────────────────────────────────────────────────────
    Store bindings (zustand selectors → direct calls in onMounted)
    ──────────────────────────────────────────────────────────────────── */
-const createSession = useSessionStore.getState().createSession
-const sendMessage = useChatStore.getState().sendMessage
-const connectToSession = useChatStore.getState().connectToSession
-const setActiveView = useUIStore.getState().setActiveView
-const addToast = useUIStore.getState().addToast
-const currentModel = useSettingsStore.getState().currentModel
-const chatSendBehavior = useSettingsStore.getState().chatSendBehavior
-const defaultPermissionMode = useSettingsStore.getState().permissionMode
+const createSession = useSessionStore().createSession
+const sendMessage = useChatStore().sendMessage
+const connectToSession = useChatStore().connectToSession
+const setActiveView = useUIStore().setActiveView
+const addToast = useUIStore().addToast
+const currentModel = useSettingsStore().currentModel
+const chatSendBehavior = useSettingsStore().chatSendBehavior
+const defaultPermissionMode = useSettingsStore().permissionMode
 draftPermissionMode.value = defaultPermissionMode
-const lastPluginReloadSummary = usePluginStore.getState().lastReloadSummary
+const lastPluginReloadSummary = usePluginStore().lastReloadSummary
 
 /* ────────────────────────────────────────────────────────────────────
    Computed values (useMemo / derived state)
    ──────────────────────────────────────────────────────────────────── */
 const draftRuntimeSelection = computed(() => {
-  return useSessionRuntimeStore.getState().selections[DRAFT_RUNTIME_SELECTION_KEY]
+  return useSessionRuntimeStore().selections[DRAFT_RUNTIME_SELECTION_KEY]
 })
 
 const draftRuntimeSelectionKey = computed(() => {
@@ -401,8 +401,8 @@ const handleSubmit = async () => {
   }
 
   if (slashUiAction?.type === 'settings') {
-    useUIStore.getState().setPendingSettingsTab(slashUiAction.tab)
-    useTabStore.getState().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
+    useUIStore().setPendingSettingsTab(slashUiAction.tab)
+    useTabStore().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
     input.value = ''
     slashMenuOpen.value = false
     fileSearchOpen.value = false
@@ -413,7 +413,7 @@ const handleSubmit = async () => {
   isSubmitting.value = true
   try {
     const explicitDraftSelection =
-      useSessionRuntimeStore.getState().selections[DRAFT_RUNTIME_SELECTION_KEY]
+      useSessionRuntimeStore().selections[DRAFT_RUNTIME_SELECTION_KEY]
     const sessionId = await createSession(workDir.value || undefined, {
       ...(selectedBranch.value
         ? { repository: { branch: selectedBranch.value, worktree: useWorktree.value } }
@@ -421,11 +421,11 @@ const handleSubmit = async () => {
       permissionMode: draftPermissionMode.value,
     })
     if (explicitDraftSelection) {
-      useSessionRuntimeStore.getState().setSelection(sessionId, explicitDraftSelection)
-      useSessionRuntimeStore.getState().clearSelection(DRAFT_RUNTIME_SELECTION_KEY)
+      useSessionRuntimeStore().setSelection(sessionId, explicitDraftSelection)
+      useSessionRuntimeStore().clearSelection(DRAFT_RUNTIME_SELECTION_KEY)
     }
     setActiveView('code')
-    useTabStore.getState().openTab(sessionId, 'New Session')
+    useTabStore().openTab(sessionId, 'New Session')
     connectToSession(sessionId)
     const attachmentPayload: AttachmentRef[] = attachments.value.map((a) => ({
       type: a.type,
@@ -719,12 +719,10 @@ const insertSlashCommand = () => {
           v-bind="dragHandlers"
           data-testid="empty-session-composer-panel"
           class="glass-panel relative flex flex-col gap-3 overflow-visible"
-          :class="
-            isMobileComposer
-              ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(54,35,28,0.12)]'
-              : 'rounded-xl p-0'
-          "
-          :class="{ 'composer-drop-target-active': isDragActive }"
+          :class="[
+            isMobileComposer ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl p-0',
+            { 'composer-drop-target-active': isDragActive },
+          ]"
         >
           <!-- Drop overlay (teleport-style, but inline since it's relative) -->
           <ComposerDropOverlay

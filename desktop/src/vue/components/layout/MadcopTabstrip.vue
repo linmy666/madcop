@@ -38,7 +38,7 @@ import { useWorkspacePanelStore } from '../../stores/workspacePanelStore'
 import { useTerminalPanelStore } from '../../stores/terminalPanelStore'
 
 // ─── i18n ──────────────────────────────────────────────────────────
-import { translate, type Locale } from '../../../i18n'
+import { translate, type Locale } from '../../i18n'
 
 // ─── Desktop host ──────────────────────────────────────────────────
 import { getDesktopHost } from '../../../lib/desktopHost'
@@ -132,14 +132,14 @@ const openProjectPath = computed(() => {
 
 const isWorkbenchOpen = computed(() => {
   if (activeTabId.value && isActiveSessionTab.value) {
-    return useWorkspacePanelStore.getState().isPanelOpen(activeTabId.value)
+    return useWorkspacePanelStore().isPanelOpen(activeTabId.value)
   }
   return false
 })
 
 const workbenchMode = computed(() => {
   if (activeTabId.value && isActiveSessionTab.value) {
-    return useWorkspacePanelStore.getState().getMode(activeTabId.value)
+    return useWorkspacePanelStore().getMode(activeTabId.value)
   }
   return 'workspace'
 })
@@ -150,7 +150,7 @@ const isWorkspacePanelOpen = computed(() =>
 
 const isTerminalPanelOpen = computed(() => {
   if (activeTabId.value && isActiveSessionTab.value) {
-    return useTerminalPanelStore.getState().isPanelOpen(activeTabId.value)
+    return useTerminalPanelStore().isPanelOpen(activeTabId.value)
   }
   return false
 })
@@ -232,8 +232,8 @@ function scroll(direction: 'left' | 'right') {
 
 function closeTabWithCleanup(tab: Tab) {
   if (isSessionTab(tab)) {
-    useWorkspacePanelStore.getState().clearSession(tab.sessionId)
-    useTerminalPanelStore.getState().clearSession(tab.sessionId)
+    useWorkspacePanelStore().clearSession(tab.sessionId)
+    useTerminalPanelStore().clearSession(tab.sessionId)
   }
   closeTab(tab.sessionId)
 }
@@ -445,10 +445,10 @@ watch(draggingSessionId, (id) => {
 // ─── Terminal toggle action ────────────────────────────────────────
 function handleTerminalToggle() {
   if (activeTabId.value && isActiveSessionTab.value) {
-    useTerminalPanelStore.getState().togglePanel(activeTabId.value)
+    useTerminalPanelStore().togglePanel(activeTabId.value)
     return
   }
-  useTabStore.getState().openTerminalTab()
+  useTabStore().openTerminalTab()
 }
 
 // ─── Workspace toggle action ───────────────────────────────────────

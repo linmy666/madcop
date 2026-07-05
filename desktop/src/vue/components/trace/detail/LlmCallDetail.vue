@@ -2,7 +2,7 @@
 // v3.0 — LlmCallDetail (Vue 3)
 // Direct translation of components/trace/detail/LlmCallDetail.tsx — same detail UI, same Tailwind classes.
 import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../../../i18n'
 import type { TraceBodySnapshot, TraceCallRecord } from '../../../types/trace'
 import type { TraceSpan } from '../../../lib/traceViewModel'
 import { formatTraceJson } from '../../../lib/traceViewModel'

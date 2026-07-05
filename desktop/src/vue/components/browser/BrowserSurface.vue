@@ -29,8 +29,8 @@ const hostRef = ref<HTMLDivElement | null>(null)
 const loadSeqRef = ref(0)
 
 // Reactive session state synced from zustand store
-const session = ref<BrowserSessionState | undefined>(useBrowserPanelStore.getState().bySession[props.sessionId])
-const overlayCount = ref(useOverlayStore.getState().count)
+const session = ref<BrowserSessionState | undefined>(useBrowserPanelStore().bySession[props.sessionId])
+const overlayCount = ref(useOverlayStore().count)
 const store = useBrowserPanelStore.getState()
 
 // Subscribe to zustand store changes to keep Vue reactive
@@ -96,7 +96,7 @@ const loadNativePreview = (
     await action()
   })().catch(() => {
     if (loadSeqRef.value === seq) {
-      useBrowserPanelStore.getState().setLoading(props.sessionId, false)
+      useBrowserPanelStore().setLoading(props.sessionId, false)
     }
   })
 }
@@ -104,7 +104,7 @@ const loadNativePreview = (
 const openOrNavigate = (inputUrl: string) => {
   const url = resolveBrowserNavigationUrl(inputUrl, props.sessionId)
   if (!url) return
-  const current = useBrowserPanelStore.getState().bySession[props.sessionId]
+  const current = useBrowserPanelStore().bySession[props.sessionId]
   store.navigate(props.sessionId, url)
   if (current?.url) {
     loadNativePreview(url, () => previewBridge.navigate(url))
@@ -196,7 +196,7 @@ watch(isLoading, (loading) => {
   }
   if (loading) {
     loadingTimer.value = setTimeout(() => {
-      useBrowserPanelStore.getState().setLoading(props.sessionId, false)
+      useBrowserPanelStore().setLoading(props.sessionId, false)
     }, 15000)
   }
 })
@@ -221,13 +221,13 @@ if (!session.value) {
         :on-back="() => {
           store.goBack(props.sessionId)
           store.setLoading(props.sessionId, true)
-          const u = useBrowserPanelStore.getState().bySession[props.sessionId]!.url
+          const u = useBrowserPanelStore().bySession[props.sessionId]!.url
           loadNativePreview(u, () => previewBridge.navigate(u))
         }"
         :on-forward="() => {
           store.goForward(props.sessionId)
           store.setLoading(props.sessionId, true)
-          const u = useBrowserPanelStore.getState().bySession[props.sessionId]!.url
+          const u = useBrowserPanelStore().bySession[props.sessionId]!.url
           loadNativePreview(u, () => previewBridge.navigate(u))
         }"
         :on-reload="() => {

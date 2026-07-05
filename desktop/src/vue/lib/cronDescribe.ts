@@ -3,7 +3,7 @@
  * Works with standard 5-field cron: minute hour day-of-month month day-of-week
  */
 
-import type { TranslationKey } from '../../i18n'
+import type { TranslationKey } from '../i18n'
 
 type TFunc = (key: TranslationKey, params?: Record<string, string | number>) => string
 

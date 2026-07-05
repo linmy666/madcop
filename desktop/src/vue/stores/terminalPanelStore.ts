@@ -6,6 +6,10 @@ export interface TerminalPanelState {
   panels: Map<string, { isOpen: boolean; sessionId: string | null }>
 }
 
+export const TERMINAL_PANEL_DEFAULT_HEIGHT = 240
+export const TERMINAL_PANEL_MAX_HEIGHT = 600
+export const TERMINAL_PANEL_MIN_HEIGHT = 120
+
 export const useTerminalPanelStore = defineStore('terminalPanel', {
   state: (): TerminalPanelState => ({
     panels: new Map(),

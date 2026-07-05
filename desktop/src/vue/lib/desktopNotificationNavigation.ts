@@ -10,7 +10,7 @@ const SCHEDULED_TAB_TITLE = 'Scheduled Tasks'
 
 export function openDesktopNotificationTarget(target: DesktopNotificationTarget): void {
   if (target.type === 'scheduled') {
-    useTabStore.getState().openTab(SCHEDULED_TAB_ID, SCHEDULED_TAB_TITLE, 'scheduled')
+    useTabStore().openTab(SCHEDULED_TAB_ID, SCHEDULED_TAB_TITLE, 'scheduled')
     return
   }
 
@@ -19,8 +19,8 @@ export function openDesktopNotificationTarget(target: DesktopNotificationTarget)
     .sessions
     .find((session) => session.id === target.sessionId)
     ?.title
-  useTabStore.getState().openTab(target.sessionId, target.title || knownTitle || 'Session', 'session')
-  useChatStore.getState().connectToSession(target.sessionId)
+  useTabStore().openTab(target.sessionId, target.title || knownTitle || 'Session', 'session')
+  useChatStore().connectToSession(target.sessionId)
 }
 
 export function installDesktopNotificationNavigation(): Promise<() => void> {

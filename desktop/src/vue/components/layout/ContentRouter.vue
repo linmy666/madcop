@@ -14,6 +14,8 @@ const TerminalSettings = defineAsyncComponent(() => import('../../pages/Terminal
 const TraceList = defineAsyncComponent(() => import('../../pages/TraceList.vue'))
 const TraceSession = defineAsyncComponent(() => import('../../pages/TraceSession.vue'))
 const WorkflowsListPage = defineAsyncComponent(() => import('../../pages/WorkflowsListPage.vue'))
+const AgentHub = defineAsyncComponent(() => import('../../pages/AgentHub.vue'))
+const KnowledgeBase = defineAsyncComponent(() => import('../../pages/KnowledgeBase.vue'))
 const DesignPage = defineAsyncComponent(() => import('../../pages/DesignPage.vue'))
 const WorkbenchTab = defineAsyncComponent(() => import('../workbench/WorkbenchTab.vue'))
 
@@ -118,6 +120,8 @@ const resolvedPage = computed(() => {
       />
       <WorkflowsListPage v-else-if="resolvedPage.kind === 'workflows'" />
       <DesignPage v-else-if="resolvedPage.kind === 'design'" />
+      <AgentHub v-else-if="resolvedPage.kind === 'agents'" />
+      <KnowledgeBase v-else-if="resolvedPage.kind === 'knowledge'" />
       <ActiveSession v-else-if="resolvedPage.kind === 'active'" />
     </div>
 

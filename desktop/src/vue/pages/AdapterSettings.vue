@@ -4,7 +4,7 @@
 
 import { ref, onMounted, watch, computed } from 'vue'
 import { useAdapterStore } from '../stores/adapterStore'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import Input from '../components/shared/Input.vue'
 import Button from '../components/shared/Button.vue'
 import DirectoryPicker from '../components/shared/DirectoryPicker.vue'

@@ -28,7 +28,7 @@ import {
 } from                    '../../../api/sessions'
 
 // ─── i18n ─────────────────────────────────────────────────────
-import { useTranslation, type TranslationKey } from '../../../i18n'
+import { useTranslation, type TranslationKey } from '../../i18n'
 
 // ─── Stores ───────────────────────────────────────────────────
 import { useUIStore } from                    '../../stores/uiStore'
@@ -772,7 +772,7 @@ function buildMemoryFilesBreakdown(files: ContextMemoryFile[]): VNode {
               type: 'button',
               onClick: () => {
                 setPendingSettingsTab('memory')
-                useTabStore.getState().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
+                useTabStore().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
               },
               class: 'rounded-sm border border-[var(--color-inspector-border)] bg-[var(--color-inspector-chip)] px-2.5 py-1 text-xs font-semibold text-[var(--color-inspector-muted-strong)] hover:text-[var(--color-inspector-text)]',
             },
@@ -796,7 +796,7 @@ function buildMemoryFilesBreakdown(files: ContextMemoryFile[]): VNode {
             type: 'button',
             onClick: () => {
               setPendingSettingsTab('memory')
-              useTabStore.getState().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
+              useTabStore().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
             },
             class: 'rounded-sm border border-[var(--color-inspector-border)] bg-[var(--color-inspector-chip)] px-2.5 py-1 text-xs font-semibold text-[var(--color-inspector-muted-strong)] hover:text-[var(--color-inspector-text)]',
           },
@@ -1122,7 +1122,7 @@ function buildMcpPanel(): VNode {
                   onClick: () => {
                     selectServer(server)
                     setPendingSettingsTab('mcp')
-                    useTabStore.getState().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
+                    useTabStore().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
                     onClose()
                   },
                   class: 'block w-full border-t border>[var(--color-border)] px-4 py-4 text-left first:border-t-0 hover:bg-[var(--color-surface-hover)]',
@@ -1209,7 +1209,7 @@ function buildSkillsPanel(): VNode {
             onClick: async () => {
               await fetchSkillDetail(skill.source, skill.name, props.cwd, 'skills')
               setPendingSettingsTab('skills')
-              useTabStore.getState().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
+              useTabStore().openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
               onClose()
             },
             class: 'block w-full border-t border>[var(--color-border)] px-4 py-4 text-left first:border-t-0 hover:bg-[var(--color-surface-hover)]',

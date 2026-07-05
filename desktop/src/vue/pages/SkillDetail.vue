@@ -2,9 +2,9 @@
 import { ref, computed, defineComponent, h, Fragment } from 'vue'
 import { useSkillStore } from '../stores/skillStore'
 import { useUIStore } from '../stores/uiStore'
-import { useTranslation } from '../../i18n'
-import MarkdownRenderer from '../components/markdown/MarkdownRenderer'
-import CodeViewer from '../components/chat/CodeViewer'
+import { useTranslation } from '../i18n'
+import MarkdownRenderer from '../components/markdown/MarkdownRenderer.vue'
+import CodeViewer from '../components/chat/CodeViewer.vue'
 
 type SkillSource = 'user' | 'project' | 'plugin' | 'mcp' | 'bundled'
 
@@ -81,7 +81,7 @@ const handleBack = () => {
   const returnTab = (skillStore as any).selectedSkillReturnTab
   (skillStore as any).clearSelection?.()
   if (returnTab === 'plugins') {
-    useUIStore.getState().setPendingSettingsTab('plugins')
+    useUIStore().setPendingSettingsTab('plugins')
   }
 }
 

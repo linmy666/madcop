@@ -11,11 +11,11 @@ import { useUIStore } from '../stores/uiStore'
 import { useSkillStore } from '../stores/skillStore'
 import { useAgentStore } from '../stores/agentStore'
 import { useMcpStore } from '../stores/mcpStore'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import { SETTINGS_TAB_ID, useTabStore } from '../stores/tabs'
 import Button from '../components/shared/Button.vue'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
-import type { PluginCapabilityKey } from '../../types/plugin'
+import type { PluginCapabilityKey } from '../types/plugin'
 
 // Child component imports
 import StatusPill from '../components/plugins/StatusPill.vue'

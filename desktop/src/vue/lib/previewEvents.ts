@@ -24,7 +24,7 @@ export async function subscribePreviewEvents(sessionId: string): Promise<() => v
     if (msg.type === 'navigated' && msg.url) store.setNavigated(sessionId, msg.url, msg.title ?? '')
     else if (msg.type === 'ready') store.setReady(sessionId)
     else if (msg.type === 'screenshot' && msg.dataUrl) {
-      useChatStore.getState().queueComposerPrefill(sessionId, {
+      useChatStore().queueComposerPrefill(sessionId, {
         text: '',
         mode: 'append',
         attachments: [{ type: 'image', name: `screenshot-${kindLabel(msg.kind)}.png`, mimeType: 'image/png', data: msg.dataUrl }],
@@ -46,7 +46,7 @@ export async function subscribePreviewEvents(sessionId: string): Promise<() => v
             quote: p.element.selector,
           }]
         : []
-      useChatStore.getState().sendMessage(sessionId, selection.modelText, attachments, {
+      useChatStore().sendMessage(sessionId, selection.modelText, attachments, {
         displayContent: selection.displayName,
         displayAttachments: attachments,
         hideDisplayContent: attachments.length > 0,

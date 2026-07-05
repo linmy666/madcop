@@ -2,7 +2,7 @@
 // v3.0 — SkillPreviewCard (Vue 3)
 // Direct translation of SkillPreviewCard component from PluginDetail.tsx
 import { computed } from 'vue'
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../../i18n'
 
 const props = withDefaults(
   defineProps<{

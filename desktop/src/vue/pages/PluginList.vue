@@ -24,8 +24,8 @@ import {
   onMounted,
   watch,
 } from 'vue'
-import type { PluginSummary } from '../../types/plugin'
-import { useTranslation } from '../../i18n'
+import type { PluginSummary } from '../types/plugin'
+import { useTranslation } from '../i18n'
 import { usePluginStore } from '../stores/pluginStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useUIStore } from '../stores/uiStore'

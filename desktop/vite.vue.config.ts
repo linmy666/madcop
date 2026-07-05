@@ -1,24 +1,21 @@
-// v3.0 — Vue 3 parallel build config.
-//
-// This file does NOT replace the React app. It exists to verify the
-// Vue 3 SFCs compile cleanly under our toolchain. The Electron
-// shell still loads dist/index.html (React) by default.
-//
-// To preview the Vue build: `vite build --config vite.vue.config.ts`
-// then load dist-vue/index.html in any browser.
-
+// v3.0 — Vue 3 build config
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 export default defineConfig({
   base: './',
-  plugins: [vue()],
+  plugins: [vue(), tailwindcss()],
   build: {
     outDir: 'dist-vue',
     emptyOutDir: true,
     target: ['es2021', 'safari15'],
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 2200,
+    // Disable minification — the minifier mangles Vue's `ref` function
+    // to `k` and creates collisions with local variables also named `k`.
+    // Disabling minification keeps the build larger but readable and crash-free.
+    minify: false,
     rollupOptions: {
       input: 'vue-preview.html',
       onwarn(warning, warn) {

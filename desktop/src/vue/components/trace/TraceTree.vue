@@ -6,7 +6,7 @@ import { useTranslation } from '../../i18n'
 import type { TraceSpan, TraceViewModel } from '../../lib/traceViewModel'
 import { previewTraceValue } from '../../lib/traceViewModel'
 import { formatDurationMs } from '../../lib/trace/formatters'
-import { iconForSpanKind, statusBadge } from '../trace/TraceBadges'
+import { iconForSpanKind, statusBadge } from '../trace/TraceBadges.vue'
 
 export type TraceTreeFilter = 'all' | 'llm' | 'tool' | 'error'
 

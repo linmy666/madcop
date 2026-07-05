@@ -574,7 +574,7 @@ const handleLaunchWorkDirChange = async (newWorkDir: string) => {
   try {
     await replaceEmptySession(newWorkDir)
   } catch {
-    // Toast would go here: useUIStore.getState().addToast(...)
+    // Toast would go here: useUIStore().addToast(...)
   } finally {
     launchTransitioning.value = false
   }
@@ -598,7 +598,7 @@ const handleSubmit = async () => {
 
   // Slash UI action: settings tab
   if (pendingSlashUiAction.value?.type === 'settings') {
-    // Would open settings: useUIStore.getState().setPendingSettingsTab(...)
+    // Would open settings: useUIStore().setPendingSettingsTab(...)
     setComposerInput('')
     slashMenuOpen.value = false
     fileSearchOpen.value = false

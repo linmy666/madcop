@@ -6,7 +6,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, type Ref } from 'vue'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import {
   SCHEDULED_TAB_ID,
   SETTINGS_TAB_ID,
@@ -29,18 +29,18 @@ import {
 } from '../stores/terminalPanelStore'
 import MessageList from '../components/chat/MessageList.vue'
 import ChatInput from '../components/chat/ChatInput.vue'
-import ComputerUsePermissionModal from '../../components/chat/ComputerUsePermissionModal'
-import ClarificationPanel from '../../components/chat/ClarificationPanel'
-import SessionTaskBar from '../../components/chat/SessionTaskBar'
-import MadCopLoader from '../../components/common/MadCopLoader'
-import WorkbenchPanel from '../../components/workbench/WorkbenchPanel'
-import TeamStatusBar from '../../components/teams/TeamStatusBar'
-import TerminalSettings from '../../pages/TerminalSettings'
-import type { SessionListItem } from '../../types/session'
-import type { ActiveGoalState } from '../../types/chat'
-import { useMobileViewport } from '../../hooks/useMobileViewport'
-import { isDesktopRuntime } from '../../lib/desktopRuntime'
-import { formatTokenCount } from '../../lib/formatTokenCount'
+import ComputerUsePermissionModal from '../components/chat/ComputerUsePermissionModal.vue'
+import ClarificationPanel from '../components/chat/ClarificationPanel.vue'
+import SessionTaskBar from '../components/chat/SessionTaskBar.vue'
+import MadCopLoader from '../components/common/MadCopLoader.vue'
+import WorkbenchPanel from '../components/workbench/WorkbenchPanel.vue'
+import TeamStatusBar from '../components/teams/TeamStatusBar.vue'
+import TerminalSettings from './TerminalSettings.vue'
+import type { SessionListItem } from '../types/session'
+import type { ActiveGoalState } from '../types/chat'
+import { useMobileViewport } from '../hooks/useMobileViewport'
+import { isDesktopRuntime } from '../lib/desktopRuntime'
+import { formatTokenCount } from '../lib/formatTokenCount'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TASK_POLL_INTERVAL_MS = 1000

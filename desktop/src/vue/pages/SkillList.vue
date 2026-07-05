@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useSkillStore } from '../stores/skillStore'
 import { useSessionStore } from '../stores/sessionStore'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import type { SkillSource } from '../stores/skillStore'
 import type { SkillDefinition } from '../stores/skillStore'
 

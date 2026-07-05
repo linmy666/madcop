@@ -1,38 +1,37 @@
-import { useEffect, useState } from 'react'
+// v3.0 — useMobileViewport (Vue 3)
+// Replacement for the React useMobileViewport.ts that was being bundled
+// into the Vue build. Returns a ref<boolean>.
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const MOBILE_VIEWPORT_QUERY = '(max-width: 767px)'
 
-function getInitialMobileViewport() {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
-  return window.matchMedia(MOBILE_VIEWPORT_QUERY).matches
-}
-
 export function useMobileViewport() {
-  const [isMobile, setIsMobile] = useState(getInitialMobileViewport)
+  const isMobile = ref(false)
+  let mediaQuery: MediaQueryList | null = null
 
-  useEffect(() => {
+  function handleChange(e: MediaQueryListEvent) {
+    isMobile.value = e.matches
+  }
+
+  onMounted(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-
-    const mediaQuery = window.matchMedia(MOBILE_VIEWPORT_QUERY)
-    const handleChange = (event: MediaQueryListEvent) => {
-      setIsMobile(event.matches)
-    }
-
-    setIsMobile(mediaQuery.matches)
+    mediaQuery = window.matchMedia(MOBILE_VIEWPORT_QUERY)
+    isMobile.value = mediaQuery.matches
     if (typeof mediaQuery.addEventListener === 'function') {
       mediaQuery.addEventListener('change', handleChange)
     } else {
       mediaQuery.addListener(handleChange)
     }
+  })
 
-    return () => {
-      if (typeof mediaQuery.removeEventListener === 'function') {
-        mediaQuery.removeEventListener('change', handleChange)
-      } else {
-        mediaQuery.removeListener(handleChange)
-      }
+  onUnmounted(() => {
+    if (!mediaQuery) return
+    if (typeof mediaQuery.removeEventListener === 'function') {
+      mediaQuery.removeEventListener('change', handleChange)
+    } else {
+      mediaQuery.removeListener(handleChange)
     }
-  }, [])
+  })
 
   return isMobile
 }

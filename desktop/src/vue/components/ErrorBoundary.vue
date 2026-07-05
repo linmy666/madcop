@@ -12,7 +12,7 @@
 // React's ErrorBoundaryFallback (window.__lastReactError) and wired
 // diagnostic reporting.
 import { ref, onMounted, onErrorCaptured, type ErrorCapturedHook } from 'vue'
-import { t } from '../../i18n'
+import { t } from '../i18n'
 
 // Fallback state lives in the component's reactive scope
 const hasError = ref(false)

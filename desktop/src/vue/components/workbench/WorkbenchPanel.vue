@@ -46,7 +46,7 @@ const isTabVariant = computed(() => props.variant === 'tab')
 
 // Browser panel store not yet ported to Vue — no-op
 function ensureBlankBrowser(_sessionId: string) {
-  // In React: useBrowserPanelStore.getState().ensureBlank(sessionId)
+  // In React: useBrowserPanelStore().ensureBlank(sessionId)
   // Vue: browserPanelStore does not exist yet; browser mode just toggles the view
 }
 

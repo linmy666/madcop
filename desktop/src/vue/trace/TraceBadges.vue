@@ -7,7 +7,7 @@
  *          spanDisplayTitle(), turnDisplayTitle(), traceEventPhaseLabel()
  *          + Vue components TypeIcon, StatusGlyph, StatusPill, MetaChip, LiveBadge
  */
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import type { TraceSpan, TraceSpanStatus } from '../../lib/traceViewModel'
 
 // ─── Lucide icon mapping → material-symbols-outlined names ──────────
@@ -138,7 +138,7 @@ export function traceEventPhaseLabel(phase: string, t: ReturnType<typeof useTran
 <script lang="ts">
 // ── Vue components (defined in non-setup script for import/export) ───
 import type { Component } from 'vue'
-import { useTranslation } from '../../i18n'
+import { useTranslation } from '../i18n'
 import type { TraceSpan, TraceSpanStatus } from '../../lib/traceViewModel'
 
 // TypeIcon — renders a span icon with color

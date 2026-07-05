@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useSkillStore } from '../stores/skillStore'
-import { useTranslation } from '../../../i18n'
+import { useTranslation } from '../i18n'
 import SkillList from './SkillList.vue'
 import SkillDetail from './SkillDetail.vue'
 

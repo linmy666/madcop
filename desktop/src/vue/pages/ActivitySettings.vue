@@ -10,15 +10,15 @@ import {
   activityStatsApi,
   type ActivityStatsResponse,
   type DailyActivity,
-} from '../../api/activityStats'
+} from '../api/activityStats'
 import {
   desktopUiPreferencesApi,
   getProfileAvatarUrl,
   type DesktopProfilePreferences,
-} from '../../api/desktopUiPreferences'
-import { type Locale, useTranslation } from '../../i18n'
+} from '../api/desktopUiPreferences'
+import { type Locale, useTranslation } from '../i18n'
 import { useSettingsStore } from '../stores/settingsStore'
-import { publicAssetPath } from '../../lib/publicAsset'
+import { publicAssetPath } from '../lib/publicAsset'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
