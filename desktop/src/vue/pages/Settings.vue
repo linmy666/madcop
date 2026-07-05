@@ -70,7 +70,7 @@ const activeModel = ref('')
 
 onMounted(async () => {
   try {
-    const r = await fetch('http://127.0.0.1:8765/api/settings')
+    const r = await fetch('/api/settings')
     const s = await r.json()
     providers.value = Object.values(s.providers || {})
     activeProvider.value = s.active_provider || ''
@@ -83,7 +83,7 @@ const kbCount = ref(0)
 
 onMounted(async () => {
   try {
-    const r = await fetch('http://127.0.0.1:8765/api/agents')
+    const r = await fetch('/api/agents')
     const d = await r.json()
     agentStats.value = {
       builtin: d.builtin?.length || 0,
@@ -91,7 +91,7 @@ onMounted(async () => {
     }
   } catch {}
   try {
-    const r2 = await fetch('http://127.0.0.1:8765/api/agents/knowledge')
+    const r2 = await fetch('/api/agents/knowledge')
     const d2 = await r2.json()
     kbCount.value = Array.isArray(d2) ? d2.length : 0
   } catch {}

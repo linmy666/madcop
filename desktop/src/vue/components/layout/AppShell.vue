@@ -18,7 +18,7 @@ const sidebarOpen = ref(true)
 
 onMounted(() => {
   // Backend health check
-  fetch('http://127.0.0.1:8765/api/health')
+  fetch('/api/health')
     .then(() => { ready.value = true })
     .catch((e) => { startupError.value = String(e) })
     .finally(() => { ready.value = true })

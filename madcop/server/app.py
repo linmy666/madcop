@@ -1380,6 +1380,13 @@ def create_app() -> FastAPI:
     # Surfaces madcop's real data (skills, memory, sessions, channels)
     # through the endpoints the cc-haha UI expects.
     # ------------------------------------------------------------------- #
+    # v3.0 — Agent Network API (agent registry + knowledge base + orchestration)
+    # MUST be registered BEFORE register_madcop_compat, because the
+    # compat layer registers its own @app.get('/api/agents') handler
+    # that would intercept our agent_network routes.
+    from madcop.agent_network.api import router as agent_router
+    app.include_router(agent_router)
+
     from .madcop_compat import register as register_madcop_compat
     from .madcop_compat import install_catch_all
     register_madcop_compat(app)
@@ -1392,10 +1399,6 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------- #
     from madcop.workflow.api import router as workflow_router
     app.include_router(workflow_router)
-
-    # v3.0 — Agent Network API (agent registry + knowledge base + orchestration)
-    from madcop.agent_network.api import router as agent_router
-    app.include_router(agent_router)
 
     # ── Design generation endpoint ────────────────────────────────────── #
     # MUST be registered BEFORE install_catch_all, otherwise the catch-all
