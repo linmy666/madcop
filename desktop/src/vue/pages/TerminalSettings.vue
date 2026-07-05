@@ -2,7 +2,7 @@
 // Sub-components defined first (mirrors React TerminalHelpHint / StatusPill)
 // These use defineComponent so they can be referenced in the main template.
 import { defineComponent, ref, computed, watch, onMounted } from 'vue'
-import { useTranslation } from '../i18n'
+import { useTranslation } from '../../i18n'
 
 export const TerminalHelpHint = defineComponent({
   props: {
@@ -48,13 +48,13 @@ import {
 } from 'vue'
 
 import { useSettingsStore } from '../stores/settingsStore'
-import { useTranslation, type TranslationKey } from '../i18n'
-import { terminalApi } from '../api/terminal'
+import { useTranslation, type TranslationKey } from '../../i18n'
+import { terminalApi } from '../../api/terminal'
 import Dropdown from '../components/shared/Dropdown.vue'
 import Input from '../components/shared/Input.vue'
 import Button from '../components/shared/Button.vue'
-import type { DesktopTerminalStartupShell } from '../types/settings'
-import { getDesktopHost } from '../lib/desktopHost'
+import type { DesktopTerminalStartupShell } from '../../types/settings'
+import { getDesktopHost } from '../../lib/desktopHost'
 import {
   attachTerminalRuntime,
   createLocalTerminalRuntimeId,
@@ -64,7 +64,7 @@ import {
   updateTerminalRuntime,
   type TerminalRuntime,
   type TerminalStatus,
-} from '../lib/terminalRuntime'
+} from '../../lib/terminalRuntime'
 
 // ─── i18n status label mapping ──────────────────────────────
 
@@ -777,7 +777,7 @@ async function handleBashBrowse() {
 <!-- ─── TerminalHelpHint (render-function child component) ─── -->
 <script lang="ts">
 import { defineComponent, ref, computed } from 'vue'
-import { useTranslation } from '../i18n'
+import { useTranslation } from '../../i18n'
 import { h as hFn } from 'vue'
 
 export const TerminalHelpHintInline = defineComponent({
@@ -879,7 +879,7 @@ export const TerminalStatusPillInline = defineComponent({
 
 <!-- ─── handleTerminalKeyDownCapture (mirrors React onKeyDownCapture) ─── -->
 <script lang="ts">
-import { getDesktopHost } from '../lib/desktopHost'
+import { getDesktopHost } from '../../lib/desktopHost'
 
 export function handleTerminalKeyDownCapture(event: KeyboardEvent, runtime: { terminal: any }) {
   const terminal = runtime.terminal

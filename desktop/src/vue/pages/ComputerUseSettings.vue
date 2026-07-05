@@ -6,9 +6,9 @@ import {
   type SetupResult,
   type InstalledApp,
   type AuthorizedApp,
-} from '../api/computerUse'
-import { useTranslation } from '../i18n'
-import { getDesktopHost } from '../lib/desktopHost'
+} from '../../api/computerUse'
+import { useTranslation } from '../../i18n'
+import { getDesktopHost } from '../../lib/desktopHost'
 
 type CheckState = 'loading' | 'ready' | 'error'
 

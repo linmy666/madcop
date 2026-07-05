@@ -13,7 +13,7 @@ import Input from '../components/shared/Input.vue'
 import Button from '../components/shared/Button.vue'
 import Modal from '../components/shared/Modal.vue'
 import QRCode from 'qrcode'
-import { copyTextToClipboard } from '../../components/chat/clipboard'
+import { copyTextToClipboard } from '../components/chat/clipboard'
 
 // ─── Pure helper functions (mirrors from React lines 87-182) ──
 

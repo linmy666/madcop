@@ -36,11 +36,11 @@ import MadCopLoader from '../../components/common/MadCopLoader'
 import WorkbenchPanel from '../../components/workbench/WorkbenchPanel'
 import TeamStatusBar from '../../components/teams/TeamStatusBar'
 import TerminalSettings from '../../pages/TerminalSettings'
-import type { SessionListItem } from '../types/session'
-import type { ActiveGoalState } from '../types/chat'
-import { useMobileViewport } from '../hooks/useMobileViewport'
-import { isDesktopRuntime } from '../lib/desktopRuntime'
-import { formatTokenCount } from '../lib/formatTokenCount'
+import type { SessionListItem } from '../../types/session'
+import type { ActiveGoalState } from '../../types/chat'
+import { useMobileViewport } from '../../hooks/useMobileViewport'
+import { isDesktopRuntime } from '../../lib/desktopRuntime'
+import { formatTokenCount } from '../../lib/formatTokenCount'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TASK_POLL_INTERVAL_MS = 1000

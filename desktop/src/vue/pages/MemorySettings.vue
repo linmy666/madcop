@@ -15,12 +15,12 @@ import {
   ref,
   watch,
 } from 'vue'
-import { memoryApi } from '../api/memory'
-import { formatBytes } from '../lib/formatBytes'
-import { useTranslation } from '../i18n'
+import { memoryApi } from '../../api/memory'
+import { formatBytes } from '../../lib/formatBytes'
+import { useTranslation } from '../../i18n'
 import { useSessionStore } from '../stores/sessionStore'
 import { useUIStore } from '../stores/uiStore'
-import type { MemoryFile, MemoryFileDetail, MemoryProject } from '../types/memory'
+import type { MemoryFile, MemoryFileDetail, MemoryProject } from '../../types/memory'
 import Button from '../components/shared/Button.vue'
 import { MarkdownRenderer } from '../components/markdown/MarkdownRenderer'
 
