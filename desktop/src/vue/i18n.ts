@@ -14,6 +14,7 @@ const ZH: Record<string, string> = {
   'sidebar.scheduled': '定时任务',
   'sidebar.workflows': '工作流',
   'sidebar.settings': '设置',
+  'sidebar.projects': '工作空间',
   'sidebar.skills': '技能',
   'sidebar.memory': '记忆',
   'sidebar.activity': '活动',
@@ -145,3 +146,6 @@ export function useTranslation(): ((key: TranslationKey, params?: Record<string,
   fn.translate = translate
   return fn
 }
+  'sidebar.noSessions': '暂无对话',
+  'sidebar.other': '其他',
+  'sidebar.allProjects': '全部工作空间',

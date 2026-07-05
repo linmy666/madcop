@@ -1393,6 +1393,10 @@ def create_app() -> FastAPI:
     from madcop.workflow.api import router as workflow_router
     app.include_router(workflow_router)
 
+    # v3.0 — Agent Network API (agent registry + knowledge base + orchestration)
+    from madcop.agent_network.api import router as agent_router
+    app.include_router(agent_router)
+
     # ── Design generation endpoint ────────────────────────────────────── #
     # MUST be registered BEFORE install_catch_all, otherwise the catch-all
     # /api/{path:path} route will intercept /api/design/generate and
