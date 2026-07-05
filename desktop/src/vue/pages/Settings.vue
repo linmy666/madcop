@@ -16,6 +16,11 @@ import DiagnosticsSettings from './DiagnosticsSettings.vue'
 import TraceList from './TraceList.vue'
 import ActivitySettings from './ActivitySettings.vue'
 import MemorySettings from './MemorySettings.vue'
+import H5AccessSettings from './H5AccessSettings.vue'
+import AgentsSettings from './AgentsSettings.vue'
+import SkillSettings from './SkillSettings.vue'
+import PluginSettings from './PluginSettings.vue'
+import AboutSettings from './AboutSettings.vue'
 
 // ─── Constants ───────────────────────────────────────────────
 const MADCOP_BUILT_IN_PROVIDER_A = 'provider-0'
@@ -190,7 +195,7 @@ onMounted(async () => {
  * Phase 2 placeholder: helper components from React lines 696-4661
  * (ProviderFormModal, ConfirmDialog, ClaudeOfficialLogin, ChatGPTOfficialLogin,
  *  SkillList, SkillDetail, PluginList, PluginDetail, GeneralSettings,
- *  H5AccessSettings, AgentsSettings, SkillSettings, PluginSettings, AboutSettings)
+ *  AgentsSettings, SkillSettings, PluginSettings, AboutSettings)
  * are deferred to Phase 2. Below are minimal inline stubs.
  */
 import { defineComponent, h } from 'vue'
@@ -502,8 +507,8 @@ export const Placeholder = defineComponent({
         <!-- General — TODO: Phase 2 -->
         <Placeholder v-if="activeTab === 'general'" label="TODO: Phase 2 — GeneralSettings (theme, language, shortcuts, output style)" />
 
-        <!-- H5Access — TODO: Phase 2 -->
-        <Placeholder v-if="activeTab === 'h5Access'" label="TODO: Phase 2 — H5AccessSettings (QR, LAN access, public URL)" />
+        <!-- H5Access -->
+        <H5AccessSettings v-if="activeTab === 'h5Access'" />
 
         <!-- Adapters -->
         <AdapterSettings v-if="activeTab === 'adapters'" />
@@ -514,17 +519,17 @@ export const Placeholder = defineComponent({
         <!-- MCP -->
         <McpSettings v-if="activeTab === 'mcp'" />
 
-        <!-- Agents — TODO: Phase 2 -->
-        <Placeholder v-if="activeTab === 'agents'" label="TODO: Phase 2 — AgentsSettings (agent definitions, MCP agents)" />
+        <!-- Agents -->
+        <AgentsSettings v-if="activeTab === 'agents'" />
 
-        <!-- Skills — TODO: Phase 2 -->
-        <Placeholder v-if="activeTab === 'skills'" label="TODO: Phase 2 — SkillSettings (SkillList + SkillDetail)" />
+        <!-- Skills -->
+        <SkillSettings v-if="activeTab === 'skills'" />
 
         <!-- Memory -->
         <MemorySettings v-if="activeTab === 'memory'" />
 
-        <!-- Plugins — TODO: Phase 2 -->
-        <Placeholder v-if="activeTab === 'plugins'" label="TODO: Phase 2 — PluginSettings (PluginList + PluginDetail)" />
+        <!-- Plugins -->
+        <PluginSettings v-if="activeTab === 'plugins'" />
 
         <!-- ComputerUse -->
         <ComputerUseSettings v-if="activeTab === 'computerUse'" />
@@ -535,8 +540,8 @@ export const Placeholder = defineComponent({
         <!-- Diagnostics -->
         <DiagnosticsSettings v-if="activeTab === 'diagnostics'" />
 
-        <!-- About — TODO: Phase 2 -->
-        <Placeholder v-if="activeTab === 'about'" label="TODO: Phase 2 — AboutSettings (version, build info, stats, update)" />
+        <!-- About -->
+        <AboutSettings v-if="activeTab === 'about'" />
       </div>
     </div>
   </div>

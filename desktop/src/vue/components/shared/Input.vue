@@ -12,6 +12,8 @@ const props = withDefaults(defineProps<{
   id?: string
   placeholder?: string
   disabled?: boolean
+  readOnly?: boolean
+  inputMode?: string
   class?: string
 }>(), {
   type: 'text',
@@ -34,6 +36,8 @@ const inputId = computed(() => props.id || (props.label ? props.label.toLowerCas
       :type="type"
       :placeholder="placeholder"
       :disabled="disabled"
+      :readonly="readOnly"
+      :inputmode="inputMode"
       :class="[
         'h-10 px-3 rounded-[var(--radius-md)] border text-sm bg-[var(--color-surface)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] transition-colors duration-150 outline-none',
         error
