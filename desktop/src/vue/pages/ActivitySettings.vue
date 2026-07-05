@@ -17,7 +17,7 @@ import {
   type DesktopProfilePreferences,
 } from '../../api/desktopUiPreferences'
 import { type Locale, useTranslation } from '../../i18n'
-import { useSettingsStore } from '../../stores/settingsStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { publicAssetPath } from '../../lib/publicAsset'
 
 // ─── Types ───────────────────────────────────────────────────────────────────

@@ -31,10 +31,10 @@ import {
 import { useTranslation, type TranslationKey } from '../../../i18n'
 
 // ─── Stores ───────────────────────────────────────────────────
-import { useUIStore } from                    '../../../stores/uiStore'
-import { SETTINGS_TAB_ID, useTabStore } from  '../../../stores/tabStore'
-import { useMcpStore } from                   '../../../stores/mcpStore'
-import { useSkillStore } from                 '../../../stores/skillStore'
+import { useUIStore } from                    '../../stores/uiStore'
+import { SETTINGS_TAB_ID, useTabStore } from  '../../stores/tabStore'
+import { useMcpStore } from                   '../../stores/mcpStore'
+import { useSkillStore } from                 '../../stores/skillStore'
 
 // ─── Types ────────────────────────────────────────────────────
 import type { McpServerRecord } from  '../../../types/mcp'

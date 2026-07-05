@@ -34,8 +34,8 @@ import { useSettingsStore } from '../../stores/settingsStore'
 
 // React zustand stores (workspacePanelStore, terminalPanelStore)
 // imported from the React path — zustand works in Vue.
-import { useWorkspacePanelStore } from '../../../stores/workspacePanelStore'
-import { useTerminalPanelStore } from '../../../stores/terminalPanelStore'
+import { useWorkspacePanelStore } from '../../stores/workspacePanelStore'
+import { useTerminalPanelStore } from '../../stores/terminalPanelStore'
 
 // ─── i18n ──────────────────────────────────────────────────────────
 import { translate, type Locale } from '../../../i18n'
