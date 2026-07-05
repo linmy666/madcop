@@ -1,13 +1,99 @@
 <script setup lang="ts">
 /**
- * MessageList — Vue 3 SFC translation of components/chat/MessageList.tsx (2223 lines)
+ * MessageList — Vue 3 SFC full translation of components/chat/MessageList.tsx (2223 lines)
  * Full version: virtual scrolling, selection menu, turn change cards, goal/memory/task cards
  */
 
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type Ref } from 'vue'
+import {
+  ref,
+  computed,
+  watch,
+  onMounted,
+  onBeforeUnmount,
+  nextTick,
+  defineComponent,
+  h,
+  type PropType,
+  type Ref,
+} from 'vue'
+
+// ─── Stores ───────────────────────────────────────────────────
 import { useChatStore, type UIMessage } from '../../stores/chatStore'
+import { useSessionStore } from '../../stores/sessionStore'
+import { useWorkspaceChatContextStore } from '../../stores/workspaceChatContextStore'
 import { useTabStore } from '../../stores/tabs'
+import { useTeamStore } from '../../stores/teamStore'
+import { useUIStore } from '../../stores/uiStore'
+
+// ─── i18n ─────────────────────────────────────────────────────
 import { useTranslation } from '../../../i18n'
+
+// ─── Utilities (extracted from MessageList.tsx) ───────────────
+import {
+  buildRenderModel,
+  getCompletedTurnTargets,
+  getLatestCompletedTurnTarget,
+  getBranchableMessageTargets,
+  buildTurnCardInsertionMap,
+  buildChangedFilesByRenderIndex,
+  buildVirtualTranscriptWindow,
+  shouldVirtualizeRenderItems,
+  estimateMessageHeight,
+  estimateRenderItemHeight,
+  getMessageMetricSignature,
+  getRenderItemMetricSignature,
+  getRenderItemKey,
+  getCompactSummaryTitle,
+  formatBackgroundTaskDuration,
+  getBackgroundTaskLabel,
+  memoryFileLabel,
+  isNearScrollBottom,
+  rememberSessionScroll,
+  getBottomScrollTop,
+  setScrollToBottomWithoutLayoutRead,
+  setScrollTopWithoutLayoutRead,
+  getChatSelectionFromContainer,
+  getSelectionPointer,
+  sessionScrollSnapshots,
+  SCROLL_BOTTOM_SENTINEL,
+  AUTO_SCROLL_BOTTOM_THRESHOLD_PX,
+  MAX_SCROLL_SNAPSHOTS,
+  VIRTUALIZE_MIN_RENDER_ITEMS,
+  VIRTUALIZE_MIN_CONTENT_CHARS,
+  TOUCH_H5_VIRTUALIZE_MIN_RENDER_ITEMS,
+  TOUCH_H5_VIRTUALIZE_MIN_CONTENT_CHARS,
+  VIRTUAL_OVERSCAN_PX,
+  VIRTUAL_DEFAULT_VIEWPORT_HEIGHT,
+  VIRTUAL_MIN_ITEM_HEIGHT,
+  VIRTUAL_MAX_ITEM_HEIGHT,
+  CONTENT_RESIZE_FOLLOW_MIN_DELTA_PX,
+  VIRTUAL_SPACER_CHUNK_PX,
+  CHAT_SELECTION_MENU_OFFSET,
+  CHAT_SELECTION_MENU_WIDTH,
+  CHAT_SELECTION_MENU_HEIGHT,
+  CHAT_SCROLL_AREA_CLASS,
+  CHAT_RENDER_ITEM_CLASS,
+  type RenderItem,
+  type RenderModel,
+  type TurnChangeCardModel,
+  type BranchableMessageTarget,
+  type VirtualViewport,
+  type VirtualTranscriptWindow,
+  type VirtualRenderItemMetric,
+  type ChatSelectionState,
+  type SelectionPointer,
+  type ToolCall,
+  type ToolResult,
+} from './messageListUtils'
+
+import {
+  getHeightsForSession,
+  getMetricsForSession,
+} from './virtualHeightCache'
+
+import { clearWindowSelection, useSelectionPopoverDismiss } from '../../hooks/useSelectionPopoverDismiss'
+
+// ─── Child components ─────────────────────────────────────────
 import UserMessage from './UserMessage.vue'
 import AssistantMessage from './AssistantMessage.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
@@ -21,8 +107,12 @@ import InlineTaskSummary from './InlineTaskSummary.vue'
 import CurrentTurnChangeCard from './CurrentTurnChangeCard.vue'
 import { ConfirmDialog } from '../shared/ConfirmDialog.vue'
 
+// ─── Constants ────────────────────────────────────────────────
+const EMPTY_MESSAGES: UIMessage[] = []
+
+// ─── Props ────────────────────────────────────────────────────
 interface MessageListProps {
-  sessionId?: string
+  sessionId?: string | null
   compact?: boolean
 }
 
@@ -30,283 +120,898 @@ const props = withDefaults(defineProps<MessageListProps>(), {
   compact: false,
 })
 
+// ─── State ────────────────────────────────────────────────────
 const t = useTranslation()
 const chatStore = useChatStore()
+const sessionStore = useSessionStore()
+const workspaceChatContextStore = useWorkspaceChatContextStore()
 const tabStore = useTabStore()
+const teamStore = useTeamStore()
+const uiStore = useUIStore()
 
+// ─── Session / message data ───────────────────────────────────
 const activeTabId = computed(() => props.sessionId || tabStore.activeTabId)
+
 const sessionState = computed(() => {
   if (!activeTabId.value) return undefined
   return chatStore.sessions[activeTabId.value]
 })
 
-const messages = computed(() => sessionState.value?.messages ?? [])
+const messages = computed(() => sessionState.value?.messages ?? EMPTY_MESSAGES)
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
 const streamingText = computed(() => sessionState.value?.streamingText ?? '')
 const streamingToolInput = computed(() => sessionState.value?.streamingToolInput ?? '')
 const activeThinkingId = computed(() => sessionState.value?.activeThinkingId ?? null)
+const activeToolUseId = computed(() => sessionState.value?.activeToolUseId ?? null)
+const activeToolName = computed(() => sessionState.value?.activeToolName ?? null)
+const agentTaskNotifications = computed(() => sessionState.value?.agentTaskNotifications ?? {})
 const pendingPermission = computed(() => sessionState.value?.pendingPermission ?? null)
-const pendingClarification = computed(() => sessionState.value?.pendingClarification ?? null)
 
-const scrollRef = ref<HTMLDivElement | null>(null)
-const isAtBottom = ref(true)
+const activeAskUserQuestionToolUseId = computed(() => {
+  if (pendingPermission.value?.toolName === 'AskUserQuestion') {
+    return pendingPermission.value.toolUseId
+  }
+  return null
+})
+
+const shouldFollowContentResize = computed(() => {
+  return (
+    streamingText.value.trim().length > 0 ||
+    chatState.value === 'streaming' ||
+    chatState.value === 'compacting' ||
+    chatState.value === 'tool_executing' ||
+    (chatState.value === 'thinking' && Boolean(activeThinkingId.value))
+  )
+})
+
+const isMemberSession = computed(() => {
+  if (!activeTabId.value) return false
+  return Boolean(teamStore.getMemberBySessionId(activeTabId.value))
+})
+
+const branchActionsDisabled = computed(() => {
+  return (
+    isMemberSession.value ||
+    chatState.value !== 'idle' ||
+    streamingText.value.trim().length > 0 ||
+    Boolean(activeThinkingId.value) ||
+    Boolean(activeToolUseId.value) ||
+    Boolean(activeToolName.value)
+  )
+})
+
+// ─── Scroll refs ──────────────────────────────────────────────
+const scrollContainerRef = ref<HTMLDivElement | null>(null)
+const scrollContentRef = ref<HTMLDivElement | null>(null)
+
+const shouldAutoScrollRef = ref(true)
+const isProgrammaticScrollingRef = ref(false)
+const lastAutoScrollAtRef = ref(0)
+const lastContentResizeFollowHeightRef = ref<number | null>(null)
+const ignoreProgrammaticScrollUntilRef = ref(0)
+const ignoreProgrammaticScrollTopRef = ref<number | null>(null)
+
+// ─── Virtual scrolling refs ───────────────────────────────────
+const virtualItemHeightsRef = ref(
+  activeTabId.value ? getHeightsForSession(activeTabId.value) : new Map<string, number>()
+)
+const virtualItemMetricCacheRef = ref(
+  activeTabId.value ? getMetricsForSession(activeTabId.value) : new Map<string, VirtualRenderItemMetric>()
+)
+const pendingMeasuredHeightsRef = ref(false)
+const measureFlushFrameRef = ref<number | null>(null)
+const lastSessionIdRef = ref<string | null | undefined>(activeTabId.value)
+const lastTailMessageIdBySessionRef = ref(new Map<string, string | null>())
+
+// ─── Render model ─────────────────────────────────────────────
+const renderModel = computed<RenderModel>(() => {
+  return buildRenderModel(messages.value, activeAskUserQuestionToolUseId.value)
+})
+
+const renderItems = computed(() => renderModel.value.renderItems)
+const toolResultMap = computed(() => renderModel.value.toolResultMap)
+const childToolCallsByParent = computed(() => renderModel.value.childToolCallsByParent)
+
+// ─── Branchable messages ──────────────────────────────────────
+const branchableMessageTargets = computed(() => {
+  return getBranchableMessageTargets(messages.value)
+})
+
+// ─── Turn change cards ────────────────────────────────────────
+const turnChangeCards = ref<TurnChangeCardModel[]>([])
+const turnChangeLoadError = ref<string | null>(null)
+const turnActionErrors = ref<Record<string, string>>({})
+const isLoadingTurnChangeCards = ref(false)
+
+const turnChangeCardsByIndex = computed(() => {
+  return buildTurnCardInsertionMap(renderItems.value, turnChangeCards.value)
+})
+
+const changedFilesByRenderIndex = computed(() => {
+  return buildChangedFilesByRenderIndex(renderItems.value, turnChangeCards.value)
+})
+
+// ─── Selection menu ───────────────────────────────────────────
+const selectionMenu = ref<ChatSelectionState | null>(null)
+const selectionMenuRef = ref<HTMLButtonElement | null>(null)
+const lastSelectionPointerRef = ref<SelectionPointer | null>(null)
+const selectionUpdateFrameRef = ref<number | null>(null)
+
+const dismissSelectionMenu = () => {
+  selectionMenu.value = null
+}
+
+const queueSelectionMenuUpdate = (pointer?: SelectionPointer) => {
+  if (pointer) lastSelectionPointerRef.value = pointer
+
+  if (selectionUpdateFrameRef.value !== null) {
+    window.cancelAnimationFrame(selectionUpdateFrameRef.value)
+  }
+
+  selectionUpdateFrameRef.value = window.requestAnimationFrame(() => {
+    selectionUpdateFrameRef.value = window.requestAnimationFrame(() => {
+      selectionUpdateFrameRef.value = null
+      const root = scrollContainerRef.value
+      const rootRect = root?.getBoundingClientRect()
+      const fallbackPointer = lastSelectionPointerRef.value ?? {
+        clientX: (rootRect?.left ?? 0) + 24,
+        clientY: (rootRect?.top ?? 0) + 24,
+      }
+      selectionMenu.value = getChatSelectionFromContainer(root, fallbackPointer)
+    })
+  })
+}
+
+const addCurrentSelectionToChat = () => {
+  if (!activeTabId.value || !selectionMenu.value) return
+  workspaceChatContextStore.addReference(activeTabId.value, {
+    kind: 'chat-selection',
+    path: `chat://user/${selectionMenu.value.text}`,
+    name: t('chat.userMessageReference'),
+    quote: selectionMenu.value.text,
+  })
+  selectionMenu.value = null
+  clearWindowSelection()
+}
+
+// ─── Virtual viewport ─────────────────────────────────────────
+const virtualViewport = ref<VirtualViewport>({
+  scrollTop: SCROLL_BOTTOM_SENTINEL,
+  viewportHeight: VIRTUAL_DEFAULT_VIEWPORT_HEIGHT,
+})
+
+const measuredItemsVersion = ref(0)
+
+const itemKeys = computed(() => renderItems.value.map(getRenderItemKey))
+
+const virtualTranscriptWindow = computed<VirtualTranscriptWindow>(() => {
+  const metricsArray = Array.from(virtualItemMetricCacheRef.value.values())
+  return buildVirtualTranscriptWindow(
+    renderItems.value,
+    itemKeys.value,
+    metricsArray,
+    virtualItemHeightsRef.value,
+    virtualViewport.value,
+    VIRTUAL_OVERSCAN_PX
+  )
+})
+
+// ─── Jump to latest / bottom state ────────────────────────────
 const showJumpToLatest = ref(false)
 
-// ─── Compact Status Divider ──────────────────────────────────
-const hasCompactingDivider = computed(() =>
-  messages.value.some((m: any) => m.type === 'compact_summary' && m.phase === 'compacting'),
+// ─── Scroll management ────────────────────────────────────────
+const syncVirtualViewportFromContainer = (container: HTMLElement) => {
+  const nextScrollTop = container.scrollTop
+  const nextViewportHeight = container.clientHeight || VIRTUAL_DEFAULT_VIEWPORT_HEIGHT
+
+  if (
+    Math.abs(virtualViewport.value.scrollTop - nextScrollTop) < 1 &&
+    Math.abs(virtualViewport.value.viewportHeight - nextViewportHeight) < 1
+  ) {
+    return
+  }
+
+  virtualViewport.value = {
+    scrollTop: nextScrollTop,
+    viewportHeight: nextViewportHeight,
+  }
+}
+
+const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+  shouldAutoScrollRef.value = true
+  isProgrammaticScrollingRef.value = true
+  ignoreProgrammaticScrollUntilRef.value = performance.now() + 250
+  lastAutoScrollAtRef.value = performance.now()
+
+  const container = scrollContainerRef.value
+  let requestedScrollTop: number | null = null
+
+  if (container) {
+    setScrollToBottomWithoutLayoutRead(container, behavior)
+    requestedScrollTop = container.scrollTop
+    ignoreProgrammaticScrollTopRef.value = requestedScrollTop
+  }
+
+  virtualViewport.value = {
+    scrollTop: SCROLL_BOTTOM_SENTINEL,
+    viewportHeight: virtualViewport.value.viewportHeight,
+  }
+
+  if (container && activeTabId.value) {
+    sessionScrollSnapshots.set(activeTabId.value, {
+      scrollTop: container.scrollTop,
+      wasAtBottom: true,
+    })
+  }
+
+  showJumpToLatest.value = false
+
+  requestAnimationFrame(() => {
+    const latestContainer = scrollContainerRef.value
+    if (
+      shouldAutoScrollRef.value &&
+      latestContainer &&
+      (requestedScrollTop === null || latestContainer.scrollTop === requestedScrollTop)
+    ) {
+      setScrollToBottomWithoutLayoutRead(latestContainer, 'auto')
+      if (activeTabId.value) {
+        sessionScrollSnapshots.set(activeTabId.value, {
+          scrollTop: latestContainer.scrollTop,
+          wasAtBottom: true,
+        })
+      }
+    }
+    isProgrammaticScrollingRef.value = false
+  })
+}
+
+const flushMeasuredHeightVersion = () => {
+  if (!pendingMeasuredHeightsRef.value) return
+  pendingMeasuredHeightsRef.value = false
+  measuredItemsVersion.value += 1
+}
+
+const handleVirtualItemHeightChange = (itemKey: string, height: number) => {
+  const measuredHeight = Math.min(VIRTUAL_MAX_ITEM_HEIGHT, Math.max(VIRTUAL_MIN_ITEM_HEIGHT, height))
+  const previousHeight = virtualItemHeightsRef.value.get(itemKey)
+  if (previousHeight !== undefined && Math.abs(previousHeight - measuredHeight) < 1) return
+
+  virtualItemHeightsRef.value.set(itemKey, measuredHeight)
+
+  if (!pendingMeasuredHeightsRef.value) {
+    pendingMeasuredHeightsRef.value = true
+    if (measureFlushFrameRef.value !== null) {
+      cancelAnimationFrame(measureFlushFrameRef.value)
+    }
+    measureFlushFrameRef.value = requestAnimationFrame(() => {
+      measureFlushFrameRef.value = null
+      flushMeasuredHeightVersion()
+    })
+  }
+}
+
+const handleScroll = () => {
+  const container = scrollContainerRef.value
+  if (!container) return
+
+  if (!isProgrammaticScrollingRef.value) {
+    // User initiated scroll — stop auto-scrolling
+    shouldAutoScrollRef.value = false
+  }
+
+  syncVirtualViewportFromContainer(container)
+
+  // Show/hide jump-to-latest button
+  if (!isNearScrollBottom(container)) {
+    showJumpToLatest.value = true
+  } else {
+    showJumpToLatest.value = false
+  }
+}
+
+const handleWheel = () => {
+  shouldAutoScrollRef.value = false
+}
+
+// ─── Event listeners ──────────────────────────────────────────
+onMounted(() => {
+  // Pointer events for selection tracking
+  document.addEventListener('pointerdown', handlePointerDown, true)
+  document.addEventListener('pointerup', handlePointerUp, true)
+  document.addEventListener('mouseup', handleMouseUp, true)
+  document.addEventListener('selectionchange', handleSelectionChange)
+  document.addEventListener('keyup', handleKeyUp, true)
+
+  // Auto-scroll on mount
+  nextTick(() => {
+    scrollToBottom('auto')
+  })
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handlePointerDown, true)
+  document.removeEventListener('pointerup', handlePointerUp, true)
+  document.removeEventListener('mouseup', handleMouseUp, true)
+  document.removeEventListener('selectionchange', handleSelectionChange)
+  document.removeEventListener('keyup', handleKeyUp, true)
+
+  if (measureFlushFrameRef.value !== null) {
+    cancelAnimationFrame(measureFlushFrameRef.value)
+  }
+})
+
+const handlePointerDown = (event: PointerEvent) => {
+  lastSelectionPointerRef.value = getSelectionPointer({
+    clientX: event.clientX,
+    clientY: event.clientY,
+  })
+}
+
+const handlePointerUp = (event: PointerEvent) => {
+  queueSelectionMenuUpdate(getSelectionPointer({
+    clientX: event.clientX,
+    clientY: event.clientY,
+  }))
+}
+
+const handleMouseUp = (event: MouseEvent) => {
+  queueSelectionMenuUpdate(getSelectionPointer({
+    clientX: event.clientX,
+    clientY: event.clientY,
+  }))
+}
+
+const handleSelectionChange = () => {
+  queueSelectionMenuUpdate()
+}
+
+const handleKeyUp = () => {
+  queueSelectionMenuUpdate()
+}
+
+// ─── Watch for scroll position reset on session change ────────
+watch(
+  () => activeTabId.value,
+  (newId, oldId) => {
+    if (oldId) {
+      const container = scrollContainerRef.value
+      if (container) {
+        rememberSessionScroll(oldId, container)
+      }
+    }
+
+    // Restore scroll position for new session
+    if (newId) {
+      const snapshot = sessionScrollSnapshots.get(newId)
+      const container = scrollContainerRef.value
+
+      if (snapshot && container) {
+        setScrollTopWithoutLayoutRead(container, snapshot.scrollTop)
+      }
+
+      // Reset virtual state
+      virtualItemHeightsRef.value = getHeightsForSession(newId)
+      virtualItemMetricCacheRef.value = getMetricsForSession(newId)
+      virtualViewport.value = {
+        scrollTop: snapshot?.wasAtBottom ?? true ? SCROLL_BOTTOM_SENTINEL : snapshot?.scrollTop ?? 0,
+        viewportHeight: container?.clientHeight ?? VIRTUAL_DEFAULT_VIEWPORT_HEIGHT,
+      }
+    }
+  }
 )
 
-function getCompactSummaryTitle(message: any): string {
-  if (!message) return t('chat.compactSummary.title')
-  if (message.trigger === 'auto') return t('chat.compactSummary.autoTitle')
-  if (message.trigger === 'manual') return t('chat.compactSummary.manualTitle')
-  if (!message.title || message.title === 'Context compacted' || message.title === 'Conversation compacted') {
-    return t('chat.compactSummary.title')
+// ─── Auto-scroll on messages/streaming ────────────────────────
+watch(
+  () => messages.value.length,
+  () => {
+    if (shouldAutoScrollRef.value || chatState.value === 'busy' || chatState.value === 'streaming' || chatState.value === 'tool_executing') {
+      nextTick(() => scrollToBottom('auto'))
+    }
   }
-  return message.title
-}
+)
 
-// ─── Goal Event Card ─────────────────────────────────────────
-function renderGoalEvent(message: any) {
-  const titleKey = `chat.goalEvent.${message.action === 'status' ? 'statusTitle' : message.action}` as any
-  const title = t(titleKey)
-  return `
-    <div class="mb-2">
-      <div class="overflow-hidden rounded-lg border border-[var(--color-memory-border)] bg-[var(--color-memory-surface)]">
-        <div class="flex w-full items-center gap-2 px-3 py-2 text-left">
-          <span class="material-symbols-outlined text-[14px] text-[var(--color-text-tertiary)]">chevron_right</span>
-          <span class="material-symbols-outlined text-[14px] text-[var(--color-memory-accent)]">target</span>
-          <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--color-text-primary)]">${title}</span>
-        </div>
-        ${message.objective ? `<div class="border-t border-[var(--color-border)]/55 px-3 py-2.5 line-clamp-2 rounded-md px-2 py-1 text-[12px] leading-5 text-[var(--color-text-secondary)]">${t('chat.goalEvent.objective', { value: message.objective })}</div>` : ''}
-        ${message.message ? `<div class="border-t border-[var(--color-border)]/55 px-3 py-2.5 whitespace-pre-wrap rounded-md px-2 py-1 text-[12px] leading-5 text-[var(--color-text-secondary)]">${message.message}</div>` : ''}
-      </div>
-    </div>
-  `
-}
-
-// ─── Background Task Event ───────────────────────────────────
-function formatBackgroundTaskDuration(durationMs?: number): string {
-  if (typeof durationMs !== 'number' || durationMs < 0) return ''
-  const seconds = Math.round(durationMs / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  return `${minutes}m ${seconds % 60}s`
-}
-
-function getBackgroundTaskLabel(taskType: string | undefined): string {
-  if (taskType === 'local_bash') return t('chat.backgroundTasks.command')
-  if (taskType === 'local_workflow') return t('chat.backgroundTasks.workflow')
-  return t('chat.backgroundTasks.task')
-}
-
-function isAgentBackgroundTaskMessage(message: any): boolean {
-  if (message.type !== 'background_task') return false
-  if (message.task.taskType === 'local_agent' || message.task.taskType === 'remote_agent') return true
-  return /^Agent (?:(?:"[^"]+" )?(completed|was stopped)|(?:"[^"]+" )?failed(?::|$))/.test(message.task.summary ?? '')
-}
-
-// ─── Memory Event Card ───────────────────────────────────────
-function renderMemoryEvent(message: any) {
-  const files = message.files.slice(0, 3)
-  const hiddenCount = Math.max(0, message.files.length - files.length)
-  return `
-    <div class="mb-3 flex justify-center px-3">
-      <div class="w-full max-w-2xl rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3.5 py-3 text-xs shadow-sm">
-        <div class="flex items-start gap-3">
-          <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-brand)]">
-            <span class="material-symbols-outlined text-[16px]">bookmark</span>
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="font-medium text-[var(--color-text-primary)]">${t('chat.memorySavedTitle', { count: message.files.length })}</div>
-            ${message.message ? `<div class="mt-1 text-[var(--color-text-tertiary)]">${message.message}</div>` : ''}
-            <div class="mt-2 flex flex-wrap gap-1.5">
-              ${files.map((f: any) => `<span class="max-w-full truncate rounded-sm border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-secondary)]" title="${f.path}">${f.path.split('/').pop() || f.path}</span>`).join('')}
-              ${hiddenCount > 0 ? `<span class="rounded-sm border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-tertiary)]">${t('chat.memoryMoreFiles', { count: hiddenCount })}</span>` : ''}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `
-}
-
-// ─── Scroll Management ───────────────────────────────────────
-function scrollToBottom() {
-  if (!scrollRef.value) return
-  scrollRef.value.scrollTop = scrollRef.value.scrollHeight
-  showJumpToLatest.value = false
-}
-
-function onScroll() {
-  if (!scrollRef.value) return
-  const { scrollTop, scrollHeight, clientHeight } = scrollRef.value
-  isAtBottom.value = scrollHeight - scrollTop - clientHeight < 50
-  showJumpToLatest.value = !isAtBottom.value
-}
-
-watch(messages, () => {
-  if (isAtBottom.value || chatState.value === 'busy' || chatState.value === 'streaming' || chatState.value === 'tool_executing') {
-    nextTick(scrollToBottom)
+watch(
+  [() => streamingText.value, () => streamingToolInput.value],
+  () => {
+    if (shouldAutoScrollRef.value) {
+      nextTick(() => scrollToBottom('smooth'))
+    }
   }
-}, { deep: true })
+)
 
-watch([streamingText, streamingToolInput], () => {
-  if (isAtBottom.value) {
-    nextTick(scrollToBottom)
+watch(
+  () => chatState.value,
+  (newState) => {
+    if (newState === 'idle') {
+      nextTick(() => scrollToBottom('auto'))
+    }
   }
-}, { deep: true })
+)
 
-onMounted(() => nextTick(scrollToBottom))
-
-function handleStop() {
-  if (activeTabId.value) chatStore.stopGeneration(activeTabId.value)
+// ─── Stop generation ──────────────────────────────────────────
+const handleStop = () => {
+  if (activeTabId.value) {
+    chatStore.stopGeneration(activeTabId.value)
+  }
 }
 
-// ─── Render message block ────────────────────────────────────
-function renderMessageBlock(msg: any) {
-  switch (msg.type) {
-    case 'user_text':
-      return `<UserMessage :message="${JSON.stringify(msg).replace(/"/g, '&quot;')}" :compact="compact" />`
-    case 'assistant_text':
-      return `<AssistantMessage :message="${JSON.stringify(msg).replace(/"/g, '&quot;')}" :compact="compact" />`
-    case 'thinking':
-      return `<ThinkingBlock :message="${JSON.stringify(msg).replace(/"/g, '&quot;')}" />`
-    case 'tool_use':
-      if (msg.toolName === 'AskUserQuestion') {
-        return `<AskUserQuestion :question="${JSON.stringify(msg.input || {}).replace(/"/g, '&quot;')}" :session-id="${activeTabId.value || ''}" />`
+// ─── Selection menu ───────────────────────────────────────────
+const SelectionMenu = defineComponent({
+  name: 'SelectionMenu',
+  props: {
+    selection: { type: Object as PropType<ChatSelectionState | null>, required: true },
+    i18nT: { type: Function as PropType<(key: string) => string>, required: true },
+  },
+  emits: ['add'],
+  setup() {},
+  template: `
+    <button
+      v-if="selection"
+      type="button"
+      class="fixed z-50 inline-flex h-11 items-center gap-2 rounded-full border border-[var(--color-border)]/70 bg-[var(--color-surface-container-lowest)] px-5 text-[15px] font-semibold text-[var(--color-text-primary)] shadow-[0_10px_28px_rgba(15,23,42,0.14),0_2px_8px_rgba(15,23,42,0.08)] transition-colors hover:bg-[var(--color-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35"
+      :style="{ left: selection.x + 'px', top: selection.y + 'px' }"
+      @mousedown.prevent="true"
+      @click="$emit('add')"
+    >
+      <span class="material-symbols-outlined shrink-0 text-[var(--color-text-primary)]" style="font-size: 21px; fontVariationSettings: 'FILL' 1">chat</span>
+      <span>{{ i18nT('chat.addSelectionToChat') }}</span>
+    </button>
+  `,
+})
+
+// ─── Compact Status Divider ───────────────────────────────────
+const CompactStatusDivider = defineComponent({
+  props: {
+    message: { type: Object as PropType<any>, default: undefined },
+    state: { type: String as PropType<'compacting' | 'complete'>, required: true },
+  },
+  setup(props) {
+    const expanded = ref(false)
+    const hasSummary = computed(() => Boolean(props.message?.summary?.trim()))
+    const meta = computed(() => {
+      const items: string[] = []
+      if (props.message?.trigger) {
+        items.push(t(`chat.compactSummary.trigger.${props.message.trigger}`))
       }
-      return `<ToolCallBlock :message="${JSON.stringify(msg).replace(/"/g, '&quot;')}" :compact="compact" />`
-    case 'tool_result':
-      return `<ToolResultBlock :message="${JSON.stringify(msg).replace(/"/g, '&quot;')}" :compact="compact" />`
-    case 'goal_event':
-      return renderGoalEvent(msg)
-    case 'memory_event':
-      return renderMemoryEvent(msg)
-    case 'background_task':
-      const task = msg.task || {}
-      const isRunning = task.status === 'running'
-      const isFailed = task.status === 'failed'
-      const isStopped = task.status === 'stopped'
-      const duration = formatBackgroundTaskDuration(task.usage?.durationMs)
-      const detail = task.summary || task.lastToolName || task.description || task.outputFile || task.taskId || ''
-      const label = getBackgroundTaskLabel(task.taskType)
-      return `
-        <div class="mb-2">
-          <div class="flex min-w-0 items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3 py-2">
-            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
-              <span class="material-symbols-outlined text-[16px] ${isRunning ? 'text-[var(--color-accent)]' : isFailed ? 'text-[var(--color-error)]' : isStopped ? 'text-[var(--color-text-tertiary)]' : 'text-[var(--color-success)]'}">${isRunning ? 'pending' : isFailed ? 'close' : isStopped ? 'stop' : 'check_circle'}</span>
-            </span>
-            <div class="min-w-0 flex-1">
-              <div class="flex min-w-0 items-center gap-2">
-                <span class="material-symbols-outlined text-[14px] text-[var(--color-text-tertiary)]">bot</span>
-                <span class="shrink-0 text-[12px] font-medium text-[var(--color-text-primary)]">${label}</span>
-                <span class="shrink-0 text-[11px] text-[var(--color-text-tertiary)]">${t(`chat.backgroundAgents.status.${task.status}`)}</span>
-                ${duration ? `<span class="hidden shrink-0 text-[11px] text-[var(--color-text-tertiary)] sm:inline">${duration}</span>` : ''}
-              </div>
-              <div class="mt-0.5 truncate text-[12px] leading-5 text-[var(--color-text-secondary)]">${detail}</div>
-            </div>
-          </div>
-        </div>
-      `
-    case 'error':
-      return `
-        <div class="mb-3 px-4 py-2.5 rounded-lg border border-[var(--color-error)]/20 bg-[var(--color-error-container)]/28 text-sm text-[var(--color-error)]">
-          <strong>${t('common.error')}:</strong> ${msg.message || t('common.unknownError')}
-        </div>
-      `
-    case 'task_summary':
-      return `<InlineTaskSummary :tasks="${JSON.stringify(msg.tasks || []).replace(/"/g, '&quot;')}" />`
-    case 'compact_summary':
-      return `
-        <div class="my-4 w-full px-1">
-          <div class="flex w-full items-center gap-3">
-            <div class="h-px flex-1 bg-[var(--color-border)]" aria-hidden="true"></div>
-            <span class="inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-[13px] font-semibold text-[var(--color-text-secondary)]">
-              <span class="material-symbols-outlined text-[16px] text-[var(--color-text-tertiary)]">file_copy</span>
-              <span class="min-w-0 truncate font-medium text-[var(--color-text-primary)]">${getCompactSummaryTitle(msg)}</span>
-            </span>
-            <div class="h-px flex-1 bg-[var(--color-border)]" aria-hidden="true"></div>
-          </div>
-        </div>
-      `
-    case 'system':
-      return `<div class="mb-3 text-center text-xs text-[var(--color-text-tertiary)]">${msg.content || ''}</div>`
-    default:
-      return `<div class="mb-2 text-xs text-[var(--color-text-tertiary)]">[Unknown: ${msg.type}]</div>`
+      if (typeof props.message?.preTokens === 'number') {
+        items.push(t('chat.compactSummary.tokens', { count: String(props.message.preTokens) }))
+      }
+      if (typeof props.message?.messagesSummarized === 'number') {
+        items.push(t('chat.compactSummary.messages', { count: String(props.message.messagesSummarized) }))
+      }
+      return items
+    })
+    const hasDetails = computed(() => hasSummary.value || meta.value.length > 0)
+    const title = computed(() => {
+      if (props.state === 'compacting') return t('chat.compactSummary.compacting')
+      if (props.message) return getCompactSummaryTitle(props.message, t)
+      return t('chat.compactSummary.title')
+    })
+
+    return () => {
+      return h('section', {
+        'data-testid': 'compact-status-divider',
+        class: 'my-4 w-full px-1',
+      }, [
+        h('div', { class: 'flex w-full items-center gap-3' }, [
+          h('div', { class: 'h-px flex-1 bg-[var(--color-border)]', 'aria-hidden': 'true' }),
+          h('button', {
+            type: 'button',
+            'aria-expanded': hasDetails.value ? expanded.value : undefined,
+            onClick: () => hasDetails.value && (expanded.value = !expanded.value),
+            disabled: !hasDetails.value,
+            class: 'group inline-flex min-h-8 max-w-[min(78vw,520px)] items-center gap-2 rounded-md px-2.5 py-1 text-[13px] font-semibold text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-default disabled:hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/30',
+          }, [
+            props.state === 'compacting'
+              ? h('span', { class: 'material-symbols-outlined shrink-0 animate-spin text-[var(--color-text-tertiary)]', style: { fontSize: '16px' } }, 'pending')
+              : h('span', { class: 'material-symbols-outlined shrink-0 text-[var(--color-text-tertiary)]', style: { fontSize: '16px' } }, 'layers'),
+            h('span', { class: 'min-w-0 truncate font-medium text-[var(--color-text-primary)]' }, title.value),
+          ]),
+          h('div', { class: 'h-px flex-1 bg-[var(--color-border)]', 'aria-hidden': 'true' }),
+        ]),
+        hasDetails.value && expanded.value ? h('div', {
+          class: 'mx-auto mt-1.5 w-full max-w-[620px] rounded-md border border-[var(--color-border)]/65 bg-[var(--color-surface-container-lowest)] px-3 py-2',
+        }, [
+          meta.value.length > 0 ? h('div', { class: 'mb-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-medium text-[var(--color-text-tertiary)]' }, meta.value.map(item => h('span', {}, item))) : null,
+          props.message?.summary ? h('div', {
+            class: 'max-h-[220px] overflow-auto whitespace-pre-wrap break-words text-[12px] leading-5 text-[var(--color-text-secondary)]',
+          }, props.message.summary) : null,
+        ]) : null,
+      ])
+    }
+  },
+})
+
+// ─── Goal Event Card ──────────────────────────────────────────
+const GoalEventCard = defineComponent({
+  props: {
+    message: { type: Object as PropType<any>, required: true },
+  },
+  setup(props) {
+    const expanded = ref(true)
+    const titleKey = computed(() => {
+      const key = `chat.goalEvent.${props.message.action === 'status' ? 'statusTitle' : props.message.action}`
+      const translated = t(key)
+      return translated === key ? 'chat.goalEvent.message' : key
+    })
+
+    const metaDetails = computed(() => {
+      const items: string[] = []
+      if (props.message.status) items.push(t('chat.goalEvent.statusValue', { value: props.message.status }))
+      if (props.message.budget) items.push(t('chat.goalEvent.budget', { value: props.message.budget }))
+      if (props.message.continuations) items.push(t('chat.goalEvent.continuations', { value: props.message.continuations }))
+      return items
+    })
+
+    return () => {
+      return h('div', { class: 'mb-2' }, [
+        h('div', {
+          'data-testid': 'goal-event-card',
+          class: 'overflow-hidden rounded-lg border border-[var(--color-memory-border)] bg-[var(--color-memory-surface)]',
+        }, [
+          h('button', {
+            type: 'button',
+            onClick: () => { expanded.value = !expanded.value },
+            class: 'flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--color-surface-hover)]/50',
+          }, [
+            h('span', { class: 'material-symbols-outlined shrink-0 text-[var(--color-text-tertiary)]', style: { fontSize: '15px' } }, expanded.value ? 'expand_less' : 'chevron_right'),
+            h('span', { class: 'material-symbols-outlined shrink-0 text-[var(--color-memory-accent)]', style: { fontSize: '15px' } }, 'track_changes'),
+            h('span', { class: 'min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--color-text-primary)]' }, t(titleKey.value)),
+            props.message.status ? h('span', { class: 'inline-flex shrink-0 items-center gap-1 text-[12px] text-[var(--color-text-tertiary)]' }, [
+              h('span', { class: 'h-1.5 w-1.5 rounded-full bg-[var(--color-memory-accent)]', 'aria-hidden': 'true' }),
+              props.message.status,
+            ]) : null,
+          ]),
+          expanded.value ? h('div', { class: 'border-t border-[var(--color-border)]/55 px-3 py-2.5' }, [
+            h('div', { class: 'space-y-1.5' }, [
+              props.message.objective ? h('div', {
+                class: 'line-clamp-2 rounded-md px-2 py-1 text-[12px] leading-5 text-[var(--color-text-secondary)]',
+              }, t('chat.goalEvent.objective', { value: props.message.objective })) :
+              props.message.message ? h('div', {
+                class: 'whitespace-pre-wrap rounded-md px-2 py-1 text-[12px] leading-5 text-[var(--color-text-secondary)]',
+              }, props.message.message) : null,
+              metaDetails.value.length > 0 ? h('div', { class: 'flex flex-wrap items-center gap-1.5 px-2 pt-0.5' },
+                metaDetails.value.map(detail => h('span', {
+                  key: detail,
+                  class: 'rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-text-secondary)]',
+                }, detail))
+              ) : null,
+            ])
+          ]) : null,
+        ])
+      ])
+    }
+  },
+})
+
+// ─── Background Task Event ────────────────────────────────────
+const BackgroundTaskEventCard = defineComponent({
+  props: {
+    message: { type: Object as PropType<any>, required: true },
+  },
+  setup(props) {
+    const task = computed(() => props.message.task)
+    const isRunning = computed(() => task.value.status === 'running')
+    const isFailed = computed(() => task.value.status === 'failed')
+    const isStopped = computed(() => task.value.status === 'stopped')
+    const duration = computed(() => formatBackgroundTaskDuration(task.value.usage?.durationMs))
+    const detail = computed(() => task.value.summary || task.value.lastToolName || task.value.description || task.value.outputFile || task.value.taskId || '')
+    const label = computed(() => getBackgroundTaskLabel(task.value.taskType, t))
+
+    return () => {
+      return h('div', { class: 'mb-2' }, [
+        h('div', {
+          'data-testid': 'background-task-event-card',
+          'data-status': task.value.status,
+          class: 'flex min-w-0 items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3 py-2',
+        }, [
+          h('span', { class: 'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center' }, [
+            h('span', {
+              class: 'material-symbols-outlined',
+              style: {
+                fontSize: '15px',
+                color: isRunning.value ? 'var(--color-accent)' : isFailed.value ? 'var(--color-error)' : isStopped.value ? 'var(--color-text-tertiary)' : 'var(--color-success)',
+              },
+            }, isRunning.value ? 'pending' : isFailed.value ? 'close' : isStopped.value ? 'stop' : 'check_circle'),
+          ]),
+          h('div', { class: 'min-w-0 flex-1' }, [
+            h('div', { class: 'flex min-w-0 items-center gap-2' }, [
+              h('span', { class: 'material-symbols-outlined shrink-0 text-[var(--color-text-tertiary)]', style: { fontSize: '14px' } }, 'bot'),
+              h('span', { class: 'shrink-0 text-[12px] font-medium text-[var(--color-text-primary)]' }, label.value),
+              h('span', { class: 'shrink-0 text-[11px] text-[var(--color-text-tertiary)]' }, t(`chat.backgroundAgents.status.${task.value.status}`)),
+              task.value.usage?.totalTokens ? h('span', { class: 'hidden shrink-0 text-[11px] text-[var(--color-text-tertiary)] sm:inline' }, t('chat.backgroundAgents.tokens', { count: task.value.usage.totalTokens })) : null,
+              duration.value ? h('span', { class: 'hidden shrink-0 text-[11px] text-[var(--color-text-tertiary)] sm:inline' }, duration.value) : null,
+            ]),
+            h('div', { class: 'mt-0.5 truncate text-[12px] leading-5 text-[var(--color-text-secondary)]' }, detail.value),
+          ]),
+        ])
+      ])
+    }
+  },
+})
+
+// ─── Memory Event Card ────────────────────────────────────────
+const MemoryEventCard = defineComponent({
+  props: {
+    message: { type: Object as PropType<any>, required: true },
+  },
+  setup(props) {
+    const visibleFiles = computed(() => props.message.files.slice(0, 3))
+    const hiddenCount = computed(() => Math.max(0, props.message.files.length - visibleFiles.value.length))
+
+    const openMemorySettings = () => {
+      if (props.message.files[0]?.path) {
+        uiStore.setPendingMemoryPath(props.message.files[0].path)
+      }
+      uiStore.setPendingSettingsTab('memory')
+      tabStore.openTab('settings', 'Settings', 'settings')
+    }
+
+    return () => {
+      return h('div', { class: 'mb-3 flex justify-center px-3' }, [
+        h('div', {
+          class: 'w-full max-w-2xl rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3.5 py-3 text-xs shadow-sm',
+        }, [
+          h('div', { class: 'flex items-start gap-3' }, [
+            h('div', {
+              class: 'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-brand)]',
+            }, [
+              h('span', { class: 'material-symbols-outlined', style: { fontSize: '15px' } }, 'bookmark_added'),
+            ]),
+            h('div', { class: 'min-w-0 flex-1' }, [
+              h('div', { class: 'flex flex-wrap items-center justify-between gap-2' }, [
+                h('div', { class: 'font-medium text-[var(--color-text-primary)]' }, t('chat.memorySavedTitle', { count: props.message.files.length })),
+                h('button', {
+                  type: 'button',
+                  onClick: openMemorySettings,
+                  class: 'inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[11px] font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-brand)]/50 hover:text-[var(--color-text-primary)]',
+                }, [
+                  h('span', { class: 'material-symbols-outlined', style: { fontSize: '13px' } }, 'settings'),
+                  t('chat.memoryOpenSettings'),
+                ]),
+              ]),
+              props.message.message ? h('div', { class: 'mt-1 text-[var(--color-text-tertiary)]' }, props.message.message) : null,
+              h('div', { class: 'mt-2 flex flex-wrap gap-1.5' }, [
+                visibleFiles.value.map((file: any) =>
+                  h('span', {
+                    key: file.path,
+                    title: file.path,
+                    class: 'max-w-full truncate rounded-sm border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-secondary)]',
+                  }, memoryFileLabel(file.path))
+                ),
+                hiddenCount.value > 0 ? h('span', {
+                  class: 'rounded-sm border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-tertiary)]',
+                }, t('chat.memoryMoreFiles', { count: hiddenCount.value })) : null,
+              ]),
+            ]),
+          ]),
+        ]),
+      ])
+    }
+  },
+})
+
+// ─── Measured Render Item ─────────────────────────────────────
+const MeasuredRenderItem = defineComponent({
+  props: {
+    itemKey: { type: String, required: true },
+  },
+  setup(props, { slots }) {
+    const itemRef = ref<HTMLElement | null>(null)
+
+    onMounted(() => {
+      if (typeof ResizeObserver !== 'undefined' && itemRef.value) {
+        const observer = new ResizeObserver((entries) => {
+          const entry = entries[0]
+          if (entry && Number.isFinite(entry.contentRect.height) && entry.contentRect.height > 0) {
+            handleVirtualItemHeightChange(props.itemKey, Math.ceil(entry.contentRect.height))
+          }
+        })
+        observer.observe(itemRef.value)
+      }
+    })
+
+    return () => {
+      return h('div', {
+        ref: itemRef,
+        'data-virtual-message-item': props.itemKey,
+        class: CHAT_RENDER_ITEM_CLASS,
+      }, slots.default?.())
+    }
+  },
+})
+
+// ─── Virtual Spacer ───────────────────────────────────────────
+const VirtualSpacer = defineComponent({
+  props: {
+    height: { type: Number, required: true },
+    position: { type: String as PropType<'top' | 'bottom'>, required: true },
+  },
+  setup(props) {
+    if (props.height <= 0) return () => null
+    if (props.height <= VIRTUAL_SPACER_CHUNK_PX) {
+      return () => h('div', {
+        'data-virtual-spacer': props.position,
+        'aria-hidden': 'true',
+        style: { height: props.height + 'px' },
+      })
+    }
+
+    const chunkCount = Math.max(1, Math.ceil(props.height / VIRTUAL_SPACER_CHUNK_PX))
+    const chunkHeight = Math.floor(props.height / chunkCount)
+    const remainder = props.height - chunkHeight * chunkCount
+
+    const chunks = []
+    for (let i = 0; i < chunkCount; i++) {
+      const px = i === chunkCount - 1 ? chunkHeight + remainder : chunkHeight
+      chunks.push(h('div', {
+        key: `${props.position}-${i}`,
+        'data-virtual-spacer-chunk': props.position,
+        style: {
+          height: px + 'px',
+          contentVisibility: 'auto',
+          containIntrinsicSize: `0 ${px}px`,
+        },
+      }))
+    }
+
+    return () => h('div', { 'data-virtual-spacer': props.position, 'aria-hidden': 'true' }, chunks)
+  },
+})
+
+// ─── Render item content ──────────────────────────────────────
+function renderItemContent(item: RenderItem) {
+  if (item.kind === 'tool_group') {
+    return h(ToolCallGroup, {
+      toolCalls: item.toolCalls,
+      toolResultMap: toolResultMap.value,
+      childToolCallsByParent: childToolCallsByParent.value,
+    })
   }
+
+  const msg = item.message
+
+  // AskUserQuestion
+  if (msg.type === 'tool_use' && msg.toolName === 'AskUserQuestion') {
+    return h(AskUserQuestion, {
+      question: msg.input || {},
+      sessionId: activeTabId.value || '',
+    })
+  }
+
+  // Message types
+  if (msg.type === 'user_text') {
+    return h(UserMessage, { message: msg, compact: props.compact })
+  }
+  if (msg.type === 'assistant_text') {
+    return h(AssistantMessage, { message: msg, compact: props.compact })
+  }
+  if (msg.type === 'thinking') {
+    return h(ThinkingBlock, { message: msg })
+  }
+  if (msg.type === 'tool_use') {
+    return h(ToolCallBlock, { message: msg, compact: props.compact })
+  }
+  if (msg.type === 'tool_result') {
+    return h(ToolResultBlock, { message: msg, compact: props.compact })
+  }
+  if (msg.type === 'goal_event') {
+    return h(GoalEventCard, { message: msg })
+  }
+  if (msg.type === 'memory_event') {
+    return h(MemoryEventCard, { message: msg })
+  }
+  if (msg.type === 'background_task') {
+    return h(BackgroundTaskEventCard, { message: msg })
+  }
+  if (msg.type === 'error') {
+    return h('div', {
+      class: 'mb-3 px-4 py-2.5 rounded-lg border border-[var(--color-error)]/20 bg-[var(--color-error-container)]/28 text-sm text-[var(--color-error)]',
+    }, `${t('common.error')}: ${msg.message || t('common.unknownError')}`)
+  }
+  if (msg.type === 'task_summary') {
+    return h(InlineTaskSummary, { tasks: msg.tasks || [] })
+  }
+  if (msg.type === 'compact_summary') {
+    const state = msg.phase === 'compacting' ? 'compacting' : 'complete'
+    return h(CompactStatusDivider, { message: msg, state })
+  }
+  if (msg.type === 'system') {
+    return h('div', { class: 'mb-3 text-center text-xs text-[var(--color-text-tertiary)]' }, msg.content || '')
+  }
+
+  return h('div', { class: 'mb-2 text-xs text-[var(--color-text-tertiary)]' }, `[Unknown: ${msg.type}]`)
 }
+
+// ─── Main render (auto-exposed to template via script setup) ──
+// All `const` declarations above are automatically available in the template.
 </script>
 
 <template>
   <div class="relative min-h-0 flex-1">
+    <!-- Scroll container -->
     <div
-      ref="scrollRef"
+      ref="scrollContainerRef"
+      :class="CHAT_SCROLL_AREA_CLASS"
       class="h-full overflow-y-auto px-4 py-4 space-y-3"
-      @scroll="onScroll"
+      @scroll="handleScroll"
+      @wheel="handleWheel"
     >
       <!-- Empty state -->
-      <div v-if="messages.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
+      <div
+        v-if="messages.length === 0"
+        class="flex flex-col items-center justify-center py-12 text-center"
+      >
         <div class="p-4 rounded-2xl bg-[var(--color-surface-container)] mb-4">
-          <span class="material-symbols-outlined text-[var(--color-text-tertiary)] text-4xl">chat</span>
+          <span class="material-symbols-outlined text-[var(--color-text-tertiary)]" style="font-size: 48px; fontVariationSettings: 'FILL' 1">
+            chat
+          </span>
         </div>
         <p class="text-sm text-[var(--color-text-secondary)] mb-1">{{ t('chat.emptyNoMessages') }}</p>
         <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('chat.emptyStartConversation') }}</p>
       </div>
 
-      <!-- Messages -->
-      <template v-for="msg in messages" :key="msg.id">
-        <div v-html="renderMessageBlock(msg)"></div>
-      </template>
+      <!-- Messages list -->
+      <div v-else ref="scrollContentRef" class="space-y-3">
+        <template
+          v-for="(renderedItem, index) in virtualTranscriptWindow.items"
+          :key="itemKeys[renderedItem.index]"
+        >
+          <!-- Turn change cards for this render item -->
+          <template
+            v-for="card in (turnChangeCardsByIndex.get(renderedItem.index) || [])"
+            :key="card.target.messageId"
+          >
+            <CurrentTurnChangeCard :card="card" />
+          </template>
 
-      <!-- Streaming text -->
-      <AssistantMessage
-        v-if="streamingText.trim()"
-        :message="{ type: 'assistant_text', content: streamingText, id: 'streaming' }"
-        :compact="compact"
-      />
+          <!-- Render item with height measurement -->
+          <MeasuredRenderItem :item-key="itemKeys[renderedItem.index]">
+            <component :is="renderItemContent(renderedItem.item)" />
+          </MeasuredRenderItem>
+        </template>
 
-      <!-- Compacting divider -->
-      <div
-        v-if="chatState === 'compacting' && !hasCompactingDivider"
-        class="my-4 w-full px-1"
-      >
-        <div class="flex w-full items-center gap-3">
-          <div class="h-px flex-1 bg-[var(--color-border)]"></div>
-          <span class="inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-[13px] font-semibold text-[var(--color-text-secondary)]">
-            <span class="material-symbols-outlined text-[16px] text-[var(--color-text-tertiary)] animate-spin">pending</span>
-            <span class="text-[var(--color-text-primary)]">{{ t('chat.compactSummary.compacting') }}</span>
-          </span>
-          <div class="h-px flex-1 bg-[var(--color-border)]"></div>
-        </div>
+        <!-- Compact status dividers -->
+        <template
+          v-for="(msg, idx) in messages"
+          :key="`compact-${msg.id}-${idx}`"
+        >
+          <CompactStatusDivider
+            v-if="msg.type === 'compact_summary' && msg.phase === 'compacting'"
+            :message="msg"
+            state="compacting"
+          />
+        </template>
+
+        <!-- Streaming text -->
+        <AssistantMessage
+          v-if="streamingText.trim()"
+          :message="{ type: 'assistant_text', content: streamingText, id: 'streaming' }"
+          :compact="compact"
+        />
+
+        <!-- Streaming indicator (tool_executing or thinking with no active block) -->
+        <StreamingIndicator
+          v-if="chatState === 'tool_executing' || (chatState === 'thinking' && !activeThinkingId)"
+        />
+
+        <!-- Pending permission dialog -->
+        <PermissionDialog
+          v-if="pendingPermission"
+          :permission="pendingPermission"
+          :session-id="activeTabId || ''"
+        />
       </div>
 
-      <!-- Streaming indicator (tool_executing or thinking with no active block) -->
-      <StreamingIndicator
-        v-if="(chatState === 'tool_executing' || (chatState === 'thinking' && !activeThinkingId))"
-      />
-
-      <!-- Pending permission dialog -->
-      <PermissionDialog
-        v-if="pendingPermission"
-        :permission="pendingPermission"
-        :session-id="activeTabId || ''"
-      />
-
-      <!-- Pending clarification -->
-      <AskUserQuestion
-        v-if="pendingClarification"
-        :question="pendingClarification"
-        :session-id="activeTabId || ''"
-      />
-
-      <!-- Inline task summary -->
-      <InlineTaskSummary
-        v-if="sessionState?.activeGoal"
-        :goal="sessionState.activeGoal"
-        :session-id="activeTabId || ''"
-      />
+      <!-- Selection menu portal -->
+      <teleport to="body">
+        <SelectionMenu
+          v-if="selectionMenu"
+          :selection="selectionMenu"
+          :i18n-t="t"
+          @add="addCurrentSelectionToChat"
+        />
+      </teleport>
     </div>
 
     <!-- Jump to latest button -->
@@ -318,17 +1023,21 @@ function renderMessageBlock(msg: any) {
       :aria-label="t('chat.jumpToLatest')"
       class="absolute bottom-4 right-5 z-20 flex h-9 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-3 text-xs font-medium text-[var(--color-text-primary)] shadow-lg transition-colors hover:border-[var(--color-brand)]/50 hover:bg-[var(--color-surface-container-low)]"
     >
-      <span class="material-symbols-outlined text-[16px]" style="fontVariationSettings: 'FILL' 1">arrow_downward</span>
+      <span class="material-symbols-outlined" style="font-size: 16px; fontVariationSettings: 'FILL' 1">
+        arrow_downward
+      </span>
       <span>{{ t('chat.jumpToLatest') }}</span>
     </button>
 
     <!-- Scroll to bottom button -->
     <button
-      v-if="!isAtBottom && !showJumpToLatest"
+      v-if="!showJumpToLatest && messages.length > 0"
       @click="scrollToBottom"
       class="fixed bottom-20 right-4 p-2 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-lg hover:opacity-90 transition-opacity z-50"
     >
-      <span class="material-symbols-outlined" style="fontVariationSettings: 'FILL' 1">arrow_downward</span>
+      <span class="material-symbols-outlined" style="fontVariationSettings: 'FILL' 1">
+        arrow_downward
+      </span>
     </button>
   </div>
 </template>
