@@ -21,6 +21,7 @@ export const en = {
 
   // ─── Sidebar ──────────────────────────────────────
   'sidebar.newSession': 'New session',
+  'sidebar.workflows': 'Workflows',
   'sidebar.scheduled': 'Scheduled',
   'sidebar.terminal': 'Terminal',
   'sidebar.settings': 'Settings',

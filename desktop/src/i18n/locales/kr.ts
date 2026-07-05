@@ -23,6 +23,7 @@ export const kr: Record<TranslationKey, string> = {
 
   // ─── Sidebar ──────────────────────────────────────
   'sidebar.newSession': '새 세션',
+  'sidebar.workflows': '워크플로우',
   'sidebar.scheduled': '예약 작업',
   'sidebar.terminal': '터미널',
   'sidebar.settings': '설정',

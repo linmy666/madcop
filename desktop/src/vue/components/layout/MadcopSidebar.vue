@@ -1258,19 +1258,28 @@ const ProjectHeaderMenu = defineComponent({
   },
 })
 
-// NavItem — Phase 2 placeholder
+// NavItem — handles both SVG component icons and string material-icons
 const NavItem = defineComponent({
   props: {
     active: Boolean,
     collapsed: Boolean,
-    label: String,
-    touchFriendly: Boolean,
-    icon: Object,
+    icon: [Object, String],
   },
   emits: ['click'],
   setup(props, { emit, slots }) {
     return () => {
-      // TODO: Phase 2 — proper NavItem sub-component with hover/active states
+      let iconNode = null
+      if (props.icon) {
+        // Handle { $: h(IconComponent) } pattern from translation
+        if (typeof props.icon === 'object' && '$' in props.icon) {
+          iconNode = props.icon.$
+        }
+        // Handle plain string icon name (material-symbols-outlined)
+        else if (typeof props.icon === 'string') {
+          iconNode = h('span', { class: 'material-symbols-outlined text-[18px]' }, props.icon)
+        }
+      }
+      const labelText = slots.default?.()?.[0]?.children || slots.default?.()?.[0]?.text || ''
       return h('button', {
         type: 'button',
         onClick: () => emit('click'),
@@ -1280,13 +1289,25 @@ const NavItem = defineComponent({
             : 'sidebar-session-row--idle text-[var(--color-text-secondary)] hover:bg-[var(--color-sidebar-item-hover)] hover:text-[var(--color-text-primary)]'
         }`,
       }, [
-        h('span', { class: 'flex h-5 w-5 items-center justify-center shrink-0' }, [props.icon]),
-        h('span', { class: 'min-w-0 flex-1 truncate' }, [slots.default?.() ?? props.label]),
+        iconNode ? h('span', { class: 'flex h-5 w-5 items-center justify-center shrink-0' }, [iconNode]) : null,
+        labelText ? h('span', { class: 'min-w-0 flex-1 truncate' }, labelText) : null,
       ])
     }
   },
 })
 
+
+// ─── Computed: project menu data ────────────────────────────────────────
+const projectMenuData = computed(() => {
+  if (!projectContextMenu.value) return null
+  const project = orderedProjectGroups.value.find((g: any) => g.key === projectContextMenu.value!.key)
+  if (!project) return null
+  return {
+    project,
+    pinned: pinnedProjectKeys.value.has(project.key),
+    hidden: hiddenProjectKeys.value.has(project.key)
+  }
+})
 </script>
 
 <template>
@@ -1356,9 +1377,7 @@ const NavItem = defineComponent({
       <NavItem
         :active="false"
         :collapsed="!expanded"
-        :label="t('sidebar.newSession')"
-        :touch-friendly="isMobileComputed"
-        @click="() => {
+                        @click="() => {
           const curTabId = tabStore.activeTabId
           const curSession = curTabId ? sessionStore.sessions.find((s) => s.id === curTabId) : null
           void createSessionForWorkDir(curSession?.workDir || curSession?.projectRoot || undefined)
@@ -1371,9 +1390,7 @@ const NavItem = defineComponent({
         v-if="!isMobileComputed"
         :active="activeTabId === SCHEDULED_TAB_ID"
         :collapsed="!expanded"
-        :label="t('sidebar.scheduled')"
-        :touch-friendly="isMobileComputed"
-        @click="() => {
+                        @click="() => {
           tabStore.openTab(SCHEDULED_TAB_ID, t('sidebar.scheduled'), 'scheduled')
           closeMobileDrawer()
         }"
@@ -1386,15 +1403,13 @@ const NavItem = defineComponent({
         v-if="!isMobileComputed"
         :active="activeTabType === 'workflows'"
         :collapsed="!expanded"
-        label="工作流"
-        :touch-friendly="isMobileComputed"
         @click="() => {
           tabStore.openWorkflowsTab()
           closeMobileDrawer()
         }"
         :icon="{ $: h(GitBranchIcon) }"
       >
-        工作流
+        {{ t('sidebar.workflows') }}
       </NavItem>
       <!-- Design tool -->
       <NavItem
@@ -1402,8 +1417,7 @@ const NavItem = defineComponent({
         :active="activeTabType === 'design'"
         :collapsed="!expanded"
         label="设计工具"
-        :touch-friendly="isMobileComputed"
-        @click="() => {
+                @click="() => {
           tabStore.openDesignTab()
           closeMobileDrawer()
         }"
@@ -1792,9 +1806,7 @@ const NavItem = defineComponent({
       <NavItem
         :active="activeTabId === SETTINGS_TAB_ID"
         :collapsed="!expanded"
-        :label="t('sidebar.settings')"
-        :touch-friendly="isMobileComputed"
-        @click="() => {
+                        @click="() => {
           tabStore.openTab(SETTINGS_TAB_ID, t('sidebar.settings'), 'settings')
           closeMobileDrawer()
         }"
@@ -1827,17 +1839,7 @@ const NavItem = defineComponent({
       </button>
     </div>
 
-// ─── Computed: project menu data ────────────────────────────────────────
-const projectMenuData = computed(() => {
-  if (!projectContextMenu.value) return null
-  const project = orderedProjectGroups.value.find((g: any) => g.key === projectContextMenu.value!.key)
-  if (!project) return null
-  return {
-    project,
-    pinned: pinnedProjectKeys.value.has(project.key),
-    hidden: hiddenProjectKeys.value.has(project.key)
-  }
-})
+
 
     <!-- Project context menu -->
     <template v-if="projectMenuData">

@@ -23,6 +23,7 @@ export const zh: Record<TranslationKey, string> = {
 
   // ─── Sidebar ──────────────────────────────────────
   'sidebar.newSession': '新建会话',
+  'sidebar.workflows': '工作流',
   'sidebar.scheduled': '定时任务',
   'sidebar.terminal': '终端',
   'sidebar.settings': '设置',
