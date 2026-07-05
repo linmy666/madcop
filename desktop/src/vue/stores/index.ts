@@ -16,3 +16,5 @@ export { useUpdateStore, type UpdateStatus } from './updateStore'
 export { useOpenTargetStore } from './openTargetStore'
 export { useSkillStore, type SkillDefinition } from './skillStore'
 export { usePluginStore, type PluginDefinition } from './pluginStore'
+export { useDesignStore, type DesignSystem, type DesignEntity } from "./design"
+export { useGDDStore, type GDDRef } from "./gdd"

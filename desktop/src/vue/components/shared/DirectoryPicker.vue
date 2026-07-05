@@ -5,8 +5,8 @@
  * and web directory browser. Teleport replaces createPortal.
  */
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { sessionsApi, type RecentProject } from '../../api/sessions'
-import { filesystemApi } from '../../api/filesystem'
+import { sessionsApi, type RecentProject } from '../../../api/sessions'
+import { filesystemApi } from '../../../api/filesystem'
 import { useTranslation } from '../../i18n'
 import { getDesktopHost } from '../../lib/desktopHost'
 import MobileBottomSheet from './MobileBottomSheet.vue'

@@ -2,16 +2,16 @@
 // v3.0 — MadCop App.vue (Vue 3)
 // Vue 3 Composition API. Replaces the React App.tsx with the same
 // functionality: a top-level shell with sidebar + tab strip + main.
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import MadcopShell from './components/layout/MadcopShell.vue'
 import MadcopSidebar from './components/layout/MadcopSidebar.vue'
 import type { MadcopSection } from './components/layout/MadcopSidebar.vue'
 import MadcopTitlebar from './components/layout/MadcopTitlebar.vue'
 import MadcopTabstrip from './components/layout/MadcopTabstrip.vue'
-import type { MadcopTab } from './components/layout/MadcopTabstrip.vue'
 import MadcopStatusbar from './components/layout/MadcopStatusbar.vue'
 import { useAppearance, type Appearance } from './composables/useAppearance'
 import { useTabs } from './stores/tabs'
+import { isDesktopRuntime, initializeDesktopServerUrl } from '../lib/desktopRuntime'
 
 const section = ref<MadcopSection>('chat')
 const { appearance, setAppearance } = useAppearance()
@@ -24,6 +24,17 @@ const activeTab = computed(() =>
 const showEmpty = computed(() => !activeTab.value)
 const showChat = computed(() => section.value === 'chat' && activeTab.value?.kind === 'chat')
 const showDesign = computed(() => section.value === 'design' && activeTab.value?.kind === 'design')
+
+// ── Bootstrap: H5 proxy init + settings load ──────────────────────────────────
+onMounted(async () => {
+  if (isDesktopRuntime) {
+    try {
+      await initializeDesktopServerUrl()
+    } catch (err) {
+      console.warn('[AppShell] H5 proxy init failed:', err)
+    }
+  }
+})
 
 function onSection(s: MadcopSection) {
   section.value = s
@@ -41,7 +52,6 @@ function onCommand(cmd: string) {
   } else if (cmd === 'settings:open') {
     section.value = 'settings'
   } else {
-    // Treat as a chat prompt
     tabsStore.open({ kind: 'chat', title: cmd.slice(0, 16), dirty: true })
   }
 }
@@ -83,8 +93,6 @@ function onCommand(cmd: string) {
 </template>
 
 <script lang="ts">
-// Import the page-level components in a second <script> block so the
-// imports are not duplicated by the Composition API script block.
 import { defineAsyncComponent } from 'vue'
 const DesignPage = defineAsyncComponent(() => import('./pages/DesignPage.vue'))
 const EmptyPage = defineAsyncComponent(() => import('./pages/EmptyPage.vue'))

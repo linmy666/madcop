@@ -55,5 +55,8 @@ export const useAgentStore = defineStore('agent', {
       this.selectedAgent = agent
       this.selectedAgentReturnTab = agent ? returnTab : 'agents'
     },
+    getState() {
+      return { allAgents: this.allAgents, activeAgents: this.activeAgents }
+    },
   },
 })

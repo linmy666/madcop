@@ -8,7 +8,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import DOMPurify from 'dompurify'
 import mermaid from 'mermaid'
-import { useUIStore } from '../stores'
+import { useUIStore } from '../../stores'
 
 // ── Props ────────────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -728,9 +728,7 @@ defineExpose({
   svg,
   error,
 })
-</script>
 
-<script lang="ts">
 // ── Proper Vue watches (code/theme re-render + preview sync) ─────────────────
 import { watch as vueWatch } from 'vue'
 
@@ -787,8 +785,7 @@ onBeforeUnmount(() => {
   }
   cleanupPreviewFitObserver()
 })
-
-<template>
+</script><template>
   <!-- Error state -->
   <div
     v-if="error"

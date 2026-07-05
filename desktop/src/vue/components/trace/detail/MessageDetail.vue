@@ -1,29 +1,72 @@
 <script setup lang="ts">
-// v3.0 — MessageDetail (trace detail, Vue 3)
-// Direct translation — same Section usage, same JSON viewer.
+/**
+ * MessageDetail — Vue 3 port of components/trace/detail/MessageDetail.tsx
+ * Renders a trace message span: content blocks + raw JSON.
+ * Prop-driven: parent passes a TraceSpan with .message.
+ */
 import { computed } from 'vue'
+import { useTranslation } from '../../../i18n'
+import type { TraceSpan } from '../../../lib/traceViewModel'
+import { formatTraceJson } from '../../../lib/traceViewModel'
+import type { NormalizedBlock, NormalizedMessage } from '../../../lib/trace/types'
+import { normalizeContentBlock } from '../../../lib/trace/sse'
+import CodeViewer from '../../components/chat/CodeViewer.vue'
 import Section from './Section.vue'
+import MessageBlocks from '../../trace/detail/MessageBlocks.vue'
 
 const props = defineProps<{
-  content?: string
-  rawJson?: string
+  span: TraceSpan
 }>()
 
-const hasContent = computed(() => Boolean(props.content && props.content.trim()))
+const t = useTranslation()
+
+// ── useMemo equivalent: normalizeMessageEntry ─────────────────────────
+// Caches the normalized message (same dependency as React useMemo)
+const normalized = computed(() => {
+  const message = props.span.message
+  if (!message) return null
+  return normalizeMessageEntry(message)
+})
+
+const message = computed(() => props.span.message)
+
+function normalizeMessageEntry(msg: TraceSpan['message']): NormalizedMessage | null {
+  if (!msg) return null
+  const role: NormalizedMessage['role'] =
+    msg.type === 'assistant' || msg.type === 'tool_use'
+      ? 'assistant'
+      : msg.type === 'system'
+        ? 'system'
+        : msg.type === 'tool_result'
+          ? 'tool'
+          : 'user'
+  const content = msg.content
+  if (typeof content === 'string') {
+    return { role, content: [{ type: 'text', text: content }] }
+  }
+  if (Array.isArray(content)) {
+    const blocks = content
+      .map((block) => normalizeContentBlock(block))
+      .filter((block): block is NormalizedBlock => block !== null)
+    return { role, content: blocks }
+  }
+  return { role, content: [] }
+}
 </script>
 
 <template>
-  <div data-testid="trace-message-detail">
-    <Section section-key="message.content" title="内容" :default-open="true">
-      <div v-if="hasContent" class="text-sm leading-relaxed text-[var(--color-text-secondary)] whitespace-pre-wrap break-words">
-        {{ content }}
-      </div>
+  <div v-if="message && normalized" data-testid="trace-message-detail">
+    <Section section-key="message.content" :title="t('trace.section.content')" :default-open="true">
+      <MessageBlocks
+        v-if="normalized.content.length > 0"
+        :message="normalized"
+      />
       <div v-else class="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] px-3 py-3 text-xs text-[var(--color-text-tertiary)]">
-        无数据
+        {{ t('trace.noData') }}
       </div>
     </Section>
-    <Section v-if="rawJson" section-key="message.raw" title="原始 JSON">
-      <pre class="font-[var(--font-mono)] text-xs leading-relaxed text-[var(--color-text-secondary)] whitespace-pre-wrap break-words max-h-[400px] overflow-auto">{{ rawJson }}</pre>
+    <Section section-key="message.raw" :title="t('trace.section.raw')">
+      <CodeViewer :code="formatTraceJson(message.content)" language="json" :max-lines="48" show-line-numbers />
     </Section>
   </div>
 </template>

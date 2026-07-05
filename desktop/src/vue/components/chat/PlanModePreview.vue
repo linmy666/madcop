@@ -5,19 +5,18 @@ import { computed } from 'vue'
  * PlanModePreview — Vue 3 port of components/chat/PlanModePreview.tsx
  *
  * Renders a plan preview card with file path, plan content, and allowed prompts.
- * NOTE: Uses plain HTML for plan rendering — MarkdownRenderer doesn't have Vue equivalent.
- * Prop-driven: no React store imports, no lucide-react.
+ * NOTE: Uses plain HTML for plan rendering. Prop-driven: no React store imports.
  */
 
-export type AllowedPrompt = { tool: string; prompt: string }
+type AllowedPrompt = { tool: string; prompt: string }
 
-export interface PlanPreviewModel {
+interface PlanPreviewModel {
   plan: string
   filePath: string
   allowedPrompts: AllowedPrompt[]
 }
 
-export interface PlanPreviewCardProps {
+interface PlanPreviewCardProps {
   title: string
   plan: string
   filePath?: string
@@ -33,12 +32,6 @@ const props = withDefaults(defineProps<PlanPreviewCardProps>(), {
 
 const trimmedPlan = computed(() => props.plan.trim())
 const hasPermissions = computed(() => props.allowedPrompts.length > 0 && props.requestedPermissionsTitle)
-
-export const EXIT_PLAN_MODE_TOOL_NAME = 'ExitPlanMode'
-
-export function isExitPlanModeTool(toolName: string): boolean {
-  return toolName === EXIT_PLAN_MODE_TOOL_NAME
-}
 </script>
 
 <template>

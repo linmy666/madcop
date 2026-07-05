@@ -1,20 +1,21 @@
+<!--
+  v2.7.0 — WorkflowsListPage (Vue 3 SFC)
+  Full translation of src/pages/WorkflowsListPage.tsx (347 lines).
+  Shows all saved workflows + create new. Also shows mode library.
+-->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-
-/**
- * WorkflowsListPage — Vue 3 port of pages/WorkflowsListPage.tsx
- * Displays a list of saved workflows with create/edit/delete actions.
- * Props-driven: workflows passed from parent (or mock data for demo).
- */
-
-interface Workflow {
-  id: string
-  name: string
-  description: string
-  nodes: { id: string; type: string }[]
-  edges: { id: string; source: string; target: string }[]
-  version: string
-}
+import { ref, onMounted, type Ref } from 'vue'
+import {
+  listWorkflows,
+  createWorkflow,
+  deleteWorkflow,
+  runWorkflow,
+  type Workflow,
+  type NodeTypeMeta,
+} from '../../api/workflow'
+import { listNodeTypes } from '../../api/workflow'
+import { getApiUrl } from '../../api/client'
+import WorkflowEditor from '../../components/workflow/WorkflowEditor.vue'
 
 interface AgentMode {
   id: string
@@ -25,152 +26,379 @@ interface AgentMode {
   node_count: number
 }
 
-interface WorkflowsListPageProps {
-  workflows?: Workflow[]
-  modes?: AgentMode[]
-  /** If true, fetches from API (optional). Otherwise uses mock data. */
-  live?: boolean
+const workflows: Ref<Workflow[]> = ref([])
+const nodeTypes: Ref<NodeTypeMeta[]> = ref([])
+const editingId: Ref<string | null> = ref(null)
+const editingName: Ref<string> = ref('')
+const editingNodes: Ref<any[]> = ref([])
+const editingEdges: Ref<any[]> = ref([])
+const loading: Ref<boolean> = ref(true)
+const isRunning: Ref<boolean> = ref(false)
+const currentNodeId: Ref<string | null> = ref(null)
+const runResult: Ref<string | null> = ref(null)
+const modes: Ref<AgentMode[]> = ref([])
+
+const refresh = async () => {
+  loading.value = true
+  try {
+    const [list, types, modesData] = await Promise.all([
+      listWorkflows(),
+      listNodeTypes(),
+      fetch(getApiUrl('/api/workflows/modes'))
+        .then(r => r.json())
+        .then(d => d.modes || [])
+        .catch(() => []),
+    ])
+    workflows.value = list
+    nodeTypes.value = types
+    modes.value = modesData
+  } finally {
+    loading.value = false
+  }
 }
-
-const props = withDefaults(defineProps<WorkflowsListPageProps>(), {
-  workflows: () => [
-    { id: '1', name: '文档翻译流水线', description: '自动翻译文档并回写', nodes: [{ id: 'start', type: 'start' }, { id: 'llm', type: 'llm' }, { id: 'end', type: 'end' }], edges: [], version: '1.0' },
-    { id: '2', name: '代码审查助手', description: 'Pull Request 自动审查', nodes: [{ id: 'start', type: 'start' }, { id: 'llm', type: 'llm' }], edges: [], version: '1.2' },
-    { id: '3', name: '数据提取管道', description: '从网页提取结构化数据', nodes: [{ id: 'start', type: 'start' }], edges: [], version: '0.5' },
-  ],
-  modes: () => [
-    { id: 'researcher', name: '研究者模式', description: '联网搜索 + 推理整合', category: '智能体', icon: 'science', node_count: 8 },
-    { id: 'coder', name: '程序员模式', description: '代码生成 + 测试执行', category: '智能体', icon: 'code', node_count: 6 },
-    { id: 'writer', name: '写作者模式', description: '长文写作 + 编辑协作', category: '智能体', icon: 'edit_note', node_count: 5 },
-    { id: 'qa', name: '测试工程师模式', description: '用例生成 + 自动化测试', category: '智能体', icon: 'bug_report', node_count: 7 },
-  ],
-  live: false,
-})
-
-const loading = ref(true)
-const showConfirmDelete = ref(false)
-const deletingWorkflow = ref<Workflow | null>(null)
 
 onMounted(() => {
-  if (props.live) {
-    // Would fetch from API here
-  }
-  setTimeout(() => loading.value = false, 200)
+  refresh()
 })
 
-const emit = defineEmits<{
-  edit: [workflow: Workflow]
-  delete: [workflowId: string]
-  create: []
-}>()
-
-function handleDelete(wf: Workflow) {
-  deletingWorkflow.value = wf
-  showConfirmDelete.value = true
+const handleNew = async () => {
+  // v2.7.0: Always include start + end nodes; LLM node added in editor.
+  // Don't depend on nodeTypes.length — if the metadata API was
+  // slow / failed, the user can still create a workflow.
+  const wf = await createWorkflow({
+    name: '未命名工作流',
+    description: '',
+    nodes: [
+      { id: 'start-1', type: 'start', position: { x: 100, y: 200 }, data: { label: '开始' } },
+      { id: 'end-1', type: 'end', position: { x: 500, y: 200 }, data: { label: '结束' } },
+    ],
+    edges: [],
+  } as any)
+  await refresh()
+  editingId.value = (wf as any).id
+  editingName.value = (wf as any).name
+  editingNodes.value = (wf as any).nodes
+  editingEdges.value = (wf as any).edges
 }
 
-function confirmDelete() {
-  if (deletingWorkflow.value) {
-    emit('delete', deletingWorkflow.value.id)
-    showConfirmDelete.value = false
-    deletingWorkflow.value = null
+const handleEdit = (wf: Workflow) => {
+  editingId.value = wf.id
+  editingName.value = wf.name
+  editingNodes.value = wf.nodes as any[]
+  editingEdges.value = wf.edges as any[]
+}
+
+const handleDelete = async (id: string) => {
+  if (!confirm('确定删除这个工作流？')) return
+  await deleteWorkflow(id)
+  await refresh()
+}
+
+const handleSave = async (nodes: any[], edges: any[]) => {
+  if (!editingId.value) return
+  const r = await fetch(`/api/workflows/${editingId.value}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: editingName.value,
+      nodes: nodes.map((n: any) => ({
+        id: n.id,
+        type: n.type,
+        position: n.position,
+        data: n.data,
+      })),
+      edges: edges.map((e: any) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+      })),
+    }),
+  })
+  if (!r.ok) throw new Error(`Save failed: ${r.status}`)
+  await refresh()
+}
+
+const handleRun = async () => {
+  if (!editingId.value) return
+  isRunning.value = true
+  currentNodeId.value = null
+  runResult.value = null
+  try {
+    const run = await runWorkflow(editingId.value, { input: '你好' })
+    runResult.value = JSON.stringify(run, null, 2)
+  } catch (e: any) {
+    runResult.value = `Error: ${e.message}`
+  } finally {
+    isRunning.value = false
   }
+}
+
+const handleBack = async () => {
+  editingId.value = null
+  editingName.value = ''
+  editingNodes.value = []
+  editingEdges.value = []
+  runResult.value = null
+  await refresh()
 }
 </script>
 
 <template>
-  <div class="flex flex-col min-h-0 bg-[var(--color-surface)]">
-    <!-- Header -->
-    <div class="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
-      <div class="flex items-center gap-3">
-        <span class="material-symbols-outlined text-[var(--color-brand)] text-xl">flowchart</span>
-        <h1 class="text-lg font-bold text-[var(--color-text-primary)]" style="font-family: var(--font-headline)">工作流</h1>
+  <!-- Editing mode: show WorkflowEditor full-screen -->
+  <div v-if="editingId" style="width: 100%; height: 100vh">
+    <WorkflowEditor
+      :workflowId="editingId"
+      :workflowName="editingName"
+      :initialNodes="editingNodes"
+      :initialEdges="editingEdges"
+      :onSave="handleSave"
+      :onRun="handleRun"
+      :isRunning="isRunning"
+      :currentNodeId="currentNodeId"
+      :onBack="handleBack"
+    />
+    <!-- Run result floating panel (createPortal → teleport) -->
+    <Teleport to="body">
+      <div
+        v-if="runResult"
+        @click="runResult = null"
+        style="
+          position: fixed;
+          bottom: 16px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: var(--color-surface);
+          border: 1px solid var(--color-border);
+          border-radius: 8px;
+          padding: 16px;
+          max-width: 720px;
+          max-height: 240px;
+          overflow: auto;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+          font-size: 12px;
+          font-family: monospace;
+          color: var(--color-text-primary);
+          white-space: pre-wrap;
+          z-index: 50;
+        "
+      >
+        <strong>运行结果 (点击关闭):</strong>
+        <pre style="margin: 8px 0 0; font-size: 11px">{{ runResult }}</pre>
       </div>
-      <button @click="emit('create')"
-        class="flex items-center gap-2 px-4 py-2 bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] rounded-lg text-sm font-semibold shadow-sm hover:brightness-105 active:scale-95 transition-all">
-        <span class="material-symbols-outlined text-sm" style="fontVariationSettings: 'FILL' 1">add</span>
-        新建工作流
+    </Teleport>
+  </div>
+
+  <!-- List mode: workflows + mode library -->
+  <div
+    v-else
+    style="
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      color: var(--color-text-primary);
+      height: 100%;
+      overflow-y: auto;
+    "
+  >
+    <!-- Header -->
+    <div
+      style="
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 24px;
+      "
+    >
+      <h1 style="font-size: 24px; font-weight: 700; margin: 0">工作流</h1>
+      <button
+        @click="handleNew"
+        style="
+          padding: 8px 16px;
+          background: var(--color-brand);
+          color: #fff;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-weight: 600;
+          font-size: 14px;
+          opacity: nodeTypes.length === 0 ? 0.7 : 1;
+        "
+      >
+        + 新建工作流
       </button>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-6">
-      <!-- Loading -->
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <span class="material-symbols-outlined text-[var(--color-brand)] animate-spin text-2xl">progress_activity</span>
-      </div>
+    <!-- Loading state -->
+    <div v-if="loading" style="color: var(--color-text-secondary)">加载中…</div>
 
-      <!-- Empty state -->
-      <div v-else-if="props.workflows.length === 0" class="flex flex-col items-center py-12 text-center">
-        <div class="p-4 rounded-2xl bg-[var(--color-surface-container)] mb-4">
-          <span class="material-symbols-outlined text-[var(--color-text-tertiary)] text-4xl">flowchart</span>
+    <!-- Empty state -->
+    <div
+      v-else-if="workflows.length === 0"
+      style="
+        padding: 40px 20px;
+        text-align: center;
+        color: var(--color-text-secondary);
+        background: var(--color-surface-container-low);
+        border-radius: 8px;
+      "
+    >
+      还没有工作流。点"新建工作流"创建一个。
+    </div>
+
+    <!-- Workflows grid -->
+    <div
+      v-else
+      style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px"
+    >
+      <div
+        v-for="wf in workflows"
+        :key="wf.id"
+        @click="handleEdit(wf)"
+        style="
+          background: var(--color-surface);
+          border: 1px solid var(--color-border);
+          border-radius: 8px;
+          padding: 16px;
+          cursor: pointer;
+        "
+      >
+        <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px">{{ wf.name }}</div>
+        <div
+          style="font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 12px"
+        >
+          {{ wf.description || '无描述' }} · {{ wf.nodes.length }} 节点 · v{{ wf.version }}
         </div>
-        <p class="text-sm text-[var(--color-text-secondary)] mb-4">还没有工作流</p>
-        <button @click="emit('create')"
-          class="px-4 py-2 bg-[var(--color-brand)] text-[var(--color-on-brand)] rounded-lg text-sm font-semibold hover:brightness-105">
-          创建第一个工作流
-        </button>
-      </div>
-
-      <!-- Workflows grid -->
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        <div v-for="wf in props.workflows" :key="wf.id"
-          @click="emit('edit', wf)"
-          class="cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container)] p-4 hover:border-[var(--color-brand)]/50 transition-colors">
-          <div class="flex items-start justify-between mb-2">
-            <div class="w-8 h-8 rounded-lg bg-[var(--color-primary-container)] flex items-center justify-center">
-              <span class="material-symbols-outlined text-[var(--color-primary)] text-sm">flowchart</span>
-            </div>
-            <div class="flex gap-1">
-              <button @click.stop="emit('edit', wf)" class="p-1.5 hover:bg-[var(--color-surface-hover)] rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-brand)]">
-                <span class="material-symbols-outlined text-sm">edit</span>
-              </button>
-              <button @click.stop="handleDelete(wf)" class="p-1.5 hover:bg-[var(--color-surface-hover)] rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-error)]">
-                <span class="material-symbols-outlined text-sm">delete</span>
-              </button>
-            </div>
-          </div>
-          <h3 class="text-sm font-semibold text-[var(--color-text-primary)] truncate">{{ wf.name }}</h3>
-          <p class="text-[11px] text-[var(--color-text-tertiary)] mt-1 line-clamp-2">{{ wf.description || '无描述' }}</p>
-          <div class="flex items-center gap-2 mt-3 text-[10px] text-[var(--color-text-tertiary)]">
-            <span class="px-1.5 py-0.5 bg-[var(--color-surface-container-high)] rounded">{{ wf.nodes.length }} 节点</span>
-            <span>v{{ wf.version }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Agent Modes -->
-      <h2 class="text-base font-bold text-[var(--color-text-primary)] mb-3 flex items-center gap-2">
-        <span class="material-symbols-outlined text-[var(--color-tertiary)] text-lg">smart_toy</span>
-        模式库
-      </h2>
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        <div v-for="mode in props.modes" :key="mode.id"
-          class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container)] p-3 hover:border-[var(--color-brand)]/50 transition-colors cursor-pointer">
-          <div class="flex items-center gap-2 mb-1">
-            <span :class="['material-symbols-outlined text-lg', mode.icon]">{{ mode.icon || 'smart_toy' }}</span>
-            <span class="text-xs font-semibold text-[var(--color-text-primary)] truncate">{{ mode.name }}</span>
-          </div>
-          <p class="text-[10px] text-[var(--color-text-tertiary)] line-clamp-2">{{ mode.description }}</p>
-          <div class="flex items-center justify-between mt-2 text-[9px] text-[var(--color-text-tertiary)]">
-            <span class="px-1.5 py-0.5 bg-[var(--color-secondary-container)] rounded">{{ mode.category }}</span>
-            <span>{{ mode.node_count }} 节点</span>
-          </div>
+        <div style="display: flex; gap: 8px">
+          <button
+            @click.stop="handleEdit(wf)"
+            style="
+              padding: 4px 10px;
+              background: var(--color-surface-container-high);
+              border: 1px solid var(--color-border);
+              border-radius: 4px;
+              color: var(--color-text-primary);
+              cursor: pointer;
+              font-size: 12px;
+            "
+          >
+            编辑
+          </button>
+          <button
+            @click.stop="handleDelete(wf.id)"
+            style="
+              padding: 4px 10px;
+              background: transparent;
+              border: 1px solid #ef4444;
+              color: #ef4444;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 12px;
+            "
+          >
+            删除
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Delete confirm dialog (simple inline) -->
-    <Teleport to="body">
-      <div v-if="showConfirmDelete" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="fixed inset-0 bg-black/50" @click="showConfirmDelete = false" />
-        <div class="relative z-10 bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 max-w-sm mx-4 shadow-xl">
-          <p class="text-sm text-[var(--color-text-primary)] mb-4">确定删除「{{ deletingWorkflow?.name }}」吗？</p>
-          <div class="flex justify-end gap-2">
-            <button @click="showConfirmDelete = false" class="px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:underline">取消</button>
-            <button @click="confirmDelete" class="px-3 py-1.5 bg-[var(--color-error)] text-[var(--color-on-error)] rounded text-xs font-semibold">删除</button>
-          </div>
+    <!-- Mode library -->
+    <h2 style="font-size: 18px; font-weight: 700; margin: 32px 0 16px">模式库</h2>
+    <div
+      style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px"
+    >
+      <div
+        v-for="mode in modes"
+        :key="mode.id"
+        style="
+          background: var(--color-surface);
+          border: 1px solid var(--color-border);
+          border-radius: 8px;
+          padding: 14px;
+        "
+      >
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px">
+          <span
+            style="font-size: 18px; font-weight: 600; color: var(--color-brand)"
+            v-text="
+              mode.id === 'single_agent'
+                ? '1'
+                : mode.id === 'sequential'
+                  ? '→'
+                  : mode.id === 'parallel'
+                    ? '∥'
+                    : mode.id === 'loop'
+                      ? '↻'
+                      : mode.id === 'review_critique'
+                        ? '✓'
+                        : mode.id === 'iterative_refine'
+                          ? '↑'
+                          : mode.id === 'coordinator'
+                            ? '◎'
+                            : mode.id === 'hierarchical'
+                              ? '⊞'
+                              : mode.id === 'swarm'
+                                ? '∞'
+                                : mode.id === 'react'
+                                  ? '◉'
+                                  : mode.id === 'human_in_loop'
+                                    ? '◎'
+                                    : '⚙'
+            "
+          ></span>
+          <span style="font-size: 14px; font-weight: 600">{{ mode.name }}</span>
         </div>
+        <div
+          style="
+            font-size: 12px;
+            color: var(--color-text-tertiary);
+            margin-bottom: 10px;
+            line-height: 1.4;
+          "
+        >
+          {{ mode.description }}
+        </div>
+        <div
+          style="font-size: 11px; color: var(--color-text-disabled); margin-bottom: 8px"
+        >
+          {{ mode.node_count }} 节点 ·
+          {{
+            mode.category === 'basic'
+              ? '基础'
+              : mode.category === 'multi_agent'
+                ? '多 Agent'
+                : '高级'
+          }}
+        </div>
+        <button
+          @click="
+            async () => {
+              try {
+                const r = await fetch(
+                  getApiUrl(`/api/workflows/modes/${mode.id}/instantiate`),
+                  { method: 'POST' }
+                )
+                if (r.ok) {
+                  const wf = await r.json()
+                  handleEdit(wf)
+                  await refresh()
+                }
+              } catch {}
+            }
+          "
+          style="
+            padding: 4px 12px;
+            background: var(--color-brand);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+          "
+        >
+          使用此模式
+        </button>
       </div>
-    </Teleport>
+    </div>
   </div>
 </template>
