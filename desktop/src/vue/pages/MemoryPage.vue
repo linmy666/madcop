@@ -1,139 +1,241 @@
 <script setup lang="ts">
 /**
- * MemoryPage — 用户能看到 "MadCop 记住了我什么" + "可以编辑/删除"
+ * MemoryPage — user-facing view of ALL memory layers.
  *
- * 这是用户对"持续学习"的可视化界面：
- * 1. 偏好（用户对回答的反馈自动提炼出来的习惯）
- * 2. 重要事实（用户在对话中说"我习惯用 X 框架"等）
- * 3. 训练状态（如果用户开启了 LoRA，显示训练了多少次、用了多少样本）
+ * Maps to the 4 backend sections in `_build_memory_system_prompt`:
+ *   1. 用户画像   (profile facts, tagged 'user-profile')
+ *   2. 相关记忆   (relevant: episodic + semantic + scenario + insight search)
+ *   3. 用户偏好   (preferences: ReflectiveMemory)
+ *   4. 可用技能   (skills: auto-distilled)
  *
- * 设计原则:
- *  - 默认 LoRA 是关闭的（保护用户资源）
- *  - 数据完全本地，无云端
- *  - 用户可以增/删/改任何条目
+ * The other memory layers (Scenario, Insight, Episodic) are
+ * automatically indexed & retrieved under "相关记忆" — users see
+ * them as one bucket.
  */
 
 import { ref, computed, onMounted } from 'vue'
 
-// ─── State ─────────────────────────────────────────────────────────────
+// ─── Data model ────────────────────────────────────────────────────────
 
-interface MemoryEntry {
+type MemoryLayer = 'profile' | 'relevant' | 'preferences' | 'skills'
+
+interface ProfileFact {
   id: string
-  category: 'preference' | 'fact' | 'style'
   content: string
-  source: 'auto' | 'manual'  // auto = LLM 提取的, manual = 用户手填
-  confidence: number  // 0-1, 自动提取的置信度
+  source: 'auto' | 'manual'
+  confidence: number
   createdAt: string
-  usedCount: number  // 被引用过多少次
+  usedCount: number
 }
 
-interface TrainingRecord {
+interface RelevantMemory {
   id: string
-  date: string
-  samples: number
-  duration: string
-  loss: number
-  status: 'completed' | 'failed'
-  baseModel: string  // 'Qwen3-1.5B' 等
+  content: string
+  layer: 'episodic' | 'semantic' | 'scenario' | 'insight'
+  relevance: number
+  createdAt: string
+  preview: string  // first 80 chars
 }
+
+interface Preference {
+  id: string
+  text: string
+  kind: 'likes' | 'dislikes'
+  strength: number  // 0-1
+  createdAt: string
+}
+
+interface Skill {
+  id: string
+  name: string
+  description: string
+  source: 'auto-distilled' | 'user-created'
+  triggered: number
+}
+
+// ─── State ─────────────────────────────────────────────────────────────
 
 const learningEnabled = ref(false)
 const loraBaseModel = ref('Qwen3-1.5B')
-const memoryEntries = ref<MemoryEntry[]>([])
-const trainingHistory = ref<TrainingRecord[]>([])
+const profile = ref<ProfileFact[]>([])
+const relevant = ref<RelevantMemory[]>([])
+const preferences = ref<Preference[]>([])
+const skills = ref<Skill[]>([])
 const loading = ref(false)
-const newEntry = ref('')
+const activeTab = ref<MemoryLayer>('profile')
+const newProfileFact = ref('')
 
-// ─── Resource estimation ───────────────────────────────────────────────
+// ─── Sample data ──────────────────────────────────────────────────────
 
-const resourceEstimate = computed(() => {
-  // 估算训练这个用户的数据需要多少资源
-  const samples = memoryEntries.value.length
-  if (samples === 0) {
-    return { time: '—', memory: '—', disk: '—' }
-  }
-  // 经验值: 1.5B 模型 + 100 samples ≈ 25 分钟, 6GB 内存, 30MB 磁盘
-  const minutes = Math.round((samples / 100) * 25)
-  const memoryGB = 6
-  const diskMB = Math.round((samples / 100) * 30)
-  return {
-    time: minutes < 60 ? `~${minutes} 分钟` : `~${(minutes / 60).toFixed(1)} 小时`,
-    memory: `${memoryGB} GB 内存`,
-    disk: diskMB < 1024 ? `~${diskMB} MB` : `~${(diskMB / 1024).toFixed(1)} GB`,
-  }
-})
-
-// ─── Sample data (replace with API) ────────────────────────────────────
-
-const SAMPLE_ENTRIES: MemoryEntry[] = [
+const SAMPLE_PROFILE: ProfileFact[] = [
   {
-    id: 'm1',
-    category: 'preference',
-    content: '回答时不要使用 emoji',
-    source: 'auto',
-    confidence: 0.92,
-    createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    usedCount: 47,
-  },
-  {
-    id: 'm2',
-    category: 'preference',
-    content: '代码示例优先用 TypeScript 而非 JavaScript',
-    source: 'auto',
-    confidence: 0.87,
-    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    usedCount: 23,
-  },
-  {
-    id: 'm3',
-    category: 'style',
-    content: '回复要简洁，避免冗长解释',
-    source: 'auto',
-    confidence: 0.78,
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    usedCount: 31,
-  },
-  {
-    id: 'm4',
-    category: 'fact',
-    content: '我常用 FastAPI + SQLAlchemy 做后端',
+    id: 'p1',
+    content: '名字：林芮翰',
     source: 'manual',
     confidence: 1.0,
-    createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+    createdAt: new Date(Date.now() - 86400000 * 30).toISOString(),
+    usedCount: 247,
+  },
+  {
+    id: 'p2',
+    content: '工作：阿里巴巴菜鸟集团 BDSA',
+    source: 'auto',
+    confidence: 0.95,
+    createdAt: new Date(Date.now() - 86400000 * 20).toISOString(),
+    usedCount: 89,
+  },
+  {
+    id: 'p3',
+    content: '常用后端框架：FastAPI + SQLAlchemy',
+    source: 'auto',
+    confidence: 0.87,
+    createdAt: new Date(Date.now() - 86400000 * 12).toISOString(),
+    usedCount: 45,
+  },
+  {
+    id: 'p4',
+    content: '常用编辑器：PyCharm',
+    source: 'auto',
+    confidence: 0.92,
+    createdAt: new Date(Date.now() - 86400000 * 8).toISOString(),
     usedCount: 12,
   },
   {
-    id: 'm5',
-    category: 'preference',
-    content: '命名风格用驼峰，不用下划线',
-    source: 'auto',
-    confidence: 0.81,
-    createdAt: new Date(Date.now() - 86400000 * 1).toISOString(),
-    usedCount: 8,
+    id: 'p5',
+    content: '手机：13472510177',
+    source: 'manual',
+    confidence: 1.0,
+    createdAt: new Date(Date.now() - 86400000 * 60).toISOString(),
+    usedCount: 3,
   },
 ]
 
-const SAMPLE_TRAINING: TrainingRecord[] = [
+const SAMPLE_RELEVANT: RelevantMemory[] = [
   {
-    id: 't1',
-    date: new Date(Date.now() - 86400000 * 2).toISOString(),
-    samples: 120,
-    duration: '28 分钟',
-    loss: 1.42,
-    status: 'completed',
-    baseModel: 'Qwen3-1.5B',
+    id: 'r1',
+    content: '上周问了关于 Vue 3 迁移的问题，MadCop 给了 Pinia + composables 的方案',
+    layer: 'episodic',
+    relevance: 0.88,
+    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
+    preview: '上周问了关于 Vue 3 迁移的问题，MadCop 给了...',
+  },
+  {
+    id: 'r2',
+    content: 'Python 异步编程：asyncio 任务调度和 Future 概念',
+    layer: 'semantic',
+    relevance: 0.75,
+    createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
+    preview: 'Python 异步编程：asyncio 任务调度...',
+  },
+  {
+    id: 'r3',
+    content: '场景：每日盘后分析 WMS 库存告警',
+    layer: 'scenario',
+    relevance: 0.62,
+    createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+    preview: '场景：每日盘后分析 WMS 库存告警',
+  },
+  {
+    id: 'r4',
+    content: '洞察：用户偏好 FastAPI + SQLAlchemy 组合出现 12 次',
+    layer: 'insight',
+    relevance: 0.71,
+    createdAt: new Date(Date.now() - 86400000 * 1).toISOString(),
+    preview: '洞察：用户偏好 FastAPI + SQLAlchemy...',
   },
 ]
 
-// ─── Actions ───────────────────────────────────────────────────────────
+const SAMPLE_PREFERENCES: Preference[] = [
+  {
+    id: 'pr1',
+    text: '代码示例用 TypeScript 而非 JavaScript',
+    kind: 'likes',
+    strength: 0.92,
+    createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+  },
+  {
+    id: 'pr2',
+    text: '回答时不要使用 emoji',
+    kind: 'dislikes',
+    strength: 0.88,
+    createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+  },
+  {
+    id: 'pr3',
+    text: '回复简洁，避免冗长解释',
+    kind: 'likes',
+    strength: 0.78,
+    createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
+  },
+  {
+    id: 'pr4',
+    text: '技术细节给完整可运行代码',
+    kind: 'likes',
+    strength: 0.83,
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+]
+
+const SAMPLE_SKILLS: Skill[] = [
+  {
+    id: 's1',
+    name: '代码审查',
+    description: '自动审查 Python 代码，按 PEP8 + 项目规范给出修改建议',
+    source: 'auto-distilled',
+    triggered: 14,
+  },
+  {
+    id: 's2',
+    name: 'BI 报告生成',
+    description: '从 12 个常见行业模板生成结构化 BI 报告',
+    source: 'auto-distilled',
+    triggered: 8,
+  },
+  {
+    id: 's3',
+    name: 'SQL 优化',
+    description: '分析慢查询，给出索引建议 + 重写方案',
+    source: 'user-created',
+    triggered: 5,
+  },
+]
+
+// ─── Computed counts ──────────────────────────────────────────────────
+
+const totalCount = computed(
+  () => profile.value.length + relevant.value.length + preferences.value.length + skills.value.length,
+)
+
+const resourceEstimate = computed(() => {
+  const samples = totalCount.value
+  if (samples === 0) return { time: '—', memory: '—', disk: '—' }
+  const minutes = Math.round((samples / 100) * 25)
+  return {
+    time: minutes < 60 ? `~${minutes} 分钟` : `~${(minutes / 60).toFixed(1)} 小时`,
+    memory: '6 GB 内存',
+    disk: samples < 2000 ? '~30 MB' : '~120 MB',
+  }
+})
+
+// ─── Layer meta ───────────────────────────────────────────────────────
+
+const LAYERS: { key: MemoryLayer; label: string; desc: string; count: () => number }[] = [
+  { key: 'profile', label: '画像', desc: '关于你的基本信息', count: () => profile.value.length },
+  { key: 'relevant', label: '相关记忆', desc: '对话中用过的上下文', count: () => relevant.value.length },
+  { key: 'preferences', label: '偏好', desc: '你喜欢 / 不喜欢什么', count: () => preferences.value.length },
+  { key: 'skills', label: '技能', desc: '提炼的可复用流程', count: () => skills.value.length },
+]
+
+// ─── Actions ──────────────────────────────────────────────────────────
 
 async function loadAll() {
   loading.value = true
   try {
-    // 实际项目里: const r = await fetch('/api/memory/entries') ...
-    memoryEntries.value = SAMPLE_ENTRIES
-    trainingHistory.value = SAMPLE_TRAINING
-    learningEnabled.value = false
+    // 实际接入: GET /api/memory/profile + /api/memory/relevant + /api/memory/preferences + /api/memory/skills
+    profile.value = SAMPLE_PROFILE
+    relevant.value = SAMPLE_RELEVANT
+    preferences.value = SAMPLE_PREFERENCES
+    skills.value = SAMPLE_SKILLS
   } finally {
     loading.value = false
   }
@@ -147,39 +249,29 @@ async function toggleLearning(enabled: boolean) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: enabled ? 'local' : 'none' }),
     })
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
-async function deleteEntry(id: string) {
-  memoryEntries.value = memoryEntries.value.filter((e) => e.id !== id)
-  // await fetch(`/api/memory/entries/${id}`, { method: 'DELETE' })
+async function deleteItem(layer: MemoryLayer, id: string) {
+  if (layer === 'profile') profile.value = profile.value.filter((x) => x.id !== id)
+  if (layer === 'relevant') relevant.value = relevant.value.filter((x) => x.id !== id)
+  if (layer === 'preferences') preferences.value = preferences.value.filter((x) => x.id !== id)
+  if (layer === 'skills') skills.value = skills.value.filter((x) => x.id !== id)
+  // await fetch(`/api/memory/${layer}/${id}`, { method: 'DELETE' })
 }
 
-async function addEntry() {
-  const content = newEntry.value.trim()
+async function addProfileFact() {
+  const content = newProfileFact.value.trim()
   if (!content) return
-  memoryEntries.value.unshift({
-    id: `m${Date.now()}`,
-    category: 'fact',
+  profile.value.unshift({
+    id: `p${Date.now()}`,
     content,
     source: 'manual',
     confidence: 1.0,
     createdAt: new Date().toISOString(),
     usedCount: 0,
   })
-  newEntry.value = ''
-  // await fetch('/api/memory/entries', { method: 'POST', body: JSON.stringify(...) })
-}
-
-async function triggerTraining() {
-  if (memoryEntries.value.length < 10) {
-    alert('至少需要 10 条记忆才能训练')
-    return
-  }
-  // await fetch('/api/training/trigger', { method: 'POST' })
-  alert('已提交训练任务。完成后会在下方历史中显示。')
+  newProfileFact.value = ''
 }
 
 function formatRelative(iso: string): string {
@@ -187,35 +279,37 @@ function formatRelative(iso: string): string {
   const diff = Date.now() - d.getTime()
   if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分钟前`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`
-  return `${Math.floor(diff / 86_400_000)} 天前`
+  if (diff < 86_400_000 * 30) return `${Math.floor(diff / 86_400_000)} 天前`
+  return d.toLocaleDateString('zh-CN')
 }
 
-const categoryLabel = {
-  preference: '偏好',
-  fact: '事实',
-  style: '风格',
+const LAYER_COLOR: Record<string, string> = {
+  episodic: 'text-[var(--color-text-tertiary)]',
+  semantic: 'text-[var(--color-text-primary)]',
+  scenario: 'text-[var(--color-text-tertiary)]',
+  insight: 'text-[var(--color-brand)]',
 }
 
-const categoryColor = {
-  preference: 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]',
-  fact: 'bg-[var(--color-success)]/10 text-[var(--color-success)]',
-  style: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
+const LAYER_LABEL: Record<string, string> = {
+  episodic: '事件',
+  semantic: '事实',
+  scenario: '场景',
+  insight: '洞察',
 }
 
 onMounted(loadAll)
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl space-y-8 px-6 py-8">
-    <!-- Title + toggle -->
+  <div class="mx-auto max-w-4xl space-y-6 px-6 py-8">
+    <!-- Header -->
     <header class="flex items-start justify-between">
       <div>
         <h2 class="text-[20px] font-semibold tracking-tight text-[var(--color-text-primary)]">记忆</h2>
         <p class="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-          MadCop 记住的关于你的信息。你可以查看、编辑、删除。
+          MadCop 记住的关于你的所有信息。共 {{ totalCount }} 条。
         </p>
       </div>
-      <!-- Big toggle -->
       <button
         type="button"
         role="switch"
@@ -235,7 +329,7 @@ onMounted(loadAll)
       </button>
     </header>
 
-    <!-- Toggle description -->
+    <!-- Toggle hint -->
     <p
       v-if="learningEnabled"
       class="rounded-lg border border-[var(--color-brand)]/30 bg-[var(--color-brand)]/5 px-3 py-2 text-[12px] text-[var(--color-text-primary)]"
@@ -246,10 +340,10 @@ onMounted(loadAll)
       v-else
       class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3 py-2 text-[12px] text-[var(--color-text-tertiary)]"
     >
-      持续学习默认关闭。开启后，MadCop 会从你的反馈中学习——所有数据保留在本地。
+      持续学习默认关闭。开启后 MadCop 会从你的反馈中学习——所有数据保留在本地。
     </p>
 
-    <!-- Resource estimate (shown only when toggled on) -->
+    <!-- Resource estimate (when on) -->
     <div
       v-if="learningEnabled"
       class="rounded-xl border border-[var(--color-border)] p-4"
@@ -274,114 +368,218 @@ onMounted(loadAll)
       </div>
     </div>
 
-    <!-- Add manual entry -->
-    <div class="rounded-xl border border-[var(--color-border)] p-4">
-      <div class="mb-2 text-[12px] font-semibold text-[var(--color-text-primary)]">添加一条手动记忆</div>
+    <!-- Tab switcher -->
+    <div class="flex items-center gap-1 border-b border-[var(--color-border-separator)]">
+      <button
+        v-for="l in LAYERS"
+        :key="l.key"
+        type="button"
+        :class="[
+          'flex items-center gap-1.5 border-b-2 px-3 py-2 text-[12px] font-medium transition-colors',
+          activeTab === l.key
+            ? 'border-[var(--color-brand)] text-[var(--color-text-primary)]'
+            : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
+        ]"
+        @click="activeTab = l.key"
+      >
+        {{ l.label }}
+        <span
+          class="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[10px] tabular-nums"
+          style="font-family: ui-monospace, 'SF Mono', monospace"
+        >
+          {{ l.count() }}
+        </span>
+      </button>
+    </div>
+
+    <!-- Tab descriptions -->
+    <p class="text-[11px] text-[var(--color-text-tertiary)]">
+      {{ LAYERS.find(l => l.key === activeTab)?.desc }}
+    </p>
+
+    <!-- Add profile fact (only on profile tab) -->
+    <div v-if="activeTab === 'profile'" class="rounded-xl border border-[var(--color-border)] p-4">
+      <div class="mb-2 text-[12px] font-semibold text-[var(--color-text-primary)]">添加一条事实</div>
       <div class="flex gap-2">
         <input
-          v-model="newEntry"
+          v-model="newProfileFact"
           type="text"
           placeholder="例如：我常用 FastAPI 做后端"
           class="flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-brand)] focus:outline-none"
-          @keydown.enter="addEntry"
+          @keydown.enter="addProfileFact"
         />
         <button
           type="button"
           class="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-          :disabled="!newEntry.trim()"
-          @click="addEntry"
-        >
-          添加
-        </button>
+          :disabled="!newProfileFact.trim()"
+          @click="addProfileFact"
+        >添加</button>
       </div>
     </div>
 
-    <!-- Memory list -->
-    <section>
-      <div class="mb-3 flex items-center justify-between">
-        <h3 class="text-[13px] font-semibold text-[var(--color-text-primary)]">
-          已记住 ({{ memoryEntries.length }})
-        </h3>
-        <div class="flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]"
-             style="font-family: ui-monospace, 'SF Mono', monospace">
-          <span class="rounded bg-[var(--color-brand)]/10 px-1.5 py-0.5 text-[var(--color-brand)]">偏好</span>
-          <span class="rounded bg-[var(--color-success)]/10 px-1.5 py-0.5 text-[var(--color-success)]">事实</span>
-          <span class="rounded bg-[var(--color-warning)]/10 px-1.5 py-0.5 text-[var(--color-warning)]">风格</span>
-        </div>
-      </div>
-      <div class="space-y-2">
-        <div
-          v-for="entry in memoryEntries"
-          :key="entry.id"
-          class="group flex items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 transition-colors hover:border-[var(--color-border-focus)]"
-        >
-          <!-- Category badge -->
-          <span
-            :class="['shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider', categoryColor[entry.category]]"
+    <!-- Profile list -->
+    <section v-if="activeTab === 'profile'" class="space-y-2">
+      <div
+        v-for="p in profile"
+        :key="p.id"
+        class="group flex items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 transition-colors hover:border-[var(--color-border-focus)]"
+      >
+        <span
+          v-if="p.source === 'manual'"
+          class="shrink-0 rounded bg-[var(--color-success)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-success)]"
+          style="font-family: ui-monospace, 'SF Mono', monospace"
+        >手动</span>
+        <span
+          v-else
+          class="shrink-0 rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-tertiary)]"
+          style="font-family: ui-monospace, 'SF Mono', monospace"
+        >{{ Math.round(p.confidence * 100) }}%</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-[13px] text-[var(--color-text-primary)]">{{ p.content }}</p>
+          <div
+            class="mt-1 flex items-center gap-3 text-[10px] text-[var(--color-text-tertiary)]"
             style="font-family: ui-monospace, 'SF Mono', monospace"
           >
-            {{ categoryLabel[entry.category] }}
-          </span>
-          <!-- Content -->
-          <div class="flex-1 min-w-0">
-            <p class="text-[13px] text-[var(--color-text-primary)]">{{ entry.content }}</p>
-            <div
-              class="mt-1 flex items-center gap-3 text-[10px] text-[var(--color-text-tertiary)]"
+            <span>{{ formatRelative(p.createdAt) }}</span>
+            <span v-if="p.usedCount > 0">· 已用 {{ p.usedCount }} 次</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 rounded p-1 text-[var(--color-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] group-hover:opacity-100"
+          :aria-label="`删除 ${p.content}`"
+          @click="deleteItem('profile', p.id)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Relevant memories (grouped by layer) -->
+    <section v-if="activeTab === 'relevant'" class="space-y-3">
+      <div
+        v-for="layer in ['episodic', 'semantic', 'scenario', 'insight']"
+        :key="layer"
+      >
+        <div
+          class="mb-1.5 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]"
+          style="font-family: ui-monospace, 'SF Mono', monospace"
+        >
+          <span>{{ LAYER_LABEL[layer] }}</span>
+          <span class="h-px flex-1 bg-[var(--color-border-separator)]"></span>
+          <span class="tabular-nums">{{ relevant.filter(r => r.layer === layer).length }}</span>
+        </div>
+        <div class="space-y-1.5">
+          <div
+            v-for="r in relevant.filter(x => x.layer === layer)"
+            :key="r.id"
+            class="group flex items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+          >
+            <span
+              class="shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums"
+              :class="layer === 'insight' ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'"
               style="font-family: ui-monospace, 'SF Mono', monospace"
             >
-              <span v-if="entry.source === 'auto'">置信度 {{ Math.round(entry.confidence * 100) }}%</span>
-              <span v-else>手动</span>
-              <span>·</span>
-              <span>{{ formatRelative(entry.createdAt) }}</span>
-              <span v-if="entry.usedCount > 0">· 已用 {{ entry.usedCount }} 次</span>
+              {{ Math.round(r.relevance * 100) }}%
+            </span>
+            <div class="flex-1 min-w-0">
+              <p class="text-[13px] text-[var(--color-text-primary)]">{{ r.content }}</p>
+              <p
+                class="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]"
+                style="font-family: ui-monospace, 'SF Mono', monospace"
+              >{{ formatRelative(r.createdAt) }}</p>
             </div>
+            <button
+              type="button"
+              class="shrink-0 rounded p-1 text-[var(--color-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] group-hover:opacity-100"
+              :aria-label="`删除 ${r.content}`"
+              @click="deleteItem('relevant', r.id)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <!-- Delete -->
-          <button
-            type="button"
-            class="shrink-0 rounded p-1 text-[var(--color-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] group-hover:opacity-100"
-            :aria-label="`删除 ${entry.content}`"
-            @click="deleteEntry(entry.id)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div
-          v-if="memoryEntries.length === 0 && !loading"
-          class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12px] text-[var(--color-text-tertiary)]"
-        >
-          还没有记忆。用一段时间 MadCop 后，会自动从这里开始积累。
         </div>
       </div>
     </section>
 
-    <!-- Training history -->
-    <section v-if="learningEnabled && trainingHistory.length > 0">
-      <h3 class="mb-3 text-[13px] font-semibold text-[var(--color-text-primary)]">微调历史</h3>
-      <div class="space-y-1.5">
-        <div
-          v-for="r in trainingHistory"
-          :key="r.id"
-          class="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2"
-        >
-          <span
-            class="inline-block h-2 w-2 rounded-full"
-            :class="r.status === 'completed' ? 'bg-[var(--color-success)]' : 'bg-[var(--color-error)]'"
-          ></span>
-          <span class="flex-1 text-[12px] text-[var(--color-text-primary)]">{{ formatRelative(r.date) }}</span>
-          <span
-            class="text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
+    <!-- Preferences -->
+    <section v-if="activeTab === 'preferences'" class="space-y-2">
+      <div
+        v-for="p in preferences"
+        :key="p.id"
+        class="group flex items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+      >
+        <span
+          :class="[
+            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider',
+            p.kind === 'likes' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-text-tertiary)]/10 text-[var(--color-text-tertiary)]',
+          ]"
+          style="font-family: ui-monospace, 'SF Mono', monospace"
+        >{{ p.kind === 'likes' ? '喜欢' : '不喜欢' }}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-[13px] text-[var(--color-text-primary)]">{{ p.text }}</p>
+          <div
+            class="mt-1 flex items-center gap-3 text-[10px] text-[var(--color-text-tertiary)]"
             style="font-family: ui-monospace, 'SF Mono', monospace"
           >
-            {{ r.samples }} 样本 · {{ r.duration }} · {{ r.baseModel }} · loss {{ r.loss.toFixed(2) }}
-          </span>
+            <span>强度 {{ Math.round(p.strength * 100) }}%</span>
+            <span>·</span>
+            <span>{{ formatRelative(p.createdAt) }}</span>
+          </div>
         </div>
+        <button
+          type="button"
+          class="shrink-0 rounded p-1 text-[var(--color-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] group-hover:opacity-100"
+          :aria-label="`删除 ${p.text}`"
+          @click="deleteItem('preferences', p.id)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
       </div>
     </section>
 
-    <!-- Trigger button (shown only when learning on and enough data) -->
+    <!-- Skills -->
+    <section v-if="activeTab === 'skills'" class="space-y-2">
+      <div
+        v-for="s in skills"
+        :key="s.id"
+        class="group flex items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+      >
+        <span
+          :class="[
+            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
+            s.source === 'auto-distilled' ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'bg-[var(--color-surface-container)] text-[var(--color-text-secondary)]',
+          ]"
+          style="font-family: ui-monospace, 'SF Mono', monospace"
+        >{{ s.source === 'auto-distilled' ? '自动提炼' : '手动创建' }}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-[13px] font-medium text-[var(--color-text-primary)]">{{ s.name }}</p>
+          <p class="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">{{ s.description }}</p>
+          <p
+            class="mt-1 text-[10px] text-[var(--color-text-tertiary)]"
+            style="font-family: ui-monospace, 'SF Mono', monospace"
+          >已用 {{ s.triggered }} 次</p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 rounded p-1 text-[var(--color-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] group-hover:opacity-100"
+          :aria-label="`删除 ${s.name}`"
+          @click="deleteItem('skills', s.id)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Trigger button (only on) -->
     <div v-if="learningEnabled" class="rounded-xl border border-[var(--color-border)] p-4">
       <div class="flex items-center justify-between">
         <div>
@@ -392,12 +590,22 @@ onMounted(loadAll)
         </div>
         <button
           type="button"
-          :disabled="memoryEntries.length < 10"
+          :disabled="totalCount < 10"
           class="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-          @click="triggerTraining"
         >
           开始微调
         </button>
+      </div>
+    </div>
+
+    <!-- Privacy banner -->
+    <div class="rounded-lg border border-[var(--color-success)]/20 bg-[var(--color-success)]/5 p-3">
+      <div class="flex items-center gap-3 text-[11px] text-[var(--color-text-tertiary)]">
+        <span
+          class="rounded bg-[var(--color-success)]/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-success)]"
+          style="font-family: ui-monospace, 'SF Mono', monospace"
+        >local only</span>
+        <span>所有数据存储于本地。永远不会离开你的 Mac。</span>
       </div>
     </div>
   </div>
