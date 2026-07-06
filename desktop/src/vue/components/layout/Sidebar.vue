@@ -1403,26 +1403,19 @@ const projectMenuData = computed(() => {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         <span v-if="expanded" class="flex-1 text-left">知识库</span>
       </button>
-    </nav>
-
-    <!-- v3.1 — Arena: multi-LLM comparison (sits between primary and secondary) -->
-    <nav v-if="!isMobileComputed && expanded" class="px-3 pb-2" aria-label="Arena">
+      <!-- Agent (previously 工作流) -->
       <button
         type="button"
-        :class="primaryNavClass(activeTabType === 'arena')"
-        aria-label="Arena"
-        @click="() => { tabStore.openArenaTab(); closeMobileDrawer() }"
+        :class="primaryNavClass(activeTabType === 'workflows')"
+        aria-label="Agent"
+        @click="() => { tabStore.openWorkflowsTab(); closeMobileDrawer() }"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        <span class="flex-1 text-left">Arena</span>
-        <span
-          class="rounded bg-[var(--color-brand)]/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[var(--color-brand)]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
-        >new</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/><line x1="6.5" y1="6.5" x2="10" y2="10"/><line x1="17.5" y1="6.5" x2="14" y2="10"/><line x1="6.5" y1="17.5" x2="10" y2="14"/><line x1="17.5" y1="17.5" x2="14" y2="14"/></svg>
+        <span v-if="expanded" class="flex-1 text-left">Agent</span>
       </button>
     </nav>
 
-    <!-- v3.1 — Divider: primary / secondary (mathematical 1px hairline) -->
+    <!-- Divider: primary / secondary -->
     <div
       v-if="expanded && !isMobileComputed"
       class="mx-4 mb-2 mt-1 h-px bg-[var(--color-border-separator)] opacity-50"
@@ -1459,13 +1452,7 @@ const projectMenuData = computed(() => {
 
       <!-- Secondary items — shown when expanded AND navMoreOpen is true -->
       <template v-if="expanded && navMoreOpen">
-        <button
-          type="button"
-          :class="secondaryNavClass(activeTabType === 'agents')"
-          @click="() => { tabStore.openTab('__agents__', 'Agent', 'agents' as any); closeMobileDrawer() }"
-        >
-          <span class="flex-1 text-left text-[12px]">Agent</span>
-        </button>
+
         <button
           type="button"
           :class="secondaryNavClass(activeTabId === SCHEDULED_TAB_ID)"
@@ -1480,7 +1467,7 @@ const projectMenuData = computed(() => {
           @click="() => { tabStore.openWorkflowsTab(); closeMobileDrawer() }"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 opacity-60"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-          <span class="flex-1 text-left text-[12px]">{{ t('sidebar.workflows') }}</span>
+          <span class="flex-1 text-left text-[12px]">Agent</span>
         </button>
         <button
           type="button"
