@@ -52,7 +52,7 @@ async function handleCopy() {
             <template #icon><span class="material-symbols-outlined text-[16px]">content_copy</span></template>
             {{ copied ? '已复制' : '复制诊断信息' }}
           </Button>
-          <Button type="button" variant="ghost" size="sm" @click="window.location.reload()">
+          <Button type="button" variant="ghost" size="sm" @click="() => window.location.reload()">
             <template #icon><span class="material-symbols-outlined text-[16px]">refresh</span></template>
             重试
           </Button>
