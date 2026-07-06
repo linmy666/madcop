@@ -1,42 +1,23 @@
 <script setup lang="ts">
 /**
- * v3.0 — Design tool page: multi-page project management + AI generation.
+ * v3.1 — Design tool page (redesigned for beauty)
  *
- * 1:1 Vue 3 port of src/pages/DesignPage.tsx (React).
- * Features:
- *  - Multi-project management (localStorage)
- *  - Per-project: multi-page design
- *  - AI generation via /api/design/generate (single page or full app)
- *  - Page preset templates (登录页/仪表盘/个人中心/落地页)
- *  - Full-app templates (电商 App/SaaS 后台/社交 App)
- *  - Auto-repair for malformed LLM output
+ * Visual language:
+ *  - Quiet top bar (project name + minimal controls)
+ *  - Hero "AI generation" card with a clear type-first prompt
+ *  - Recent projects: clean card grid with thumbnails
+ *  - Inside project: tabbed pages + full canvas + property panel
+ *  - All stroke-outline icons (no Material Symbols fill)
+ *  - Monospace for IDs, file names
+ *  - Subtle gradients, no garish colors
  */
 
 import { ref, computed, watch, onMounted } from 'vue'
 import DesignCanvas, { type DesignData } from '../components/design/DesignCanvas.vue'
-
-function emptyData(): DesignData {
-  return { root: { props: { bgColor: '#FFFFFF', padding: 40 } }, content: [] }
-}
 import { getApiUrl } from '../api/client'
 
-// ── Types ──────────────────────────────────────────────────────────────
-
-interface DesignPageData {
-  id: string
-  name: string
-  data: DesignData
-}
-
-interface DesignProject {
-  id: string
-  name: string
-  pages: DesignPageData[]
-  activePageId: string | null
-  createdAt: number
-}
-
-// ── Presets ───────────────────────────────────────────────────────────
+interface DesignPageData { id: string; name: string; data: DesignData }
+interface DesignProject { id: string; name: string; pages: DesignPageData[]; activePageId: string | null; createdAt: number }
 
 const PAGE_PRESETS = [
   { label: '登录页', prompt: '一个简洁的登录页面，包含邮箱输入框、密码输入框、一个主要登录按钮，白色背景，居中布局' },
@@ -44,43 +25,27 @@ const PAGE_PRESETS = [
   { label: '个人中心', prompt: '用户个人中心页，顶部是头像和昵称，下面是设置项列表：个人信息、通知设置、隐私、关于' },
   { label: '落地页', prompt: '产品落地页，包含大标题、副标题、行动号召按钮、功能特性列表（3列网格）' },
 ]
-
 const FULL_APP_PROMPTS = [
   { name: '电商 App', pages: ['首页轮播推荐', '商品列表页', '商品详情页', '购物车', '个人中心'] },
   { name: 'SaaS 后台', pages: ['登录页', '仪表盘概览', '用户管理', '设置页'] },
   { name: '社交 App', pages: ['登录页', '消息列表', '个人主页', '设置'] },
 ]
 
-// ── Project storage ──────────────────────────────────────────────────
-
 const STORAGE_KEY = 'madcop_design_projects'
-
 function loadProjects(): DesignProject[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
+  try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return JSON.parse(raw) } catch {}
   return []
 }
-
 function saveProjects(projects: DesignProject[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
-  } catch {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(projects)) } catch {}
 }
-
-function genId() {
-  return `p${Date.now()}${Math.floor(Math.random() * 1000)}`
-}
-
-// ── Auto-repair for LLM output ──────────────────────────────────────
+function genId() { return `p${Date.now()}${Math.floor(Math.random() * 1000)}` }
 
 const componentNames: Record<string, boolean> = {
   Header: true, Paragraph: true, Button: true, Image: true,
   Input: true, Card: true, Flex: true, Grid: true,
   Section: true, Divider: true, Space: true,
 }
-
 const defaultsFor: Record<string, Record<string, any>> = {
   Header: { text: '标题', level: '2', fontSize: 24 },
   Paragraph: { text: '文字', fontSize: 14 },
@@ -90,7 +55,6 @@ const defaultsFor: Record<string, Record<string, any>> = {
   Grid: { columns: 2, gap: 12 },
   Space: { height: 20 },
 }
-
 function autoRepair(data: any): DesignData {
   if (!data.root) data.root = { props: { bgColor: '#FFFFFF', padding: 40 } }
   if (!data.root.props) data.root.props = {}
@@ -114,8 +78,9 @@ function autoRepair(data: any): DesignData {
   data.content = data.content.map(repairItem).filter(Boolean)
   return data as DesignData
 }
-
-// ── Main state ───────────────────────────────────────────────────────
+function emptyData(): DesignData {
+  return { root: { props: { bgColor: '#FFFFFF', padding: 40 } }, content: [] }
+}
 
 const projects = ref<DesignProject[]>(loadProjects())
 const activeProject = ref<DesignProject | null>(null)
@@ -124,16 +89,13 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const showGenAll = ref(false)
 const newProjectName = ref('')
+const newProjectNameInput = ref<HTMLInputElement | null>(null)
 
 watch(projects, (val) => saveProjects(val), { deep: true })
 
 onMounted(() => {
-  if (projects.value.length > 0) {
-    // Don't auto-open — show project list first
-  }
+  if (newProjectNameInput.value) newProjectNameInput.value.focus()
 })
-
-// ── Project actions ──────────────────────────────────────────────────
 
 function createProject(name: string) {
   if (!name.trim()) return
@@ -145,63 +107,46 @@ function createProject(name: string) {
   activeProject.value = project
   newProjectName.value = ''
 }
-
 function deleteProject(id: string) {
   if (!confirm('删除此项目？')) return
   projects.value = projects.value.filter((p) => p.id !== id)
 }
-
-// ── Page actions ─────────────────────────────────────────────────────
-
 function addPage(name: string) {
   if (!activeProject.value) return
   const page: DesignPageData = { id: genId(), name, data: emptyData() }
   const updated: DesignProject = {
     ...activeProject.value,
-    pages: [...activeProject.value.pages, page],
-    activePageId: page.id,
+    pages: [...activeProject.value.pages, page], activePageId: page.id,
   }
   activeProject.value = updated
   projects.value = projects.value.map((p) => p.id === updated.id ? updated : p)
 }
-
 function deletePage(pageId: string) {
   if (!activeProject.value) return
   if (!confirm('删除此页面？')) return
   const updated: DesignProject = {
     ...activeProject.value,
     pages: activeProject.value.pages.filter((p) => p.id !== pageId),
-    activePageId: activeProject.value.activePageId === pageId
-      ? null
-      : activeProject.value.activePageId,
+    activePageId: activeProject.value.activePageId === pageId ? null : activeProject.value.activePageId,
   }
   activeProject.value = updated
   projects.value = projects.value.map((p) => p.id === updated.id ? updated : p)
 }
-
 function selectPage(pageId: string) {
   if (!activeProject.value) return
-  const updated: DesignProject = {
-    ...activeProject.value,
-    activePageId: pageId,
-  }
+  const updated: DesignProject = { ...activeProject.value, activePageId: pageId }
   activeProject.value = updated
   projects.value = projects.value.map((p) => p.id === updated.id ? updated : p)
 }
-
 function updatePageData(pageId: string, data: DesignData) {
   if (!activeProject.value) return
   const updated: DesignProject = {
     ...activeProject.value,
-    pages: activeProject.value.pages.map((p) =>
-      p.id === pageId ? { ...p, data } : p
-    ),
+    pages: activeProject.value.pages.map((p) => p.id === pageId ? { ...p, data } : p),
   }
   activeProject.value = updated
   projects.value = projects.value.map((p) => p.id === updated.id ? updated : p)
 }
-
-// ── AI generation ────────────────────────────────────────────────────
 
 async function generatePage(genPrompt: string): Promise<DesignData | null> {
   loading.value = true
@@ -231,7 +176,6 @@ async function generatePage(genPrompt: string): Promise<DesignData | null> {
     loading.value = false
   }
 }
-
 async function handleGenerate() {
   if (!prompt.value.trim() || !activeProject.value) return
   const data = await generatePage(prompt.value)
@@ -240,15 +184,13 @@ async function handleGenerate() {
     const page: DesignPageData = { id: genId(), name: pageName, data }
     const updated: DesignProject = {
       ...activeProject.value,
-      pages: [...activeProject.value.pages, page],
-      activePageId: page.id,
+      pages: [...activeProject.value.pages, page], activePageId: page.id,
     }
     activeProject.value = updated
     projects.value = projects.value.map((p) => p.id === updated.id ? updated : p)
     prompt.value = ''
   }
 }
-
 async function handleGenerateApp(preset: typeof FULL_APP_PROMPTS[0]) {
   if (!activeProject.value) return
   showGenAll.value = false
@@ -256,9 +198,7 @@ async function handleGenerateApp(preset: typeof FULL_APP_PROMPTS[0]) {
   const newPages: DesignPageData[] = []
   for (const pageName of preset.pages) {
     const data = await generatePage(`${preset.name}的${pageName}，风格统一`)
-    if (data) {
-      newPages.push({ id: genId(), name: pageName, data })
-    }
+    if (data) newPages.push({ id: genId(), name: pageName, data })
   }
   if (newPages.length > 0) {
     const updated: DesignProject = {
@@ -271,188 +211,229 @@ async function handleGenerateApp(preset: typeof FULL_APP_PROMPTS[0]) {
   }
   loading.value = false
 }
-
-// ── Computed ─────────────────────────────────────────────────────────
-
 const activePage = computed<DesignPageData | null>(() => {
   if (!activeProject.value) return null
   return activeProject.value.pages.find((p) => p.id === activeProject.value!.activePageId) || null
 })
 
-// ── Render: project list ─────────────────────────────────────────────
+// Format date as "3 天前"
+function formatRelative(ts: number): string {
+  const days = Math.floor((Date.now() - ts) / 86400000)
+  if (days === 0) return '今天'
+  if (days === 1) return '昨天'
+  if (days < 7) return `${days} 天前`
+  if (days < 30) return `${Math.floor(days / 7)} 周前`
+  return new Date(ts).toLocaleDateString('zh-CN')
+}
 </script>
 
 <template>
-  <!-- No active project: project list -->
-  <div v-if="!activeProject" :class="['design-page', 'flex', 'h-screen', 'w-screen', 'overflow-hidden', 'bg-[var(--color-surface-container-lowest)]', 'text-[var(--color-text-primary)]']">
-    <div style="max-width: 720px; margin: 0 auto; padding: 40px 20px; width: 100%;">
-      <h1 style="font-size: 24px; font-weight: 700; margin-bottom: 6px; text-align: center; color: var(--color-text-primary);">
-        设计工具
-      </h1>
-      <p style="font-size: 14px; color: var(--color-text-tertiary); margin-bottom: 32px; text-align: center;">
-        创建项目，用 AI 批量生成原型设计
-      </p>
-
-      <!-- Create new project -->
-      <div style="display: flex; gap: 8px; margin-bottom: 32px;">
-        <input
-          v-model="newProjectName"
-          type="text"
-          placeholder="输入项目名称…"
-          @keydown.enter="createProject(newProjectName)"
-          style="flex: 1; padding: 10px 14px; border: 1px solid var(--color-border); border-radius: 6px; font-size: 14px; outline: none; background: var(--color-surface); color: var(--color-text-primary);"
-        />
-        <button
-          @click="createProject(newProjectName)"
-          :disabled="!newProjectName.trim()"
-          style="padding: 10px 20px; background: #7C3AED; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; opacity: newProjectName.trim() ? 1 : 0.5;"
-        >新建项目</button>
+  <!-- ============================== -->
+  <!-- Project list (no active project) -->
+  <!-- ============================== -->
+  <div v-if="!activeProject" class="design-page bg-[var(--color-surface)] flex h-screen w-screen overflow-y-auto">
+    <div class="mx-auto w-full max-w-[960px] px-12 py-20">
+      <!-- Title -->
+      <div class="mb-16">
+        <h1 class="text-[28px] font-semibold tracking-tight text-[var(--color-text-primary)] mb-2">设计工具</h1>
+        <p class="text-[14px] text-[var(--color-text-secondary)] leading-relaxed max-w-xl">
+          用 AI 批量生成原型设计。拖拽组件、属性面板、导出 .madcop 分享。
+        </p>
       </div>
 
-      <!-- Existing projects -->
-      <div
-        v-if="projects.length === 0"
-        style="text-align: center; padding: 60px 20px; color: var(--color-text-tertiary); font-size: 14px;"
-      >
-        还没有项目，创建一个开始吧
+      <!-- New project card (top, prominent) -->
+      <div class="mb-12">
+        <div class="design-new-card">
+          <div class="design-new-card__title">新建项目</div>
+          <div class="flex gap-2">
+            <input
+              ref="newProjectNameInput"
+              v-model="newProjectName"
+              type="text"
+              placeholder="项目名…"
+              @keydown.enter="createProject(newProjectName)"
+              class="design-input flex-1"
+            />
+            <button
+              @click="createProject(newProjectName)"
+              :disabled="!newProjectName.trim()"
+              class="design-btn-primary"
+              :class="{ 'design-btn-primary--disabled': !newProjectName.trim() }"
+            >创建</button>
+          </div>
+        </div>
       </div>
-      <div
-        v-else
-        style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px;"
-      >
-        <div
-          v-for="proj in projects"
-          :key="proj.id"
-          @click="activeProject = proj"
-          class="design-project-card"
-        >
-          <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--color-text-primary);">
-            {{ proj.name }}
+
+      <!-- Recent projects -->
+      <div>
+        <div class="design-section-label flex items-center justify-between mb-4">
+          <span>最近的项目</span>
+          <span class="design-meta">{{ projects.length }} 个</span>
+        </div>
+
+        <div v-if="projects.length === 0" class="design-empty">
+          <div class="design-empty__icon">○</div>
+          <div class="design-empty__text">还没有项目</div>
+          <div class="design-empty__hint">在上方创建一个开始</div>
+        </div>
+
+        <div v-else class="grid grid-cols-3 gap-4">
+          <div
+            v-for="proj in projects"
+            :key="proj.id"
+            @click="activeProject = proj"
+            class="design-project-tile"
+          >
+            <!-- Mini "thumbnail" — stacked page rectangles -->
+            <div class="design-project-tile__thumb">
+              <div
+                v-for="(p, i) in proj.pages.slice(0, 3)"
+                :key="p.id"
+                :style="{
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '3px',
+                  height: '6px',
+                  width: (40 + i * 12) + '%',
+                  marginBottom: '4px',
+                  opacity: 0.6 + i * 0.13,
+                }"
+              ></div>
+              <div v-if="proj.pages.length === 0" class="design-project-tile__empty">—</div>
+            </div>
+            <div class="design-project-tile__name">{{ proj.name }}</div>
+            <div class="design-project-tile__meta">
+              <span class="design-meta">{{ proj.pages.length }} 个页面</span>
+              <span class="design-meta">{{ formatRelative(proj.createdAt) }}</span>
+            </div>
+            <button
+              @click.stop="deleteProject(proj.id)"
+              class="design-project-tile__delete"
+              aria-label="删除"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
           </div>
-          <div style="font-size: 12px; color: var(--color-text-tertiary);">
-            {{ proj.pages.length }} 个页面
-          </div>
-          <div style="font-size: 11px; color: var(--color-text-tertiary); margin-top: 8px; opacity: 0.7;">
-            {{ new Date(proj.createdAt).toLocaleDateString('zh-CN') }}
-          </div>
-          <button
-            @click.stop="deleteProject(proj.id)"
-            style="margin-top: 12px; padding: 4px 10px; font-size: 11px; border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent); border-radius: 3px; background: var(--color-surface); color: var(--color-error); cursor: pointer;"
-          >删除</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Active project: editor + AI generation -->
+  <!-- ============================== -->
+  <!-- Active project: editor -->
+  <!-- ============================== -->
   <div v-else class="design-page flex h-screen w-screen flex-col overflow-hidden bg-[var(--color-surface)]">
-    <!-- Top bar -->
-    <div
-      style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); flex-shrink: 0;"
+    <!-- Quiet top bar -->
+    <header
+      class="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 h-12 flex-shrink-0"
     >
-      <div style="display: flex; align-items: center; gap: 12px;">
+      <div class="flex items-center gap-4">
         <button
           @click="activeProject = null"
-          style="padding: 4px 12px; border: 1px solid var(--color-border); border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--color-text-secondary); background: var(--color-surface);"
-        >← 项目列表</button>
-        <span style="font-size: 14px; font-weight: 600; color: var(--color-text-primary);">{{ activeProject.name }}</span>
+          class="design-btn-ghost flex items-center gap-1.5"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+          <span>项目</span>
+        </button>
+        <div class="h-4 w-px bg-[var(--color-border)]"></div>
+        <span class="text-[14px] font-medium text-[var(--color-text-primary)]">{{ activeProject.name }}</span>
+        <span class="design-meta">{{ activeProject.pages.length }} 页</span>
       </div>
-      <div style="display: flex; gap: 8px;">
+      <div class="flex items-center gap-2">
         <button
           @click="showGenAll = !showGenAll"
-          style="padding: 4px 12px; border: 1px solid #7C3AED; border-radius: 4px; cursor: pointer; font-size: 12px; color: #7C3AED; background: var(--color-surface);"
-        >批量生成</button>
+          class="design-btn-ghost flex items-center gap-1.5"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span>批量生成</span>
+        </button>
       </div>
-    </div>
+    </header>
 
-    <!-- Batch generation dropdown -->
+    <!-- Batch generation strip -->
     <div
       v-if="showGenAll"
-      style="padding: 12px; background: var(--color-surface-container-lowest); border-bottom: 1px solid var(--color-border); display: flex; gap: 8px; flex-wrap: wrap; align-items: center;"
+      class="border-b border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-5 py-3 flex items-center gap-3 flex-shrink-0"
     >
-      <span style="font-size: 12px; color: var(--color-text-tertiary);">一键生成:</span>
+      <span class="design-meta shrink-0">一套生成</span>
       <button
         v-for="preset in FULL_APP_PROMPTS"
         :key="preset.name"
         @click="handleGenerateApp(preset)"
         :disabled="loading"
-        style="padding: 4px 14px; border: 1px solid var(--color-border); border-radius: 20px; cursor: pointer; font-size: 12px; background: var(--color-surface); color: var(--color-text-secondary);"
-      >{{ preset.name }} ({{ preset.pages.length }}页)</button>
+        class="design-chip"
+      >{{ preset.name }} <span class="opacity-60">· {{ preset.pages.length }}页</span></button>
     </div>
 
-    <!-- Page tabs -->
+    <!-- Page tabs strip -->
     <div
-      style="display: flex; align-items: center; gap: 2px; padding: 6px 16px; border-bottom: 1px solid var(--color-border); background: var(--color-surface-container-lowest); overflow-x: auto; flex-shrink: 0;"
+      class="flex items-center gap-1 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 h-10 overflow-x-auto flex-shrink-0"
     >
-      <div
+      <button
         v-for="page in activeProject.pages"
         :key="page.id"
         @click="selectPage(page.id)"
         :class="['design-page-tab', activeProject.activePageId === page.id ? 'design-page-tab--active' : '']"
       >
         <span>{{ page.name }}</span>
-        <button
+        <span
           @click.stop="deletePage(page.id)"
-          style="background: none; border: none; cursor: pointer; font-size: 14px; color: var(--color-text-tertiary); padding: 0; line-height: 1; margin-left: 4px;"
-        >×</button>
-      </div>
+          class="design-page-tab__close"
+          aria-label="删除页面"
+        >×</span>
+      </button>
       <button
         @click="addPage(`页面 ${activeProject.pages.length + 1}`)"
-        style="padding: 5px 10px; border: 1px dashed var(--color-border); border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--color-text-tertiary); background: transparent;"
+        class="design-page-tab-add"
       >+ 新页面</button>
     </div>
 
-    <!-- AI prompt bar (when no page active) -->
-    <div
-      v-if="!activePage && !loading"
-      style="padding: 40px 20px; max-width: 640px; margin: 0 auto; width: 100%; flex: 1; overflow-y: auto;"
-    >
-      <!-- Presets -->
-      <div
-        style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; justify-content: center;"
-      >
-        <button
-          v-for="p in PAGE_PRESETS"
-          :key="p.label"
-          @click="prompt = p.prompt"
-          :class="['design-preset', prompt === p.prompt ? 'design-preset--active' : '']"
-        >{{ p.label }}</button>
+    <!-- Content: prompt bar OR canvas -->
+    <div v-if="!activePage && !loading" class="flex-1 overflow-y-auto bg-[var(--color-surface-container-lowest)]">
+      <div class="mx-auto max-w-[640px] px-8 py-16">
+        <!-- Presets (as quiet chips) -->
+        <div class="mb-6">
+          <div class="design-section-label mb-3">快速开始</div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="p in PAGE_PRESETS"
+              :key="p.label"
+              @click="prompt = p.prompt"
+              :class="['design-preset', prompt === p.prompt ? 'design-preset--active' : '']"
+            >{{ p.label }}</button>
+          </div>
+        </div>
+
+        <!-- Prompt area — like Notion / Figma -->
+        <div class="design-prompt-area">
+          <textarea
+            v-model="prompt"
+            placeholder="描述你想生成的页面…&#10;&#10;例: 一个深色主题的登录页,左侧有产品图,右侧是邮箱密码登录框,登录按钮用品牌色"
+            rows="6"
+            class="design-prompt-textarea"
+          ></textarea>
+          <div class="flex items-center justify-between mt-3">
+            <span class="design-meta">GLM-5.2 · 约 30s</span>
+            <button
+              @click="handleGenerate"
+              :disabled="!prompt.trim()"
+              :class="['design-btn-primary', !prompt.trim() ? 'design-btn-primary--disabled' : '']"
+            >生成</button>
+          </div>
+        </div>
       </div>
-      <textarea
-        v-model="prompt"
-        placeholder="描述你想生成的页面…"
-        rows="4"
-        style="width: 100%; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; font-size: 14px; resize: vertical; margin-bottom: 16px; font-family: inherit; box-sizing: border-box; background: var(--color-surface); color: var(--color-text-primary);"
-      ></textarea>
-      <button
-        @click="handleGenerate"
-        :disabled="!prompt.trim()"
-        :style="{
-          width: '100%', padding: '12px',
-          background: prompt.trim() ? '#7C3AED' : '#D1D5DB',
-          color: '#fff', border: 'none', borderRadius: '6px',
-          cursor: prompt.trim() ? 'pointer' : 'default',
-          fontSize: '14px', fontWeight: '600',
-        }"
-      >AI 生成页面</button>
     </div>
 
     <!-- Loading -->
-    <div
-      v-if="loading"
-      style="flex: 1; display: flex; align-items: center; justify-content: center; color: #7C3AED; font-size: 14px;"
-    >
-      <div style="text-align: center;">
-        <div style="font-size: 32px; margin-bottom: 12px;">⟳</div>
-        <div style="font-size: 12px; color: var(--color-text-tertiary);">AI 正在生成…</div>
+    <div v-if="loading" class="flex-1 flex items-center justify-center bg-[var(--color-surface)]">
+      <div class="text-center">
+        <div class="design-loading-dot"></div>
+        <div class="text-[13px] text-[var(--color-text-tertiary)] mt-4">AI 正在生成</div>
       </div>
     </div>
 
-    <!-- Active page canvas -->
-    <div
-      v-if="activePage && !loading"
-      style="flex: 1; overflow: hidden;"
-    >
+    <!-- Canvas -->
+    <div v-if="activePage && !loading" class="flex-1 overflow-hidden">
       <DesignCanvas
         :initial-data="activePage.data"
         @save="(data) => updatePageData(activePage.id, data)"
@@ -460,67 +441,318 @@ const activePage = computed<DesignPageData | null>(() => {
     </div>
 
     <!-- Error toast -->
-    <div
-      v-if="error"
-      style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 8px 20px; background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface)); color: var(--color-error); border-radius: 6px; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 1000;"
-    >{{ error }}</div>
+    <Transition name="design-fade">
+      <div v-if="error" class="design-toast">{{ error }}</div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
-.design-project-card {
-  padding: 20px;
+/* ── Type system ────────────────────────────────────── */
+.design-page {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+.design-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--color-text-tertiary);
+}
+.design-meta {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  font-family: ui-monospace, 'SF Mono', monospace;
+}
+
+/* ── Buttons ───────────────────────────────────────── */
+.design-btn-primary {
+  padding: 8px 18px;
+  background: var(--color-brand);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.05s;
+}
+.design-btn-primary:hover { opacity: 0.92; }
+.design-btn-primary:active { transform: scale(0.98); }
+.design-btn-primary--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.design-btn-ghost {
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.design-btn-ghost:hover { background: var(--color-surface-container); color: var(--color-text-primary); }
+
+.design-chip {
+  padding: 5px 14px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.design-chip:hover {
+  border-color: var(--color-brand);
+  color: var(--color-text-primary);
+}
+.design-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Inputs ────────────────────────────────────────── */
+.design-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.1s;
+}
+.design-input:focus { border-color: var(--color-brand); }
+
+/* ── New project card ────────────────────────────── */
+.design-new-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  cursor: pointer;
-  transition: box-shadow 0.15s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 16px 20px;
 }
-.design-project-card:hover {
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.15);
+.design-new-card__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 10px;
 }
 
-.design-page-tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  white-space: nowrap;
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--color-text-secondary);
-  font-weight: 400;
-}
-.design-page-tab:hover {
-  background: var(--color-surface);
-}
-.design-page-tab--active {
+/* ── Project tiles ────────────────────────────────── */
+.design-project-tile {
+  position: relative;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  color: #7C3AED;
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+}
+.design-project-tile:hover {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+.design-project-tile__thumb {
+  background: var(--color-surface-container-low);
+  border-radius: 4px;
+  height: 64px;
+  margin-bottom: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.design-project-tile__empty {
+  color: var(--color-text-tertiary);
+  font-size: 14px;
+  text-align: center;
+  opacity: 0.5;
+}
+.design-project-tile__name {
+  font-size: 13px;
   font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.design-project-tile__meta {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.design-project-tile__delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+.design-project-tile:hover .design-project-tile__delete { opacity: 1; }
+.design-project-tile__delete:hover { color: var(--color-error); border-color: var(--color-error); }
+
+/* ── Empty state ──────────────────────────────────── */
+.design-empty {
+  text-align: center;
+  padding: 80px 20px;
+  border: 1px dashed var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-tertiary);
+}
+.design-empty__icon {
+  font-size: 32px;
+  opacity: 0.4;
+  margin-bottom: 12px;
+}
+.design-empty__text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+.design-empty__hint {
+  font-size: 12px;
+}
+
+/* ── Prompt area ─────────────────────────────────── */
+.design-prompt-area {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  transition: border-color 0.15s;
+}
+.design-prompt-area:focus-within { border-color: var(--color-brand); }
+.design-prompt-textarea {
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  background: transparent;
+}
+.design-prompt-textarea::placeholder {
+  color: var(--color-text-tertiary);
+  white-space: pre-line;
 }
 
 .design-preset {
-  padding: 6px 14px;
-  border: none;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 13px;
-  background: var(--color-surface-container);
-  color: var(--color-text-secondary);
-  font-weight: 400;
-}
-.design-preset:hover {
+  padding: 5px 12px;
   background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.1s;
 }
+.design-preset:hover { border-color: var(--color-border-focus); }
 .design-preset--active {
-  background: #7C3AED;
+  background: var(--color-brand);
   color: #fff;
-  font-weight: 600;
+  border-color: var(--color-brand);
+}
+
+/* ── Page tabs ────────────────────────────────────── */
+.design-page-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+.design-page-tab:hover { background: var(--color-surface-container-low); }
+.design-page-tab--active {
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+.design-page-tab__close {
+  margin-left: 2px;
+  font-size: 14px;
+  color: var(--color-text-tertiary);
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+.design-page-tab__close:hover { background: var(--color-error); color: #fff; }
+
+.design-page-tab-add {
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.design-page-tab-add:hover { color: var(--color-text-primary); border-color: var(--color-border-focus); }
+
+/* ── Loading ──────────────────────────────────────── */
+.design-loading-dot {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-brand);
+  border-radius: 50%;
+  margin: 0 auto;
+  animation: design-spin 0.8s linear infinite;
+}
+@keyframes design-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Toast ───────────────────────────────────────── */
+.design-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  background: var(--color-surface);
+  color: var(--color-error);
+  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+}
+
+.design-fade-enter-active, .design-fade-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+.design-fade-enter-from, .design-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
 }
 </style>

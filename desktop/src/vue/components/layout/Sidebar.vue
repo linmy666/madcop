@@ -1368,7 +1368,7 @@ const projectMenuData = computed(() => {
       </div>
     </div>
 
-    <!-- Primary nav: 3 entries, each with stroke-outline icon -->
+    <!-- Primary nav: 2 entries, each with stroke-outline icon -->
     <nav :class="`px-3 pb-3 flex flex-col ${expanded ? 'gap-0.5' : 'items-center gap-1.5'}`" aria-label="Primary">
       <!-- 对话 -->
       <button
@@ -1391,25 +1391,6 @@ const projectMenuData = computed(() => {
         >{{ activeSessionCount }}</span>
       </button>
 
-      <!-- Agent -->
-      <button
-        v-if="!isMobileComputed"
-        type="button"
-        :class="primaryNavClass(activeTabType === 'agents' || activeTabType === 'workflows' || activeTabType === 'design')"
-        aria-label="Agent"
-        @click="() => { tabStore.openTab('__agents__', 'Agent', 'agents' as any); closeMobileDrawer() }"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/><line x1="6.5" y1="6.5" x2="10" y2="10"/><line x1="17.5" y1="6.5" x2="14" y2="10"/><line x1="6.5" y1="17.5" x2="10" y2="14"/><line x1="17.5" y1="17.5" x2="14" y2="14"/></svg>
-        <span v-if="expanded" class="flex-1 text-left">Agent</span>
-        <span
-          v-if="expanded && runningSessionCount > 0"
-          class="ml-auto inline-flex items-center gap-1 text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
-          style="fontFamily: ui-monospace, 'SF Mono', monospace"
-        >
-          <span class="inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-success)]"></span>
-          {{ runningSessionCount }}
-        </span>
-      </button>
 
       <!-- 知识库 -->
       <button
@@ -1478,6 +1459,13 @@ const projectMenuData = computed(() => {
 
       <!-- Secondary items — shown when expanded AND navMoreOpen is true -->
       <template v-if="expanded && navMoreOpen">
+        <button
+          type="button"
+          :class="secondaryNavClass(activeTabType === 'agents')"
+          @click="() => { tabStore.openTab('__agents__', 'Agent', 'agents' as any); closeMobileDrawer() }"
+        >
+          <span class="flex-1 text-left text-[12px]">Agent</span>
+        </button>
         <button
           type="button"
           :class="secondaryNavClass(activeTabId === SCHEDULED_TAB_ID)"
