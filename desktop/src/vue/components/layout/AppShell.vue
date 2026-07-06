@@ -17,10 +17,10 @@ const startupError = ref<string | null>(null)
 const sidebarOpen = ref(true)
 
 onMounted(() => {
-  // Backend health check
+  // Backend health check (silent — don't block app on transient failures)
   fetch('/api/health')
     .then(() => { ready.value = true })
-    .catch((e) => { startupError.value = String(e) })
+    .catch(() => { /* backend may be slow or unreachable, don't block the app */ })
     .finally(() => { ready.value = true })
 })
 
