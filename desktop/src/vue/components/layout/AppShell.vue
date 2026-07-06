@@ -12,6 +12,10 @@ import Sidebar from './Sidebar.vue'
 import ContentRouter from './ContentRouter.vue'
 import StartupErrorView from './StartupErrorView.vue'
 import CommandPalette from '../command/CommandPalette.vue'
+import { useSessionStore } from '../../stores/sessionStore'
+import { useTabStore } from '../../stores/tabs'
+import { useChatStore } from '../../stores/chatStore'
+import { useTranslation } from '../../i18n'
 
 const ready = ref(false)
 const paletteOpen = ref(false)
@@ -31,6 +35,20 @@ onMounted(() => {
     .then(() => { ready.value = true })
     .catch(() => { /* backend may be slow or unreachable, don't block the app */ })
     .finally(() => { ready.value = true })
+  
+  // Auto-create initial session tab so user sees ActiveSession (with ChatInput),
+  // not EmptySession (which has a different composer layout)
+  const sessionStore = useSessionStore()
+  const tabStore = useTabStore()
+  const chatStore = useChatStore()
+  const t = useTranslation()
+  
+  if (!tabStore.activeTabId && sessionStore.sessions.length === 0) {
+    sessionStore.createSession().then((id: string) => {
+      tabStore.openTab(id, t('sidebar.newSession'))
+      chatStore.connectToSession(id)
+    })
+  }
 })
 
 function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }

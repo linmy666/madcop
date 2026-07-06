@@ -48,6 +48,8 @@ import ContextUsageIndicator from '../components/chat/ContextUsageIndicator.vue'
 import FileSearchMenu from '../components/chat/FileSearchMenu.vue'
 import LocalSlashCommandPanel from '../components/chat/LocalSlashCommandPanel.vue'
 import { useMobileViewport } from '../hooks/useMobileViewport'
+
+
 import { isDesktopRuntime } from '../lib/desktopRuntime'
 import MadCopLoader from '../components/common/MadCopLoader.vue'
 import {
