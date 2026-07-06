@@ -735,10 +735,10 @@ const handleProjectDrop = (event: MouseEvent, targetProjectKey: string) => {
   clearProjectDragState()
 }
 
-const createSessionForWorkDir = (workDir?: string) => {
+const createSessionForWorkDir = async (workDir?: string) => {
   try {
-    // createSession is sync (just sets state, no API call)
-    const sessionId = sessionStore.createSession(workDir)
+    // createSession is async (returns Promise<string>) - await it
+    const sessionId = await sessionStore.createSession(workDir)
     restoreHiddenProjectForWorkDir(workDir)
     tabStore.openTab(sessionId, t('sidebar.newSession'))
     chatStore.connectToSession(sessionId)
