@@ -93,6 +93,18 @@ const resolvedPage = computed(() => {
   if (activeTabType.value === 'design') {
     return { kind: 'design' as const }
   }
+  if (activeTabType.value === 'agents') {
+    return { kind: 'agents' as const }
+  }
+  if (activeTabType.value === 'knowledge') {
+    return { kind: 'knowledge' as const }
+  }
+  if (activeTabType.value === 'skill-builder') {
+    return { kind: 'skill-builder' as const }
+  }
+  if (activeTabType.value === 'usage-stats') {
+    return { kind: 'usage-stats' as const }
+  }
   if (activeTabType.value !== 'terminal') {
     return { kind: 'active' as const }
   }
@@ -122,7 +134,7 @@ const resolvedPage = computed(() => {
       />
       <WorkflowsListPage v-else-if="resolvedPage.kind === 'workflows'" />
       <DesignPage v-else-if="resolvedPage.kind === 'design'" />
-      <AgentOverview v-else-if="resolvedPage.kind === 'agents' || resolvedPage.kind === 'workflows' || resolvedPage.kind === 'design'" />
+      <AgentOverview v-else-if="resolvedPage.kind === 'agents'" />
       <SkillBuilder v-else-if="resolvedPage.kind === 'skill-builder'" />
       <UsageStats v-else-if="resolvedPage.kind === 'usage-stats'" />
       <KnowledgeBase v-else-if="resolvedPage.kind === 'knowledge'" />

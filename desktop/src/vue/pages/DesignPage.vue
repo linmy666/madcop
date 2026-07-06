@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import DesignCanvas from '@/vue/components/design/DesignCanvas.vue'
 import { useDesignStore } from '../stores/design'
 import { useGDDStore } from '../stores/gdd'
-import { Button } from '@/components/ui/button'
+// Button replaced with native <button>
 
 const designStore = useDesignStore()
 const gddStore = useGDDStore()
@@ -260,7 +260,7 @@ defineExpose({
     <header class="topbar flex h-12 w-full items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 z-50">
       <div class="flex items-center gap-3">
         <span class="material-symbols-outlined text-[var(--color-accent)] text-lg">design_services</span>
-        <h1 class="text-sm font-semibold text-[var(--color-text)]">Game Design Studio</h1>
+        <h1 class="text-sm font-semibold text-[var(--color-text)]">设计工具</h1>
         <span class="text-xs text-[var(--color-text-dim)] ml-2">
           {{ systems.length }} systems · {{ entities.length }} entities
         </span>

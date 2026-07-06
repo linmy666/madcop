@@ -9,8 +9,8 @@
 -->
 <script setup lang="ts">
 import { ref, computed, onMounted, type Ref } from 'vue'
-import { useTranslation } from '../../i18n'
-import { listNodeTypes, type NodeTypeMeta } from '../../api/workflow'
+import { useTranslation } from '../i18n'
+import { listNodeTypes, type NodeTypeMeta } from '../api/workflow'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface NodeData extends Record<string, unknown> {
@@ -54,16 +54,16 @@ const props = defineProps<{
   workflowName: string
   initialNodes: WfNode[]
   initialEdges: WfEdge[]
-  onSave: (nodes: WfNode[], edges: WfEdge[]) => Promise<void>
-  onRun: () => Promise<void>
+  onSave: Function
+  onRun: Function
   isRunning: boolean
   currentNodeId: string | null
-  onBack: () => void
+  onBack: Function
 }>()
 
 // ── Events ───────────────────────────────────────────────────────────────────
 const emit = defineEmits<{
-  save: [nodes: WfNode[], edges: WfEdge{}]
+  save: [nodes: WfNode[], edges: WfEdge[]]
   run: []
 }>()
 
