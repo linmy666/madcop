@@ -10,6 +10,7 @@ type SettingsTab =
   | 'providers'    // 模型供应商
   | 'general'      // 通用
   | 'agents'       // Agent 网络（新）
+  | 'learning'     // 持续学习（LoRA 微调）
   | 'knowledge'    // 知识库（新）
   | 'workflow'     // 工作流引擎（新）
   | 'memory'       // 记忆
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { id: 'general',     label: '通用设置',   icon: 'tune',    group: 'core' },
   // AI Features (new!)
   { id: 'agents',      label: 'Agent 网络', icon: 'hub',     group: 'ai', badge: 'NEW' },
+  { id: 'learning',    label: '持续学习',  icon: 'school',   group: 'ai', badge: 'NEW' },
   { id: 'knowledge',   label: '知识库',     icon: 'menu_book', group: 'ai', badge: 'NEW' },
   { id: 'workflow',    label: '工作流引擎', icon: 'account_tree', group: 'ai' },
   { id: 'memory',      label: '记忆系统',   icon: 'psychology', group: 'ai' },
@@ -96,6 +98,127 @@ onMounted(async () => {
     kbCount.value = Array.isArray(d2) ? d2.length : 0
   } catch {}
 })
+
+// ─── Continuous Learning state ───────────────────────────────────────
+const learningMode = ref<'none' | 'local'>('none')
+const learningStats = ref({ total: 0, used: 0 })
+const learningHistory = ref<any[]>([])
+const learningTraining = ref(false)
+const learningTrainingStatus = ref<'idle' | 'running' | 'completed' | 'failed'>('idle')
+const learningTrainingMessage = ref('')
+
+async function loadLearning() {
+  try {
+    const r1 = await fetch('/api/training/mode')
+    if (r1.ok) {
+      const d = await r1.json()
+      learningMode.value = d.mode || 'none'
+    }
+    const r2 = await fetch('/api/training/stats')
+    if (r2.ok) {
+      const d = await r2.json()
+      learningStats.value = d.stats ?? { total: 0, used: 0 }
+      learningHistory.value = d.history ?? []
+    }
+  } catch {}
+}
+
+async function setLearningMode(mode: 'none' | 'local') {
+  learningMode.value = mode
+  await fetch('/api/training/mode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  })
+}
+
+async function triggerTraining() {
+  if (learningTraining.value) return
+  if (learningStats.value.total - learningStats.value.used < 10) {
+    alert('至少需要 10 条未训练反馈才能触发微调')
+    return
+  }
+  learningTraining.value = true
+  learningTrainingStatus.value = 'running'
+  learningTrainingMessage.value = '正在准备 LoRA 微调...'
+  try {
+    const res = await fetch('/api/training/trigger', { method: 'POST' })
+    if (res.ok) {
+      const d = await res.json()
+      learningTrainingMessage.value = `微调已启动，使用 ${d.samples} 条样本`
+      pollTrainingStatus()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      learningTrainingStatus.value = 'failed'
+      learningTrainingMessage.value = err.message || '启动失败'
+      learningTraining.value = false
+    }
+  } catch (e) {
+    learningTrainingStatus.value = 'failed'
+    learningTrainingMessage.value = '网络错误'
+    learningTraining.value = false
+  }
+}
+
+async function pollTrainingStatus() {
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 30000))
+    try {
+      const res = await fetch('/api/training/status')
+      if (res.ok) {
+        const d = await res.json()
+        if (d.status === 'completed') {
+          learningTrainingStatus.value = 'completed'
+          learningTrainingMessage.value = '微调完成'
+          learningTraining.value = false
+          await loadLearning()
+          return
+        } else if (d.status === 'failed') {
+          learningTrainingStatus.value = 'failed'
+          learningTrainingMessage.value = d.message || '微调失败'
+          learningTraining.value = false
+          return
+        }
+      }
+    } catch {}
+  }
+  learningTrainingStatus.value = 'failed'
+  learningTrainingMessage.value = '轮询超时'
+  learningTraining.value = false
+}
+
+async function exportDataset() {
+  try {
+    const res = await fetch('/api/training/export')
+    if (!res.ok) return
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `madcop-feedback-${Date.now()}.jsonl`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch {}
+}
+
+async function clearLearningData() {
+  if (!confirm('确定清除所有反馈数据？此操作不可恢复。')) return
+  await fetch('/api/training/clear', { method: 'POST' })
+  await loadLearning()
+}
+
+function formatDate(dateStr: string): string {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  const diff = Date.now() - d.getTime()
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分钟前`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`
+  return d.toLocaleDateString('zh-CN')
+}
+
+onMounted(loadLearning)
 </script>
 
 <template>
@@ -215,6 +338,107 @@ onMounted(async () => {
           <div class="settings-row">
             <span class="settings-row__label">对话中自动引用</span>
             <Toggle default-on />
+          </div>
+        </div>
+
+        <!-- ═══ Continuous Learning ═══ -->
+        <div v-else-if="activeTab === 'learning'" class="settings-section">
+          <h2 class="settings-section__title">持续学习</h2>
+          <p class="settings-section__desc">基于你的反馈数据，本地 LoRA 微调专属小模型。所有数据保留在 Mac 上。</p>
+
+          <!-- Mode selector -->
+          <div class="settings-row settings-row--stack">
+            <span class="settings-row__label">学习模式</span>
+            <div class="learning-modes">
+              <button
+                type="button"
+                :class="['learning-mode', { 'learning-mode--active': learningMode === 'none' }]"
+                @click="setLearningMode('none')"
+              >
+                <span class="learning-mode__title">不学习</span>
+                <span class="learning-mode__desc">仅使用在线推理，不收集反馈</span>
+              </button>
+              <button
+                type="button"
+                :class="['learning-mode', { 'learning-mode--active': learningMode === 'local' }]"
+                @click="setLearningMode('local')"
+              >
+                <span class="learning-mode__title">本地 LoRA 微调</span>
+                <span class="learning-mode__desc">数据保留在本地，用反馈训练小模型</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Stats -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-card__value">{{ learningStats.total }}</div>
+              <div class="stat-card__label">已收集反馈</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card__value">{{ learningStats.used }}</div>
+              <div class="stat-card__label">已用于训练</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card__value">{{ learningHistory.length }}</div>
+              <div class="stat-card__label">微调次数</div>
+            </div>
+          </div>
+
+          <!-- Training trigger -->
+          <div class="settings-row">
+            <span class="settings-row__label">手动触发</span>
+            <div class="flex flex-col gap-2">
+              <button
+                type="button"
+                :disabled="learningTraining"
+                :class="[
+                  'training-trigger-btn',
+                  learningTraining ? 'training-trigger-btn--disabled' : '',
+                ]"
+                @click="triggerTraining"
+              >
+                {{ learningTraining ? '微调中…' : '开始 LoRA 微调' }}
+              </button>
+              <span
+                v-if="learningTrainingMessage"
+                :class="[
+                  'text-[11px]',
+                  learningTrainingStatus === 'failed' ? 'training-msg--error' : 'training-msg--ok',
+                ]"
+                style="font-family: ui-monospace, monospace"
+              >{{ learningTrainingMessage }}</span>
+            </div>
+          </div>
+
+          <!-- Data management -->
+          <div class="settings-row">
+            <span class="settings-row__label">数据管理</span>
+            <div class="flex flex-wrap gap-2">
+              <button class="settings-btn" @click="exportDataset">导出训练集 (JSONL)</button>
+              <button
+                class="settings-btn settings-btn--danger"
+                :disabled="learningStats.total === 0"
+                @click="clearLearningData"
+              >清除所有数据</button>
+            </div>
+          </div>
+
+          <!-- History -->
+          <div v-if="learningHistory.length > 0" class="settings-row settings-row--stack">
+            <span class="settings-row__label">微调历史</span>
+            <div class="learning-history">
+              <div v-for="r in learningHistory" :key="r.id" class="learning-history__row">
+                <span class="learning-history__dot" :class="r.status === 'completed' ? 'learning-history__dot--ok' : 'learning-history__dot--err'"></span>
+                <span class="learning-history__date">{{ formatDate(r.date) }}</span>
+                <span class="learning-history__meta">{{ r.samples }} samples · {{ r.duration }} · loss {{ r.loss.toFixed(3) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="privacy-banner">
+            <span style="font-family: ui-monospace, monospace">local only</span>
+            <span>数据存储于 <code>~/Library/MadCop/training_data/</code></span>
           </div>
         </div>
 
@@ -410,3 +634,126 @@ export default { components: { Toggle } }
 }
 :deep(.madcop-toggle--on)::after { transform: translateX(18px); }
 </style>
+
+/* Continuous Learning styles */
+.learning-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+.learning-mode {
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.learning-mode:hover { border-color: var(--color-border-focus); }
+.learning-mode--active {
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 5%, transparent);
+}
+.learning-mode__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.learning-mode__desc {
+  display: block;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+.training-trigger-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: var(--color-brand);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.training-trigger-btn:hover { opacity: 0.9; }
+.training-trigger-btn--disabled {
+  background: var(--color-surface-container);
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+.training-msg--ok { color: var(--color-text-secondary); }
+.training-msg--error { color: var(--color-error); }
+.learning-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.learning-history__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--color-surface);
+  font-size: 12px;
+}
+.learning-history__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+}
+.learning-history__dot--ok { background: var(--color-success); }
+.learning-history__dot--err { background: var(--color-error); }
+.learning-history__date { color: var(--color-text-primary); }
+.learning-history__meta {
+  color: var(--color-text-tertiary);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  margin-left: auto;
+}
+.privacy-banner {
+  margin-top: 16px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.privacy-banner code {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  padding: 1px 4px;
+  background: var(--color-surface);
+  border-radius: 3px;
+}
+.settings-row--stack {
+  flex-direction: column;
+  align-items: flex-start !important;
+  gap: 8px;
+}
+.settings-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings-btn:hover { background: var(--color-surface-container); }
+.settings-btn--danger {
+  border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
+  color: var(--color-error);
+}
+.settings-btn--danger:hover {
+  background: color-mix(in srgb, var(--color-error) 5%, transparent);
+}
