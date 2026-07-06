@@ -11,8 +11,17 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import Sidebar from './Sidebar.vue'
 import ContentRouter from './ContentRouter.vue'
 import StartupErrorView from './StartupErrorView.vue'
+import CommandPalette from '../command/CommandPalette.vue'
 
 const ready = ref(false)
+const paletteOpen = ref(false)
+
+// Listen for ⌘K toggle event from CommandPalette
+onMounted(() => {
+  window.addEventListener('madcop:command-palette-toggle', () => {
+    paletteOpen.value = !paletteOpen.value
+  })
+})
 const startupError = ref<string | null>(null)
 const sidebarOpen = ref(true)
 
@@ -49,5 +58,8 @@ function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
         <ContentRouter />
       </main>
     </div>
+
+    <!-- ⌘K Command Palette -->
+    <CommandPalette :open="paletteOpen" @close="paletteOpen = false" />
   </div>
 </template>

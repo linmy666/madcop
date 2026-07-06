@@ -16,6 +16,8 @@ const TraceSession = defineAsyncComponent(() => import('../../pages/TraceSession
 const WorkflowsListPage = defineAsyncComponent(() => import('../../pages/WorkflowsListPage.vue'))
 const AgentHub = defineAsyncComponent(() => import('../../pages/AgentHub.vue'))
 const KnowledgeBase = defineAsyncComponent(() => import('../../pages/KnowledgeBase.vue'))
+const AgentOverview = defineAsyncComponent(() => import('../../pages/AgentOverview.vue'))
+const ContinuousLearningSettings = defineAsyncComponent(() => import('../../pages/settings/ContinuousLearningSettings.vue'))
 const DesignPage = defineAsyncComponent(() => import('../../pages/DesignPage.vue'))
 const WorkbenchTab = defineAsyncComponent(() => import('../workbench/WorkbenchTab.vue'))
 
@@ -120,11 +122,12 @@ const resolvedPage = computed(() => {
       />
       <WorkflowsListPage v-else-if="resolvedPage.kind === 'workflows'" />
       <DesignPage v-else-if="resolvedPage.kind === 'design'" />
-      <AgentHub v-else-if="resolvedPage.kind === 'agents'" />
+      <AgentOverview v-else-if="resolvedPage.kind === 'agents' || resolvedPage.kind === 'workflows' || resolvedPage.kind === 'design'" />
       <SkillBuilder v-else-if="resolvedPage.kind === 'skill-builder'" />
       <UsageStats v-else-if="resolvedPage.kind === 'usage-stats'" />
       <KnowledgeBase v-else-if="resolvedPage.kind === 'knowledge'" />
       <ActiveSession v-else-if="resolvedPage.kind === 'active'" />
+      <ContinuousLearningSettings v-else-if="resolvedPage.kind === 'continuous-learning'" />
     </div>
 
     <!-- Terminal tab overlays (mirrors ContentRouter.tsx lines 58–80) -->

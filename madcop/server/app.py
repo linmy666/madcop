@@ -1385,11 +1385,13 @@ def create_app() -> FastAPI:
     # compat layer registers its own @app.get('/api/agents') handler
     # that would intercept our agent_network routes.
     from madcop.agent_network.api import router as agent_router
+    from madcop.training.api import router as training_router
 
     # v3.0 — Extras API (SkillBuilder + UsageStats) — MadCop-exclusive
     from madcop.extras.api import router as extras_router
     app.include_router(extras_router)
     app.include_router(agent_router)
+    app.include_router(training_router)
 
     from .madcop_compat import register as register_madcop_compat
     from .madcop_compat import install_catch_all

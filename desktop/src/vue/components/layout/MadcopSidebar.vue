@@ -491,6 +491,28 @@ const SidebarToggleIcon = defineComponent({
 const isMobileComputed = computed(() => props.isMobile ?? false)
 const closeMobileDrawer = () => props.onRequestClose?.()
 
+// === v3.1 — Graph-theoretic nav: more/less state for secondary nav ===
+const navMoreOpen = ref(false)
+const activeSessionCount = computed(() => sessionStore.sessions?.length ?? 0)
+const runningSessionCount = computed(() => (tabStore.tabs ?? []).filter((tb: any) => tb.status === 'running').length)
+
+// === v3.1 — Nav item class generators (no icons, typography-driven) ===
+function primaryNavClass(isActive: boolean): string {
+  return `group flex w-full h-9 items-center rounded-lg px-2.5 text-[13px] font-medium transition-all duration-150 ${
+    isActive
+      ? 'bg-[var(--color-sidebar-item-active)] text-[var(--color-text-primary)]'
+      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-sidebar-item-hover)] hover:text-[var(--color-text-primary)]'
+  } ${!expanded ? 'justify-center' : ''}`
+}
+
+function secondaryNavClass(isActive: boolean): string {
+  return `group flex w-full h-8 items-center rounded-md px-2.5 transition-all duration-150 ${
+    isActive
+      ? 'bg-[var(--color-sidebar-item-active)]/60 text-[var(--color-text-primary)]'
+      : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-sidebar-item-hover)]/50 hover:text-[var(--color-text-secondary)]'
+  } ${!expanded ? 'justify-center' : ''}`
+}
+
 const contextMenu = ref<{ id: string; x: number; y: number } | null>(null)
 const projectContextMenu = ref<{ key: string; x: number; y: number } | null>(null)
 const projectHeaderMenu = ref<{ type: SidebarHeaderMenuType; x: number; y: number } | null>(null)
@@ -1316,24 +1338,30 @@ const projectMenuData = computed(() => {
     :data-state="expanded ? 'open' : 'closed'"
     aria-label="Sidebar"
   >
-    <!-- Title region -->
+    <!-- v3.1 — Brand: monogram + tagline, no icon, mathematical spacing -->
     <div
       data-testid="sidebar-title-region"
       data-desktop-drag-region
-      :class="`px-3 pb-2 ${isDesktopRuntime && !isWindows ? 'pt-[44px]' : 'pt-3'}`"
+      :class="`px-4 pb-3 ${isDesktopRuntime && !isWindows ? 'pt-[44px]' : 'pt-4'}`"
     >
-      <div :class="`flex ${expanded ? 'items-center justify-between gap-3' : 'flex-col items-center gap-2'}`">
-        <div :class="`flex min-w-0 items-center ${expanded ? 'gap-2.5' : 'justify-center'}`">
-          <MascotAvatar :size="32" />
+      <div :class="`flex ${expanded ? 'items-center justify-between' : 'flex-col items-center gap-2'}`">
+        <div :class="`flex min-w-0 items-baseline ${expanded ? 'gap-2' : 'justify-center'}`">
+          <!-- Monogram — monospace, the engineer's mark -->
           <span
-            :class="`sidebar-copy ${expanded ? 'sidebar-copy--visible' : 'sidebar-copy--hidden'} text-[13px] font-semibold tracking-tight text-[var(--color-text-primary)]`"
-            style="fontFamily: var(--font-headline)"
+            class="sidebar-copy text-[15px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]"
+            style="fontFamily: var(--font-headline, 'SF Mono', ui-monospace, monospace)"
           >
-            MadCop Agent
+            MadCop
+          </span>
+          <span
+            v-if="expanded"
+            class="sidebar-copy text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-tertiary)]"
+            style="fontFamily: ui-monospace, 'SF Mono', monospace"
+          >
+            v3
           </span>
         </div>
         <div v-if="isMobileComputed" :class="`flex items-center ${expanded ? 'gap-1.5' : 'flex-col gap-2'}`">
-          <!-- Mobile close button only -->
           <button
             type="button"
             @click="closeMobileDrawer"
@@ -1345,91 +1373,156 @@ const projectMenuData = computed(() => {
           </button>
         </div>
       </div>
+      <!-- Tagline: appears only when expanded, subtle, typeset in mono small caps -->
+      <div
+        v-if="expanded"
+        class="mt-1.5 text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]"
+        style="fontFamily: ui-monospace, 'SF Mono', monospace"
+      >
+        {{ t('sidebar.brand.tagline') }}
+      </div>
     </div>
 
-    <!-- Nav items (New Session, Scheduled, Workflows, Design) -->
-    <div :class="`px-3 pb-3 flex flex-col ${expanded ? 'gap-0.5' : 'items-center gap-2'}`">
-      <!-- TODO: Phase 2 — NavItem for New Session -->
-      <NavItem
-        :active="false"
-        :collapsed="!expanded"
-                        @click="() => {
+    <!-- v3.1 — Three primary entries: 对话 / Agent / 知识库 -->
+    <nav :class="`px-3 pb-3 flex flex-col ${expanded ? 'gap-0.5' : 'items-center gap-1.5'}`" aria-label="Primary">
+      <!-- 1. 对话 — primary entry, with running-session count badge in mono -->
+      <button
+        type="button"
+        @click="() => {
           const curTabId = tabStore.activeTabId
           const curSession = curTabId ? sessionStore.sessions.find((s) => s.id === curTabId) : null
           void createSessionForWorkDir(curSession?.workDir || curSession?.projectRoot || undefined)
-        }"
-        :icon="{ $: h(PlusIcon) }"
-      >
-        {{ t('sidebar.newSession') }}
-      </NavItem>
-      <NavItem
-        v-if="!isMobileComputed"
-        :active="activeTabId === SCHEDULED_TAB_ID"
-        :collapsed="!expanded"
-                        @click="() => {
-          tabStore.openTab(SCHEDULED_TAB_ID, t('sidebar.scheduled'), 'scheduled')
           closeMobileDrawer()
         }"
-        :icon="{ $: h(ClockIcon) }"
+        :class="primaryNavClass(activeTabType === 'session' || activeTabType === null)"
+        :aria-label="t('sidebar.newSession')"
       >
-        {{ t('sidebar.scheduled') }}
-      </NavItem>
-      <!-- Workflow editor -->
-      <NavItem
+        <span :class="expanded ? 'flex-1 text-left' : ''">{{ t('sidebar.newSession') }}</span>
+        <span
+          v-if="expanded && activeSessionCount > 0"
+          class="ml-auto text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
+          style="fontFamily: ui-monospace, 'SF Mono', monospace"
+        >
+          {{ activeSessionCount }}
+        </span>
+      </button>
+
+      <!-- 2. Agent — primary entry -->
+      <button
         v-if="!isMobileComputed"
-        :active="activeTabType === 'workflows'"
-        :collapsed="!expanded"
+        type="button"
+        :class="primaryNavClass(activeTabType === 'agents' || activeTabType === 'workflows' || activeTabType === 'design')"
+        :aria-label="'Agent'"
         @click="() => {
-          tabStore.openWorkflowsTab()
+          tabStore.openTab('__agents__', 'Agent', 'agents' as any)
           closeMobileDrawer()
         }"
-        :icon="{ $: h(GitBranchIcon) }"
       >
-        {{ t('sidebar.workflows') }}
-      </NavItem>
-      <!-- Design tool -->
-      <NavItem
+        <span :class="expanded ? 'flex-1 text-left' : ''">Agent</span>
+        <span
+          v-if="expanded && runningSessionCount > 0"
+          class="ml-auto inline-flex items-center gap-1 text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
+          style="fontFamily: ui-monospace, 'SF Mono', monospace"
+        >
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-success)]"></span>
+          {{ runningSessionCount }}
+        </span>
+      </button>
+
+      <!-- 3. 知识库 — primary entry -->
+      <button
         v-if="!isMobileComputed"
-        :active="activeTabType === 'design'"
-        :collapsed="!expanded"
-        label="设计工具"
-                @click="() => {
-          tabStore.openDesignTab()
-          closeMobileDrawer()
-        }"
-        :icon="{ $: h(DesignIcon) }"
-      >
-        设计工具
-      </NavItem>
-      <!-- Agent Hub -->
-      <NavItem
-        v-if="!isMobileComputed"
-        :active="activeTabType === 'agents'"
-        :collapsed="!expanded"
-        label="Agent 网络"
-        @click="() => {
-          tabStore.openTab('__agents__', 'Agent 网络', 'agents' as any)
-          closeMobileDrawer()
-        }"
-        :icon="{ $: h(() => h('span', { class: 'material-symbols-outlined', style: 'font-size:18px' }, 'hub')) }"
-      >
-        Agent 网络
-      </NavItem>
-      <!-- Knowledge Base -->
-      <NavItem
-        v-if="!isMobileComputed"
-        :active="activeTabType === 'knowledge'"
-        :collapsed="!expanded"
-        label="知识库"
+        type="button"
+        :class="primaryNavClass(activeTabType === 'knowledge')"
+        :aria-label="'知识库'"
         @click="() => {
           tabStore.openTab('__knowledge__', '知识库', 'knowledge' as any)
           closeMobileDrawer()
         }"
-        :icon="{ $: h(() => h('span', { class: 'material-symbols-outlined', style: 'font-size:18px' }, 'menu_book')) }"
       >
-        知识库
-      </NavItem>
-    </div>
+        <span :class="expanded ? 'flex-1 text-left' : ''">知识库</span>
+      </button>
+    </nav>
+
+    <!-- v3.1 — Divider: primary / secondary (mathematical 1px hairline) -->
+    <div
+      v-if="expanded && !isMobileComputed"
+      class="mx-4 mb-2 mt-1 h-px bg-[var(--color-border-separator)] opacity-50"
+      aria-hidden="true"
+    ></div>
+
+    <!-- v3.1 — Secondary entries, collapsed by default under "更多" -->
+    <nav
+      v-if="!isMobileComputed"
+      :class="`px-3 pb-2 flex flex-col ${expanded ? 'gap-0.5' : 'items-center gap-1.5'}`"
+      aria-label="Secondary"
+    >
+      <!-- Toggle "更多" when expanded; in collapsed mode, show a subtle indicator dot -->
+      <button
+        v-if="expanded"
+        type="button"
+        @click="navMoreOpen = !navMoreOpen"
+        class="group flex h-7 items-center gap-1.5 px-2 text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors"
+        style="fontFamily: ui-monospace, 'SF Mono', monospace"
+        :aria-expanded="navMoreOpen"
+        :aria-label="t(navMoreOpen ? 'sidebar.less' : 'sidebar.more')"
+      >
+        <span class="inline-block w-3 text-center text-[9px]">{{ navMoreOpen ? '−' : '+' }}</span>
+        <span>{{ navMoreOpen ? t('sidebar.less') : t('sidebar.more') }}</span>
+        <span class="ml-1 text-[var(--color-text-tertiary)] opacity-50">4</span>
+      </button>
+
+      <!-- Tiny status dot when collapsed: a hint that there's more -->
+      <div
+        v-else
+        class="h-1 w-1 rounded-full bg-[var(--color-border)]"
+        aria-hidden="true"
+      ></div>
+
+      <!-- Secondary items — shown when expanded AND navMoreOpen is true -->
+      <template v-if="expanded && navMoreOpen">
+        <button
+          type="button"
+          :class="secondaryNavClass(activeTabId === SCHEDULED_TAB_ID)"
+          @click="() => {
+            tabStore.openTab(SCHEDULED_TAB_ID, t('sidebar.scheduled'), 'scheduled')
+            closeMobileDrawer()
+          }"
+        >
+          <span class="flex-1 text-left text-[13px]">{{ t('sidebar.scheduled') }}</span>
+        </button>
+        <button
+          type="button"
+          :class="secondaryNavClass(activeTabType === 'workflows')"
+          @click="() => {
+            tabStore.openWorkflowsTab()
+            closeMobileDrawer()
+          }"
+        >
+          <span class="flex-1 text-left text-[13px]">{{ t('sidebar.workflows') }}</span>
+        </button>
+        <button
+          type="button"
+          :class="secondaryNavClass(activeTabType === 'design')"
+          @click="() => {
+            tabStore.openDesignTab()
+            closeMobileDrawer()
+          }"
+        >
+          <span class="flex-1 text-left text-[13px]">设计工具</span>
+        </button>
+        <button
+          type="button"
+          :class="secondaryNavClass(false)"
+          @click="() => {
+            tabStore.openSkillBuilderTab()
+            closeMobileDrawer()
+          }"
+        >
+          <span class="flex-1 text-left text-[13px]">技能构建器</span>
+        </button>
+      </template>
+    </nav>
 
     <!-- Expanded view: search + session list -->
     <template v-if="expanded">
