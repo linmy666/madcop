@@ -86,6 +86,63 @@ async function clearAll() {
   }
 }
 
+const trainingStatus = ref<'idle' | 'starting' | 'running' | 'completed' | 'failed'>('idle')
+const trainingMessage = ref<string>('')
+
+async function triggerTraining() {
+  if (trainingStatus.value === 'starting' || trainingStatus.value === 'running') return
+  if (stats.value.total - stats.value.used < 10) {
+    alert('至少需要 10 条未训练的反馈才能触发微调')
+    return
+  }
+  trainingStatus.value = 'starting'
+  trainingMessage.value = '正在准备 LoRA 微调...'
+  try {
+    const res = await fetch('/api/training/trigger', { method: 'POST' })
+    if (res.ok) {
+      const data = await res.json()
+      trainingStatus.value = 'running'
+      trainingMessage.value = `微调已启动，使用 ${data.samples} 条反馈样本`
+      // Poll for status updates
+      pollTrainingStatus()
+    } else {
+      const err = await res.json()
+      trainingStatus.value = 'failed'
+      trainingMessage.value = err.message || '启动失败'
+    }
+  } catch (e) {
+    trainingStatus.value = 'failed'
+    trainingMessage.value = '网络错误：' + String(e)
+  }
+}
+
+async function pollTrainingStatus() {
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 30000)) // 30s intervals
+    try {
+      const res = await fetch('/api/training/status')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.status === 'completed') {
+          trainingStatus.value = 'completed'
+          trainingMessage.value = '微调完成'
+          await refreshStats()
+          return
+        } else if (data.status === 'failed') {
+          trainingStatus.value = 'failed'
+          trainingMessage.value = data.message || '微调失败'
+          return
+        }
+      }
+    } catch {
+      // Network error — keep polling
+    }
+  }
+  // Timeout
+  trainingStatus.value = 'failed'
+  trainingMessage.value = '轮询超时'
+}
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr)
@@ -218,7 +275,22 @@ onMounted(refreshStats)
       </div>
 
       <!-- Actions -->
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          :disabled="trainingStatus === 'starting' || trainingStatus === 'running'"
+          :class="[
+            'rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors',
+            trainingStatus === 'starting' || trainingStatus === 'running'
+              ? 'cursor-not-allowed bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'
+              : mode === 'local' && stats.total - stats.used >= 10
+                ? 'bg-[var(--color-brand)] text-white hover:opacity-90'
+                : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]',
+          ]"
+          @click="triggerTraining"
+        >
+          {{ trainingStatus === 'starting' ? '准备中…' : trainingStatus === 'running' ? '微调中…' : '开始 LoRA 微调' }}
+        </button>
         <button
           type="button"
           class="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-[12px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-container)]"
@@ -239,6 +311,20 @@ onMounted(refreshStats)
         >
           清除所有数据
         </button>
+      </div>
+
+      <!-- Training status message -->
+      <div
+        v-if="trainingMessage"
+        :class="[
+          'mt-3 rounded-lg border px-3 py-2 text-[11px]',
+          trainingStatus === 'running' ? 'border-[var(--color-brand)]/30 bg-[var(--color-brand)]/5 text-[var(--color-text-primary)]' :
+          trainingStatus === 'completed' ? 'border-[var(--color-success)]/30 bg-[var(--color-success)]/5 text-[var(--color-text-primary)]' :
+          trainingStatus === 'failed' ? 'border-[var(--color-error)]/30 bg-[var(--color-error)]/5 text-[var(--color-text-primary)]' :
+          'border-[var(--color-border)] text-[var(--color-text-tertiary)]',
+        ]"
+      >
+        <span style="font-family: ui-monospace, monospace">{{ trainingMessage }}</span>
       </div>
     </div>
 

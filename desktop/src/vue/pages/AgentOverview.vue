@@ -12,7 +12,7 @@
  * All pure text, zero icons. Graph-theory aesthetic.
  */
 
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import GraphCanvas, { type GraphNodeData, type GraphEdgeData } from '../components/graph/GraphCanvas.vue'
 import { useTabStore } from '../stores/tabs'
 
@@ -36,7 +36,7 @@ const presets: TopologyPreset[] = [
     nameEn: 'Single',
     desc: '一个 LLM 独立完成所有任务',
     buildNodes: () => [
-      { id: 'n1', label: 'Agent', detail: 'GLM-5.2', x: 500, y: 300, status: 'idle' },
+      { id: 'n1', label: 'Agent', detail: '', x: 500, y: 300, status: 'idle' },
     ],
     buildEdges: () => [],
   },
@@ -46,9 +46,9 @@ const presets: TopologyPreset[] = [
     nameEn: 'Chain',
     desc: '顺序传递: 规划 → 执行 → 审查',
     buildNodes: () => [
-      { id: 'n1', label: '规划', detail: 'GLM-5.2', x: 200, y: 300, status: 'idle' },
-      { id: 'n2', label: '执行', detail: 'Qwen3', x: 500, y: 300, status: 'idle' },
-      { id: 'n3', label: '审查', detail: 'DeepSeek', x: 800, y: 300, status: 'idle' },
+      { id: 'n1', label: '规划', detail: '', x: 200, y: 300, status: 'idle' },
+      { id: 'n2', label: '执行', detail: '', x: 500, y: 300, status: 'idle' },
+      { id: 'n3', label: '审查', detail: '', x: 800, y: 300, status: 'idle' },
     ],
     buildEdges: () => [
       { id: 'e1', from: 'n1', to: 'n2', type: 'dependency' },
@@ -61,11 +61,11 @@ const presets: TopologyPreset[] = [
     nameEn: 'Parallel',
     desc: '多 Agent 同时工作，结果汇聚',
     buildNodes: () => [
-      { id: 'n0', label: '分发', detail: 'Router', x: 200, y: 300, status: 'idle' },
-      { id: 'n1', label: '前端', detail: 'GLM-5.2', x: 500, y: 150, status: 'idle' },
-      { id: 'n2', label: '后端', detail: 'Qwen3', x: 500, y: 300, status: 'idle' },
-      { id: 'n3', label: '测试', detail: 'DeepSeek', x: 500, y: 450, status: 'idle' },
-      { id: 'n4', label: '聚合', detail: 'GLM-5.2', x: 800, y: 300, status: 'idle' },
+      { id: 'n0', label: '分发', detail: '', x: 200, y: 300, status: 'idle' },
+      { id: 'n1', label: '前端', detail: '', x: 500, y: 150, status: 'idle' },
+      { id: 'n2', label: '后端', detail: '', x: 500, y: 300, status: 'idle' },
+      { id: 'n3', label: '测试', detail: '', x: 500, y: 450, status: 'idle' },
+      { id: 'n4', label: '聚合', detail: '', x: 800, y: 300, status: 'idle' },
     ],
     buildEdges: () => [
       { id: 'e1', from: 'n0', to: 'n1', type: 'flow' },
@@ -82,9 +82,9 @@ const presets: TopologyPreset[] = [
     nameEn: 'Debate',
     desc: '提议者 ↔ 批判者对抗，评判者裁决',
     buildNodes: () => [
-      { id: 'n1', label: '提议者', detail: 'GLM-5.2', x: 300, y: 200, status: 'idle' },
-      { id: 'n2', label: '批判者', detail: 'Qwen3', x: 300, y: 400, status: 'idle' },
-      { id: 'n3', label: '评判者', detail: 'DeepSeek', x: 700, y: 300, status: 'idle' },
+      { id: 'n1', label: '提议者', detail: '', x: 300, y: 200, status: 'idle' },
+      { id: 'n2', label: '批判者', detail: '', x: 300, y: 400, status: 'idle' },
+      { id: 'n3', label: '评判者', detail: '', x: 700, y: 300, status: 'idle' },
     ],
     buildEdges: () => [
       { id: 'e1', from: 'n1', to: 'n2', type: 'flow', label: '提议' },
@@ -99,11 +99,11 @@ const presets: TopologyPreset[] = [
     nameEn: 'Ensemble',
     desc: '同一问题问 N 个模型，投票选优',
     buildNodes: () => [
-      { id: 'n0', label: '问题', detail: 'input', x: 150, y: 300, status: 'idle' },
+      { id: 'n0', label: '问题', detail: '', x: 150, y: 300, status: 'idle' },
       { id: 'n1', label: 'GLM-5.2', detail: '', x: 450, y: 150, status: 'idle' },
       { id: 'n2', label: 'Qwen3', detail: '', x: 450, y: 300, status: 'idle' },
       { id: 'n3', label: 'DeepSeek', detail: '', x: 450, y: 450, status: 'idle' },
-      { id: 'n4', label: '评判', detail: 'judge', x: 750, y: 300, status: 'idle' },
+      { id: 'n4', label: '评判', detail: '', x: 750, y: 300, status: 'idle' },
     ],
     buildEdges: () => [
       { id: 'e1', from: 'n0', to: 'n1', type: 'flow' },
@@ -120,9 +120,9 @@ const presets: TopologyPreset[] = [
     nameEn: 'Loop',
     desc: '迭代优化: 执行 → 评估 → 修正 → 再执行',
     buildNodes: () => [
-      { id: 'n1', label: '执行', detail: 'GLM-5.2', x: 250, y: 200, status: 'idle' },
-      { id: 'n2', label: '评估', detail: 'Qwen3', x: 650, y: 200, status: 'idle' },
-      { id: 'n3', label: '修正', detail: 'DeepSeek', x: 450, y: 450, status: 'idle' },
+      { id: 'n1', label: '执行', detail: '', x: 250, y: 200, status: 'idle' },
+      { id: 'n2', label: '评估', detail: '', x: 650, y: 200, status: 'idle' },
+      { id: 'n3', label: '修正', detail: '', x: 450, y: 450, status: 'idle' },
     ],
     buildEdges: () => [
       { id: 'e1', from: 'n1', to: 'n2', type: 'dependency' },
@@ -136,10 +136,10 @@ const presets: TopologyPreset[] = [
     nameEn: 'Hierarchical',
     desc: '协调者分配子任务给执行者',
     buildNodes: () => [
-      { id: 'n0', label: '协调者', detail: 'GLM-5.2', x: 500, y: 120, status: 'idle' },
-      { id: 'n1', label: '执行 A', detail: 'Qwen3', x: 250, y: 350, status: 'idle' },
-      { id: 'n2', label: '执行 B', detail: 'DeepSeek', x: 500, y: 350, status: 'idle' },
-      { id: 'n3', label: '执行 C', detail: 'GLM-5.2', x: 750, y: 350, status: 'idle' },
+      { id: 'n0', label: '协调者', detail: '', x: 500, y: 120, status: 'idle' },
+      { id: 'n1', label: '执行 A', detail: '', x: 250, y: 350, status: 'idle' },
+      { id: 'n2', label: '执行 B', detail: '', x: 500, y: 350, status: 'idle' },
+      { id: 'n3', label: '执行 C', detail: '', x: 750, y: 350, status: 'idle' },
     ],
     buildEdges: () => [
       { id: 'e1', from: 'n0', to: 'n1', type: 'control', label: '分配' },
@@ -156,11 +156,11 @@ const presets: TopologyPreset[] = [
     nameEn: 'Blackboard',
     desc: '多专家共享上下文，独立读写',
     buildNodes: () => [
-      { id: 'n0', label: '黑板', detail: 'shared', x: 500, y: 300, status: 'idle' },
-      { id: 'n1', label: '专家 A', detail: 'GLM-5.2', x: 200, y: 150, status: 'idle' },
-      { id: 'n2', label: '专家 B', detail: 'Qwen3', x: 800, y: 150, status: 'idle' },
-      { id: 'n3', label: '专家 C', detail: 'DeepSeek', x: 200, y: 450, status: 'idle' },
-      { id: 'n4', label: '专家 D', detail: 'GLM-5.2', x: 800, y: 450, status: 'idle' },
+      { id: 'n0', label: '黑板', detail: '', x: 500, y: 300, status: 'idle' },
+      { id: 'n1', label: '专家 A', detail: '', x: 200, y: 150, status: 'idle' },
+      { id: 'n2', label: '专家 B', detail: '', x: 800, y: 150, status: 'idle' },
+      { id: 'n3', label: '专家 C', detail: '', x: 200, y: 450, status: 'idle' },
+      { id: 'n4', label: '专家 D', detail: '', x: 800, y: 450, status: 'idle' },
     ],
     buildEdges: () => [
       { id: 'e1', from: 'n1', to: 'n0', type: 'flow', label: '读写' },
@@ -192,17 +192,32 @@ function applyPreset(preset: TopologyPreset) {
 // Init with default
 applyPreset(presets[1]) // chain
 
+// Load user's configured models from settings
+async function loadUserModels() {
+  try {
+    const res = await fetch('/api/settings/models')
+    if (res.ok) {
+      const data = await res.json()
+      // User might have configured multiple model providers
+      userConfiguredModels.value = (data.models ?? []).map((m: any) => m.name || m.id)
+    }
+  } catch {
+    // Silently ignore — user can configure in Settings later
+  }
+}
+onMounted(() => {
+  loadUserModels()
+})
+
 // ─── Node config ───────────────────────────────────────────────────────
 
 const selectedNode = computed(() =>
   nodes.value.find((n) => n.id === selectedNodeId.value) ?? null,
 )
 
-const availableModels = [
-  { id: 'glm52', name: 'GLM-5.2', desc: '强推理 · 工具调用稳定' },
-  { id: 'qwen3', name: 'Qwen3-80B', desc: '快 · 代码强' },
-  { id: 'deepseek', name: 'DeepSeek-V3', desc: '均衡 · 长上下文' },
-]
+// Models are user-configured in Settings. The graph only shows the
+// selected model name; the user picks which model to attach per node.
+const userConfiguredModels = ref<string[]>([])
 
 function setNodeModel(nodeId: string, modelName: string) {
   const node = nodes.value.find((n) => n.id === nodeId)
@@ -333,25 +348,35 @@ function sleep(ms: number) {
           </div>
         </div>
 
-        <!-- Model selector -->
+        <!-- Model selector — from user's settings -->
         <div class="mb-5">
-          <label class="mb-2 block text-[11px] font-medium text-[var(--color-text-secondary)]">模型</label>
+          <label class="mb-2 block text-[11px] font-medium text-[var(--color-text-secondary)]">模型（来自设置）</label>
           <div class="space-y-1">
+            <!-- User's configured models from Settings -->
             <button
-              v-for="model in availableModels"
-              :key="model.id"
+              v-for="modelName in userConfiguredModels"
+              :key="modelName"
               type="button"
               :class="[
-                'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors',
-                (selectedNode.detail || '') === model.name
+                'flex w-full items-center rounded-lg border px-3 py-2 text-left transition-colors',
+                (selectedNode.detail || '') === modelName
                   ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5'
                   : 'border-[var(--color-border)] hover:border-[var(--color-border-focus)]',
               ]"
-              @click="setNodeModel(selectedNode.id, model.name)"
+              @click="setNodeModel(selectedNode.id, modelName)"
             >
-              <span class="text-[12px] font-medium text-[var(--color-text-primary)]">{{ model.name }}</span>
-              <span class="text-[10px] text-[var(--color-text-tertiary)]">{{ model.desc }}</span>
+              <span class="text-[12px] font-medium text-[var(--color-text-primary)]">{{ modelName }}</span>
             </button>
+            <!-- Empty state: prompt to configure in Settings -->
+            <div
+              v-if="userConfiguredModels.length === 0"
+              class="rounded-lg border border-dashed border-[var(--color-border)] p-3 text-center"
+            >
+              <div class="text-[12px] text-[var(--color-text-secondary)]">尚未配置模型</div>
+              <div class="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
+                请在 <span style="font-family: ui-monospace, monospace">设置</span> 中添加
+              </div>
+            </div>
           </div>
         </div>
 
@@ -395,7 +420,7 @@ function sleep(ms: number) {
     <!-- Bottom bar: run button + stats -->
     <footer class="flex items-center justify-between border-t border-[var(--color-border)] px-6 py-3">
       <div class="flex items-center gap-4 text-[11px] text-[var(--color-text-tertiary)]">
-        <span>预估 Token: <span class="tabular-nums" style="font-family: ui-monospace, monospace">~{{ nodes.length * 2000 }}</span></span>
+        <span>每个节点使用用户在设置中配置的模型</span>
       </div>
       <button
         type="button"
