@@ -396,7 +396,7 @@ function getCachedMarkdownParse(content: string, streaming: boolean): MarkdownPa
 }
 
 // Exposed for testing / diagnostics (matches React's `__markdownParseCacheInternals`)
-export const __markdownParseCacheInternals = {
+const __markdownParseCacheInternals = {
   finalizedSize: () => finalizedMarkdownCache.size,
   streamingSize: () => streamingMarkdownCache.size,
   finalizedChars: () => finalizedMarkdownCacheChars,

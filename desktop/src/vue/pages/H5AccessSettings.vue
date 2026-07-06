@@ -119,7 +119,7 @@ function parseH5GraceDraft(draft: string): number | null | 'invalid' {
 function buildH5PublicBaseUrlFromHostDraft(draft: string, currentBaseUrl: string | null): string | null {
   const trimmed = draft.trim()
   if (!trimmed) return null
-  if (/^[a-z][a-z0-9+.-]*:\/\/i.test(trimmed)) return trimmed
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed
 
   try {
     const current = currentBaseUrl ? new URL(currentBaseUrl) : null

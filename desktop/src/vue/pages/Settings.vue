@@ -6,6 +6,19 @@
 
 import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
 const MemoryPage = defineAsyncComponent(() => import('./MemoryPage.vue'))
+const ProviderSettings = defineAsyncComponent(() => import('./settings/ProviderSettings.vue'))
+const GeneralSettings = defineAsyncComponent(() => import('./settings/GeneralSettings.vue'))
+const H5AccessSettings = defineAsyncComponent(() => import('./H5AccessSettings.vue'))
+const AdapterSettings = defineAsyncComponent(() => import('./AdapterSettings.vue'))
+const TerminalSettings = defineAsyncComponent(() => import('./TerminalSettings.vue'))
+const McpSettings = defineAsyncComponent(() => import('./McpSettings.vue'))
+const AgentsSettingsPage = defineAsyncComponent(() => import('./AgentsSettings.vue'))
+const SkillSettingsPage = defineAsyncComponent(() => import('./SkillSettings.vue'))
+const PluginSettingsPage = defineAsyncComponent(() => import('./PluginSettings.vue'))
+const ComputerUseSettingsPage = defineAsyncComponent(() => import('./ComputerUseSettings.vue'))
+const ActivitySettingsPage = defineAsyncComponent(() => import('./ActivitySettings.vue'))
+const DiagnosticsSettingsPage = defineAsyncComponent(() => import('./DiagnosticsSettings.vue'))
+const AboutSettingsPage = defineAsyncComponent(() => import('./AboutSettings.vue'))
 
 type SettingsTab =
   | 'providers'    // 模型供应商
@@ -50,6 +63,16 @@ const navItems: NavItem[] = [
   { id: 'activity',    label: '活动统计',   icon: 'monitoring', group: 'system' },
   { id: 'diagnostics', label: '环境诊断',   icon: 'monitor_heart', group: 'system' },
   { id: 'about',       label: '关于',       icon: 'info',    group: 'system' },
+  { id: 'h5Access',    label: 'H5 访问',   icon: 'qr_code_2', group: 'ai' },
+  { id: 'adapters',    label: '适配器',    icon: 'chat',     group: 'ai' },
+  { id: 'terminal',    label: '终端',      icon: 'terminal', group: 'system' },
+  { id: 'mcp',         label: 'MCP 工具',  icon: 'dns',      group: 'ai' },
+  { id: 'skills',      label: '技能构建',  icon: 'auto_awesome', group: 'ai' },
+  { id: 'plugins',     label: '插件',      icon: 'extension', group: 'ai' },
+  { id: 'computerUse', label: '计算机使用', icon: 'mouse',   group: 'system' },
+  { id: 'activity',    label: '活动统计',  icon: 'monitoring', group: 'system' },
+  { id: 'trace',       label: '追踪',      icon: 'account_tree', group: 'system' },
+  { id: 'diagnostics', label: '诊断',      icon: 'monitor_heart', group: 'system' },
 ]
 
 const groupLabels: Record<string, string> = {
@@ -244,73 +267,16 @@ onMounted(loadLearning)
       <!-- Right: Content -->
       <main class="settings-content">
         <!-- ═══ Providers ═══ -->
-        <div v-if="activeTab === 'providers'" class="settings-section">
-          <h2 class="settings-section__title">模型供应商</h2>
-          <p class="settings-section__desc">配置你的 LLM API key 和默认模型。</p>
-
-          <div v-for="p in providers" :key="p.id" class="provider-card">
-            <div class="provider-card__head">
-              <span class="material-symbols-outlined text-[20px] text-[var(--color-text-secondary)]">cloud</span>
-              <span class="provider-card__name">{{ p.name }}</span>
-              <span v-if="p.id === activeProvider" class="provider-card__active">当前</span>
-            </div>
-            <div class="provider-card__model">{{ p.model }}</div>
-            <div class="provider-card__status" :class="p.api_key ? 'provider-card__status--ok' : 'provider-card__status--warn'">
-              {{ p.api_key ? 'API Key 已配置' : '未配置 API Key' }}
-            </div>
-          </div>
+        <div v-if="activeTab === 'providers'" class="settings-section settings-section--fullbleed">
+          <ProviderSettings />
         </div>
 
         <!-- ═══ General ═══ -->
-        <div v-else-if="activeTab === 'general'" class="settings-section">
-          <h2 class="settings-section__title">通用设置</h2>
-          <div class="settings-row">
-            <span class="settings-row__label">语言</span>
-            <select class="settings-select"><option>中文</option><option>English</option></select>
-          </div>
-          <div class="settings-row">
-            <span class="settings-row__label">回复语言</span>
-            <select class="settings-select"><option>跟随用户</option><option>始终中文</option><option>始终英文</option></select>
-          </div>
-          <div class="settings-row">
-            <span class="settings-row__label">发送快捷键</span>
-            <select class="settings-select"><option>Enter 发送 / Shift+Enter 换行</option><option>Ctrl+Enter 发送</option></select>
-          </div>
+        <div v-else-if="activeTab === 'general'" class="settings-section settings-section--fullbleed">
+          <GeneralSettings />
         </div>
 
-        <!-- ═══ Agent Network ═══ -->
-        <div v-else-if="activeTab === 'agents'" class="settings-section">
-          <h2 class="settings-section__title">Agent 网络</h2>
-          <p class="settings-section__desc">管理你的 AI Agent 团队。每个 Agent 可以有独立的模型、工具和能力。</p>
-
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-card__value">{{ agentStats.builtin }}</div>
-              <div class="stat-card__label">内置 Agent</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-card__value">{{ agentStats.installed }}</div>
-              <div class="stat-card__label">自定义 Agent</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-card__value">{{ agentStats.builtin + agentStats.installed }}</div>
-              <div class="stat-card__label">总计</div>
-            </div>
-          </div>
-
-          <div class="settings-row">
-            <span class="settings-row__label">默认 Agent 模型</span>
-            <select class="settings-select"><option>GLM-5.2</option><option>DeepSeek-V4 Flash</option><option>Qwen3-80B</option></select>
-          </div>
-          <div class="settings-row">
-            <span class="settings-row__label">Agent 超时（秒）</span>
-            <input type="number" value="120" class="settings-input" />
-          </div>
-          <div class="settings-row">
-            <span class="settings-row__label">最大并发 Agent</span>
-            <input type="number" value="3" class="settings-input" />
-          </div>
-        </div>
+<!-- ═══ Agent Network (now handled by routing above) ═══ -->
 
         <!-- ═══ Knowledge Base ═══ -->
         <div v-else-if="activeTab === 'knowledge'" class="settings-section">
@@ -466,36 +432,54 @@ onMounted(loadLearning)
           <MemoryPage />
         </div>
 
-        <!-- ═══ About ═══ -->
-        <div v-else-if="activeTab === 'about'" class="settings-section">
-          <h2 class="settings-section__title">关于 MadCop</h2>
-          <div class="about-card">
-            <div class="about-card__logo">
-              <span class="material-symbols-outlined text-[48px] text-[var(--color-primary)]">smart_toy</span>
-            </div>
-            <div class="about-card__info">
-              <div class="about-card__name">MadCop</div>
-              <div class="about-card__version">v3.0.0 · Agent Network Edition</div>
-              <div class="about-card__desc">周思万虑，巡行无疆 — 本地 AI Agent 桌面工作站</div>
-              <a href="https://github.com/linmy666/madcop" target="_blank" class="about-card__link">
-                <span class="material-symbols-outlined text-[14px]">open_in_new</span>
-                GitHub
-              </a>
-            </div>
-          </div>
-          <div class="about-tech">
-            <div class="about-tech__title">技术栈</div>
-            <div class="about-tech__list">
-              <span class="about-tech__item">Vue 3 + Pinia</span>
-              <span class="about-tech__item">FastAPI + Uvicorn</span>
-              <span class="about-tech__item">Electron 42</span>
-              <span class="about-tech__item">Tailwind v4</span>
-              <span class="about-tech__item">SQLite + JSON</span>
-            </div>
-          </div>
-        </div>
+<!-- ═══ About (now handled by routing above) ═══ -->
 
         <!-- ═══ Placeholder for other tabs ═══ -->
+        <!-- ═══ H5 Access ═══ -->
+        <div v-else-if="activeTab === 'h5Access'" class="settings-section settings-section--fullbleed">
+          <H5AccessSettings />
+        </div>
+        <!-- ═══ Adapters ═══ -->
+        <div v-else-if="activeTab === 'adapters'" class="settings-section settings-section--fullbleed">
+          <AdapterSettings />
+        </div>
+        <!-- ═══ Terminal ═══ -->
+        <div v-else-if="activeTab === 'terminal'" class="settings-section settings-section--fullbleed">
+          <TerminalSettings />
+        </div>
+        <!-- ═══ MCP ═══ -->
+        <div v-else-if="activeTab === 'mcp'" class="settings-section settings-section--fullbleed">
+          <McpSettings />
+        </div>
+        <!-- ═══ Agents ═══ -->
+        <div v-else-if="activeTab === 'agents'" class="settings-section settings-section--fullbleed">
+          <AgentsSettingsPage />
+        </div>
+        <!-- ═══ Skills ═══ -->
+        <div v-else-if="activeTab === 'skills'" class="settings-section settings-section--fullbleed">
+          <SkillSettingsPage />
+        </div>
+        <!-- ═══ Plugins ═══ -->
+        <div v-else-if="activeTab === 'plugins'" class="settings-section settings-section--fullbleed">
+          <PluginSettingsPage />
+        </div>
+        <!-- ═══ ComputerUse ═══ -->
+        <div v-else-if="activeTab === 'computerUse'" class="settings-section settings-section--fullbleed">
+          <ComputerUseSettingsPage />
+        </div>
+        <!-- ═══ Activity ═══ -->
+        <div v-else-if="activeTab === 'activity'" class="settings-section settings-section--fullbleed">
+          <ActivitySettingsPage />
+        </div>
+        <!-- ═══ Diagnostics ═══ -->
+        <div v-else-if="activeTab === 'diagnostics'" class="settings-section settings-section--fullbleed">
+          <DiagnosticsSettingsPage />
+        </div>
+        <!-- ═══ About ═══ -->
+        <div v-else-if="activeTab === 'about'" class="settings-section settings-section--fullbleed">
+          <AboutSettingsPage />
+        </div>
+        <!-- ═══ Placeholder for unhandled tabs ═══ -->
         <div v-else class="settings-section">
           <h2 class="settings-section__title">{{ navItems.find(n => n.id === activeTab)?.label }}</h2>
           <p class="settings-section__desc">此模块正在开发中。</p>
