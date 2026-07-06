@@ -234,12 +234,10 @@ const pendingSlashUiAction = computed((): SlashUiAction => {
   if (isMemberSession.value || !input.value.trim().startsWith('/')) return null
   return resolveSlashUiAction(input.value.trim().slice(1))
 })
-const canSubmit = computed(() =>
-  !isWorkspaceMissing.value &&
-  !launchTransitioning.value &&
-  (!showLaunchControls.value || launchReady.value || !!pendingSlashUiAction.value) &&
-  (input.value.trim().length > 0 || (!isMemberSession.value && (attachments.value.length > 0 || hasWorkspaceReferences.value))),
-)
+const canSubmit = computed(() => {
+  // Simplified: just need text or attachments
+  return input.value.trim().length > 0 || attachments.value.length > 0
+})
 
 function workspaceReferenceToAttachment(reference: { id: string; name: string; kind?: string; path?: string; isDirectory?: boolean; lineStart?: number; lineEnd?: number; note?: string; quote?: string }): ComposerAttachment {
   return {

@@ -6,6 +6,7 @@
  */
 
 import { ref, onMounted, computed } from 'vue'
+import { getApiUrl } from '../../../api/client'
 
 interface Provider {
   provider_id: string
@@ -73,14 +74,14 @@ const createForm = ref({
 async function loadData() {
   loading.value = true
   try {
-    const res = await fetch('/api/settings')
+    const res = await fetch(getApiUrl('/api/settings'))
     if (res.ok) {
       const data = await res.json()
       activeProviderId.value = data.active_provider || null
       providers.value = (data.providers || []).filter((p: Provider) => p.model || p.label)
     }
     // Load presets
-    const res2 = await fetch('/api/settings/providers/presets')
+    const res2 = await fetch(getApiUrl('/api/settings/providers/presets'))
     if (res2.ok) {
       const data2 = await res2.json()
       presets.value = data2.presets || []
@@ -137,7 +138,7 @@ async function createProvider() {
   if (createForm.value.preset_id) body.preset_id = createForm.value.preset_id
 
   try {
-    const res = await fetch('/api/settings', {
+    const res = await fetch(getApiUrl('/api/settings'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ providers: [body] }),
@@ -146,7 +147,7 @@ async function createProvider() {
       showCreateModal.value = false
       createForm.value = { label: '', base_url: '', model: '', api_key: '', preset_id: '' }
       // Reload
-      const settingsRes = await fetch('/api/settings')
+      const settingsRes = await fetch(getApiUrl('/api/settings'))
       if (settingsRes.ok) {
         const data = await settingsRes.json()
         providers.value = (data.providers || []).filter((p: Provider) => p.model || p.label)
@@ -219,7 +220,7 @@ async function executeDelete() {
 
 async function activateProvider(providerId: string) {
   try {
-    await fetch('/api/settings/active', {
+    await fetch(getApiUrl('/api/settings/active'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider_id: providerId }),
@@ -235,7 +236,7 @@ async function activateProvider(providerId: string) {
 async function testProvider(providerId: string) {
   testResults.value = { ...testResults.value, [providerId]: { loading: true } }
   try {
-    const res = await fetch(`/api/settings/providers/${providerId}/test`, { method: 'POST' })
+    const res = await fetch(getApiUrl(`/api/settings/providers/${providerId}/test`), { method: 'POST' })
     if (res.ok) {
       const result = await res.json()
       testResults.value = { ...testResults.value, [providerId]: { loading: false, result } }
