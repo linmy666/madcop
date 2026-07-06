@@ -191,13 +191,13 @@ const isMobileComposer = computed(() => useMobileViewport() && !isDesktopRuntime
 
 const allSlashCommands = computed(() => {
   return appendAgentSlashCommands(
-    mergeSlashCommands(slashCommands.value, getLocalizedFallbackCommands(t)),
-    agentSlashCommands.value,
-  )
+    mergeSlashCommands(slashCommands.value ?? [], getLocalizedFallbackCommands(t)),
+    agentSlashCommands.value ?? [],
+  ) ?? []
 })
 
 const filteredCommands = computed(() => {
-  return filterSlashCommands(allSlashCommands.value, slashFilter.value)
+  return filterSlashCommands(allSlashCommands.value ?? [], slashFilter.value) ?? []
 })
 
 const exactSlashCommand = computed(() => {
