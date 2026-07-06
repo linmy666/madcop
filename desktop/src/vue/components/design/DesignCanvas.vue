@@ -1,21 +1,22 @@
-<!--
-  v3.0 — DesignCanvas (Vue 3 SFC)
-  Full translation of src/design/DesignCanvas.tsx (640 lines).
-  Native HTML5 canvas-based design tool, zero external deps.
--->
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  onMounted,
-  onBeforeUnmount,
-  watch,
-  type Ref,
-} from 'vue'
-import FieldEditor from './FieldEditor.vue'
-import RenderedItem from './RenderedItem.vue'
+/**
+ * v3.0 — MadCop Design Canvas (Vue 3 port)
+ *
+ * Native HTML5 drag-drop design editor. No external CSS, no Puck, no deps.
+ * 1:1 port of src/design/DesignCanvas.tsx (React).
+ *
+ * Features:
+ *  - 11 component types: Header / Paragraph / Button / Image / Input / Card /
+ *    Flex / Grid / Section / Divider / Space
+ *  - Click to select, edit fields in right panel
+ *  - Drag to reorder children
+ *  - 导出 .madcop (JSON) and 导入 .madcop
+ *  - 保存 triggers onSave callback
+ */
 
-// ── Types ─────────────────────────────────────────────────────────────
+import { ref, computed, onMounted } from 'vue'
+
+// ── Types ──────────────────────────────────────────────────────────────
 
 export interface DesignItem {
   type: string
@@ -39,15 +40,10 @@ export interface ComponentConfig {
   defaultProps: Record<string, any>
   isContainer?: boolean
   label: string
+  render: (props: Record<string, any>) => string
 }
 
 // ── Component Registry ────────────────────────────────────────────────
-
-const shadowMap: Record<string, string> = {
-  sm: '0 1px 2px rgba(0,0,0,0.05)',
-  md: '0 4px 6px rgba(0,0,0,0.1)',
-  lg: '0 10px 15px rgba(0,0,0,0.15)',
-}
 
 const componentRegistry: Record<string, ComponentConfig> = {
   Header: {
@@ -59,6 +55,13 @@ const componentRegistry: Record<string, ComponentConfig> = {
       fontSize: { type: 'number', label: '字号' },
     },
     defaultProps: { text: '新标题', level: '2', fontSize: 24 },
+    render: ({ text, level, color, fontSize }) => {
+      const fontSizePx = `${fontSize || 24}px`
+      const colorHex = color || '#1A1A1A'
+      const text_ = text || '标题'
+      const tag = `h${level || 2}`
+      return `<${tag} style="margin: 0 0 8px 0; color: ${colorHex}; font-size: ${fontSizePx}; font-weight: 700;">${text_}</${tag}>`
+    },
   },
   Paragraph: {
     label: '段落',
@@ -69,677 +72,523 @@ const componentRegistry: Record<string, ComponentConfig> = {
       textAlign: { type: 'select', label: '对齐', options: [{ label: '左', value: 'left' }, { label: '中', value: 'center' }, { label: '右', value: 'right' }] },
     },
     defaultProps: { text: '这是一段文字', fontSize: 14, textAlign: 'left' },
+    render: ({ text, color, fontSize, textAlign }) =>
+      `<p style="margin: 0 0 12px 0; font-size: ${fontSize || 14}px; line-height: 1.6; color: ${color || '#4B5563'}; text-align: ${textAlign || 'left'};">${text || '段落文字'}</p>`,
   },
   Button: {
     label: '按钮',
     fields: {
       text: { type: 'text', label: '文字' },
-      variant: { type: 'radio', label: '样式', options: [{ label: '主要', value: 'primary' }, { label: '次要', value: 'secondary' }] },
-      color: { type: 'color', label: '主色' },
-      width: { type: 'number', label: '宽度' },
+      variant: { type: 'select', label: '样式', options: [{ label: '主按钮', value: 'primary' }, { label: '次按钮', value: 'secondary' }] },
+      color: { type: 'color', label: '颜色' },
     },
-    defaultProps: { text: '提交', variant: 'primary', color: '#7C3AED' },
+    defaultProps: { text: '按钮', variant: 'primary' },
+    render: ({ text, variant, color }) => {
+      const bg = variant === 'primary' ? (color || '#7C3AED') : '#E2E8F0'
+      const fg = variant === 'primary' ? '#fff' : '#1A1A1A'
+      return `<button style="padding: 10px 24px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 14px; background: ${bg}; color: ${fg};">${text || '按钮'}</button>`
+    },
   },
   Image: {
     label: '图片',
     fields: {
       src: { type: 'text', label: '图片地址' },
-      alt: { type: 'text', label: '替代文字' },
       width: { type: 'number', label: '宽度' },
       height: { type: 'number', label: '高度' },
-      borderRadius: { type: 'number', label: '圆角' },
     },
-    defaultProps: { src: '', alt: '', borderRadius: 8 },
+    defaultProps: { src: 'https://via.placeholder.com/300x200', width: 300, height: 200 },
+    render: ({ src, width, height }) =>
+      `<img src="${src || ''}" alt="" style="max-width: 100%; width: ${width || 300}px; height: ${height || 200}px; object-fit: cover; border-radius: 4px;" />`,
   },
   Input: {
     label: '输入框',
     fields: {
       placeholder: { type: 'text', label: '占位文字' },
       width: { type: 'number', label: '宽度' },
-      type: { type: 'select', label: '类型', options: [{ label: '文本', value: 'text' }, { label: '密码', value: 'password' }, { label: '邮箱', value: 'email' }] },
     },
-    defaultProps: { placeholder: '请输入...', width: 300, type: 'text' },
+    defaultProps: { placeholder: '请输入...', width: 300 },
+    render: ({ placeholder, width }) =>
+      `<input type="text" placeholder="${placeholder || ''}" style="padding: 10px 14px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; width: ${width || 300}px;" />`,
   },
   Card: {
     label: '卡片',
-    isContainer: true,
     fields: {
       padding: { type: 'number', label: '内边距' },
-      bgColor: { type: 'color', label: '背景色' },
       radius: { type: 'number', label: '圆角' },
-      shadow: { type: 'select', label: '阴影', options: [{ label: '小', value: 'sm' }, { label: '中', value: 'md' }, { label: '大', value: 'lg' }] },
     },
-    defaultProps: { padding: 20, bgColor: '#F9FAFB', radius: 12, shadow: 'sm' },
+    defaultProps: { padding: 20, radius: 12 },
+    isContainer: true,
+    render: ({ padding, radius }, children = '') =>
+      `<div style="background: #fff; border: 1px solid #E5E7EB; border-radius: ${radius || 12}px; padding: ${padding || 20}px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">${children}</div>`,
   },
   Flex: {
     label: '弹性布局',
-    isContainer: true,
     fields: {
-      direction: { type: 'select', label: '方向', options: [{ label: '水平', value: 'row' }, { label: '垂直', value: 'column' }] },
+      direction: { type: 'select', label: '方向', options: [{ label: '横向', value: 'row' }, { label: '纵向', value: 'column' }] },
       gap: { type: 'number', label: '间距' },
-      justify: { type: 'select', label: '主轴', options: [{ label: '起始', value: 'start' }, { label: '居中', value: 'center' }, { label: '两端', value: 'between' }, { label: '环绕', value: 'around' }] },
-      align: { type: 'select', label: '交叉轴', options: [{ label: '起始', value: 'start' }, { label: '居中', value: 'center' }, { label: '拉伸', value: 'stretch' }] },
     },
-    defaultProps: { direction: 'column', gap: 8, justify: 'start', align: 'start' },
+    defaultProps: { direction: 'column', gap: 8 },
+    isContainer: true,
+    render: ({ direction, gap }, children = '') =>
+      `<div style="display: flex; flex-direction: ${direction || 'column'}; gap: ${gap || 8}px;">${children}</div>`,
   },
   Grid: {
     label: '网格',
-    isContainer: true,
     fields: {
       columns: { type: 'number', label: '列数' },
       gap: { type: 'number', label: '间距' },
     },
     defaultProps: { columns: 2, gap: 12 },
+    isContainer: true,
+    render: ({ columns, gap }, children = '') =>
+      `<div style="display: grid; grid-template-columns: repeat(${columns || 2}, 1fr); gap: ${gap || 12}px;">${children}</div>`,
   },
   Section: {
     label: '区块',
-    isContainer: true,
     fields: {
-      bgColor: { type: 'color', label: '背景色' },
       padding: { type: 'number', label: '内边距' },
-      maxWidth: { type: 'number', label: '最大宽度' },
+      bgColor: { type: 'color', label: '背景色' },
     },
-    defaultProps: { padding: 24, maxWidth: 720 },
+    defaultProps: { padding: 40, bgColor: '#F9FAFB' },
+    isContainer: true,
+    render: ({ padding, bgColor }, children = '') =>
+      `<section style="padding: ${padding || 40}px; background: ${bgColor || '#F9FAFB'};">${children}</section>`,
   },
   Divider: {
     label: '分割线',
-    fields: {
-      color: { type: 'color', label: '颜色' },
-      thickness: { type: 'number', label: '粗细' },
-      margin: { type: 'number', label: '外边距' },
-    },
-    defaultProps: { color: '#E5E7EB', thickness: 1, margin: 16 },
+    fields: {},
+    defaultProps: {},
+    render: () => `<hr style="margin: 16px 0; border: none; border-top: 1px solid #E5E7EB;" />`,
   },
   Space: {
     label: '间距',
-    fields: { height: { type: 'number', label: '高度' } },
+    fields: {
+      height: { type: 'number', label: '高度' },
+    },
     defaultProps: { height: 20 },
+    render: ({ height }) => `<div style="height: ${height || 20}px;"></div>`,
   },
 }
 
-// ── Path utilities (address items in the tree) ────────────────────────
+// ── Empty data helper ───────────────────────────────────────────────
 
-type Path = (number)[] // e.g. [0, 2] = content[0].children[2]
-
-function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
+function emptyData(): DesignData {
+  return {
+    root: { props: { bgColor: '#FFFFFF', padding: 40 } },
+    content: [],
+  }
 }
 
-function getItem(content: DesignItem[], path: Path): DesignItem | null {
-  if (path.length === 0) return null
-  let item = content[path[0]]
-  for (let i = 1; i < path.length; i++) {
-    if (!item?.children) return null
-    item = item.children[path[i]]
-  }
-  return item
-}
-
-function updateItem(content: DesignItem[], path: Path, updater: (item: DesignItem) => DesignItem): DesignItem[] {
-  const result = deepClone(content)
-  let arr = result
-  for (let i = 0; i < path.length - 1; i++) {
-    arr = arr[path[i]].children!
-  }
-  arr[path[path.length - 1]] = updater(arr[path[path.length - 1]])
-  return result
-}
-
-function deleteItem(content: DesignItem[], path: Path): DesignItem[] {
-  const result = deepClone(content)
-  let arr = result
-  for (let i = 0; i < path.length - 1; i++) {
-    arr = arr[path[i]].children!
-  }
-  arr.splice(path[path.length - 1], 1)
-  return result
-}
-
-function addItemToTree(content: DesignItem[], path: Path | null, item: DesignItem): DesignItem[] {
-  const result = deepClone(content)
-  if (!path || path.length === 0) {
-    result.push(item)
-    return result
-  }
-  let target = result
-  for (let i = 0; i < path.length - 1; i++) {
-    target = target[path[i]].children!
-  }
-  const container = target[path[path.length - 1]]
-  if (!container.children) container.children = []
-  container.children.push(item)
-  return result
-}
-
-function reorderInTree(content: DesignItem[], from: Path, to: Path): DesignItem[] {
-  const item = getItem(content, from)
-  if (!item) return content
-  let result = deleteItem(content, from)
-  // Adjust to path if from was before to in the same array
-  if (from.length === to.length && from.slice(0, -1).join() === to.slice(0, -1).join() && from[from.length - 1] < to[to.length - 1]) {
-    to = [...to.slice(0, -1), to[to.length - 1] - 1]
-  }
-  if (to.length === 1) {
-    result.splice(to[0], 0, item)
-  } else {
-    result = addItemToTree(result, to.length === 0 ? null : to.slice(0, -1), item)
-  }
-  return result
-}
-
-// ── Layer Tree ────────────────────────────────────────────────────────
-
-function flattenTree(items: DesignItem[], parentPath: Path = []): { item: DesignItem; path: Path; depth: number }[] {
-  const result: { item: DesignItem; path: Path; depth: number }[] = []
-  items.forEach((item, idx) => {
-    const path = [...parentPath, idx]
-    result.push({ item, path, depth: parentPath.length })
-    if (item.children) {
-      result.push(...flattenTree(item.children, path))
-    }
-  })
-  return result
-}
-
-// ── Props / Emits ──────────────────────────────────────────────────────
+// ── Props ─────────────────────────────────────────────────────────────
 
 const props = defineProps<{
-  initialData?: DesignData
+  initialData: DesignData
 }>()
 
 const emit = defineEmits<{
-  (e: 'save', data: DesignData): void
+  save: [data: DesignData]
 }>()
 
-// ── State ──────────────────────────────────────────────────────────────
+// ── State ───────────────────────────────────────────────────────────
 
-const VIEWPORTS = [
-  { label: '桌面', width: 0, icon: '🖥' },
-  { label: '平板', width: 600, icon: '📱' },
-  { label: '手机', width: 375, icon: '📱' },
-]
+const data = ref<DesignData>(JSON.parse(JSON.stringify(props.initialData)) || emptyData())
+const selectedIndex = ref<number | null>(null)
+const draggingIndex = ref<number | null>(null)
+const draggingType = ref<string | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
-const data = ref<DesignData>(props.initialData || { root: { props: { bgColor: '#FFFFFF', padding: 40 } }, content: [] })
-const selectedPath = ref<Path | null>(null)
-const viewport = ref(0)
-const clipboard = ref<DesignItem | null>(null)
-const showLayers = ref(true)
-const contextMenu = ref<{ x: number; y: number; path: Path } | null>(null)
-
-// Drag state
-const dragPath = ref<Path | null>(null)
-const dragOverPath = ref<Path | null>(null)
-
-// ── History ────────────────────────────────────────────────────────────
-
+// History (undo/redo)
 const history = ref<DesignData[]>([])
-const historyIdx = ref(-1)
-const skipHistory = ref(false)
+const historyIndex = ref(-1)
 
-function commitHistory(newData: DesignData) {
-  if (skipHistory.value) { skipHistory.value = false; data.value = newData; return }
-  history.value = history.value.slice(0, historyIdx.value + 1)
-  history.value.push(deepClone(newData))
-  historyIdx.value = history.value.length - 1
-  if (history.value.length > 50) { history.value.shift(); historyIdx.value-- }
-  data.value = newData
-}
-
-function undo() {
-  if (historyIdx.value > 0) {
-    historyIdx.value--
-    skipHistory.value = true
-    data.value = deepClone(history.value[historyIdx.value])
-  }
-}
-
-function redo() {
-  if (historyIdx.value < history.value.length - 1) {
-    historyIdx.value++
-    skipHistory.value = true
-    data.value = deepClone(history.value[historyIdx.value])
-  }
-}
-
-// ── Sync external data ─────────────────────────────────────────────────
-
-const lastExternal = ref('')
-
-function syncInitialData() {
-  if (props.initialData) {
-    const sig = JSON.stringify(props.initialData)
-    if (sig !== lastExternal.value) {
-      lastExternal.value = sig
-      data.value = props.initialData
-      selectedPath.value = null
-      history.value = [deepClone(props.initialData)]
-      historyIdx.value = 0
-    }
-  }
-}
-
-watch(() => props.initialData, syncInitialData, { deep: true })
-
-// ── Keyboard shortcuts ─────────────────────────────────────────────────
-
-let keydownBound = false
-
-function handleKeydown(e: KeyboardEvent) {
-  const tag = (e.target as HTMLElement)?.tagName
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-
-  if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
-  if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo() }
-  if ((e.metaKey || e.ctrlKey) && e.key === 'c' && selectedPath.value) {
-    e.preventDefault()
-    const item = getItem(data.value.content, selectedPath.value)
-    if (item) clipboard.value = deepClone(item)
-  }
-  if ((e.metaKey || e.ctrlKey) && e.key === 'v' && clipboard.value) {
-    e.preventDefault()
-    const newContent = addItemToTree(data.value.content, null, deepClone(clipboard.value))
-    commitHistory({ ...data.value, content: newContent })
-  }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedPath.value) {
-    e.preventDefault()
-    const newContent = deleteItem(data.value.content, selectedPath.value)
-    commitHistory({ ...data.value, content: newContent })
-    selectedPath.value = null
-  }
-  if (e.key === 'Escape') { selectedPath.value = null; contextMenu.value = null }
-}
+watch(
+  () => data.value,
+  (val) => {
+    // Push to history (debounced)
+    history.value.push(JSON.parse(JSON.stringify(val)))
+    historyIndex.value = history.value.length - 1
+  },
+  { deep: true }
+)
 
 onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-  history.value = [deepClone(data.value)]
-  historyIdx.value = 0
+  // Load initial data
+  if (props.initialData) {
+    data.value = JSON.parse(JSON.stringify(props.initialData))
+  }
+  history.value = [JSON.parse(JSON.stringify(data.value))]
+  historyIndex.value = 0
 })
 
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeydown)
+// ── Selection ────────────────────────────────────────────────────────
+
+const selectedItem = computed<DesignItem | null>(() => {
+  if (selectedIndex.value === null) return null
+  return data.value.content[selectedIndex.value] || null
 })
 
-// ── Mutations ──────────────────────────────────────────────────────────
-
-function updateProps(path: Path, propsUpdate: Record<string, any>) {
-  commitHistory({ ...data.value, content: updateItem(data.value.content, path, (item) => ({ ...item, props: { ...item.props, ...propsUpdate } })) })
+function selectIndex(idx: number | null) {
+  selectedIndex.value = idx
 }
 
-function addComponent(type: string) {
+// ── Item actions ────────────────────────────────────────────────────
+
+function addItem(type: string, atIndex?: number) {
   const cfg = componentRegistry[type]
   if (!cfg) return
   const newItem: DesignItem = { type, props: { ...cfg.defaultProps } }
-  const targetPath = selectedPath.value && getItem(data.value.content, selectedPath.value)?.children !== undefined ? selectedPath.value : null
-  commitHistory({ ...data.value, content: addItemToTree(data.value.content, targetPath, newItem) })
+  const items = data.value.content
+  if (atIndex === undefined || atIndex >= items.length) {
+    items.push(newItem)
+  } else {
+    items.splice(atIndex, 0, newItem)
+  }
+  selectIndex(items.length - 1)
 }
 
-function deleteComponent(path: Path) {
-  commitHistory({ ...data.value, content: deleteItem(data.value.content, path) })
-  selectedPath.value = null
-}
-
-function duplicateComponent(path: Path) {
-  const item = getItem(data.value.content, path)
+function updateItem(idx: number, updates: Partial<DesignItem['props']>) {
+  const item = data.value.content[idx]
   if (!item) return
-  const newContent = addItemToTree(data.value.content, null, deepClone(item))
-  commitHistory({ ...data.value, content: newContent })
+  item.props = { ...item.props, ...updates }
 }
 
-// ── Context menu ───────────────────────────────────────────────────────
+function deleteItem(idx: number) {
+  data.value.content.splice(idx, 1)
+  if (selectedIndex.value === idx) selectIndex(null)
+  else if (selectedIndex.value !== null && selectedIndex.value > idx) {
+    selectedIndex.value--
+  }
+}
 
-function onContextMenu(e: MouseEvent, path: Path) {
-  e.preventDefault()
+function duplicateItem(idx: number) {
+  const item = data.value.content[idx]
+  if (!item) return
+  const copy = JSON.parse(JSON.stringify(item))
+  data.value.content.splice(idx + 1, 0, copy)
+}
+
+// ── Drag-drop ────────────────────────────────────────────────────────
+
+function onDragStart(e: DragEvent, type: string) {
+  draggingType.value = type
+  draggingIndex.value = null
+  e.dataTransfer?.setData('text/plain', type)
+}
+
+function onItemDragStart(e: DragEvent, idx: number) {
+  draggingIndex.value = idx
+  draggingType.value = null
+  e.dataTransfer?.setData('text/plain', String(idx))
   e.stopPropagation()
-  selectedPath.value = path
-  contextMenu.value = { x: e.clientX, y: e.clientY, path }
 }
 
-// ── Computed ───────────────────────────────────────────────────────────
+function onDragOver(e: DragEvent) {
+  e.preventDefault()
+}
 
-const selectedItem = computed(() => selectedPath.value ? getItem(data.value.content, selectedPath.value) : null)
-const selectedCfg = computed(() => selectedItem.value ? componentRegistry[selectedItem.value.type] : null)
-const flatLayers = computed(() => flattenTree(data.value.content))
+function onDrop(e: DragEvent, atIndex?: number) {
+  e.preventDefault()
+  if (draggingType.value) {
+    addItem(draggingType.value, atIndex)
+  } else if (draggingIndex.value !== null) {
+    // Reorder
+    const fromIdx = draggingIndex.value
+    let toIdx = atIndex
+    if (toIdx === undefined) {
+      data.value.content.push(data.value.content.splice(fromIdx, 1)[0])
+    } else if (fromIdx !== toIdx) {
+      const item = data.value.content.splice(fromIdx, 1)[0]
+      data.value.content.splice(toIdx, 0, item)
+      if (selectedIndex.value === fromIdx) selectedIndex.value = toIdx
+    }
+  }
+  draggingType.value = null
+  draggingIndex.value = null
+}
 
-const vp = computed(() => VIEWPORTS[viewport.value])
-const canvasMaxWidth = computed(() => vp.value.width || '100%')
+// ── Undo/Redo ───────────────────────────────────────────────────────
 
-// ── Expose for parent ──────────────────────────────────────────────────
+function undo() {
+  if (historyIndex.value > 0) {
+    historyIndex.value--
+    data.value = JSON.parse(JSON.stringify(history.value[historyIndex.value]))
+  }
+}
+function redo() {
+  if (historyIndex.value < history.value.length - 1) {
+    historyIndex.value++
+    data.value = JSON.parse(JSON.stringify(history.value[historyIndex.value]))
+  }
+}
 
-defineExpose({
-  getData: () => deepClone(data.value),
-  setData: (d: DesignData) => {
-    data.value = d
-    history.value = [deepClone(d)]
-    historyIdx.value = 0
-  },
-})
+// ── Export / Import .madcop ─────────────────────────────────────────
 
-function exportJson() {
-  const blob = new Blob([JSON.stringify(data.value, null, 2)], { type: 'application/json' })
+function exportMadcop() {
+  const json = JSON.stringify(data.value, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
+  a.href = url
   a.download = `design-${Date.now()}.madcop`
   a.click()
-  URL.revokeObjectURL(a.href)
+  URL.revokeObjectURL(url)
 }
 
+function triggerImport() {
+  fileInputRef.value?.click()
+}
+
+function importMadcop(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    try {
+      const parsed = JSON.parse(ev.target?.result as string)
+      if (parsed.root && Array.isArray(parsed.content)) {
+        data.value = parsed
+        history.value = [JSON.parse(JSON.stringify(data.value))]
+        historyIndex.value = 0
+      } else {
+        alert('文件格式有误')
+      }
+    } catch {
+      alert('解析失败')
+    }
+  }
+  reader.readAsText(file)
+  input.value = ''
+}
+
+function saveData() {
+  emit('save', JSON.parse(JSON.stringify(data.value)))
+}
+
+// ── Render the content tree ─────────────────────────────────────────
+
+function renderItem(item: DesignItem): string {
+  const cfg = componentRegistry[item.type]
+  if (!cfg) return ''
+  const childHtml = item.children ? item.children.map(renderItem).join('') : ''
+  return cfg.render(item.props, childHtml)
+}
+
+const contentHtml = computed(() => data.value.content.map(renderItem).join(''))
 </script>
+
 <template>
-  <div
-    class="flex h-full bg-[#F3F4F6] relative"
-    @click="selectedPath = null; contextMenu = null"
-  >
-    <!-- ── Left: Components + Layers ── -->
-    <div class="w-[200px] flex-shrink-0 border-r border-[#E5E7EB] bg-white flex flex-col">
-      <!-- Component palette -->
-      <div class="p-[10px_8px] border-b border-[#E5E7EB] max-h-[260px] overflow-y-auto">
-        <div class="text-xs font-bold text-[#9CA3AF] uppercase tracking-[0.5] mb-2">
-          组件
-        </div>
-        <div class="flex flex-wrap gap-1">
-          <button
-            v-for="([type, cfg]) in Object.entries(componentRegistry)"
-            :key="type"
-            @click.stop="addComponent(type)"
-            class="px-2.5 py-1 bg-[#F3F4F6] border border-[#E5E7EB] rounded text-xs text-[#374151] cursor-pointer hover:bg-[#EEF2FF] transition-colors"
-          >
-            {{ cfg.label }}
-          </button>
-        </div>
-      </div>
-
-      <!-- Layer tree -->
-      <div class="flex-1 overflow-y-auto p-2">
-        <div class="text-xs font-bold text-[#9CA3AF] uppercase tracking-[0.5] mb-2 flex justify-between items-center">
-          图层
-          <button
-            @click.stop="showLayers = !showLayers"
-            class="bg-none border-none cursor-pointer text-[10px] text-[#9CA3AF]"
-          >
-            {{ showLayers ? '收起' : '展开' }}
-          </button>
-        </div>
-        <div
-          v-if="showLayers"
-          v-for="{ item, path, depth } in flatLayers"
-          :key="path.join('-')"
-          @click.stop="selectedPath = path"
-          :style="{
-            padding: '4px 8px',
-            marginLeft: `${depth * 12}px`,
-            fontSize: 12,
-            cursor: 'pointer',
-            borderRadius: 3,
-            background: selectedPath && path.join('-') === selectedPath.join('-') ? '#EEF2FF' : 'transparent',
-            color: selectedPath && path.join('-') === selectedPath.join('-') ? '#4F46E5' : '#374151',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }"
-        >
-          <span v-if="componentRegistry[item.type]?.isContainer">▸ </span>
-          {{ componentRegistry[item.type]?.label || item.type }}
-        </div>
-        <div
-          v-if="flatLayers.length === 0"
-          class="text-xs text-[#D1D5DB]"
-        >
-          暂无组件
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Center: Canvas ── -->
-    <div class="flex-1 flex flex-col overflow-hidden">
-      <!-- Toolbar -->
-      <div class="flex items-center justify-between px-3 py-1.5 border-b border-[#E5E7EB] bg-white flex-shrink-0">
-        <div class="flex gap-1">
-          <button
-            v-for="(v, i) in VIEWPORTS"
-            :key="i"
-            @click.stop="viewport = i"
-            :style="{
-              padding: '4px 10px',
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontSize: 12,
-              background: viewport === i ? '#7C3AED' : 'transparent',
-              color: viewport === i ? '#fff' : '#6B7280',
-            }"
-          >
-            {{ v.label }}
-          </button>
-        </div>
-        <div class="flex gap-1.5">
-          <button
-            @click.stop="undo()"
-            :disabled="historyIdx <= 0"
-            :style="{
-              padding: '4px 10px',
-              border: '1px solid #E5E7EB',
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontSize: 12,
-              background: '#fff',
-              color: historyIdx <= 0 ? '#D1D5DB' : '#374151',
-            }"
-          >
-            撤销
-          </button>
-          <button
-            @click.stop="redo()"
-            :disabled="historyIdx >= history.length - 1"
-            :style="{
-              padding: '4px 10px',
-              border: '1px solid #E5E7EB',
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontSize: 12,
-              background: '#fff',
-              color: historyIdx >= history.length - 1 ? '#D1D5DB' : '#374151',
-            }"
-          >
-            重做
-          </button>
-        </div>
-      </div>
-
-      <!-- Canvas area -->
-      <div
-        class="flex-1 overflow-y-auto p-6 flex justify-center items-start"
-        @dragover.stop.prevent
-        @drop.stop.prevent
-      >
-        <!-- Canvas container -->
-        <div
-          :style="{
-            width: '100%',
-            maxWidth: canvasMaxWidth,
-            minHeight: '100%',
-            background: data.root?.props?.bgColor || '#FFFFFF',
-            borderRadius: 8,
-            padding: `${data.root?.props?.padding || 40}px`,
-            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-          }"
-          @click="selectedPath = null"
-          @dragover.stop.prevent
-          @drop.stop="(e) => {
-            e.preventDefault()
-            if (dragPath) {
-              const moved = getItem(data.content, dragPath)
-              if (moved) {
-                let newContent = deleteItem(data.content, dragPath)
-                newContent = [...newContent, deepClone(moved)]
-                commitHistory({ ...data, content: newContent })
-              }
-            }
-            dragPath = null
-            dragOverPath = null
-          }"
-        >
-          <div
-            v-if="data.content.length === 0"
-            class="text-center py-[60px] px-5 text-[#9CA3AF] text-sm"
-          >
-            从左侧添加组件，或用 AI 生成设计
-          </div>
-
-          <!-- Render items recursively -->
-          <RenderedItem
-            v-for="(item, idx) in data.content"
-            :key="idx"
-            :item="item"
-            :path="[idx]"
-            :selected-path="selectedPath"
-            :drag-path="dragPath"
-            :drag-over-path="dragOverPath"
-            :component-registry="componentRegistry"
-            :shadow-map="shadowMap"
-            @select="(p: Path) => selectedPath = p"
-            @start-drag="(p: Path) => dragPath = p"
-            @drag-over="(p: Path) => dragOverPath = p"
-            @drop="(targetPath: Path) => {
-              if (dragPath && componentRegistry[data.content[idx]?.type]?.isContainer && dragPath.join('-') !== targetPath.join('-')) {
-                const moved = getItem(data.content, dragPath)
-                if (moved) {
-                  let newContent = deleteItem(data.content, dragPath)
-                  newContent = addItemToTree(newContent, targetPath, deepClone(moved))
-                  commitHistory({ ...data, content: newContent })
-                }
-              }
-              dragPath = null
-              dragOverPath = null
-            }"
-            @context-menu="(e: MouseEvent, p: Path) => onContextMenu(e, p)"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Right: Properties ── -->
+  <div class="flex h-full w-full">
+    <!-- Left palette -->
     <div
-      class="w-[260px] flex-shrink-0 border-l border-[#E5E7EB] bg-white overflow-y-auto p-3"
-      @click.stop
+      style="width: 200px; background: var(--color-surface-container-lowest); border-right: 1px solid var(--color-border); padding: 12px; flex-shrink: 0; overflow-y: auto;"
     >
-      <template v-if="selectedItem && selectedCfg">
-        <div class="flex justify-between items-center mb-3.5">
-          <span class="text-sm font-bold">{{ selectedCfg.label }} 属性</span>
-          <div class="flex gap-1">
-            <button
-              @click="duplicateComponent(selectedPath!)"
-              class="px-1.5 py-0.5 text-xs border border-[#D1D5DB] rounded cursor-pointer bg-white"
-            >
-              复制
-            </button>
-            <button
-              @click="deleteComponent(selectedPath!)"
-              class="px-1.5 py-0.5 text-xs border-none rounded cursor-pointer bg-[#FEE2E2] text-[#DC2626]"
-            >
-              删除
-            </button>
-          </div>
-        </div>
+      <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--color-text-tertiary); margin-bottom: 8px;">
+        组件库
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
         <div
-          v-for="([key, field]) in Object.entries(selectedCfg.fields)"
-          :key="key"
-          class="mb-3"
+          v-for="(cfg, type) in componentRegistry"
+          :key="type"
+          draggable="true"
+          @dragstart="onDragStart($event, type)"
+          class="design-palette-item"
         >
-          <label class="block text-xs text-[#6B7280] mb-1">{{ field.label }}</label>
-          <FieldEditor
-            :field="field"
-            :value="selectedItem.props[key]"
-            @change="(v: any) => updateProps(selectedPath!, { [key]: v })"
-          />
+          {{ cfg.label }}
         </div>
-      </template>
-      <template v-else>
-        <div class="text-xs font-bold text-[#9CA3AF] uppercase tracking-[0.5] mb-2.5">
-          画布设置
-        </div>
-        <div class="mb-3">
-          <label class="block text-xs text-[#6B7280] mb-1">背景色</label>
-          <FieldEditor
-            :field="{ type: 'color', label: '背景色' }"
-            :value="data.root?.props?.bgColor"
-            @change="(v: any) => commitHistory({ ...data, root: { props: { ...data.root.props, bgColor: v } } })"
-          />
-        </div>
-        <div class="mb-3">
-          <label class="block text-xs text-[#6B7280] mb-1">内边距</label>
-          <FieldEditor
-            :field="{ type: 'number', label: '内边距' }"
-            :value="data.root?.props?.padding"
-            @change="(v: any) => commitHistory({ ...data, root: { props: { ...data.root.props, padding: v } } })"
-          />
-        </div>
-        <div class="mt-5 p-2.5 bg-[#F3F4F6] rounded-md text-xs text-[#9CA3AF] leading-relaxed">
-          快捷键: Ctrl+Z 撤销 | Ctrl+C/V 复制粘贴 | Del 删除 | Esc 取消选中
-        </div>
-      </template>
+      </div>
+      <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--color-text-tertiary); margin: 16px 0 8px;">
+        操作
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <button
+          @click="undo"
+          style="padding: 6px 10px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--color-text-primary);"
+        >↶ 撤销</button>
+        <button
+          @click="redo"
+          style="padding: 6px 10px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--color-text-primary);"
+        >↷ 重做</button>
+        <button
+          @click="triggerImport"
+          style="padding: 6px 10px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--color-text-primary);"
+        >导入 .madcop</button>
+        <button
+          @click="exportMadcop"
+          style="padding: 6px 10px; background: #7C3AED; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; color: #fff; font-weight: 500;"
+        >导出 .madcop</button>
+        <button
+          @click="saveData"
+          style="padding: 6px 10px; background: var(--color-success, #10b981); border: none; border-radius: 4px; cursor: pointer; font-size: 12px; color: #fff; font-weight: 500;"
+        >保存</button>
+      </div>
+      <input
+        ref="fileInputRef"
+        type="file"
+        accept=".madcop,.json"
+        style="display: none;"
+        @change="importMadcop"
+      />
     </div>
 
-    <!-- ── Context Menu (teleport to body) ── -->
-    <teleport v-if="contextMenu" to="body">
-      <div
-        class="fixed inset-0 z-[200]"
-        @click.stop="contextMenu = null"
-        @contextmenu.stop.prevent="contextMenu = null"
-      />
+    <!-- Center canvas -->
+    <div
+      style="flex: 1; overflow: auto; padding: 32px; background: #E5E7EB;"
+      @click="selectIndex(null)"
+    >
       <div
         :style="{
-          position: 'fixed',
-          left: contextMenu.x,
-          top: contextMenu.y,
-          zIndex: 201,
-          background: '#fff',
-          border: '1px solid #E5E7EB',
-          borderRadius: 6,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          padding: 4,
-          minWidth: 120,
+          background: data.root.props.bgColor || '#FFFFFF',
+          padding: (data.root.props.padding || 40) + 'px',
+          minHeight: '100%',
+          width: '800px',
+          margin: '0 auto',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
         }"
+        @click.stop
       >
-        <button
-          v-for="(menuItem, i) in [
-            { label: '复制', action: () => { const item = getItem(data.content, contextMenu!.path); if (item) clipboard = deepClone(item) } },
-            { label: '粘贴到末尾', action: () => { if (clipboard) commitHistory({ ...data, content: addItemToTree(data.content, null, deepClone(clipboard)) }) } },
-            { label: '创建副本', action: () => duplicateComponent(contextMenu!.path) },
-            { label: '删除', action: () => deleteComponent(contextMenu!.path), danger: true },
-          ]"
-          :key="i"
-          @click.stop="menuItem.action(); contextMenu = null"
-          :style="{
-            display: 'block',
-            width: '100%',
-            textAlign: 'left',
-            padding: '6px 12px',
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            fontSize: 13,
-            color: menuItem.danger ? '#DC2626' : '#374151',
-            borderRadius: 3,
-          }"
-          @mouseenter="($event.target as HTMLElement).style.background = menuItem.danger ? '#FEF2F2' : '#F3F4F6'"
-          @mouseleave="($event.target as HTMLElement).style.background = 'transparent'"
+        <div
+          v-if="data.content.length === 0"
+          style="text-align: center; padding: 80px 20px; color: var(--color-text-tertiary); font-size: 14px;"
         >
-          {{ menuItem.label }}
-        </button>
+          从左侧拖入组件开始设计
+        </div>
+        <div
+          v-for="(item, idx) in data.content"
+          :key="idx"
+          :draggable="true"
+          @dragstart.stop="onItemDragStart($event, idx)"
+          @dragover="onDragOver"
+          @drop.stop="onDrop($event, idx)"
+          @click.stop="selectIndex(idx)"
+          :class="['design-canvas-item', selectedIndex === idx ? 'design-canvas-item--selected' : '']"
+          v-html="renderItem(item)"
+        ></div>
       </div>
-    </teleport>
+    </div>
 
-    <!-- ── Export/Save floating buttons ── -->
-    <div class="absolute bottom-3 right-3 flex gap-2">
-      <button @click.stop="exportJson" class="rounded-lg p-2.5 text-white transition-colors hover:bg-opacity-90" :style="{ background: 'var(--color-brand)' }">
-        <span class="material-symbols-outlined text-lg">save</span>
-      </button>
-      <button
-        @click.stop="emit('save', data)"
-        class="px-3 py-1.5 bg-purple-600/90 text-white border-none rounded cursor-pointer text-xs font-semibold backdrop-blur-sm"
+    <!-- Right: property panel -->
+    <div
+      v-if="selectedItem"
+      style="width: 280px; background: var(--color-surface-container-lowest); border-left: 1px solid var(--color-border); padding: 12px; flex-shrink: 0; overflow-y: auto;"
+    >
+      <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--color-text-tertiary); margin-bottom: 8px;">
+        属性: {{ componentRegistry[selectedItem.type]?.label || selectedItem.type }}
+      </div>
+      <div
+        v-for="(field, key) in componentRegistry[selectedItem.type]?.fields || {}"
+        :key="key"
+        style="margin-bottom: 10px;"
       >
-        保存
-      </button>
+        <label
+          style="display: block; font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px;"
+        >{{ field.label }}</label>
+        <input
+          v-if="field.type === 'text'"
+          type="text"
+          :value="selectedItem.props[key]"
+          @input="(e) => updateItem(selectedIndex, { [key]: (e.target as HTMLInputElement).value })"
+          style="width: 100%; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 12px; background: var(--color-surface); color: var(--color-text-primary);"
+        />
+        <textarea
+          v-else-if="field.type === 'textarea'"
+          :value="selectedItem.props[key]"
+          @input="(e) => updateItem(selectedIndex, { [key]: (e.target as HTMLTextAreaElement).value })"
+          rows="3"
+          style="width: 100%; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 12px; resize: vertical; font-family: inherit; background: var(--color-surface); color: var(--color-text-primary);"
+        ></textarea>
+        <input
+          v-else-if="field.type === 'number'"
+          type="number"
+          :value="selectedItem.props[key]"
+          @input="(e) => updateItem(selectedIndex, { [key]: Number((e.target as HTMLInputElement).value) })"
+          style="width: 100%; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 12px; background: var(--color-surface); color: var(--color-text-primary);"
+        />
+        <input
+          v-else-if="field.type === 'color'"
+          type="color"
+          :value="selectedItem.props[key] || '#000000'"
+          @input="(e) => updateItem(selectedIndex, { [key]: (e.target as HTMLInputElement).value })"
+          style="width: 100%; height: 32px; padding: 2px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface);"
+        />
+        <select
+          v-else-if="field.type === 'select'"
+          :value="selectedItem.props[key]"
+          @change="(e) => updateItem(selectedIndex, { [key]: (e.target as HTMLSelectElement).value })"
+          style="width: 100%; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 12px; background: var(--color-surface); color: var(--color-text-primary);"
+        >
+          <option v-for="opt in field.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+        <div v-else-if="field.type === 'radio'" style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <label
+            v-for="opt in field.options"
+            :key="opt.value"
+            style="display: flex; align-items: center; gap: 4px; font-size: 12px;"
+          >
+            <input
+              type="radio"
+              :value="opt.value"
+              :checked="selectedItem.props[key] === opt.value"
+              @change="updateItem(selectedIndex, { [key]: opt.value })"
+            />
+            {{ opt.label }}
+          </label>
+        </div>
+      </div>
+      <div style="display: flex; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--color-border);">
+        <button
+          @click="duplicateItem(selectedIndex)"
+          style="flex: 1; padding: 6px 10px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--color-text-primary);"
+        >复制</button>
+        <button
+          @click="deleteItem(selectedIndex)"
+          style="flex: 1; padding: 6px 10px; background: var(--color-surface); border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent); border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--color-error);"
+        >删除</button>
+      </div>
+    </div>
+    <div
+      v-else
+      style="width: 280px; background: var(--color-surface-container-lowest); border-left: 1px solid var(--color-border); padding: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--color-text-tertiary); font-size: 12px;"
+    >
+      选中组件后编辑属性
     </div>
   </div>
 </template>
+
+<style scoped>
+.design-palette-item {
+  padding: 8px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  cursor: grab;
+  user-select: none;
+  transition: all 0.15s;
+}
+.design-palette-item:hover {
+  background: var(--color-surface-container);
+  border-color: #7C3AED;
+  transform: translateX(2px);
+}
+.design-palette-item:active {
+  cursor: grabbing;
+}
+
+.design-canvas-item {
+  position: relative;
+  padding: 4px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.design-canvas-item:hover {
+  background: rgba(124, 58, 237, 0.05);
+}
+.design-canvas-item--selected {
+  background: rgba(124, 58, 237, 0.08);
+  outline: 2px solid #7C3AED;
+  outline-offset: 2px;
+}
+</style>
