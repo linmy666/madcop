@@ -83,7 +83,7 @@ export const browserHost: DesktopHost = {
   shell: {
     async open(target) {
       if (typeof window !== 'undefined') {
-        window.open(target, '_blank', 'noopener,noreferrer')
+        globalThis.window.open(target, '_blank', 'noopener,noreferrer')
         return
       }
       unsupported('Opening system targets')
@@ -95,7 +95,7 @@ export const browserHost: DesktopHost = {
   trace: {
     async openWindow(sessionId) {
       if (typeof window !== 'undefined') {
-        window.open(buildTraceWindowUrl(sessionId), '_blank', 'noopener,noreferrer')
+        globalThis.window.open(buildTraceWindowUrl(sessionId), '_blank', 'noopener,noreferrer')
         return
       }
       unsupported('Opening trace windows')

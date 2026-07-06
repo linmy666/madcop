@@ -76,7 +76,7 @@ function isValidHttpProxyUrl(value: string): boolean {
 }
 
 const openUrl = (url: string) => {
-  void getDesktopHost().shell.open(url).catch(() => window.open(url, '_blank'))
+  void getDesktopHost().shell.open(url).catch(() => globalThis.window.open(url, '_blank'))
 }
 
 const checkedAtText = computed(() => {

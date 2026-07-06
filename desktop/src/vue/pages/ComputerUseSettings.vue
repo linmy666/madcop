@@ -530,7 +530,7 @@ const sortedApps = computed(() => {
             () =>
               getDesktopHost()
                 .shell.open(pythonDownloadUrl)
-                .catch(() => window.open(pythonDownloadUrl, '_blank', 'noopener,noreferrer'))
+                .catch(() => globalThis.window.open(pythonDownloadUrl, '_blank', 'noopener,noreferrer'))
           "
           class="flex items-center gap-2 px-5 py-2.5 bg-[var(--color-brand)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity"
         >

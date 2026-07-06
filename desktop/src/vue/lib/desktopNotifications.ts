@@ -287,7 +287,7 @@ export async function openDesktopNotificationSettings(): Promise<boolean> {
     return true
   } catch {
     try {
-      window.open(url, '_blank', 'noopener,noreferrer')
+      globalThis.window.open(url, '_blank', 'noopener,noreferrer')
       return true
     } catch {
       return false

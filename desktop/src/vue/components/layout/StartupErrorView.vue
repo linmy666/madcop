@@ -1,4 +1,5 @@
 <script setup lang="ts">
+function handleReload() { globalThis.window.location.reload() }
 // v3.0 — StartupErrorView (Vue 3)
 // Direct translation — same Tailwind classes, same error/logs layout.
 import { ref, computed } from 'vue'
@@ -52,7 +53,7 @@ async function handleCopy() {
             <template #icon><span class="material-symbols-outlined text-[16px]">content_copy</span></template>
             {{ copied ? '已复制' : '复制诊断信息' }}
           </Button>
-          <Button type="button" variant="ghost" size="sm" @click="() => window.location.reload()">
+          <Button type="button" variant="ghost" size="sm" @click="handleReload">
             <template #icon><span class="material-symbols-outlined text-[16px]">refresh</span></template>
             重试
           </Button>

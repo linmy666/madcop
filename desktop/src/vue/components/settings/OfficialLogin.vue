@@ -37,7 +37,7 @@ async function handleLogin() {
     const r = await fetch('/api/auth/oauth/login', { method: 'POST' })
     const data = await r.json()
     if (data.authorizeUrl) {
-      window.open(data.authorizeUrl, '_blank')
+      globalThis.window.open(data.authorizeUrl, '_blank')
       pollTimer = window.setInterval(fetchStatus, 2000)
     }
   } catch (e: any) {

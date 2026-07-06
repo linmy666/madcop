@@ -121,6 +121,8 @@ const resolvedPage = computed(() => {
       <WorkflowsListPage v-else-if="resolvedPage.kind === 'workflows'" />
       <DesignPage v-else-if="resolvedPage.kind === 'design'" />
       <AgentHub v-else-if="resolvedPage.kind === 'agents'" />
+      <SkillBuilder v-else-if="resolvedPage.kind === 'skill-builder'" />
+      <UsageStats v-else-if="resolvedPage.kind === 'usage-stats'" />
       <KnowledgeBase v-else-if="resolvedPage.kind === 'knowledge'" />
       <ActiveSession v-else-if="resolvedPage.kind === 'active'" />
     </div>

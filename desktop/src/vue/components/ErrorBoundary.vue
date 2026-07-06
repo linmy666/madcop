@@ -50,7 +50,7 @@ onMounted(() => {
 
 function retry() {
   if (typeof window !== 'undefined') {
-    window.location.reload()
+    globalThis.window.location.reload()
   }
 }
 </script>
