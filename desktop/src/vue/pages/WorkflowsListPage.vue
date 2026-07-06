@@ -134,6 +134,67 @@ const handleRun = async () => {
   }
 }
 
+// ─── Invoke workflow dialog state ─────────────────────────────────────
+import { ref as _ref } from 'vue'
+const invokingWorkflow = _ref<any>(null)
+const invokeInput = _ref('')
+const invokeResult = _ref('')
+const invokeError = _ref('')
+const invokeRunning = _ref(false)
+
+function openInvokeDialog(wf: any) {
+  invokingWorkflow.value = wf
+  invokeInput.value = ''
+  invokeResult.value = ''
+  invokeError.value = ''
+}
+
+function closeInvokeDialog() {
+  invokingWorkflow.value = null
+}
+
+async function runInvokedWorkflow() {
+  if (!invokingWorkflow.value || !invokeInput.value.trim()) return
+  invokeRunning.value = true
+  invokeError.value = ''
+  invokeResult.value = ''
+  try {
+    const wf = invokingWorkflow.value
+    const res = await fetch(`/api/workflows/${wf.id}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: { input: invokeInput.value } }),
+    })
+    if (!res.ok) {
+      const t = await res.text().catch(() => '')
+      invokeError.value = `${res.status}: ${t}`
+      return
+    }
+    const result = await res.json()
+    // Pretty-print
+    if (result.outputs) {
+      const endNodeId = result.end_node_id || 'end-1'
+      const endOutput = result.outputs[endNodeId]
+      if (typeof endOutput === 'string') {
+        invokeResult.value = endOutput
+      } else if (endOutput && typeof endOutput === 'object') {
+        // Try common fields
+        invokeResult.value = endOutput.output || endOutput.text || endOutput.result || JSON.stringify(endOutput, null, 2)
+      } else {
+        invokeResult.value = JSON.stringify(result.outputs, null, 2)
+      }
+    } else if (typeof result.output === 'string') {
+      invokeResult.value = result.output
+    } else {
+      invokeResult.value = JSON.stringify(result, null, 2)
+    }
+  } catch (e: any) {
+    invokeError.value = `错误: ${e?.message || e}`
+  } finally {
+    invokeRunning.value = false
+  }
+}
+
 const handleBack = async () => {
   editingId.value = null
   editingName.value = ''
@@ -285,6 +346,21 @@ const handleBack = async () => {
             编辑
           </button>
           <button
+            @click.stop="openInvokeDialog(wf)"
+            style="
+              padding: 4px 10px;
+              background: var(--color-brand);
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 12px;
+              font-weight: 500;
+            "
+          >
+            用此工作流
+          </button>
+          <button
             @click.stop="handleDelete(wf.id)"
             style="
               padding: 4px 10px;
@@ -402,4 +478,100 @@ const handleBack = async () => {
       </div>
     </div>
   </div>
+
+
+    <!-- Invoke workflow dialog -->
+    <Teleport to="body">
+      <div
+        v-if="invokingWorkflow"
+        @click.self="closeInvokeDialog"
+        style="
+          position: fixed; inset: 0; z-index: 9999;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex; align-items: center; justify-content: center;
+        "
+      >
+        <div
+          style="
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 24px;
+            width: 520px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+          "
+        >
+          <h3 style="margin: 0 0 4px; font-size: 16px; font-weight: 600;">
+            调用: {{ invokingWorkflow.name }}
+          </h3>
+          <p style="margin: 0 0 16px; font-size: 12px; color: var(--color-text-tertiary);">
+            {{ invokingWorkflow.description || '工作流会用以下输入作为参数' }}
+          </p>
+
+          <label style="display: block; font-size: 11px; font-weight: 500; margin-bottom: 4px;">
+            输入内容
+          </label>
+          <textarea
+            v-model="invokeInput"
+            placeholder="给这个工作流一些输入…"
+            style="
+              width: 100%; min-height: 100px;
+              background: var(--color-surface-container-lowest);
+              border: 1px solid var(--color-border);
+              border-radius: 4px;
+              padding: 8px 10px;
+              font-size: 13px;
+              font-family: inherit;
+              resize: vertical;
+            "
+          ></textarea>
+
+          <div
+            v-if="invokeResult"
+            style="margin-top: 16px; padding: 12px; background: var(--color-surface-container-lowest); border-radius: 4px; border: 1px solid var(--color-border);"
+          >
+            <div style="font-size: 11px; font-weight: 500; margin-bottom: 6px; color: var(--color-text-tertiary);">
+              结果
+            </div>
+            <pre style="margin: 0; white-space: pre-wrap; font-size: 12px; font-family: ui-monospace, monospace; max-height: 300px; overflow-y: auto;">{{ invokeResult }}</pre>
+          </div>
+
+          <div v-if="invokeError" style="margin-top: 12px; padding: 8px 10px; background: color-mix(in srgb, var(--color-error) 10%, transparent); border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent); border-radius: 4px; font-size: 12px; color: var(--color-error);">
+            {{ invokeError }}
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end;">
+            <button
+              @click="closeInvokeDialog"
+              style="
+                padding: 8px 16px;
+                background: transparent;
+                border: 1px solid var(--color-border);
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+              "
+            >关闭</button>
+            <button
+              @click="runInvokedWorkflow"
+              :disabled="invokeRunning || !invokeInput.trim()"
+              style="
+                padding: 8px 16px;
+                background: var(--color-brand);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+                font-weight: 500;
+                opacity: (invokeRunning || !invokeInput.trim()) ? 0.5 : 1;
+              "
+            >{{ invokeRunning ? '运行中…' : '▶ 运行' }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 </template>
