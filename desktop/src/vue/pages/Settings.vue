@@ -4,7 +4,8 @@
 // No cc-haha TabButton horizontal strip — uses a proper settings sidebar.
 // Includes new Agent Network + Knowledge Base settings sections.
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
+const MemoryPage = defineAsyncComponent(() => import('./MemoryPage.vue'))
 
 type SettingsTab =
   | 'providers'    // 模型供应商
@@ -41,7 +42,7 @@ const navItems: NavItem[] = [
   { id: 'learning',    label: '持续学习',  icon: 'school',   group: 'ai', badge: 'NEW' },
   { id: 'knowledge',   label: '知识库',     icon: 'menu_book', group: 'ai', badge: 'NEW' },
   { id: 'workflow',    label: '工作流引擎', icon: 'account_tree', group: 'ai' },
-  { id: 'memory',      label: '记忆系统',   icon: 'psychology', group: 'ai' },
+  { id: 'memory',      label: '记忆',       icon: 'psychology', group: 'ai' },
   { id: 'plugins',     label: '插件',       icon: 'extension', group: 'ai' },
   { id: 'mcp',         label: 'MCP 工具',   icon: 'build',   group: 'ai' },
   // System
@@ -461,21 +462,8 @@ onMounted(loadLearning)
         </div>
 
         <!-- ═══ Memory ═══ -->
-        <div v-else-if="activeTab === 'memory'" class="settings-section">
-          <h2 class="settings-section__title">记忆系统</h2>
-          <p class="settings-section__desc">MadCop 会自动记忆你的偏好和上下文。</p>
-          <div class="settings-row">
-            <span class="settings-row__label">启用长期记忆</span>
-            <Toggle default-on />
-          </div>
-          <div class="settings-row">
-            <span class="settings-row__label">自动提取事实</span>
-            <Toggle default-on />
-          </div>
-          <div class="settings-row">
-            <span class="settings-row__label">记忆保留（天）</span>
-            <input type="number" value="90" class="settings-input" />
-          </div>
+        <div v-else-if="activeTab === 'memory'" class="settings-section settings-section--fullbleed">
+          <MemoryPage />
         </div>
 
         <!-- ═══ About ═══ -->

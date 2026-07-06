@@ -16,7 +16,7 @@ export const WORKBENCH_TAB_PREFIX = '__workbench__'
 
 // ─── Types ─────────────────────────────────────────────────────────
 
-export type TabType = 'session' | 'settings' | 'scheduled' | 'terminal' | 'trace' | 'traces' | 'workbench' | 'workflows' | 'design' | 'agents' | 'knowledge' | 'skill-builder' | 'usage-stats'
+export type TabType = 'session' | 'settings' | 'scheduled' | 'terminal' | 'trace' | 'traces' | 'workbench' | 'workflows' | 'design' | 'agents' | 'knowledge' | 'skill-builder' | 'usage-stats' | 'arena'
 
 export interface Tab {
   sessionId: string
@@ -100,6 +100,9 @@ export const useTabStore = defineStore('madcop-tabs', () => {
   function openUsageStatsTab() {
     openTab('__usage_stats__', '用量统计', 'usage-stats' as TabType)
   }
+  function openArenaTab() {
+    openTab('__arena__', 'Arena', 'arena' as TabType)
+  }
 
   return {
     tabs,
@@ -115,5 +118,6 @@ export const useTabStore = defineStore('madcop-tabs', () => {
     openKnowledgeTab,
     openSkillBuilderTab,
     openUsageStatsTab,
+    openArenaTab,
   }
 })

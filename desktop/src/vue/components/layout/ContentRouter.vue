@@ -16,6 +16,7 @@ const TraceSession = defineAsyncComponent(() => import('../../pages/TraceSession
 const WorkflowsListPage = defineAsyncComponent(() => import('../../pages/WorkflowsListPage.vue'))
 const AgentHub = defineAsyncComponent(() => import('../../pages/AgentHub.vue'))
 const KnowledgeBase = defineAsyncComponent(() => import('../../pages/KnowledgeBase.vue'))
+const ArenaPage = defineAsyncComponent(() => import('../../pages/ArenaPage.vue'))
 const AgentOverview = defineAsyncComponent(() => import('../../pages/AgentOverview.vue'))
 const ContinuousLearningSettings = defineAsyncComponent(() => import('../../pages/settings/ContinuousLearningSettings.vue'))
 const DesignPage = defineAsyncComponent(() => import('../../pages/DesignPage.vue'))
@@ -105,6 +106,9 @@ const resolvedPage = computed(() => {
   if (activeTabType.value === 'usage-stats') {
     return { kind: 'usage-stats' as const }
   }
+  if (activeTabType.value === 'arena') {
+    return { kind: 'arena' as const }
+  }
   if (activeTabType.value !== 'terminal') {
     return { kind: 'active' as const }
   }
@@ -137,6 +141,7 @@ const resolvedPage = computed(() => {
       <AgentOverview v-else-if="resolvedPage.kind === 'agents'" />
       <SkillBuilder v-else-if="resolvedPage.kind === 'skill-builder'" />
       <UsageStats v-else-if="resolvedPage.kind === 'usage-stats'" />
+      <ArenaPage v-else-if="resolvedPage.kind === 'arena'" />
       <KnowledgeBase v-else-if="resolvedPage.kind === 'knowledge'" />
       <ActiveSession v-else-if="resolvedPage.kind === 'active'" />
       <ContinuousLearningSettings v-else-if="resolvedPage.kind === 'continuous-learning'" />
