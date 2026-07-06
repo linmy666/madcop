@@ -24,9 +24,6 @@ type SettingsTab =
   | 'providers'    // 模型供应商
   | 'general'      // 通用
   | 'agents'       // Agent 网络（新）
-  | 'learning'     // 持续学习（LoRA 微调）
-  | 'knowledge'    // 知识库（新）
-  | 'workflow'     // 工作流引擎（新）
   | 'memory'       // 记忆
   | 'plugins'      // 插件
   | 'mcp'          // MCP 工具
@@ -35,6 +32,8 @@ type SettingsTab =
   | 'diagnostics'  // 诊断
   | 'about'        // 关于（新）
 
+const tabStore = useTabStore()
+const sessionStore = useSessionStore()
 const activeTab = ref<SettingsTab>('providers')
 
 // ── Settings nav items — grouped ────────────────────────────────────
@@ -50,29 +49,20 @@ const navItems: NavItem[] = [
   // Core
   { id: 'providers',   label: '模型供应商', icon: 'dns',     group: 'core' },
   { id: 'general',     label: '通用设置',   icon: 'tune',    group: 'core' },
-  // AI Features (new!)
-  { id: 'agents',      label: 'Agent 网络', icon: 'hub',     group: 'ai', badge: 'NEW' },
-  { id: 'learning',    label: '持续学习',  icon: 'school',   group: 'ai', badge: 'NEW' },
-  { id: 'knowledge',   label: '知识库',     icon: 'menu_book', group: 'ai', badge: 'NEW' },
-  { id: 'workflow',    label: '工作流引擎', icon: 'account_tree', group: 'ai' },
+  // AI Features
   { id: 'memory',      label: '记忆',       icon: 'psychology', group: 'ai' },
-  { id: 'plugins',     label: '插件',       icon: 'extension', group: 'ai' },
   { id: 'mcp',         label: 'MCP 工具',   icon: 'build',   group: 'ai' },
+  { id: 'plugins',     label: '插件',       icon: 'extension', group: 'ai' },
+  { id: 'skills',      label: '技能构建',  icon: 'auto_awesome', group: 'ai' },
+  { id: 'adapters',    label: '适配器',    icon: 'chat',     group: 'ai' },
+  { id: 'h5Access',    label: 'H5 访问',   icon: 'qr_code_2', group: 'ai' },
   // System
   { id: 'terminal',    label: '终端',       icon: 'terminal', group: 'system' },
+  { id: 'computerUse', label: '计算机使用', icon: 'mouse',   group: 'system' },
   { id: 'activity',    label: '活动统计',   icon: 'monitoring', group: 'system' },
+  { id: 'trace',       label: '追踪',      icon: 'account_tree', group: 'system' },
   { id: 'diagnostics', label: '环境诊断',   icon: 'monitor_heart', group: 'system' },
   { id: 'about',       label: '关于',       icon: 'info',    group: 'system' },
-  { id: 'h5Access',    label: 'H5 访问',   icon: 'qr_code_2', group: 'ai' },
-  { id: 'adapters',    label: '适配器',    icon: 'chat',     group: 'ai' },
-  { id: 'terminal',    label: '终端',      icon: 'terminal', group: 'system' },
-  { id: 'mcp',         label: 'MCP 工具',  icon: 'dns',      group: 'ai' },
-  { id: 'skills',      label: '技能构建',  icon: 'auto_awesome', group: 'ai' },
-  { id: 'plugins',     label: '插件',      icon: 'extension', group: 'ai' },
-  { id: 'computerUse', label: '计算机使用', icon: 'mouse',   group: 'system' },
-  { id: 'activity',    label: '活动统计',  icon: 'monitoring', group: 'system' },
-  { id: 'trace',       label: '追踪',      icon: 'account_tree', group: 'system' },
-  { id: 'diagnostics', label: '诊断',      icon: 'monitor_heart', group: 'system' },
 ]
 
 const groupLabels: Record<string, string> = {
@@ -242,11 +232,34 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString('zh-CN')
 }
 
+function goBackToSession() {
+  // Create a new session if none active
+  if (!tabStore.activeTabId) {
+    sessionStore.createSession().then((id: string) => {
+      tabStore.openTab(id, '新对话')
+    })
+  } else {
+    // Just set active to the current session tab
+    const firstSession = (tabStore.tabs as any[]).find((t: any) => t.type === 'session')
+    if (firstSession) {
+      tabStore.setActiveTab(firstSession.sessionId)
+    }
+  }
+}
+
 onMounted(loadLearning)
 </script>
 
 <template>
   <div class="settings-page">
+    <!-- Back to session button -->
+    <div
+      style="display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--color-border); cursor: pointer;"
+      @click="goBackToSession"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+      <span style="font-size: 13px; font-weight: 500; color: var(--color-text-primary);">设置</span>
+    </div>
     <div class="settings-layout">
       <!-- Left: Settings Nav -->
       <nav class="settings-nav">
