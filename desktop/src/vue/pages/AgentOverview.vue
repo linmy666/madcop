@@ -100,9 +100,9 @@ const presets: TopologyPreset[] = [
     desc: '同一问题问 N 个模型，投票选优',
     buildNodes: () => [
       { id: 'n0', label: '问题', detail: '', x: 150, y: 300, status: 'idle' },
-      { id: 'n1', label: 'GLM-5.2', detail: '', x: 450, y: 150, status: 'idle' },
-      { id: 'n2', label: 'Qwen3', detail: '', x: 450, y: 300, status: 'idle' },
-      { id: 'n3', label: 'DeepSeek', detail: '', x: 450, y: 450, status: 'idle' },
+      { id: 'n1', label: '回答 A', detail: '', x: 450, y: 150, status: 'idle' },
+      { id: 'n2', label: '回答 B', detail: '', x: 450, y: 300, status: 'idle' },
+      { id: 'n3', label: '回答 C', detail: '', x: 450, y: 450, status: 'idle' },
       { id: 'n4', label: '评判', detail: '', x: 750, y: 300, status: 'idle' },
     ],
     buildEdges: () => [
