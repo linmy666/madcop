@@ -737,7 +737,6 @@ const handleProjectDrop = (event: MouseEvent, targetProjectKey: string) => {
 
 const createSessionForWorkDir = async (workDir?: string) => {
   try {
-    // createSession is async (returns Promise<string>) - await it
     const sessionId = await sessionStore.createSession(workDir)
     restoreHiddenProjectForWorkDir(workDir)
     tabStore.openTab(sessionId, t('sidebar.newSession'))
