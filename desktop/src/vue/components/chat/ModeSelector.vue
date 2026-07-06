@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 /**
  * ModeSelector — Vue 3 port of components/chat/ModeSelector.tsx
@@ -28,7 +29,7 @@ const open = ref(false)
 const rootRef = ref<HTMLDivElement | null>(null)
 
 onMounted(() => {
-  fetch('/api/workflows/modes')
+  fetch(getApiUrl('/api/workflows/modes'))
     .then((r) => r.json())
     .then((d) => { if (Array.isArray(d.modes)) modes.value = d.modes })
     .catch(() => {

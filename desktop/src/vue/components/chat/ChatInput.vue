@@ -33,6 +33,7 @@ import PermissionModeSelector from '../controls/PermissionModeSelector.vue'
 import RepositoryLaunchControls from '../shared/RepositoryLaunchControls.vue'
 import FileSearchMenu from './FileSearchMenu.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
+import ModelSelector from '../controls/ModelSelector.vue'
 import LocalSlashCommandPanel from './LocalSlashCommandPanel.vue'
 import ComposerDropOverlay from './ComposerDropOverlay.vue'
 import ProjectContextChip from '../shared/ProjectContextChip.vue'
@@ -1373,6 +1374,10 @@ watch(attachments, (v) => { attachmentsRef.value = v }, { deep: true })
                 :t="t"
               />
 
+              <ModelSelector
+                :compact="useCompactControls"
+                :disabled="isSubmitting"
+              />
               <ModeSelector
                 :current-mode="selectedMode"
                 @mode-change="(m: string) => { selectedMode = m }"

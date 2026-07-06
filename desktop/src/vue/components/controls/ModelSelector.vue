@@ -7,6 +7,7 @@
  */
 
 import { ref, onMounted } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 interface Provider {
   provider_id: string
@@ -34,7 +35,7 @@ const currentLabel = ref('选择模型')
 async function loadProviders() {
   loading.value = true
   try {
-    const res = await fetch('/api/settings')
+    const res = await fetch(getApiUrl('/api/settings'))
     if (res.ok) {
       const data = await res.json()
       const allProviders: Provider[] = data.providers || []

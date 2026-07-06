@@ -218,6 +218,77 @@ export const useChatStore = defineStore('chat', {
       // Clear composer state
       session.composerPrefill = null
       session.composerInsertion = null
+      
+      // Call the backend API
+      const apiUrl = 'http://127.0.0.1:8765/api/chat'
+      fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'glm-5.2',
+          messages: [{ role: 'user', content }],
+          temperature: 0.7,
+          max_tokens: 2048,
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            session.chatState = 'error'
+            return
+          }
+          // Read the SSE stream
+          const reader = res.body?.getReader()
+          if (!reader) {
+            session.chatState = 'error'
+            return
+          }
+          const decoder = new TextDecoder()
+          let buffer = ''
+          let assistantMsg = ''
+          const assistantId = nextId()
+          
+          // Add a placeholder assistant message
+          const assistantPlaceholder: UIMessage = {
+            type: 'assistant_text',
+            content: '',
+            id: assistantId,
+            timestamp: Date.now(),
+          }
+          session.messages.push(assistantPlaceholder)
+          
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            
+            // Parse SSE events
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const event = JSON.parse(line.slice(6))
+                  if (event.type === 'text' && event.content) {
+                    assistantMsg += event.content
+                    // Update the placeholder message
+                    const msg = session.messages.find((m: any) => m.id === assistantId)
+                    if (msg) msg.content = assistantMsg
+                  } else if (event.type === 'done') {
+                    session.chatState = 'idle'
+                    // Update the final message
+                    const msg = session.messages.find((m: any) => m.id === assistantId)
+                    if (msg) msg.content = assistantMsg
+                  }
+                } catch {}
+              }
+            }
+          }
+          session.chatState = 'idle'
+        })
+        .catch(() => {
+          session.chatState = 'error'
+        })
     },
 
     stopGeneration(sessionId: string) {

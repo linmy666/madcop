@@ -8,6 +8,7 @@
  */
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 interface ContextCategory {
   name: string
@@ -78,7 +79,7 @@ async function fetchContext() {
   loading.value = true
   error.value = null
   try {
-    const res = await fetch(`/api/sessions/${props.sessionId}/inspection`, {
+    const res = await fetch(getApiUrl(`/api/sessions/${props.sessionId}/inspection`), {
       signal: AbortSignal.timeout(10_000),
     })
     if (res.ok) {

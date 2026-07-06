@@ -5,6 +5,8 @@
 // Includes new Agent Network + Knowledge Base settings sections.
 
 import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
+import { useTabStore } from '../stores/tabStore'
+import { useSessionStore } from '../stores/sessionStore'
 const MemoryPage = defineAsyncComponent(() => import('./MemoryPage.vue'))
 const ProviderSettings = defineAsyncComponent(() => import('./settings/ProviderSettings.vue'))
 const GeneralSettings = defineAsyncComponent(() => import('./settings/GeneralSettings.vue'))
