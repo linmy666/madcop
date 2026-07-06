@@ -6,6 +6,9 @@ import path from 'path'
 
 export default defineConfig({
   base: './',
+  define: {
+    'import.meta.env.VITE_DESKTOP_SERVER_URL': JSON.stringify('http://127.0.0.1:8765'),
+  },
   plugins: [vue(), tailwindcss()],
   build: {
     outDir: 'dist-vue',
