@@ -583,7 +583,7 @@ const handleLaunchWorkDirChange = async (newWorkDir: string) => {
 
 const handleSubmit = async () => {
   const text = input.value.trim()
-  if ((!text && ((!attachments.value.length && !hasWorkspaceReferences.value) || isMemberSession.value)) || isWorkspaceMissing.value) return
+  if (!text && (!attachments.value.length && !hasWorkspaceReferences.value) || isMemberSession.value) return
 
   // Slash UI action: panel
   if (pendingSlashUiAction.value?.type === 'panel') {
