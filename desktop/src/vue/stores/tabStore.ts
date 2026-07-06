@@ -81,6 +81,26 @@ export const useTabStore = defineStore('madcop-tabs', () => {
     tabs.value.splice(toIndex, 0, moved)
   }
 
+  // ─── Sidebar nav-item helpers (open specific tab by type) ───
+  function openWorkflowsTab() {
+    openTab('__workflows__', '工作流', 'workflows' as TabType)
+  }
+  function openDesignTab() {
+    openTab('__design__', '设计工具', 'design' as TabType)
+  }
+  function openAgentHubTab() {
+    openTab('__agent_hub__', 'Agent 中心', 'workflows' as TabType)
+  }
+  function openKnowledgeTab() {
+    openTab('__knowledge__', '知识库', 'workflows' as TabType)
+  }
+  function openSkillBuilderTab() {
+    openTab('__skill_builder__', '技能构建器', 'workflows' as TabType)
+  }
+  function openUsageStatsTab() {
+    openTab('__usage_stats__', '用量统计', 'workflows' as TabType)
+  }
+
   return {
     tabs,
     activeTabId,
@@ -89,5 +109,11 @@ export const useTabStore = defineStore('madcop-tabs', () => {
     closeTab,
     openTerminalTab,
     moveTab,
+    openWorkflowsTab,
+    openDesignTab,
+    openAgentHubTab,
+    openKnowledgeTab,
+    openSkillBuilderTab,
+    openUsageStatsTab,
   }
 })

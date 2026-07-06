@@ -24,6 +24,7 @@ export interface SessionTaskBarProps {
 }
 
 const props = withDefaults(defineProps<SessionTaskBarProps>(), {
+  tasks: () => [] as CLITask[],
   expanded: false,
   completedAndDismissed: false,
 })
@@ -39,14 +40,14 @@ const statusConfig = {
   completed: { icon: 'check_circle', color: 'var(--color-success)' },
 } as const
 
-const allCompleted = computed(() => props.tasks.every((tk) => tk.status === 'completed'))
-const completedCount = computed(() => props.tasks.filter((tk) => tk.status === 'completed').length)
-const totalCount = computed(() => props.tasks.length)
+const allCompleted = computed(() => (props.tasks ?? []).every((tk) => tk.status === 'completed'))
+const completedCount = computed(() => (props.tasks ?? []).filter((tk) => tk.status === 'completed').length)
+const totalCount = computed(() => (props.tasks ?? []).length)
 const progressPercent = computed(() => totalCount.value > 0 ? Math.round((completedCount.value / totalCount.value) * 100) : 0)
 </script>
 
 <template>
-  <div v-if="props.tasks.length > 0 && !(allCompleted && completedAndDismissed)" class="shrink-0 px-8">
+  <div v-if="(props.tasks ?? []).length > 0 && !(allCompleted && completedAndDismissed)" class="shrink-0 px-8">
     <div class="mx-auto max-w-[860px] rounded-[var(--radius-lg)] border border-[var(--color-outline-variant)]/40 bg-[var(--color-surface-container-lowest)] overflow-hidden mb-2">
       <!-- Header -->
       <div class="flex items-center gap-2 bg-[var(--color-surface-container)] px-2 py-1.5">
