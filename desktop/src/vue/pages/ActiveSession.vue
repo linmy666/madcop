@@ -29,6 +29,7 @@ import {
 } from '../stores/terminalPanelStore'
 import MessageList from '../components/chat/MessageList.vue'
 import ChatInput from '../components/chat/ChatInput.vue'
+import DirectChatButton from '../components/chat/DirectChatButton.vue'
 import ComputerUsePermissionModal from '../components/chat/ComputerUsePermissionModal.vue'
 import ClarificationPanel from '../components/chat/ClarificationPanel.vue'
 import SessionTaskBar from '../components/chat/SessionTaskBar.vue'
