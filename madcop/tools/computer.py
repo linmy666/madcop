@@ -114,7 +114,8 @@ class ComputerUseTool(Tool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["screenshot", "click", "type", "key", "scroll"],
+                    "enum": ["screenshot", "click", "type", "key", "scroll",
+                             "find_element", "list_apps", "focus_app", "dump_tree"],
                     "description": "The computer-use action to perform.",
                 },
                 "x": {
@@ -151,6 +152,22 @@ class ComputerUseTool(Tool):
                     "type": "string",
                     "enum": ["left", "right", "middle"],
                     "description": "Mouse button for click (default left).",
+                },
+                "pid": {
+                    "type": "integer",
+                    "description": "Process ID of the target app (for find_element/focus_app/dump_tree).",
+                },
+                "label": {
+                    "type": "string",
+                    "description": "Label/title substring to search for (for find_element).",
+                },
+                "role": {
+                    "type": "string",
+                    "description": "AX role to find (e.g. AXButton, AXTextField). Default: any.",
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "Max recursion depth for AX tree search (default 20).",
                 },
             },
             "required": ["action"],
@@ -229,6 +246,22 @@ class ComputerUseTool(Tool):
             return self._scroll(
                 kwargs.get("direction", "down"),
                 kwargs.get("clicks", 3),
+            )
+        elif action == "list_apps":
+            return self._list_apps()
+        elif action == "focus_app":
+            return self._focus_app(kwargs.get("pid", 0))
+        elif action == "find_element":
+            return self._find_element(
+                pid=kwargs.get("pid", 0),
+                label=kwargs.get("label"),
+                role=kwargs.get("role"),
+                max_depth=kwargs.get("max_depth", 20),
+            )
+        elif action == "dump_tree":
+            return self._dump_tree(
+                pid=kwargs.get("pid", 0),
+                max_depth=kwargs.get("max_depth", 5),
             )
         else:
             return {"error": f"unknown action: {action}"}
@@ -392,6 +425,77 @@ class ComputerUseTool(Tool):
 
     def clear_log(self) -> None:
         self._action_log.clear()
+
+    # ---- macOS AXAPI actions ---- #
+
+    def _list_apps(self) -> dict[str, Any]:
+        """List all running GUI applications visible via AXAPI."""
+        try:
+            from .mac_ax import list_apps
+            apps = list_apps()
+            return {
+                "action": "list_apps",
+                "apps": apps,
+                "count": len(apps),
+            }
+        except ImportError as e:
+            return {"error": f"AXAPI not available: {e}"}
+        except Exception as e:
+            return {"error": f"AXAPI error: {e}"}
+
+    def _focus_app(self, pid: int) -> dict[str, Any]:
+        """Bring an app to the foreground by PID."""
+        try:
+            from .mac_ax import focus_app
+            ok = focus_app(pid)
+            return {
+                "action": "focus_app",
+                "pid": pid,
+                "success": ok,
+            }
+        except ImportError as e:
+            return {"error": f"AXAPI not available: {e}"}
+        except Exception as e:
+            return {"error": f"AXAPI error: {e}"}
+
+    def _find_element(
+        self,
+        pid: int,
+        label: str | None = None,
+        role: str | None = None,
+        max_depth: int = 20,
+    ) -> dict[str, Any]:
+        """Search the AX tree for matching UI elements."""
+        try:
+            from .mac_ax import find_element
+            results = find_element(pid, label=label, role=role, max_depth=max_depth)
+            return {
+                "action": "find_element",
+                "pid": pid,
+                "label": label,
+                "role": role,
+                "matches": results,
+                "count": len(results),
+            }
+        except ImportError as e:
+            return {"error": f"AXAPI not available: {e}"}
+        except Exception as e:
+            return {"error": f"AXAPI error: {e}"}
+
+    def _dump_tree(self, pid: int, max_depth: int = 5) -> dict[str, Any]:
+        """Print the full AX tree of an app for debugging."""
+        try:
+            from .mac_ax import dump_tree
+            lines = dump_tree(pid, max_depth=max_depth)
+            return {
+                "action": "dump_tree",
+                "pid": pid,
+                "tree": lines,
+            }
+        except ImportError as e:
+            return {"error": f"AXAPI not available: {e}"}
+        except Exception as e:
+            return {"error": f"AXAPI error: {e}"}
 
 
 __all__ = [
