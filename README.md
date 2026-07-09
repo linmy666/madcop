@@ -200,7 +200,7 @@ The interesting design decision here is that the canvas is **not** an iframe of 
 
 ## How is quality controlled?
 
-A test suite of **1,321 tests** (currently 1,316 passing, 5 known-failing in `test_memory_api.py` due to a missing `total` field on the list endpoint — fixed in the upcoming commit) covers:
+A test suite of **1,321 tests** (all passing) covers:
 
 - The memory store, the consolidation / pruning pipeline, the prescreen for sensitive content.
 - The statistics engine (CUSUM, z-score anomaly detection, counterfactual cost).
@@ -305,7 +305,16 @@ madcop/
 
 ## License
 
-MIT.
+MadCop is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. The full license text is in [LICENSE](LICENSE).
+
+In short:
+
+- You may use, modify, and distribute MadCop for personal or internal use freely.
+- If you run a modified MadCop as a **network service** (e.g. a hosted AI agent workstation for your customers), you **must release the full source code** of your modified version to those users, under the same AGPL-3.0.
+- Closed-source SaaS forks are explicitly prohibited by the AGPL. If you want to use MadCop in a commercial product you do not wish to open-source, contact the author for a separate commercial license.
+
+See the additional notice in [LICENSE](LICENSE) for the full text and rationale.
+
 
 ## Author
 
