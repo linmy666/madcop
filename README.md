@@ -41,7 +41,7 @@ MadCop is built around three observations:
 
 1. **The work is multi-step.** A single useful task almost always needs several LLM calls with intermediate state. A chat that cannot sequence, branch, persist, or call external tools caps you at "Q&A on a webpage".
 2. **The data is local.** A working file directory, a Notion export, a `git` history, screenshots, contracts — the substance of real work sits on the user's disk. A client that can only attach a single file per message (or pays per-token for cloud RAG) punishes the people who already have the answer.
-3. **The model is a choice, not a vendor.** A senior engineer might want Claude for refactors and GLM-5.2 for Chinese-language analysis. A privacy-sensitive user wants a self-hosted endpoint. A startup wants to A/B-test cost. A single-vendor client forces that decision at sign-up and never lets you revisit it.
+3. **The model is a choice, not a vendor.** A senior engineer might need different models for different tasks — one for refactoring code, another for Chinese-language analysis. A privacy-sensitive user wants a self-hosted endpoint. A startup wants to A/B-test cost. A single-vendor client forces that decision at sign-up and never lets you revisit it.
 
 So the design goal is: a thin local shell that lets the user pick their own model, hand it their own files, and let the system orchestrate the rest. Everything else is in service of that.
 
@@ -90,13 +90,13 @@ Routing is the single most important design question in any LLM client. MadCop r
 
 ### Axis 1: Per-request model selection
 
-The user configures one or more model providers in the Settings panel. Each provider is a name + base URL + API key + model id (e.g. `sensenova / https://token.sensenova.cn/v1 / GLM-5.2`). The frontend exposes the active provider as a `useSettingsStore.currentModel` ref; the backend receives a `model` field on every `POST /api/chat` and forwards it to the OpenAI-compatible client.
+The user configures one or more model providers in the Settings panel. Each provider is a name + base URL + API key + model id (any OpenAI-compatible endpoint). The frontend exposes the active provider as a `useSettingsStore.currentModel` ref; the backend receives a `model` field on every `POST /api/chat` and forwards it to the OpenAI-compatible client.
 
 This means **there is no "default model" hard-coded in the backend**. If you don't configure one, you get a clear error on the first request. The model lives in user data, not in the product.
 
 ### Axis 2: Per-session tool registry
 
-Different models from different vendors have wildly different tool-use quality. GLM-5.2 reliably emits `tool_call` parts but occasionally echoes the schema as text; Qwen3 is the opposite. The backend's tool dispatcher (`madcop/tools/registry.py`) registers the **same** toolset regardless of model, but the system prompt is tuned to nudge the model toward emitting function calls. Specifically, every chat request includes an explicit instruction:
+Different models from different vendors have wildly different tool-use quality. The backend's tool dispatcher handles this by tuning the system prompt per model family. The backend's tool dispatcher (`madcop/tools/registry.py`) registers the **same** toolset regardless of model, but the system prompt is tuned to nudge the model toward emitting function calls. Specifically, every chat request includes an explicit instruction:
 
 > "When the user asks you to do anything that requires real-time information, you MUST call the `web_search` tool. Do not make up answers. Call the tool directly — do not output the tool's parameter description."
 
@@ -283,7 +283,7 @@ The model API key is supplied by the user at first launch via the Settings panel
 The roadmap in priority order:
 
 1. **Local inference** — integrate MLX (macOS) and llama.cpp (cross-platform) so a user with a 64GB Mac can run a 70B model entirely offline. This unlocks the "no API key needed" path for privacy-sensitive users.
-2. **Visual understanding** — current GLM-5.2 endpoint is text-only; once a multimodal model is wired in, the design tool and the workflow editor both benefit from "show me a screenshot, generate the component that matches it".
+2. **Visual understanding** — the current API endpoint is text-only; once a multimodal model is wired in, the design tool and the workflow editor both benefit from "show me a screenshot, generate the component that matches it".
 3. **Skill marketplace** — a "skill" is a named workflow + tool bundle (e.g. "competitor research", "weekly status report"). The current `/api/skills` endpoint is the local-only seed; the next step is opt-in cloud discovery with a rating system.
 4. **Mobile companion** — a thin iOS/Android app that talks to the desktop backend over LAN. The local-first model is a good fit for this; the alternative is "no mobile at all".
 
