@@ -30,7 +30,7 @@ from typing import Any, Iterable, Iterator
 class Message:
     """One chat message."""
     role: str                          # "system" | "user" | "assistant" | "tool"
-    content: str
+    content: str | list = ""           # str for text-only, list[dict] for multimodal blocks
     name: str | None = None
     tool_call_id: str | None = None     # for role="tool"
     tool_calls: tuple[ToolCall, ...] = ()  # for role="assistant" with tool use
@@ -266,6 +266,7 @@ class OpenAICompatClient(ChatClient):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = None,
     ) -> ChatResponse:
         payload = [m.to_dict() for m in messages]
         kwargs: dict[str, Any] = {
@@ -277,6 +278,8 @@ class OpenAICompatClient(ChatClient):
             kwargs["max_tokens"] = max_tokens
         if tools:
             kwargs["tools"] = tools
+            if tool_choice:
+                kwargs["tool_choice"] = tool_choice
         resp = self._client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message

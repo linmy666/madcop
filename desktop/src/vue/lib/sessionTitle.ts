@@ -4,6 +4,7 @@ const PLACEHOLDER_TITLES = new Set([
   '',
   'New Session',
   'Untitled Session',
+  '新对话',
 ])
 
 const XML_TAG_BLOCK_PATTERN = /<([a-z][\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1>\n?/g

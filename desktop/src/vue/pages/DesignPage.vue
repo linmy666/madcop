@@ -231,7 +231,7 @@ function formatRelative(ts: number): string {
   <!-- ============================== -->
   <!-- Project list (no active project) -->
   <!-- ============================== -->
-  <div v-if="!activeProject" class="design-page bg-[var(--color-surface)] flex h-screen w-screen overflow-y-auto">
+  <div v-if="!activeProject" class="design-page bg-[var(--color-surface)] flex h-full w-full overflow-y-auto">
     <div class="mx-auto w-full max-w-[960px] px-12 py-20">
       <!-- Title -->
       <div class="mb-16">
@@ -322,7 +322,7 @@ function formatRelative(ts: number): string {
   <!-- ============================== -->
   <!-- Active project: editor -->
   <!-- ============================== -->
-  <div v-else class="design-page flex h-screen w-screen flex-col overflow-hidden bg-[var(--color-surface)]">
+  <div v-else class="design-page flex h-full w-full flex-col overflow-hidden bg-[var(--color-surface)]">
     <!-- Quiet top bar -->
     <header
       class="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 h-12 flex-shrink-0"

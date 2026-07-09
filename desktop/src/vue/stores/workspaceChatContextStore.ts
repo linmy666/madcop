@@ -56,5 +56,8 @@ export const useWorkspaceChatContextStore = defineStore('workspaceChatContext', 
     clearSession(sessionId: string) {
       delete this.referencesBySession[sessionId]
     },
+    formatWorkspaceReferencePrompt(_references: any[]): string {
+      return ''
+    },
   },
 })

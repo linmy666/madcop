@@ -37,6 +37,7 @@ import MadCopLoader from '../components/common/MadCopLoader.vue'
 import WorkbenchPanel from '../components/workbench/WorkbenchPanel.vue'
 import TeamStatusBar from '../components/teams/TeamStatusBar.vue'
 import TerminalSettings from './TerminalSettings.vue'
+import type { ChatPermission } from '~/stores/permissionStore'
 import type { SessionListItem } from '../types/session'
 import type { ActiveGoalState } from '../types/chat'
 import { useMobileViewport } from '../hooks/useMobileViewport'
@@ -99,6 +100,17 @@ const activeTabType = computed<TabType | null>(() => {
   return tabStore.tabs.find((tab: any) => tab.sessionId === activeTabId.value)?.type ?? null
 })
 
+// v3.0: when the active tab changes to a session that hasn't been
+// hydrated yet, load its message history from the backend. Without
+// this, switching to a saved session showed only the welcome state.
+watch(activeTabId, async (newId, oldId) => {
+  if (!newId || newId === oldId) return
+  if (!isSessionTabState(newId, activeTabType.value)) return
+  const existing = chatStore.sessions[newId]
+  if (existing?.historyStatus === 'ready' && (existing?.messages?.length ?? 0) > 0) return
+  void chatStore.loadHistory(newId)
+}, { immediate: true })
+
 const sessions = computed(() => sessionStore.sessions)
 const sessionState = computed(() => {
   if (!activeTabId.value) return undefined
@@ -139,7 +151,8 @@ const showTerminalPanel = computed(() => {
 const terminalPanelRuntimeId = computed(() => {
   if (!activeTabId.value || isMemberSession.value || isMobileLayout.value) return undefined
   if (!isSessionTabState(activeTabId.value, activeTabType.value)) return undefined
-  return terminalPanelStore.panelBySession[activeTabId.value!]?.runtimeId
+  // Guard against store not yet initialized (HMR / race conditions)
+  return terminalPanelStore?.panelBySession?.[activeTabId.value!]?.runtimeId
 })
 const terminalPanelHeight = computed(() => terminalPanelStore.height)
 
@@ -425,7 +438,7 @@ function openTerminalInTab() {
         <!-- Member session header -->
         <div
           v-if="isMemberSession"
-          class="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface-container)]"
+          class="w-full shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface-container)]"
         >
           <div class="mx-auto max-w-[860px] flex items-center justify-between gap-4 px-8 py-2">
             <div class="min-w-0">
@@ -466,15 +479,19 @@ function openTerminalInTab() {
         <div
           v-if="isEmpty"
           data-testid="empty-session-hero"
-          :class="['flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden px-8 pt-8', compactEmptyHero ? 'pb-6' : 'pb-32']"
+          :class="['relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden', compactEmptyHero ? 'pb-6' : 'pb-28']"
+          class="w-full"
         >
-          <div class="flex max-w-md flex-col items-center text-center">
+          <!-- Subtle gradient background -->
+          <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-[var(--color-surface)] via-transparent to-[var(--color-surface)] opacity-40" />
+
+          <div class="relative z-10 flex max-w-md flex-col items-center text-center px-6">
             <!-- Member session empty -->
             <template v-if="isMemberSession">
               <span
-                :class="['material-symbols-outlined mb-4 text-[var(--color-text-tertiary)]', compactEmptyHero ? 'text-[36px]' : 'text-[48px]']"
+                :class="['material-symbols-outlined mb-5 text-[var(--color-text-tertiary)]', compactEmptyHero ? 'text-[36px]' : 'text-[48px]']"
               >smart_toy</span>
-              <p class="text-[var(--color-text-secondary)]">
+              <p class="text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
                 {{ memberInfo?.status === 'running' ? `${memberInfo.role} ${t('teams.working')}` : t('teams.noMessages') }}
               </p>
             </template>
@@ -483,18 +500,17 @@ function openTerminalInTab() {
             <template v-else>
               <MadCopLoader
                 state="'ready'"
-                :size="compactEmptyHero ? 160 : 240"
-                class="mb-6"
+                :size="compactEmptyHero ? 120 : 160"
+                class="mb-5"
               />
               <h1
-                :class="[compactEmptyHero ? 'mb-1 text-2xl' : 'mb-2 text-3xl', 'font-extrabold tracking-tight text-[var(--color-text-primary)]']"
+                class="mb-2 text-[22px] font-bold tracking-tight text-[var(--color-text-primary)]"
                 style="font-family: var(--font-headline)"
               >
                 {{ t('empty.title') }}
               </h1>
               <p
-                :class="['mx-auto max-w-xs text-[var(--color-text-secondary)]', compactEmptyHero ? 'text-sm' : '']"
-                style="font-family: var(--font-body)"
+                class="mx-auto max-w-xs text-[13px] leading-relaxed text-[var(--color-text-tertiary)]"
               >
                 {{ t('empty.subtitle') }}
               </p>
@@ -507,14 +523,14 @@ function openTerminalInTab() {
           <!-- Session header (non-member, non-mobile) -->
           <div
             v-if="!isMemberSession && !isMobileLayout"
-            :class="showRightPanel ? 'flex w-full items-center border-b border-[var(--color-border)]/70 px-4 py-3' : 'w-full border-b border-outline-variant/10 px-4 py-3'"
+            :class="showRightPanel ? 'flex w-full items-center border-b border-[var(--color-border)]/60 bg-[var(--color-surface-container-lowest)]/50 px-4 py-2.5' : 'w-full border-b border-[var(--color-border)]/60 bg-[var(--color-surface-container-lowest)]/50 px-4 py-2.5'"
           >
             <div :class="showRightPanel ? 'min-w-0 flex-1' : 'mx-auto w-full max-w-[860px] min-w-0'">
               <div class="flex min-w-0 items-center gap-3">
                 <h1
                   :class="showRightPanel
-                    ? 'min-w-0 flex-1 truncate text-[15px] font-bold font-headline leading-tight text-on-surface'
-                    : 'min-w-0 flex-1 text-lg font-bold font-headline text-on-surface leading-tight'"
+                    ? 'min-w-0 flex-1 truncate text-[14px] font-semibold text-[var(--color-text-primary)]'
+                    : 'min-w-0 flex-1 text-[16px] font-semibold text-[var(--color-text-primary)]'"
                 >
                   {{ session?.title || t('session.untitled') }}
                 </h1>
@@ -588,7 +604,7 @@ function openTerminalInTab() {
           <div
             v-if="isHistoryLoading"
             role="status"
-            class="flex flex-1 items-center justify-center p-8 text-sm text-[var(--color-text-secondary)]"
+            class="w-full flex flex-1 items-center justify-center p-8 text-sm text-[var(--color-text-secondary)]"
           >
             <span class="material-symbols-outlined mr-2 animate-spin text-[18px]">progress_activity</span>
             {{ t('common.loading') }}
@@ -598,13 +614,19 @@ function openTerminalInTab() {
           <div
             v-else-if="historyError"
             role="alert"
-            class="flex flex-1 items-center justify-center p-8 text-sm text-[var(--color-error)]"
+            class="w-full flex flex-1 items-center justify-center p-8 text-sm text-[var(--color-error)]"
           >
             {{ historyError }}
           </div>
 
           <!-- Message list -->
-          <MessageList v-else :compact="showRightPanel" />
+          <template v-else>
+            <div class="flex-1 min-h-0 w-full overflow-y-auto pt-6">
+              <div class="mx-auto max-w-[820px] px-5">
+                <MessageList :compact="showRightPanel" />
+              </div>
+            </div>
+          </template>
         </template>
 
         <!-- Session task bar (non-member) -->

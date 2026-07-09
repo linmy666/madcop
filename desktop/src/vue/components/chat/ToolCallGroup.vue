@@ -54,6 +54,9 @@ export interface ToolCallGroupProps {
 
 const props = withDefaults(defineProps<ToolCallGroupProps>(), {
   isStreaming: false,
+  resultMap: () => new Map(),  // fallback empty map if undefined
+  childToolCallsByParent: () => new Map(),
+  agentTaskNotifications: () => ({}),
 })
 
 const t = useTranslation()

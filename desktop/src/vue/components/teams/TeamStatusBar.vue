@@ -35,7 +35,7 @@ const statusConfig: Record<string, { icon: string; color: string; pulse: boolean
 </script>
 
 <template>
-  <div v-if="filteredMembers.length > 0" class="shrink-0 px-8">
+  <div v-if="filteredMembers.length > 0" class="w-full shrink-0 px-8">
     <div class="mx-auto max-w-[860px] rounded-[var(--radius-lg)] border border-[var(--color-outline-variant)]/40 bg-[var(--color-surface-container-lowest)] overflow-hidden mb-2">
       <button
         @click="expanded = !expanded"

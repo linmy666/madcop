@@ -85,18 +85,19 @@ function getNativeFilePath(file: File): string | undefined {
 
 async function fileToComposerAttachment(file: File): Promise<ComposerAttachment | null> {
   const nativePath = isDesktopRuntime() ? getNativeFilePath(file) : undefined
-  if (nativePath) {
-    return pathToComposerAttachment(nativePath)
-  }
 
-  const isImage = file.type.startsWith('image/')
+  // Always read the dataURL so we can show previews of images
+  // regardless of which picker path we used.
+  const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name || '')
   const data = await readFileAsDataUrl(file)
+
   return {
     id: nextAttachmentId(),
     name: file.name,
     type: isImage ? 'image' : 'file',
     mimeType: file.type || undefined,
-    previewUrl: isImage ? data : undefined,
+    path: nativePath,
+    previewUrl: data,  // always set — used for image thumbnails AND PDF/other attachments to send dataUrl to backend
     data,
   }
 }

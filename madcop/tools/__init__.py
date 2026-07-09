@@ -46,7 +46,7 @@ from .weather import WeatherTool
 from .clarify import ClarifyTool
 
 
-def default_registry(store: MemoryStore | None = None) -> ToolRegistry:
+def default_registry(store: MemoryStore | None = None, workspace_dir: str | None = None) -> ToolRegistry:
     """Build a ToolRegistry pre-loaded with the built-in chat tools.
 
     If `store` is provided, the LLM-managed memory tools (store/recall/forget)
@@ -59,9 +59,21 @@ def default_registry(store: MemoryStore | None = None) -> ToolRegistry:
     reg.register(WebFetchTool())
     reg.register(WeatherTool())
     reg.register(ClarifyTool())  # v2.6.3.3 — ask_user for clarifying questions
-    reg.register(ReadFileTool())   # v2.7.0 — file read for workflows
-    reg.register(WriteFileTool())  # v2.7.0 — file write for workflows & BI
-    reg.register(EditFileTool())   # v2.7.0 — edit files
+    import os as _os
+    from pathlib import Path as _P
+    _user_home = str(_P.home())
+    # Determine write directories: prefer the user-selected workspace
+    # (so the agent can drop files where the user is working) over the
+    # server's cwd. Fall back to cwd + user home if no workspace is
+    # selected yet. Callers (especially the chat endpoint) should pass
+    # `workspace_dir` so the agent's tools honor the user's pick.
+    _write_dirs: list[str] = []
+    if workspace_dir:
+        _write_dirs.append(workspace_dir)
+    _write_dirs.extend([_os.getcwd(), _user_home])
+    reg.register(ReadFileTool(allowed_dirs=[_user_home, _os.getcwd()]))   # v2.7.0 — file read for workflows
+    reg.register(WriteFileTool(allowed_dirs=_write_dirs))  # v3.0 — write to user's workspace
+    reg.register(EditFileTool(allowed_dirs=_write_dirs))   # v3.0 — edit in user's workspace
     if store is not None:
         from .memory import default_memory_tools
         for tool in default_memory_tools(store):

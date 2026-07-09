@@ -397,7 +397,13 @@ const sanitizedSvg = computed(() => (svg.value ? sanitizeMermaidSvg(svg.value) :
 
 const inlineZoom = computed(() => {
   if (!svgMetrics.value || inlineViewportWidth.value <= 0) return 1
-  return clampZoom(Math.min(1, Math.max(1, inlineViewportWidth.value - 32) / svgMetrics.value.width))
+  // v3.0: was `Math.max(1, ...)` which forced zoom to 1 whenever
+  // the SVG was wider than the viewport — the result was a SVG
+  // that overflowed horizontally and rendered blank because
+  // `overflow: hidden` clipped it. Allow downscaling so the SVG
+  // fits the viewport.
+  const fit = (inlineViewportWidth.value - 32) / svgMetrics.value.width
+  return clampZoom(Math.min(1, fit))
 })
 
 const inlineFrameStyle = computed(() => {

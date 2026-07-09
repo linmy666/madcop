@@ -1,64 +1,153 @@
+<template>
+  <div v-if="hasContent" data-message-shell="assistant" data-layout="document" class="assistant-message group py-4">
+    <div class="assistant-message__body">
+      <!-- If this is a clarify/choices JSON, render question + chips -->
+      <template v-if="clarifyData">
+        <p class="text-[14px] leading-[1.7] text-[var(--color-text-primary)] mb-3">
+          {{ clarifyData.question }}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="opt in clarifyData.options"
+            :key="opt"
+            type="button"
+            class="clarify-chip"
+            :class="opt === '自定义' ? 'clarify-chip--custom' : ''"
+            @click.stop="pickOption(opt)"
+          >
+            {{ opt === '自定义' ? '✏️ 自定义' : opt }}
+          </button>
+        </div>
+      </template>
+
+      <!-- Regular markdown content -->
+      <template v-else>
+        <MarkdownRenderer
+          :content="cleanContent"
+          :streaming="isStreaming"
+          class="text-[14px] leading-[1.7] text-[var(--color-text-primary)]"
+        />
+        <span
+          v-if="isStreaming"
+          class="ml-0.5 inline-block h-4 w-0.5 bg-[var(--color-brand)] align-text-bottom animate-caret-blink"
+        />
+      </template>
+    </div>
+  </div>
+</template>
+
 <script setup lang="ts">
-// v3.0 — AssistantMessage (Vue 3)
-// Direct translation of AssistantMessage.tsx — same Tailwind classes.
-// Markdown rendering deferred to a Vue port of MarkdownRenderer.
 import { computed } from 'vue'
-import MessageActionBar from './MessageActionBar.vue'
+import { useChatStore } from '../../stores/chatStore'
+import { useTabStore } from '../../stores/tabs'
+import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
+
+interface ClarifyPayload {
+  clarify?: boolean
+  choices?: boolean
+  question?: string
+  options?: string[]
+}
 
 const props = withDefaults(defineProps<{
   content: string
   isStreaming?: boolean
-  sessionId?: string
-  timestamp?: number
-  branchLabel?: string
 }>(), {
   isStreaming: false,
 })
 
-function shouldUseDocumentLayout(content: string): boolean {
-  const n = content.trim()
-  if (!n) return false
-  if (/```/.test(n)) return true
-  if (/^\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|\.+\|)/m.test(n)) return true
-  const paragraphs = n.split(/\n\s*\n/).map((c) => c.trim()).filter(Boolean)
-  return paragraphs.length >= 2 || n.split('\n').filter((l) => l.trim()).length >= 8
-}
+const chatStore = useChatStore()
+const tabStore = useTabStore()
 
-const documentLayout = computed(() => shouldUseDocumentLayout(props.content))
-const hasContent = computed(() => props.content.trim().length > 0)
+const hasContent = computed(() => (props.content || '').trim().length > 0)
+
+// Detect clarify/choices JSON at the start of content
+const clarifyData = computed<ClarifyPayload | null>(() => {
+  const c = (props.content || '').trim()
+  if (!c.startsWith('{')) return null
+  try {
+    const parsed = JSON.parse(c) as ClarifyPayload
+    if (parsed.clarify || parsed.choices) return parsed
+    return null
+  } catch {
+    return null
+  }
+})
+
+// For regular messages, strip the JSON prefix if it exists (as fallback)
+const cleanContent = computed(() => {
+  if (clarifyData.value) return ''
+  return props.content || ''
+})
+
+function pickOption(opt: string) {
+  const sessionId = tabStore.activeTabId
+  if (!sessionId) return
+
+  if (opt === '自定义') {
+    // Focus the chat input so user can type
+    const el = document.querySelector('[data-testid="chat-input"]') as HTMLElement
+    el?.focus()
+    return
+  }
+
+  // Find the last user message
+  const session = chatStore.sessions[sessionId]
+  if (!session) return
+
+  const lastUserMsg = [...session.messages]
+    .reverse()
+    .find((m: any) => m.type === 'user' || m.type === 'user_text')
+  const originalQuery = lastUserMsg ? (lastUserMsg as any).content || '' : ''
+
+  // Append choice and send
+  const fullQuery = `${originalQuery}（${opt}）`
+  chatStore.sendMessage(sessionId, fullQuery)
+}
 </script>
 
-<template>
-  <div v-if="hasContent" class="mb-5 flex justify-start">
-    <div
-      data-message-shell="assistant"
-      :data-layout="documentLayout ? 'document' : 'bubble'"
-      :class="[
-        'group flex min-w-0 flex-col items-start',
-        documentLayout ? 'w-full max-w-full' : 'max-w-[88%] sm:max-w-[80%] lg:max-w-[72%]',
-      ]"
-    >
-      <div
-        :class="[
-          'rounded-[20px] rounded-tl-[8px] border border-[var(--color-border)]/60 bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-text-primary)] shadow-sm',
-          documentLayout ? 'w-full' : 'max-w-full',
-        ]"
-      >
-        <!-- TODO: replace with Vue MarkdownRenderer -->
-        <div class="whitespace-pre-wrap break-words leading-relaxed">{{ content }}</div>
-        <span
-          v-if="isStreaming"
-          class="ml-0.5 inline-block h-4 w-0.5 animate-shimmer bg-[var(--color-brand)] align-text-bottom"
-        />
-      </div>
-      <MessageActionBar
-        :copy-text="isStreaming ? undefined : content"
-        copy-label="复制回复"
-        :branch-label="branchLabel"
-        align="start"
-        :timestamp="timestamp"
-        @branch="$emit('branch')"
-      />
-    </div>
-  </div>
-</template>
+<style scoped>
+.assistant-message {
+  display: block;
+}
+.assistant-message__body {
+  position: relative;
+}
+
+.clarify-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: inherit;
+  user-select: none;
+}
+.clarify-chip:hover {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: white;
+}
+.clarify-chip--custom {
+  border-style: dashed;
+  opacity: 0.75;
+}
+.clarify-chip--custom:hover {
+  border-style: solid;
+  opacity: 1;
+}
+
+@keyframes caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.animate-caret-blink {
+  animation: caret-blink 1s step-end infinite;
+}
+</style>

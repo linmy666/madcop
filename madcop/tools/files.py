@@ -88,10 +88,81 @@ class ReadFileTool(Tool):
             "required": ["path"],
         }
 
+    def _read_attachment(self, att: dict[str, Any]) -> dict[str, Any]:
+        """Decode an inline attachment (from chat composer) and return its
+        content as a string. Supports text files (utf-8) and a metadata
+        header for binary files like images/PDFs."""
+        name = att.get("name", "attachment")
+        mime = att.get("mimeType", "")
+        data = att.get("data", "")
+        if not data:
+            return {"error": f"no data for attachment {name}"}
+        # data may be a data URL (data:<mime>;base64,<...>) — keep the
+        # metadata but truncate the body for very large files.
+        if data.startswith("data:") and "," in data:
+            header, body = data.split(",", 1)
+            # If it's a text-y mime, try to decode and return text.
+            if mime.startswith("text/") or mime in ("application/json", "application/xml"):
+                import base64 as _b64
+                try:
+                    return {"path": att.get("id") or name,
+                            "content": _b64.b64decode(body).decode("utf-8", errors="replace")}
+                except Exception as e:
+                    return {"error": f"failed to decode {name}: {e}"}
+            # PDF: extract real text using pypdf
+            if mime == "application/pdf" or name.lower().endswith(".pdf"):
+                try:
+                    import base64 as _b64
+                    import io as _io
+                    from pypdf import PdfReader as _PdfReader
+                    raw_bytes = _b64.b64decode(body)
+                    reader = _PdfReader(_io.BytesIO(raw_bytes))
+                    pages_text = []
+                    for i, page in enumerate(reader.pages):
+                        try:
+                            t = page.extract_text() or ""
+                        except Exception:
+                            t = ""
+                        pages_text.append(f"--- Page {i + 1} ---\n{t}")
+                    text = "\n\n".join(pages_text).strip()
+                    if text:
+                        # Truncate very large PDFs to keep response manageable
+                        max_chars = 30_000
+                        if len(text) > max_chars:
+                            text = text[:max_chars] + f"\n\n[truncated at {max_chars} chars of {len(text)} total]"
+                        return {
+                            "path": att.get("id") or name,
+                            "content": text,
+                        }
+                    return {
+                        "error": f"could not extract text from PDF: {name} (scanned/image-only PDF?)"
+                    }
+                except Exception as e:
+                    return {"error": f"failed to parse PDF {name}: {e}"}
+            # Binary: return metadata; LLM can decide what to do.
+            return {
+                "path": att.get("id") or name,
+                "content": f"[binary file: {name}, type: {mime}, size: {len(body)} base64 chars — describe what you see or do not try to render]",
+            }
+        # Raw text fallback.
+        return {"path": att.get("id") or name, "content": data}
+
     def __call__(self, **kwargs: Any) -> dict[str, Any]:
         path_str = kwargs.get("path", "")
         if not path_str:
             return {"error": "missing 'path'"}
+
+        # Virtual path scheme for inline attachments sent from the chat
+        # composer. We can't use the real disk path because the user's
+        # file API may not have a path in Electron. Instead we look up
+        # the attachment in a module-level registry keyed by id.
+        if path_str.startswith("attachment://"):
+            from . import inline_attachments
+            att_id = path_str[len("attachment://"):]
+            att = inline_attachments.get(att_id)
+            if not att:
+                return {"error": f"attachment not found: {att_id}"}
+            return self._read_attachment(att)
 
         try:
             p = _resolve_in_allowlist(path_str, self._allowed_dirs)
@@ -105,6 +176,29 @@ class ReadFileTool(Tool):
 
         offset = max(1, int(kwargs.get("offset", 1)))
         limit = min(2000, max(1, int(kwargs.get("limit", 500))))
+
+        # Detect PDF by extension and use pypdf to extract text instead of
+        # reading raw binary bytes as UTF-8 (which produces garbage).
+        if str(p).lower().endswith(".pdf"):
+            try:
+                from pypdf import PdfReader as _PdfReader
+                reader = _PdfReader(str(p))
+                pages_text = []
+                for i, page in enumerate(reader.pages):
+                    try:
+                        t = page.extract_text() or ""
+                    except Exception:
+                        t = ""
+                    pages_text.append(f"--- Page {i + 1} ---\n{t}")
+                text = "\n\n".join(pages_text).strip()
+                if text:
+                    max_chars = 60_000
+                    if len(text) > max_chars:
+                        text = text[:max_chars] + f"\n\n[truncated at {max_chars} chars of {len(text)} total]"
+                    return {"path": str(p), "content": text}
+                return {"error": f"could not extract text from PDF: {p.name} (scanned/image-only PDF?)"}
+            except Exception as e:
+                return {"error": f"failed to parse PDF {p.name}: {e}"}
 
         try:
             content = p.read_text(

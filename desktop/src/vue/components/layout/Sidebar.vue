@@ -17,6 +17,7 @@ import { getDesktopHost } from '../../../lib/desktopHost'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import AnimationPlayer from '../animations/AnimationPlayer.vue'
 import MascotAvatar from '../common/MascotAvatar.vue'
+import WorkspacePanel from '../workspace/WorkspacePanel.vue'
 // GlobalSearchModal not yet translated — using placeholder
 const GlobalSearchModal = { template: '<div></div>' }
 
@@ -286,8 +287,56 @@ function getVisibleProjectSessions(
 }
 
 function getSessionProjectKey(session: SessionListItem): string {
-  return session.projectRoot || session.workDir || session.projectPath || 'unknown'
+  // The session's projectRoot may be missing (e.g. older sessions
+  // saved before the field was added, or sessions created before the
+  // workspace was selected). In that case attribute the session to
+  // the current workspace dir so it groups under the proper project
+  // folder instead of an opaque "unknown" bucket.
+  //
+  // Exception: the "default" sentinel session (id starting with
+  // "default") is the catch-all new-chat session. It should NOT be
+  // attributed to the current workspace — it represents the "no
+  // project" state, so we keep it under a dedicated "__default__"
+  // key which the sidebar renders as "默认".
+  if (session.id === 'default' || session.id?.startsWith('default-')) {
+    return '__default__'
+  }
+  return session.projectRoot || session.workDir || session.projectPath
+      || (typeof localStorage !== 'undefined'
+            ? localStorage.getItem('madcop_workspace_dir') || ''
+            : '')
+      || fallbackWorkspaceDir.value
+      || 'unknown'
 }
+
+// Fallback workspace dir, used as last-resort attribution for sessions
+// whose projectRoot is missing AND localStorage hasn't been populated
+// yet. Populated by onMounted below by querying the backend.
+const fallbackWorkspaceDir = ref('')
+
+onMounted(async () => {
+  // Read workspace dir from backend; persist to localStorage for the
+  // sessionStore backfill. If we already have a value in localStorage,
+  // use that (avoids an extra network round-trip).
+  try {
+    let dir = ''
+    try { dir = localStorage.getItem('madcop_workspace_dir') || '' } catch {}
+    if (!dir) {
+      const res = await fetch('/api/workspace/dir')
+      if (res.ok) {
+        const data = await res.json()
+        dir = data?.dir || ''
+        if (dir) {
+          try { localStorage.setItem('madcop_workspace_dir', dir) } catch {}
+        }
+      }
+    }
+    fallbackWorkspaceDir.value = dir
+  } catch {
+    // Ignore: sidebar will fall back to 'unknown' if the backend
+    // is unreachable.
+  }
+})
 
 function compareSessionsByTimestamp(
   a: SessionListItem | undefined,
@@ -304,12 +353,13 @@ function getSessionTimestamp(session: SessionListItem | undefined, sortBy: Sideb
 }
 
 function projectTitle(pathLike: string | null | undefined): string {
-  if (!pathLike) return 'Unknown project'
-  const normalized = pathLike.replace(/[\\\/]+$/, '')
-  const segments = normalized.split(/[\\\/]/).filter(Boolean)
+  if (!pathLike) return '默认'
+  if (pathLike === '__default__') return '默认'
+  const normalized = pathLike.replace(/[\\/]+$/, '')
+  const segments = normalized.split(/[\\/]/).filter(Boolean)
   const last = segments[segments.length - 1]
   if (last) return last
-  return normalized || 'Unknown project'
+  return normalized || '默认'
 }
 
 function projectSubtitle(projectRoot: string | null | undefined, fallbackKey: string): string | null {
@@ -1857,14 +1907,17 @@ const projectMenuData = computed(() => {
     <!-- Collapsed view placeholder -->
     <div v-else class="flex-1" aria-hidden="true" />
 
-    <!-- Settings dock (bottom) -->
+    <!-- Settings dock (bottom) — wrap workspace + settings -->
     <div
       v-if="!isMobileComputed"
       data-testid="sidebar-settings-dock"
-      :class="`sidebar-settings-dock absolute bottom-0 left-0 right-0 border-t border-[var(--color-border)] p-3 ${expanded ? '' : 'flex justify-center'}`"
+      :class="`sidebar-settings-dock absolute bottom-0 left-0 right-0 border-t border-[var(--color-border)] ${expanded ? '' : 'flex justify-center'}`"
     >
-      <!-- TODO: Phase 2 — NavItem for Settings -->
-      <NavItem
+      <div v-if="expanded" class="px-2 pb-2">
+        <WorkspacePanel />
+      </div>
+      <div :class="`p-3`">
+        <NavItem
         :active="activeTabId === SETTINGS_TAB_ID"
         :collapsed="!expanded"
                         @click="() => {
@@ -1875,6 +1928,7 @@ const projectMenuData = computed(() => {
       >
         {{ t('sidebar.settings') }}
       </NavItem>
+    </div>
     </div>
 
     <!-- Context menu for session -->

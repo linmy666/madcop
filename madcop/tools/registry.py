@@ -140,6 +140,16 @@ class ToolRegistry:
             output = tool(**call.arguments)
         except Exception as e:  # noqa: BLE001
             return ToolResult(tool_name=call.name, output=None, error=f"{type(e).__name__}: {e}")
+        # If the tool returned a dict with an "error" key (e.g. attachment
+        # not found), promote it to a top-level ToolResult.error so the LLM
+        # clearly sees it as a failure rather than as successful output.
+        # Take precedence over content even if both are present.
+        if isinstance(output, dict) and "error" in output:
+            return ToolResult(
+                tool_name=call.name,
+                output=output,
+                error=str(output.get("error")),
+            )
         return ToolResult(tool_name=call.name, output=output)
 
 

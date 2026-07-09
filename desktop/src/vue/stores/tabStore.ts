@@ -31,9 +31,43 @@ export interface Tab {
 
 // ─── Store ─────────────────────────────────────────────────────────
 
+const TAB_STORAGE_KEY = 'madcop_tabs'
+const ACTIVE_TAB_STORAGE_KEY = 'madcop_active_tab'
+
+function loadTabs(): Tab[] {
+  try {
+    const raw = localStorage.getItem(TAB_STORAGE_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return []
+}
+
+function loadActiveTabId(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_TAB_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function saveTabs(tabs: Tab[]) {
+  try {
+    // Only persist session-type tabs (skip system tabs)
+    const persistable = tabs.filter((t) => t.type === 'session')
+    localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(persistable))
+  } catch {}
+}
+
+function saveActiveTabId(id: string | null) {
+  try {
+    if (id) localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, id)
+    else localStorage.removeItem(ACTIVE_TAB_STORAGE_KEY)
+  } catch {}
+}
+
 export const useTabStore = defineStore('madcop-tabs', () => {
-  const tabs = ref<Tab[]>([])
-  const activeTabId = ref<string | null>(null)
+  const tabs = ref<Tab[]>(loadTabs())
+  const activeTabId = ref<string | null>(loadActiveTabId())
 
   function openTab(sessionId: string, title: string, type: TabType = 'session') {
     // If tab already exists, activate it
@@ -41,14 +75,18 @@ export const useTabStore = defineStore('madcop-tabs', () => {
     if (existing) {
       existing.title = title
       activeTabId.value = sessionId
+      saveActiveTabId(activeTabId.value)
       return
     }
     tabs.value.push({ sessionId, title, type, status: 'idle' })
     activeTabId.value = sessionId
+    saveTabs(tabs.value)
+    saveActiveTabId(activeTabId.value)
   }
 
   function setActiveTab(id: string | null) {
     activeTabId.value = id
+    saveActiveTabId(id)
   }
 
   function closeTab(id: string) {
@@ -59,6 +97,8 @@ export const useTabStore = defineStore('madcop-tabs', () => {
       const next = tabs.value[tabs.value.length - 1]
       activeTabId.value = next?.sessionId ?? null
     }
+    saveTabs(tabs.value)
+    saveActiveTabId(activeTabId.value)
   }
 
   function openTerminalTab(cwd?: string, terminalRuntimeId?: string) {

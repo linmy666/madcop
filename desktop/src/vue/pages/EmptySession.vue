@@ -427,7 +427,7 @@ const handleSubmit = async () => {
       useSessionRuntimeStore().clearSelection(DRAFT_RUNTIME_SELECTION_KEY)
     }
     setActiveView('code')
-    useTabStore().openTab(sessionId, 'New Session')
+    useTabStore().openTab(sessionId, t('sidebar.newSession'))
     connectToSession(sessionId)
     const attachmentPayload: AttachmentRef[] = attachments.value.map((a) => ({
       type: a.type,

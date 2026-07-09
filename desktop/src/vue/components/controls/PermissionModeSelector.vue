@@ -1,7 +1,6 @@
 <script setup lang="ts">
-// v3.0 — PermissionModeSelector (Vue 3) — MadCop custom design
-// Custom shield icon instead of Material Symbols "gavel"
-import { ref, computed } from 'vue'
+// v3.1 — PermissionModeSelector — click-outside to close dropdown
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps<{
   value?: string
@@ -19,15 +18,27 @@ const modes = [
 
 const current = computed(() => modes.find(m => m.id === props.value) ?? modes[0])
 const open = ref(false)
+
+const rootRef = ref<HTMLElement | null>(null)
+
+function onClickOutside(e: MouseEvent) {
+  if (open.value && rootRef.value && !rootRef.value.contains(e.target as Node)) {
+    open.value = false
+  }
+}
+
+onMounted(() => document.addEventListener('mousedown', onClickOutside))
+onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 </script>
 
 <template>
-  <div class="relative" @click.stop="open = !open">
+  <div ref="rootRef" class="relative">
     <div
       class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[var(--radius-md)] cursor-pointer transition-colors"
       :class="current.id === 'bypass' 
         ? 'bg-[var(--color-error)]/10 text-[var(--color-error)] border border-[var(--color-error)]/30'
         : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]'"
+      @click.stop="open = !open"
     >
       <!-- Custom shield icon -->
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" class="flex-shrink-0">
@@ -44,7 +55,7 @@ const open = ref(false)
 
     <!-- Dropdown -->
     <Transition name="perm-drop">
-      <div v-if="open" class="absolute bottom-full left-0 mb-2 z-50 min-w-[200px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] shadow-[var(--shadow-dropdown)] py-1">
+      <div v-if="open" class="absolute bottom-full left-0 mb-2 z-50 min-w-[200px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-dropdown)] py-1">
         <button
           v-for="mode in modes" :key="mode.id"
           @click.stop="emit('update:value', mode.id); open = false"

@@ -27,8 +27,10 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useSessionRuntimeStore } from '../../stores/sessionRuntimeStore'
 import { useWorkspaceChatContextStore } from '../../stores/workspaceChatContextStore'
 import { useTranslation } from '../../i18n'
+import { detectAmbiguity } from '../../lib/clarify'
 import AttachmentGallery from './AttachmentGallery.vue'
 import ModeSelector from './ModeSelector.vue'
+import ClarifyHints from './ClarifyHints.vue'
 import PermissionModeSelector from '../controls/PermissionModeSelector.vue'
 import RepositoryLaunchControls from '../shared/RepositoryLaunchControls.vue'
 import FileSearchMenu from './FileSearchMenu.vue'
@@ -122,6 +124,27 @@ const workspaceStore = useWorkspaceChatContextStore()
 // ─── Local state ───────────────────────────────────────────────
 
 const input = ref('')
+const clarifyDismissed = ref(false)  // user clicked × to hide clarification
+const clarifications = computed(() => {
+  if (clarifyDismissed.value) return []
+  // Only show clarifications after the user has typed at least 3 chars
+  if (input.value.trim().length < 3) return []
+  return detectAmbiguity(input.value)
+})
+
+function pickClarification(slot: string, value: string) {
+  // Append the clarification to the input in a natural way:
+  //  - "今天天气怎么样" + "北京" → "今天天气怎么样（北京）"
+  //  - "best restaurant" + "NYC" → "best restaurant in NYC"
+  const slotPhrases: Record<string, { prefix?: string; suffix?: string }> = {
+    location: { suffix: `（${value}）` },
+    time: { suffix: `（${value}）` },
+    subject: { suffix: `（${value}）` },
+    method: { suffix: `（${value}）` },
+  }
+  const conf = slotPhrases[slot] || { suffix: `（${value}）` }
+  if (conf.suffix) input.value = `${input.value.trim()}${conf.suffix}`
+}
 const inputRef = ref(input) // React inputRef.sync pattern
 const attachments = ref<ComposerAttachment[]>([])
 const attachmentsRef = ref(attachments) // sync ref
@@ -203,12 +226,17 @@ const runtimeModelLabel = computed(() =>
 )
 
 const isStreaming = computed(() => chatState.value === 'busy')
-const isActive = computed(() => chatState.value !== 'idle')
+const isActive = computed(() => false) // Always let handleSubmit run
 
 const messageCount = computed(() => {
   const loaded = sessionState.value?.messages?.length ?? 0
   const total = activeSession.value?.messageCount ?? 0
   return Math.max(loaded, total)
+})
+
+const totalContent = computed(() => {
+  const msgs = sessionState.value?.messages ?? []
+  return msgs.map((m: any) => m.content || '').join('\n')
 })
 
 const workspaceReferences = computed(() => {
@@ -229,7 +257,7 @@ const iconOnlyAction = computed(() => props.compact || isMobileViewport())
 const activeLaunchWorkDir = computed(() =>
   showLaunchControls.value ? (launchWorkDir.value || resolvedWorkDir.value || '') : (resolvedWorkDir.value || ''),
 )
-const embedLaunchControlsInHero = computed(() => isHeroComposer.value && !useCompactControls.value && showLaunchControls.value)
+const embedLaunchControlsInHero = computed(() => false) // v3.0: always show in composer area, never embedded in hero
 const pendingSlashUiAction = computed((): SlashUiAction => {
   if (isMemberSession.value || !input.value.trim().startsWith('/')) return null
   return resolveSlashUiAction(input.value.trim().slice(1))
@@ -620,6 +648,7 @@ const handleSubmit = async () => {
     name: a.name,
     type: a.type,
     path: a.path,
+    previewUrl: (a as any).previewUrl || (a as any).data,
   }))
 
   const workspaceAttachmentPayload: AttachmentRef[] = workspaceReferences.value
@@ -1059,11 +1088,17 @@ onUnmounted(() => {
 // Sync refs on input/attachment changes
 watch(input, (v) => { inputRef.value = v })
 watch(attachments, (v) => { attachmentsRef.value = v }, { deep: true })
+
+// Reset clarifyDismissed when the user clears the input
+watch(input, (v) => {
+  if (!v.trim()) clarifyDismissed.value = false
+})
 </script>
 
 <template>
   <div
     data-testid="chat-input-shell"
+    class="w-full"
     :class="[
       isHeroComposer
         ? `bg-[var(--color-surface)] ${isMobileViewport() ? 'px-4 pb-3' : 'px-8 pb-4'}`
@@ -1081,6 +1116,12 @@ watch(attachments, (v) => { attachmentsRef.value = v }, { deep: true })
               : `${isMobileViewport() ? 'mx-0 max-w-none' : 'mx-auto max-w-[860px]'}`,
       ]"
     >
+      <ClarifyHints
+        v-if="clarifications.length > 0"
+        :clarifications="clarifications"
+        @pick="(p) => pickClarification(p.slot, p.value)"
+        @dismiss="clarifyDismissed = true"
+      />
       <div
         ref="panelRef"
         data-testid="chat-input-panel"
@@ -1333,7 +1374,7 @@ watch(attachments, (v) => { attachmentsRef.value = v }, { deep: true })
                 <div
                   v-if="plusMenuOpen"
                   :class="[
-                    'absolute bottom-full left-0 z-50 mb-2 rounded-xl border border-[var(--color-border)] bg>[var(--color-surface-container-lowest)] py-1 shadow-[var(--shadow-dropdown)]',
+                    'absolute bottom-full left-0 z-50 mb-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-[var(--shadow-dropdown)]',
                     isMobileViewport() ? 'w-[min(240px,calc(100vw-32px))]' : 'w-[240px]',
                   ]"
                 >
@@ -1365,6 +1406,7 @@ watch(attachments, (v) => { attachmentsRef.value = v }, { deep: true })
                 :session-id="activeTabId"
                 :chat-state="chatState"
                 :message-count="messageCount"
+                :total-content="totalContent"
                 :runtime-selection-key="runtimeSelectionKey"
                 :fallback-model-label="runtimeModelLabel"
                 :compact="useCompactControls"
@@ -1386,7 +1428,7 @@ watch(attachments, (v) => { attachmentsRef.value = v }, { deep: true })
             <!-- Send / Stop button -->
             <button
               :disabled="!isMemberSession && isActive ? false : !canSubmit"
-              @click="isMemberSession ? handleSubmit : (isActive ? chatStore.stopGeneration(activeTabId!) : handleSubmit)"
+              @click="handleSubmit" 
               :aria-label="(!isMemberSession && isActive) ? t('common.stop') : (isMemberSession ? t('common.send') : t('common.run'))"
               :title="
                 !isMemberSession && isActive

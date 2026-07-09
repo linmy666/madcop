@@ -280,6 +280,21 @@ MODES: dict[str, dict[str, Any]] = {
 
 
 def list_modes() -> list[dict[str, Any]]:
+    # Min number of distinct model providers required for each mode.
+    # Single-agent modes can run on 1 model. Multi-agent modes need multiple.
+    requires: dict[str, int] = {
+        "single_agent": 1,
+        "sequential": 2,
+        "parallel": 2,
+        "loop": 1,
+        "review_critique": 2,
+        "iterative_refine": 1,
+        "coordinator": 2,
+        "hierarchical": 3,
+        "swarm": 3,
+        "react": 1,
+        "human_in_loop": 1,
+    }
     out = []
     for mid, mode in MODES.items():
         out.append({
@@ -289,6 +304,7 @@ def list_modes() -> list[dict[str, Any]]:
             "category": mode["category"],
             "icon": mode["icon"],
             "node_count": len(mode["nodes"]),
+            "requires_models": requires.get(mid, 1),
         })
     return out
 

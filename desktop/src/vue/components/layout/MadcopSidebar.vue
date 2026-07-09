@@ -17,6 +17,7 @@ import { getDesktopHost } from '../../../lib/desktopHost'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import AnimationPlayer from '../animations/AnimationPlayer.vue'
 import MascotAvatar from '../common/MascotAvatar.vue'
+import WorkspacePanel from '../workspace/WorkspacePanel.vue'
 // GlobalSearchModal not yet translated — using placeholder
 const GlobalSearchModal = { template: '<div></div>' }
 
@@ -286,7 +287,13 @@ function getVisibleProjectSessions(
 }
 
 function getSessionProjectKey(session: SessionListItem): string {
-  return session.projectRoot || session.workDir || session.projectPath || 'unknown'
+  return session.projectRoot || session.workDir || session.projectPath || ''
+}
+
+function getSessionProjectDisplayName(session: SessionListItem): string {
+  const key = getSessionProjectKey(session)
+  if (!key) return '默认'
+  return key.split('/').pop() || key
 }
 
 function compareSessionsByTimestamp(
@@ -304,16 +311,16 @@ function getSessionTimestamp(session: SessionListItem | undefined, sortBy: Sideb
 }
 
 function projectTitle(pathLike: string | null | undefined): string {
-  if (!pathLike) return 'Unknown project'
-  const normalized = pathLike.replace(/[\\\/]+$/, '')
-  const segments = normalized.split(/[\\\/]/).filter(Boolean)
+  if (!pathLike) return '默认'
+  const normalized = pathLike.replace(/[\\/]+$/, '')
+  const segments = normalized.split(/[\\/]/).filter(Boolean)
   const last = segments[segments.length - 1]
   if (last) return last
-  return normalized || 'Unknown project'
+  return normalized || '默认'
 }
 
 function projectSubtitle(projectRoot: string | null | undefined, fallbackKey: string): string | null {
-  if (!projectRoot) return fallbackKey === 'unknown' ? null : fallbackKey
+  if (!projectRoot) return fallbackKey === '' ? null : fallbackKey
   return compactProjectPath(projectRoot)
 }
 
@@ -1856,6 +1863,9 @@ const projectMenuData = computed(() => {
 
     <!-- Collapsed view placeholder -->
     <div v-else class="flex-1" aria-hidden="true" />
+
+    <!-- Workspace panel -->
+    <WorkspacePanel v-if="expanded" />
 
     <!-- Settings dock (bottom) -->
     <div

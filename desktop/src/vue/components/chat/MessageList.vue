@@ -103,6 +103,7 @@ import ToolResultBlock from './ToolResultBlock.vue'
 import PermissionDialog from './PermissionDialog.vue'
 import AskUserQuestion from './AskUserQuestion.vue'
 import StreamingIndicator from './StreamingIndicator.vue'
+import ThinkingIndicator from './ThinkingIndicator.vue'
 import InlineTaskSummary from './InlineTaskSummary.vue'
 import CurrentTurnChangeCard from './CurrentTurnChangeCard.vue'
 import { ConfirmDialog } from '../shared/ConfirmDialog.vue'
@@ -139,7 +140,21 @@ const sessionState = computed(() => {
 
 const messages = computed(() => sessionState.value?.messages ?? EMPTY_MESSAGES)
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
+const isAIThinking = computed(() => {
+  // Show the indicator while AI is preparing a response and hasn't
+  // started streaming visible text yet. Once text starts flowing, the
+  // AssistantMessage itself shows.
+  const s = chatState.value
+  if (s === 'busy' || s === 'thinking' || s === 'tool_executing') {
+    return !streamingText.value.trim()
+  }
+  // If a clarification JSON is pending, the AI is "thinking about"
+  // what to ask — show the indicator too.
+  if (sessionState.value?.clarificationPending) return true
+  return false
+})
 const streamingText = computed(() => sessionState.value?.streamingText ?? '')
+const reasoningContent = computed(() => sessionState.value?.reasoningContent ?? null)
 const streamingToolInput = computed(() => sessionState.value?.streamingToolInput ?? '')
 const activeThinkingId = computed(() => sessionState.value?.activeThinkingId ?? null)
 const activeToolUseId = computed(() => sessionState.value?.activeToolUseId ?? null)
@@ -209,7 +224,7 @@ const renderModel = computed<RenderModel>(() => {
 })
 
 const renderItems = computed(() => renderModel.value.renderItems)
-const toolResultMap = computed(() => renderModel.value.toolResultMap)
+const toolResultMap = computed(() => renderModel.value?.toolResultMap ?? new Map())
 const childToolCallsByParent = computed(() => renderModel.value.childToolCallsByParent)
 
 // ─── Branchable messages ──────────────────────────────────────
@@ -881,19 +896,34 @@ function renderItemContent(item: RenderItem) {
 
   // Message types
   if (msg.type === 'user_text') {
-    return h(UserMessage, { message: msg, compact: props.compact })
+    return h(UserMessage, {
+      content: msg.content || '',
+      attachments: (msg as any).attachments,
+      compact: props.compact,
+    })
   }
   if (msg.type === 'assistant_text') {
-    return h(AssistantMessage, { message: msg, compact: props.compact })
+    return h(AssistantMessage, { content: msg.content || '', isStreaming: msg.isStreaming, sessionId: msg.sessionId, timestamp: msg.timestamp, compact: props.compact })
   }
   if (msg.type === 'thinking') {
     return h(ThinkingBlock, { message: msg })
   }
   if (msg.type === 'tool_use') {
-    return h(ToolCallBlock, { message: msg, compact: props.compact })
+    return h(ToolCallBlock, {
+      toolName: msg.toolName,
+      input: msg.input,
+      isPending: msg.isPending,
+      partialInput: msg.partialInput,
+      compact: props.compact,
+    })
   }
   if (msg.type === 'tool_result') {
-    return h(ToolResultBlock, { message: msg, compact: props.compact })
+    return h(ToolResultBlock, {
+      toolName: msg.toolName,
+      result: msg.result,
+      isError: msg.isError,
+      compact: props.compact,
+    })
   }
   if (msg.type === 'goal_event') {
     return h(GoalEventCard, { message: msg })
@@ -983,11 +1013,19 @@ function renderItemContent(item: RenderItem) {
           />
         </template>
 
-        <!-- Streaming text -->
+        <!-- Streaming text (live assistant text being typed out) -->
         <AssistantMessage
           v-if="streamingText.trim()"
           :message="{ type: 'assistant_text', content: streamingText, id: 'streaming' }"
           :compact="compact"
+        />
+
+        <!-- Thinking indicator: shown at the END of the list when AI is busy.
+             User messages are at the top, AI messages follow, and the indicator
+             shows at the end so it's always near the user's last action. -->
+        <ThinkingIndicator
+          v-if="isAIThinking"
+          :reasoning-content="reasoningContent"
         />
 
         <!-- Streaming indicator (tool_executing or thinking with no active block) -->

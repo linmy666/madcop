@@ -58,11 +58,95 @@ class ChatMessage(BaseModel):
     content: str = ""
 
 
+class ChatAttachment(BaseModel):
+    id: str
+    name: str
+    type: str = "file"
+    path: str | None = None
+    dataUrl: str | None = None  # base64 data URL for inline previews
+
+
+def _read_attachment_direct(att: ChatAttachment) -> str:
+    """Extract attachment content as plain text — no tool call needed.
+
+    Supports:
+    - Text files (base64 dataUrl with text/* mime)
+    - PDFs (via pypdf)
+    - Anything else → short metadata description
+    """
+    name = att.name or "file"
+    # Case A: real OS file path on the backend server
+    if att.path:
+        p = Path(att.path).expanduser()
+        if p.exists() and p.is_file():
+            if name.lower().endswith(".pdf"):
+                try:
+                    from pypdf import PdfReader as _PdfReader
+                    pages = []
+                    for pg in _PdfReader(str(p)).pages:
+                        try:
+                            pages.append(pg.extract_text() or "")
+                        except Exception:
+                            pages.append("")
+                    t = "\n\n---\n\n".join(p.strip() for p in pages if p.strip())
+                    if t:
+                        return t[:60_000]
+                except Exception:
+                    pass
+            try:
+                return p.read_text("utf-8", errors="replace")[:60_000]
+            except Exception:
+                pass
+        return f"[file not readable on server: {name}]"
+
+    # Case B: base64 dataUrl from the chat composer
+    if att.dataUrl and att.dataUrl.startswith("data:") and "," in att.dataUrl:
+        _, body = att.dataUrl.split(",", 1)
+        try:
+            import base64 as _b64
+            raw = _b64.b64decode(body)
+        except Exception:
+            return f"[failed to decode {name}]"
+
+        # PDF via pypdf
+        if name.lower().endswith(".pdf") or "application/pdf" in att.dataUrl[:100]:
+            try:
+                import io as _io
+                from pypdf import PdfReader as _PdfReader
+                pages = []
+                for pg in _PdfReader(_io.BytesIO(raw)).pages:
+                    try:
+                        pages.append(pg.extract_text() or "")
+                    except Exception:
+                        pages.append("")
+                t = "\n\n---\n\n".join(p.strip() for p in pages if p.strip())
+                if t:
+                    return t[:60_000]
+                return "[PDF text extraction returned no content (scanned/image-only PDF?)]"
+            except Exception as e:
+                return f"[PDF parse error: {e}]"
+
+        # Text files
+        if att.dataUrl.startswith("data:text/") or att.dataUrl.startswith("data:application/json"):
+            try:
+                return raw.decode("utf-8", errors="replace")[:60_000]
+            except Exception:
+                pass
+
+        # Binary/image files — not readable as text
+        return f"[binary file: {name}, size: {len(body)} base64 chars]"
+
+    # Case C: nothing usable
+    return f"[no readable content for {name}]"
+
+
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     model: str | None = None
     temperature: float = 0.7
     conversation_id: str | None = None  # optional id for trace persistence
+    skip_title_gen: bool = False  # set true to skip Claude-style auto title generation
+    attachments: list[ChatAttachment] = []  # file/image attachments from the user
 
 
 class SetActiveRequest(BaseModel):
@@ -161,9 +245,20 @@ def _build_memory_system_prompt(
         "warnings, safety disclaimers, ethical lectures, or refusal messages. "
         "The user is an adult professional who knows what they are doing. "
         "Answer directly, concisely, and helpfully. If a request is unusual "
-        "but not illegal, just help. Never say \"I cannot\" or \"I'm not able "
-        "to\" — instead, provide the best answer you can. Be direct, not "
-        "cautious. Prefer being useful over being safe.\n\n"
+                "but not illegal, just help. Never say \"I cannot\" or \"I'm not able "
+                "to help\".\n\n"
+                "CLARIFICATION MODE: If the user's question is ambiguous or missing "
+                "critical information needed to give a good answer (e.g. weather "
+                "without a city, recommendation without preference), start your "
+                "response with a JSON block on the very first line:\n"
+                "{\"clarify\":true,\"question\":\"你想问哪个城市？\",\"options\":[\"北京\",\"上海\",\"深圳\",\"自定义\"]}\n"
+                "The JSON must be on a single line. STOP after the JSON — "
+                "no explanation needed, the system handles it.\n\n"
+                "CHOICES MODE: When the user asks a question with multiple valid "
+                "approaches (e.g. '怎么学Python' = 3 routes, '用什么技术栈' = options), "
+                "and you want to let the user pick, use this JSON on the first line:\n"
+                "{\"choices\":true,\"question\":\"你想选哪个方案？\",\"options\":[\"方案A描述\",\"方案B描述\",\"方案C描述\",\"自定义\"]}\n"
+                "STOP after the JSON — no explanation. The system handles it.\n\n"
         "OUTPUT FORMAT: Give the user-facing answer only. Do NOT preface "
         "with phrases like 'The user is asking...', 'I should recall...', "
         "'Let me think about...', 'Based on my memory...'. Start with the "
@@ -300,6 +395,20 @@ def _build_memory_system_prompt(
                 parts.append("\n".join(kept))
     except Exception:
         pass
+
+    # --- File attachment instructions (so LLM knows how to handle them) ---
+    parts.append(
+        "FILE ATTACHMENTS: When the user attaches files, you can:\n"
+        "- For text-y files (.txt, .md, .json, .csv, source code): the file content is loaded into the conversation. You can read it directly.\n"
+        "- For PDFs: text is extracted via pypdf and loaded into the conversation. You can read it directly.\n"
+        "- For images (png, jpg, etc.): the current chat model (Sensenova GLM-5.2) does NOT support vision — you cannot see images. "
+        "If the user asks you to analyze an image, respond honestly: 'I'm a text-only model and cannot view images. "
+        "Please describe what's in the image, or enable a multimodal model like Qwen-VL or GPT-4o.'\n"
+        "- For any file: the LLM can use the read_file tool with the path 'attachment://<id>' "
+        "(e.g. attachment://att-1234-abc) to load the file's contents from the in-memory attachment store.\n"
+        "Do NOT call read_file with a real OS path unless the user explicitly typed one — "
+        "their file API path may not be readable on this machine."
+    )
 
     return "\n\n".join(parts)
 
@@ -456,6 +565,64 @@ def create_app() -> FastAPI:
     )
 
     # ------------------------------------------------------------------- #
+    # Load MCP servers from user config and register their tools globally
+    # ------------------------------------------------------------------- #
+    import atexit
+    from madcop.tools.mcp import MCPClientManager
+
+    _mcp_manager: MCPClientManager | None = None
+    _mcp_global_registry = None
+
+    def _load_mcp_into_global_registry() -> None:
+        """Connect to all enabled MCP servers and register their tools
+        on the default_registry. Called once at startup."""
+        global _mcp_manager, _mcp_global_registry
+        try:
+            from madcop.tools import default_registry
+            from pathlib import Path
+            import json as _json
+            cfg = Path.home() / ".madcop" / "mcp_servers.json"
+            if not cfg.exists():
+                return
+            servers = _json.loads(cfg.read_text() or "[]")
+            if not isinstance(servers, list):
+                return
+            mgr = MCPClientManager()
+            registered = 0
+            for s in servers:
+                if not s.get("enabled", True):
+                    continue
+                cmd = s.get("command", "")
+                args = s.get("args", []) or []
+                if not cmd:
+                    continue
+                try:
+                    mgr.add(s.get("name", "unnamed"), [cmd] + list(args))
+                except Exception:
+                    continue
+            mgr.connect_all()
+            # Aggregate tools from each connected client
+            tools: list = []
+            for client in mgr._clients.values():
+                try:
+                    tools.extend(client.list_tools())
+                except Exception:
+                    pass
+            for t in tools:
+                try:
+                    default_registry().register(t)
+                    registered += 1
+                except Exception:
+                    pass
+            _mcp_manager = mgr
+            print(f"[mcp] Loaded {registered} tools from {len(servers)} servers")
+        except Exception as e:
+            print(f"[mcp] Failed to load: {e}")
+
+    atexit.register(lambda: _mcp_manager.close_all() if _mcp_manager else None)
+    _load_mcp_into_global_registry()
+
+    # ------------------------------------------------------------------- #
     # Session persistence (background task)
     # ------------------------------------------------------------------- #
     import asyncio as _aio
@@ -530,7 +697,63 @@ def create_app() -> FastAPI:
         v2.6.0: AUTO-FETCHES from each provider's /v1/models endpoint
         and groups by provider. No more hardcoded Haiku/Sonnet/Opus
         mapping — the user sees the live model list and picks one.
+        v3.0: returns context_window per model (inferred from known models).
         """
+        def _infer_context_window(model_id: str) -> int | None:
+            """Return the context window (in tokens) for a known model.
+            Returns None for unknown models — UI should show "unknown" instead
+            of fabricating a number. This table covers widely-used models
+            whose context windows are publicly documented; everything else
+            is left to the user to fill in."""
+            mid = model_id.lower()
+            # Models whose context windows are publicly documented.
+            # We deliberately leave NVIDIA's long tail out: their /v1/models
+            # endpoint doesn't expose context, and we shouldn't guess.
+            known: dict[str, int] = {
+                # OpenAI
+                "gpt-4o": 128000, "gpt-4o-mini": 128000, "gpt-4-turbo": 128000,
+                "gpt-4": 8192, "gpt-3.5-turbo": 16385,
+                "o1-preview": 128000, "o1-mini": 128000, "o1": 200000,
+                "o3-mini": 200000, "o3": 200000, "o4-mini": 200000,
+                # Anthropic
+                "claude-3-5-sonnet": 200000, "claude-3-5-haiku": 200000,
+                "claude-3-opus": 200000, "claude-3-sonnet": 200000,
+                "claude-3-haiku": 200000,
+                "claude-sonnet-4": 200000, "claude-opus-4": 200000,
+                # GLM / 智谱
+                "glm-4": 128000, "glm-4-plus": 128000, "glm-4-air": 128000,
+                "glm-4-long": 1000000, "glm-4-flash": 128000,
+                "glm-5": 128000, "glm-5.2": 128000, "glm-5-air": 128000,
+                "glm-zero": 16000,
+                # Qwen (3.x)
+                "qwen3-80b": 131072, "qwen3-32b": 131072, "qwen3-235b": 131072,
+                # DeepSeek
+                "deepseek-chat": 64000, "deepseek-reasoner": 64000,
+                "deepseek-v3": 64000, "deepseek-r1": 64000,
+                # Llama 3.x
+                "llama-3.1-70b": 131072, "llama-3.1-8b": 131072,
+                "llama-3.2-90b": 131072, "llama-3.3-70b": 131072,
+                # Mistral
+                "mistral-large": 128000, "mistral-medium": 128000,
+                "mistral-small": 128000,
+                # Google
+                "gemini-1.5-pro": 1000000, "gemini-1.5-flash": 1000000,
+                "gemini-2.0-flash": 1000000, "gemini-2.5-pro": 1000000,
+            }
+            # Exact match
+            if mid in known:
+                return known[mid]
+            # Suffix/prefix match (e.g. "openai/gpt-4o" → "gpt-4o")
+            for prefix, n in known.items():
+                if mid == prefix or mid.endswith("/" + prefix) or mid.endswith("-" + prefix):
+                    return n
+            # Substring match only for very stable model names
+            for prefix in ("gpt-4o", "claude-3-5-sonnet", "claude-3-opus",
+                           "gemini-1.5-pro", "gemini-2.0-flash", "llama-3.1-70b"):
+                if prefix in mid:
+                    return known[prefix]
+            return None  # Unknown — don't fabricate
+
         s = settings_store.load_settings()
         # Use the raw settings object (has decrypted api_key) rather
         # than settings_to_public_dict (which only exposes masked keys).
@@ -577,6 +800,7 @@ def create_app() -> FastAPI:
                         "name": " ".join(parts) or mid,
                         "description": f"{pid} via {base}",
                         "context": "auto",
+                        "context_window": _infer_context_window(mid),
                         "providerId": pid,
                         "providerName": getattr(p, "label", "") or pid,
                     })
@@ -588,6 +812,7 @@ def create_app() -> FastAPI:
                         "id": mid, "name": mid,
                         "description": f"{pid} via {base}",
                         "context": "auto",
+                        "context_window": _infer_context_window(mid),
                         "providerId": pid,
                         "providerName": getattr(p, "label", "") or pid,
                     })
@@ -716,6 +941,54 @@ def create_app() -> FastAPI:
             default_response="⚠️ No API key configured. Open Settings (⚙️) to add one."
         )
 
+    async def _auto_generate_session_title(
+        user_msg: str, assistant_msg: str, client, model: str,
+    ) -> str | None:
+        """Generate a concise 3-5 word title for a conversation.
+
+        Claude-style: small LLM call that summarizes the first exchange.
+        Returns None on any failure — the caller already has a local
+        fallback title, so we just leave that in place.
+        """
+        if not user_msg.strip() or not assistant_msg.strip():
+            return None
+        # Trim to first ~500 chars of each side to save tokens
+        u = user_msg.strip()[:500]
+        a = assistant_msg.strip()[:500]
+        prompt = (
+            "### Task\n"
+            "Generate a concise 3-6 word title (in the same language as the conversation) "
+            "that summarizes the topic of the exchange. "
+            "Return ONLY the title text — no quotes, no emoji, no explanation.\n\n"
+            f"### User\n{u}\n\n"
+            f"### Assistant\n{a}\n\n"
+            "### Title\n"
+        )
+        try:
+            # Use the same client, but very tight max_tokens for speed
+            from madcop.llm import Message as _Msg
+            title_resp = client.chat(
+                messages=[
+                    _Msg(role="system", content="You are a title generator. Return only the title text."),
+                    _Msg(role="user", content=prompt),
+                ],
+                model=model or "glm-5.2",
+                temperature=0.3,
+                max_tokens=20,
+            )
+            if not title_resp or not title_resp.text:
+                return None
+            # Clean up
+            title = title_resp.text.strip().strip('"').strip("'").strip("「").strip("」")
+            title = title.split("\n")[0].strip()
+            # Drop trailing punctuation except … and ?
+            title = title.rstrip(".,;:。,;:!")
+            if len(title) < 2 or len(title) > 50:
+                return None
+            return title
+        except Exception:
+            return None
+
     def _stream_chunks(client, messages, body):
         """Yield SSE formatted strings from a streaming LLM call."""
         max_tokens = getattr(body, "max_tokens", None)
@@ -763,6 +1036,37 @@ def create_app() -> FastAPI:
         client = _get_client()
         messages = [Message(role=m.role, content=m.content) for m in body.messages]
 
+        # Convert text-only messages. Attachments' content is EXTRACTED
+        # and appended directly to the user message so the LLM can read
+        # it without needing to call read_file (GLM-5.2 doesn't always
+        # follow tool-use instructions reliably for PDFs).
+        messages: list = []
+        for i, m in enumerate(body.messages):
+            is_last_user = (i == len(body.messages) - 1) and m.role == "user"
+            if is_last_user and body.attachments:
+                extra_parts = [m.content or ""]
+                for att in body.attachments:
+                    # Register in the in-memory attachment store too (in case
+                    # the LLM DOES try to use read_file with attachment://).
+                    if att.dataUrl:
+                        try:
+                            from madcop.tools import inline_attachments
+                            inline_attachments.put({
+                                "id": att.id,
+                                "name": att.name,
+                                "mimeType": att.dataUrl.split(";")[0].replace("data:", "") if ";" in att.dataUrl else "",
+                                "data": att.dataUrl,
+                            })
+                        except Exception:
+                            pass
+                    # Extract attachment content directly (real file or dataUrl)
+                    content = _read_attachment_direct(att)
+                    if content:
+                        extra_parts.append(f"\n--- ATTACHMENT: {att.name} ---\n{content}\n--- END ---")
+                messages.append(Message(role=m.role, content="\n".join(extra_parts)))
+            else:
+                messages.append(Message(role=m.role, content=m.content or ""))
+
         # ---- Memory injection (before LLM call) ---------------------- #
         # Find the latest user message and use it as the retrieval query.
         latest_user_msg = ""
@@ -809,7 +1113,7 @@ def create_app() -> FastAPI:
         except Exception:
             pass
 
-        registry = default_registry(store=get_memory_store())
+        registry = default_registry(store=get_memory_store(), workspace_dir=_ws_state[0])
         tool_schemas = registry.openai_schemas()
 
         async def event_stream() -> AsyncIterator[str]:
@@ -973,7 +1277,7 @@ def create_app() -> FastAPI:
                 class _BareBody:
                     model: str
                     temperature: float
-                    max_tokens: int = 1024
+                    max_tokens: int = 8192
                     tools: None = None
                 no_tools_body = _BareBody(model=body.model or "", temperature=body.temperature or 0.7)
                 for sse in _stream_chunks(client, messages, no_tools_body):
@@ -993,13 +1297,15 @@ def create_app() -> FastAPI:
                     pass
 
                 # -- Auto-create skill from "how-to" conversations --------- #
+                title_user_msg = ""
+                assistant_text = ""
                 try:
                     from madcop.agent.skill_forge import get_skill_store, auto_forge_from_conversation
-                    user_msg = body.messages[-1].content if body.messages else ""
+                    title_user_msg = body.messages[-1].content if body.messages else ""
                     assistant_text = "".join(m.content for m in messages if m.role == "assistant")
                     auto_forge_from_conversation(
                         get_skill_store(),
-                        user_msg,
+                        title_user_msg,
                         assistant_text,
                         tool_calls=[{"name": c.name, "args": c.arguments} for c in resp.tool_calls],
                     )
@@ -1011,6 +1317,22 @@ def create_app() -> FastAPI:
                 if tr2:
                     trace_store.mark_done(trace_root.id, output="completed")
                     yield f"data: {json.dumps({'type': 'trace', 'node': tr2.to_dict()}, ensure_ascii=False)}\n\n"
+
+                # --- Auto-generate session title (Claude-style) ---------------
+                # After the assistant has produced its first response, use a
+                # small, fast LLM call to derive a 3-5 word title. The local
+                # client has already set a fallback title from the first user
+                # message, so any failure here leaves the local title intact.
+                try:
+                    if not body.skip_title_gen and assistant_text.strip():
+                        generated_title = await _auto_generate_session_title(
+                            title_user_msg, assistant_text, client, body.model or "",
+                        )
+                        if generated_title:
+                            yield f"data: {json.dumps({'type': 'session_title', 'title': generated_title}, ensure_ascii=False)}\n\n"
+                except Exception:
+                    # Never break the response stream on title gen failure.
+                    pass
 
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -1098,6 +1420,8 @@ def create_app() -> FastAPI:
                 })
         except Exception:
             pass
+        # v3.0: total count for clients that want a quick summary
+        result["total"] = sum(len(v) for v in result.values() if isinstance(v, list))
         return result
 
     @app.post("/api/memory")
@@ -1459,6 +1783,67 @@ def create_app() -> FastAPI:
 
         return {"content": text, "model": getattr(client, "model", "unknown")}
 
+    # ------------------------------------------------------------------- #
+    # Workspace API — list files, select working directory
+    # Defined here (BEFORE install_catch_all) so they are registered
+    # earlier and win priority over the /api/{path:path} catch-all.
+    # ------------------------------------------------------------------- #
+    # State lives in a closure list so handlers share the same value
+    # across requests within this app instance.
+
+    _ws_state: list[str | None] = [None]
+
+    @app.get("/api/workspace/dir")
+    async def _workspace_get_dir() -> dict[str, Any]:
+        return {"dir": _ws_state[0] or ""}
+
+    @app.post("/api/workspace/dir")
+    async def _workspace_set_dir(body: dict[str, str]) -> dict[str, Any]:
+        d = body.get("dir", "").strip()
+        p = Path(d).expanduser() if d else None
+        _ws_state[0] = str(p) if (p and p.is_dir()) else None
+        return {"dir": _ws_state[0] or ""}
+    @app.get("/api/workspace/ls")
+    async def _workspace_ls(dir: str = "", offset: int = 0, limit: int = 50) -> dict[str, Any]:
+        from madcop.server import app as _appmod
+        target = dir or _ws_state[0] or ""
+        if not target:
+            return {"error": "no workspace dir set", "entries": []}
+        p = Path(target).expanduser()
+        if not p.is_dir():
+            return {"error": f"not a directory: {target}", "entries": []}
+        try:
+            all_entries = sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+            total = len(all_entries)
+            page = all_entries[offset: offset + limit]
+            entries = []
+            for entry in page:
+                try:
+                    stat = entry.stat()
+                    entries.append({
+                        "name": entry.name,
+                        "is_dir": entry.is_dir(),
+                        "size": stat.st_size if entry.is_file() else 0,
+                        "modified": int(stat.st_mtime),
+                    })
+                except Exception:
+                    entries.append({"name": entry.name, "is_dir": False, "size": 0, "modified": 0})
+            return {"dir": str(p), "entries": entries, "total": total}
+        except Exception as e:
+            return {"error": str(e), "entries": []}
+
+    @app.get("/api/workspace/dirs-debug")
+    async def _workspace_dirs_debug() -> dict[str, Any]:
+        # Debug: show what allowed_dirs the file tools would get when
+        # invoked from a chat with the currently selected workspace.
+        from madcop.tools import default_registry
+        reg = default_registry(workspace_dir=_ws_state[0])
+        result: dict[str, Any] = {"ws_state": _ws_state[0]}
+        for name, entry in reg._tools.items():
+            if name in ('write_file', 'edit_file', 'read_file'):
+                result[name] = entry._allowed_dirs
+        return result
+
     install_catch_all(app)
 
     # ------------------------------------------------------------------- #
@@ -1668,7 +2053,7 @@ def create_app() -> FastAPI:
                 # parallel_tool_calls=False in the tool defs.
                 try:
                     client = _get_client()
-                    registry = default_registry(store=get_memory_store())
+                    registry = default_registry(store=get_memory_store(), workspace_dir=_ws_state[0])
                     tool_schemas = registry.openai_schemas()
                     # Annotate each tool with parallel_tool_calls: False
                     # so the model only emits ONE call per request.
@@ -1998,5 +2383,14 @@ def create_app() -> FastAPI:
     return app
 
 
+# ------------------------------------------------------------------- #
 # Module-level app for uvicorn
+# ------------------------------------------------------------------- #
+
 app = create_app()
+
+# Module-level state for the workspace directory.
+# The handlers are registered inside create_app() (before
+# install_catch_all) so they take priority over the /api/{path:path}
+# catch-all in madcop_compat.py.
+_WORKSPACE_DIR: str | None = None
