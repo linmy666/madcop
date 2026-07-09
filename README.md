@@ -8,6 +8,31 @@ This document explains the *why* behind the major design decisions — written f
 
 ---
 
+## Preview
+
+<table>
+  <tr>
+    <td align="center"><b>Multi-model chat</b><br/>Sidebar · Tabs · Workspace · Tool calls</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/01-chat.png" alt="Chat interface"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Streaming report generation</b><br/>LLM streaming output with tool calls</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/02-generating.png" alt="Generating report"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Rich report with tables</b><br/>Markdown + data visualization</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/03-report.png" alt="Generated report"/></td>
+  </tr>
+</table>
+
+---
+
 ## What problem is MadCop solving?
 
 The dominant LLM desktop clients (ChatGPT, Claude.ai, Gemini) are excellent chat surfaces but they assume a specific shape of interaction: one human, one model, one conversation at a time, with vendor-managed tools and memory. That works for "answer this question" but it does not work for "I need to (a) search the web, (b) read a local file, (c) summarise the result, (d) save a Markdown report to disk" — which is a normal afternoon for a product manager, analyst, or engineer.
