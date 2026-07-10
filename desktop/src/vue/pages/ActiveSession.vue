@@ -29,6 +29,8 @@ import {
 } from '../stores/terminalPanelStore'
 import MessageList from '../components/chat/MessageList.vue'
 import PlanPanel from '../components/plan/PlanPanel.vue'
+import PlanTasksPanel from '../components/plan/PlanTasksPanel.vue'
+import PlanArtifactsPanel from '../components/plan/PlanArtifactsPanel.vue'
 import ChatInput from '../components/chat/ChatInput.vue'
 import DirectChatButton from '../components/chat/DirectChatButton.vue'
 import ComputerUsePermissionModal from '../components/chat/ComputerUsePermissionModal.vue'
@@ -149,6 +151,58 @@ const showTerminalPanel = computed(() => {
   if (!isSessionTabState(activeTabId.value, activeTabType.value)) return false
   return terminalPanelStore.isPanelOpen(activeTabId.value!)
 })
+
+// ── Plan sidebar derived state ──────────────────────────────────────────────
+// Show workspace dir + step results in the artifacts panel as the plan runs.
+const planSession = computed(() =>
+  activeTabId.value ? chatStore.sessions[activeTabId.value] : null
+)
+const workspaceDirForArtifacts = computed(() => {
+  // Read from localStorage (set by AppShell/WorkspacePanel).
+  try {
+    return localStorage.getItem('madcop_workspace_dir')
+  } catch {
+    return null
+  }
+})
+const finalArtifact = computed(() => {
+  const plan = planSession.value?.plan
+  if (!plan) return null
+  // Prefer the most recently-completed step's result, if it produced a file path.
+  const lastCompleted = [...plan.steps]
+    .reverse()
+    .find((s: any) => s.status === 'completed' && s.result && /\.\w+$/.test(s.result))
+  if (lastCompleted) return lastCompleted.result
+  return null
+})
+const workingFiles = computed<Array<string>>(() => {
+  const plan = planSession.value?.plan
+  if (!plan) return []
+  const out: Array<string> = []
+  for (const s of plan.steps) {
+    if (s.status === 'completed' && s.result) {
+      // Heuristic: if step result looks like a file path, capture it.
+      const match = s.result.match(/[\w.\-\/]+\.(?:md|py|json|txt|xlsx|csv|html|ts|tsx|js|jsx|vue)\b/)
+      if (match && match[0] !== finalArtifact.value) out.push(match[0])
+    }
+  }
+  return out.slice(-4) // cap at 4
+})
+const skillTags = computed<Array<string>>(() => {
+  const plan = planSession.value?.plan
+  if (!plan) return []
+  const tools = new Set<string>()
+  for (const s of plan.steps) {
+    if (s.tool) tools.add(s.tool)
+  }
+  return Array.from(tools)
+})
+function onArtifactOpen(path: string) {
+  // Best-effort: reveal in file manager on macOS via Electron desktopRuntime.
+  // For now just emit to console + chat composer.
+  try { console.log('[artifact open]', path) } catch {}
+  // Try to open in terminal/editor by writing to chat composer (deferred).
+}
 const terminalPanelRuntimeId = computed(() => {
   if (!activeTabId.value || isMemberSession.value || isMobileLayout.value) return undefined
   if (!isSessionTabState(activeTabId.value, activeTabType.value)) return undefined
@@ -624,10 +678,6 @@ function openTerminalInTab() {
           <template v-else>
             <div class="flex-1 min-h-0 w-full overflow-y-auto pt-6">
               <div class="mx-auto max-w-[820px] px-5">
-                <!-- Plan-and-Execute panel -->
-                <div v-if="chatStore.sessions[activeTabId]?.plan" class="mb-6">
-                  <PlanPanel :plan="chatStore.sessions[activeTabId].plan" />
-                </div>
                 <MessageList :compact="showRightPanel" />
               </div>
             </div>
@@ -682,6 +732,30 @@ function openTerminalInTab() {
           />
         </div>
       </div>
+
+      <!-- Plan sidebar: tasks + artifacts (visible when a plan is active) -->
+      <template v-if="chatStore.sessions[activeTabId]?.plan">
+        <aside
+          data-testid="plan-sidebar"
+          class="flex h-full shrink-0 flex-col border-l border-[var(--color-border)] bg-[var(--color-surface)]"
+          style="width: 320px; min-width: 320px;"
+        >
+          <!-- 任务监控 (top, scrollable) -->
+          <div class="flex-1 min-h-0 overflow-y-auto">
+            <PlanTasksPanel :plan="chatStore.sessions[activeTabId].plan" />
+          </div>
+          <!-- 产物 (bottom) -->
+          <div class="shrink-0 border-t border-[var(--color-border)]" style="max-height: 45%;">
+            <PlanArtifactsPanel
+              :workspace-dir="workspaceDirForArtifacts"
+              :final-artifact="finalArtifact"
+              :working-files="workingFiles"
+              :skill-tags="skillTags"
+              @open="onArtifactOpen"
+            />
+          </div>
+        </aside>
+      </template>
 
       <!-- Workspace resize handle + Workbench panel -->
       <template v-if="showWorkbench">
