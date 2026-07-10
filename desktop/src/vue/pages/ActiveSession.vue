@@ -28,6 +28,7 @@ import {
   useTerminalPanelStore,
 } from '../stores/terminalPanelStore'
 import MessageList from '../components/chat/MessageList.vue'
+import PlanPanel from '../components/plan/PlanPanel.vue'
 import ChatInput from '../components/chat/ChatInput.vue'
 import DirectChatButton from '../components/chat/DirectChatButton.vue'
 import ComputerUsePermissionModal from '../components/chat/ComputerUsePermissionModal.vue'
@@ -623,6 +624,10 @@ function openTerminalInTab() {
           <template v-else>
             <div class="flex-1 min-h-0 w-full overflow-y-auto pt-6">
               <div class="mx-auto max-w-[820px] px-5">
+                <!-- Plan-and-Execute panel -->
+                <div v-if="chatStore.sessions[activeTabId]?.plan" class="mb-6">
+                  <PlanPanel :plan="chatStore.sessions[activeTabId].plan" />
+                </div>
                 <MessageList :compact="showRightPanel" />
               </div>
             </div>

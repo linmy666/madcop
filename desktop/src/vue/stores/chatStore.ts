@@ -132,6 +132,25 @@ export type PerSessionState = {
   activeToolUseId: string | null
   activeToolName: string | null
   activeThinkingId: string | null
+  /** Plan-and-Execute state */
+  plan: {
+    goal: string
+    steps: Array<{
+      step: number
+      action: string
+      tool: string | null
+      input_hint: string
+      expected_result: string
+      status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
+      result: string | null
+      error: string | null
+    }>
+    current_step: number
+    total_steps: number
+    completed_steps: number
+    failed_steps: number
+    status: string
+  } | null
   pendingPermission: {
     requestId: string
     toolName: string
@@ -185,6 +204,7 @@ function createDefaultSessionState(): PerSessionState {
     activeToolUseId: null,
     activeToolName: null,
     activeThinkingId: null,
+    plan: null,
     pendingPermission: null,
     pendingComputerUsePermission: null,
     pendingClarification: null,
@@ -464,6 +484,24 @@ export const useChatStore = defineStore('chat', {
                       const ss = useSessionStore()
                       ss.updateSessionTitle(sessionId, event.title)
                     } catch {}
+                  } else if (event.type === 'plan' && event.plan) {
+                    // Plan-and-Execute: full plan update
+                    this.sessions[sessionId].plan = event.plan
+                  } else if (event.type === 'plan_step' && event.step) {
+                    // Plan-and-Execute: single step status update
+                    const plan = this.sessions[sessionId].plan
+                    if (plan) {
+                      const idx = plan.steps.findIndex((s: any) => s.step === event.step.step)
+                      if (idx >= 0) {
+                        plan.steps[idx] = event.step
+                        plan.completed_steps = plan.steps.filter((s: any) => s.status === 'completed').length
+                        plan.failed_steps = plan.steps.filter((s: any) => s.status === 'failed').length
+                        plan.current_step = event.step.step
+                      }
+                    }
+                  } else if (event.type === 'plan_done') {
+                    // Plan-and-Execute: all steps complete
+                    // Plan stays in the session state for display
                   }
                 } catch {}
               }
