@@ -304,7 +304,22 @@ madcop/
 ├── madcop/                   Python backend
 │   ├── server/               FastAPI app, route handlers, SSE streaming
 │   ├── llm/                  OpenAI-compatible client + model config
-│   ├── tools/                Tool registry, built-in tools, MCP bridge
+│   ├── tools/                Tool registry, built-in tools, MCP bridge, MCP server
+│   │   ├── mac_ax.py         macOS AXAPI bridge (JXA/osascript)
+│   │   ├── mac_ax_mcp_server.py  Standalone MCP server wrapping mac_ax
+│   │   ├── mcp.py            MCP client (connect to external servers)
+│   │   ├── registry.py       Tool ABC, FunctionTool, ToolRegistry
+│   │   ├── computer.py       ComputerUseTool (screenshot, click, AXAPI)
+│   │   ├── permissions.py    Permission gating for dangerous actions
+│   │   ├── files.py          Read/write/edit file tools
+│   │   ├── web.py            Web search + fetch tools
+│   │   ├── memory.py         Agent-managed long-term memory tools
+│   │   ├── cron.py           Cron scheduling tools
+│   │   ├── weather.py        Weather lookup tool
+│   │   ├── clarify.py        Ask-user-for-clarification tool
+│   │   ├── sandbox.py        Bash/shell execution sandbox
+│   │   ├── eventbus.py       Event bus + webhook subscriptions
+│   │   └── docker_sandbox.py Docker container sandbox
 │   ├── workflow/             Workflow engine + 12 mode presets + node types
 │   ├── agent_network/        Agent network API
 │   ├── memory/               5-tier memory system (episodic / semantic / reflective / scenario / persona / insight)
@@ -316,6 +331,7 @@ madcop/
 │
 ├── docs/                     Documentation
 │   ├── screenshots/          README product screenshots
+│   ├── skills/               Reusable skill definitions (SKILL.md format)
 │   ├── img/                  Historical assets
 │   ├── design-tool/          Design tool docs
 │   └── workflow-editor/      Workflow editor docs
@@ -353,6 +369,51 @@ npm run dev
 **macOS Computer Use** requires two permissions:
 1. **Accessibility** — System Settings → Privacy & Security → Accessibility → add Terminal/Electron
 2. **Screen Recording** — System Settings → Privacy & Security → Screen Recording → add Terminal/Electron
+
+---
+
+## macOS Computer Use (mac_ax)
+
+MadCop includes a **pure-JXA** macOS Accessibility API bridge — no pyobjc, no ctypes, no visual model. It's available two ways:
+
+### 1. Built-in tool (via MadCop's agent)
+```json
+// The agent calls computer_use tool when it needs to interact with the screen
+{ "action": "screenshot", ... }
+{ "action": "find_element", "label": "搜索", "role": "AXButton" }
+{ "action": "click", "x": 400, "y": 300 }
+{ "action": "launch_app", "name": "Calculator" }
+```
+
+### 2. Standalone MCP Server (for any MCP client)
+```bash
+# Run the MCP server
+python3 -m madcop.tools.mac_ax_mcp_server
+
+# Claude Desktop → Config → MCP Servers → add:
+# {
+#   "macos-axapi": {
+#     "command": "python3",
+#     "args": ["-m", "madcop.tools.mac_ax_mcp_server"]
+#   }
+# }
+```
+
+This exposes **10 tools**: `check_permission`, `check_screen_recording`, `list_apps`, `list_windows`, `focus_app`, `launch_app`, `find_element`, `click`, `type_text`, `press_key`.
+
+Any MCP-compatible client (Claude Desktop, Cursor, VS Code, etc.) can connect and use macOS UI automation.
+
+### Architecture
+```
+┌──────────────┐     MCP/JSON-RPC      ┌─────────────────┐
+│  MCP Client  │ ←─── over stdio ───→  │  mac_ax MCP     │
+│  (Claude,    │                        │  Server          │
+│   Cursor,    │     tools/list         │                  │
+│   MadCop...) │     tools/call         │  osascript       │
+│              │                        │  → JXA           │
+└──────────────┘                        │  → AXAPI         │
+                                        └─────────────────┘
+```
 
 ---
 
