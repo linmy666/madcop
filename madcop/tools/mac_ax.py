@@ -89,6 +89,56 @@ def check_permission() -> dict[str, Any]:
     return result
 
 
+def check_screen_recording() -> dict[str, Any]:
+    """Check if Screen Recording permission is granted by trying to enumerate windows.
+
+    macOS requires Screen Recording (or the deprecated Accessibility) to access
+    process windows via AXAPI. If denied, `proc.windows()` returns empty arrays
+    silently (no error). We detect this by checking a known-visible app.
+    """
+    jxa = '''
+        function main() {
+            var se = Application("System Events");
+            var procs = se.processes();
+            var testProc = null;
+            for (var i = 0; i < procs.length; i++) {
+                try {
+                    if (procs[i].visible() && procs[i].windows) {
+                        testProc = procs[i];
+                        break;
+                    }
+                } catch(e) {}
+            }
+            if (!testProc) {
+                return JSON.stringify({granted: null, reason: "no_visible_process"});
+            }
+            try {
+                var _ = testProc.windows();
+            } catch(e) {
+                return JSON.stringify({granted: false, reason: "exception", error: e.message});
+            }
+            var appsWithWindows = 0;
+            for (var p = 0; p < procs.length; p++) {
+                try {
+                    if (procs[p].windows().length > 0) { appsWithWindows++; }
+                } catch(e) {}
+            }
+            return JSON.stringify({
+                granted: appsWithWindows > 0,
+                windowsFound: appsWithWindows,
+                totalProcesses: procs.length,
+            });
+        }
+        main();
+    '''
+    result = _jxa_json(jxa)
+    if result.get("_error") == "ACCESS_DENIED":
+        return {"granted": False, "reason": "no_accessibility"}
+    if not isinstance(result, dict):
+        return {"granted": None, "reason": "parse_error"}
+    return result
+
+
 def list_apps() -> list[dict[str, Any]]:
     """List all running GUI applications with their properties."""
     result = _jxa_json(

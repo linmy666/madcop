@@ -20,7 +20,7 @@ export default defineConfig({
     // Disabling minification keeps the build larger but readable and crash-free.
     minify: false,
     rollupOptions: {
-      input: 'vue-preview.html',
+      input: 'index.html',
       onwarn(warning, warn) {
         if (warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT') return
         warn(warning)

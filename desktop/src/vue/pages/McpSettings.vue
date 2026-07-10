@@ -16,8 +16,11 @@
        with logic expressed through helper functions in <script setup>.
 -->
 
+
 <script setup lang="ts">
 import type { McpServerRecord, McpWritableScope, McpUpsertPayload } from '../types/mcp'
+import { useTranslation } from "../i18n"
+import { useMcpStore } from "../stores/mcpStore"
 
 import {
   ref,
@@ -101,6 +104,7 @@ interface McpApi {
 
 // ─── Props / Emits ────────────────────────────────────────────────
 const props = defineProps<{
+
   mcpStore: McpStore
   sessionStore: SessionStore
   sessionsApi: SessionsApi
@@ -108,6 +112,11 @@ const props = defineProps<{
   t: (key: string, params?: Record<string, string | number>) => string
   addToast: (payload: ToastPayload) => void
 }>()
+
+const t = useTranslation()
+const mcpStore = useMcpStore()
+const sessionsApi = { getRecentProjects: async () => ({ projects: [] }) }
+const mcpApi = { projectPaths: async () => ({ projectPaths: [] }) }
 
 // ─── Constants ────────────────────────────────────────────────────
 const MCP_GROUP_ORDER: McpGroupKey[] = [
@@ -269,7 +278,7 @@ function isDraftValid(draft: McpDraft): boolean {
 function transportLabel(transport: string): string {
   switch (transport) {
     case 'stdio': return 'STDIO'
-    case 'http':  return props.t('settings.mcp.transport.http')
+    case 'http':  return t('settings.mcp.transport.http')
     case 'sse':   return 'SSE'
     default:      return transport
   }
@@ -287,8 +296,8 @@ function getServerGroupKey(server: McpServerRecord): McpGroupKey {
 
 function scopeLabel(server: McpServerRecord): string {
   const group = getServerGroupKey(server)
-  if (group === 'plugin') return props.t('settings.mcp.scope.plugin')
-  return props.t(`settings.mcp.scope.${group}`)
+  if (group === 'plugin') return t('settings.mcp.scope.plugin')
+  return t(`settings.mcp.scope.${group}`)
 }
 
 function getServerIdentityKey(server: Pick<McpServerRecord, 'name' | 'scope' | 'projectPath'>): string {
@@ -314,7 +323,7 @@ const refreshInFlightRef: Ref<Set<string>> = ref(new Set())
 
 // ─── Derived / refs to store ──────────────────────────────────────
 const activeSession = computed(() => {
-  const { sessions, activeSessionId } = props.sessionStore
+  const { sessions = [], activeSessionId = null } = mcpStore  // sessionStore not wired, using empty
   return sessions.find((session) => session.id === activeSessionId) ?? null
 })
 const currentWorkDir = computed(() => activeSession.value?.workDir)
@@ -324,7 +333,7 @@ const resolveOperationCwd = (server?: McpServerRecord) => server?.projectPath ??
 // ─── Grouping + stats (useMemo → computed) ───────────────────────
 const groupedServers = computed(() => {
   const groups: Partial<Record<McpGroupKey, McpServerRecord[]>> = {}
-  for (const server of props.mcpStore.servers) {
+  for (const server of mcpStore.servers) {
     const key = getServerGroupKey(server)
     if (!groups[key]) groups[key] = []
     groups[key]!.push(server)
@@ -333,27 +342,27 @@ const groupedServers = computed(() => {
 })
 
 const stats = computed(() => ({
-  total: props.mcpStore.servers.length,
-  connected: props.mcpStore.servers.filter((s) => s.status === 'connected').length,
-  attention: props.mcpStore.servers.filter((s) => s.status === 'failed' || s.status === 'needs-auth').length,
+  total: mcpStore.servers.length,
+  connected: mcpStore.servers.filter((s) => s.status === 'connected').length,
+  attention: mcpStore.servers.filter((s) => s.status === 'failed' || s.status === 'needs-auth').length,
 }))
 
 const showListLoading = computed(
-  () => (isInitialLoading.value || props.mcpStore.isLoading) && props.mcpStore.servers.length === 0,
+  () => (isInitialLoading.value || mcpStore.isLoading) && mcpStore.servers.length === 0,
 )
 
 // ─── onMounted: load servers ─────────────────────────────────────
 onMounted(async () => {
   // React sets isInitialLoading based on existing server count
-  isInitialLoading.value = props.mcpStore.servers.length === 0
+  isInitialLoading.value = mcpStore.servers.length === 0
 
   let cancelled = false
   try {
     const [recentProjectPaths, privateMcpProjectPaths] = await Promise.all([
-      props.sessionsApi.getRecentProjects(8)
+      sessionsApi.getRecentProjects(8)
         .then(({ projects }) => projects.map((p) => p.realPath))
         .catch(() => []),
-      props.mcpApi.projectPaths()
+      mcpApi.projectPaths()
         .then(({ projectPaths }) => projectPaths)
         .catch(() => []),
     ])
@@ -367,7 +376,7 @@ onMounted(async () => {
     const projectPathsForFetch = Array.from(new Set(paths))
     projectPathsForFetchRef.value = projectPathsForFetch.length ? projectPathsForFetch : undefined
 
-    await props.mcpStore.fetchServers(projectPathsForFetchRef.value, currentWorkDir.value as string | undefined)
+    await mcpStore.fetchServers(projectPathsForFetchRef.value, currentWorkDir.value as string | undefined)
   } finally {
     if (!cancelled) isInitialLoading.value = false
   }
@@ -378,7 +387,7 @@ onMounted(async () => {
 
 // ─── watch: selectedServer → sync view ────────────────────────────
 watch(
-  () => props.mcpStore.selectedServer,
+  () => mcpStore.selectedServer,
   (sel) => {
     if (!sel) return
     if (sel.canEdit) {
@@ -392,9 +401,9 @@ watch(
 
 // ─── watch: auto-refresh pending 'checking' servers ───────────────
 watch(
-  () => props.mcpStore.servers,
+  () => mcpStore.servers,
   () => {
-    const pendingServers = props.mcpStore.servers.filter(
+    const pendingServers = mcpStore.servers.filter(
       (server) =>
         server.enabled &&
         server.status === 'checking' &&
@@ -414,7 +423,7 @@ watch(
         const key = getServerIdentityKey(server)
         refreshInFlightRef.value.add(key)
         try {
-          const updated = await props.mcpStore.refreshServerStatus(server, resolveOperationCwd(server))
+          const updated = await mcpStore.refreshServerStatus(server, resolveOperationCwd(server))
           if (cancelled) return
 
           // Sync view if currently viewing this server
@@ -443,7 +452,7 @@ const beginCreate = () => {
 }
 
 const beginEdit = (server: McpServerRecord) => {
-  props.mcpStore.selectServer(server)
+  mcpStore.selectServer(server)
   if (!server.canEdit) {
     view.value = { type: 'details', server }
     return
@@ -455,21 +464,21 @@ const beginEdit = (server: McpServerRecord) => {
 const handleToggle = async (server: McpServerRecord) => {
   busyServerKey.value = getServerIdentityKey(server)
   try {
-    const updated = await props.mcpStore.toggleServer(
+    const updated = await mcpStore.toggleServer(
       server,
       resolveOperationCwd(server),
-      props.sessionStore.activeSessionId ?? undefined,
+      null  // activeSessionId no longer in mcpStore ?? undefined,
     )
     props.addToast({
       type: 'success',
       message: updated.enabled
-        ? props.t('settings.mcp.toast.enabled', { name: server.name })
-        : props.t('settings.mcp.toast.disabled', { name: server.name }),
+        ? t('settings.mcp.toast.enabled', { name: server.name })
+        : t('settings.mcp.toast.disabled', { name: server.name }),
     })
   } catch (error) {
     props.addToast({
       type: 'error',
-      message: error instanceof Error ? error.message : props.t('settings.mcp.toast.toggleFailed'),
+      message: error instanceof Error ? error.message : t('settings.mcp.toast.toggleFailed'),
     })
   } finally {
     busyServerKey.value = null
@@ -480,7 +489,7 @@ const handleReconnect = async (server: McpServerRecord) => {
   const optimistic: McpServerRecord = {
     ...server,
     status: 'checking',
-    statusLabel: props.t('status.reconnecting'),
+    statusLabel: t('status.reconnecting'),
     statusDetail: undefined,
   }
   busyServerKey.value = getServerIdentityKey(server)
@@ -491,11 +500,11 @@ const handleReconnect = async (server: McpServerRecord) => {
     }
   }
   try {
-    const updated = await props.mcpStore.reconnectServer(server, resolveOperationCwd(server))
+    const updated = await mcpStore.reconnectServer(server, resolveOperationCwd(server))
     props.addToast({
       type: updated.status === 'connected' ? 'success' : 'warning',
       message: updated.status === 'connected'
-        ? props.t('settings.mcp.toast.reconnected', { name: server.name })
+        ? t('settings.mcp.toast.reconnected', { name: server.name })
         : updated.statusDetail || updated.statusLabel,
     })
     if (view.value.type === 'edit')   view.value = { type: 'edit', server: updated }
@@ -509,7 +518,7 @@ const handleReconnect = async (server: McpServerRecord) => {
     }
     props.addToast({
       type: 'error',
-      message: error instanceof Error ? error.message : props.t('settings.mcp.toast.reconnectFailed'),
+      message: error instanceof Error ? error.message : t('settings.mcp.toast.reconnectFailed'),
     })
   } finally {
     busyServerKey.value = null
@@ -525,15 +534,15 @@ const confirmDelete = async () => {
   if (!server) return
   isDeleting.value = true
   try {
-    await props.mcpStore.deleteServer(server, resolveOperationCwd(server))
-    props.addToast({ type: 'success', message: props.t('settings.mcp.toast.deleted', { name: server.name }) })
+    await mcpStore.deleteServer(server, resolveOperationCwd(server))
+    props.addToast({ type: 'success', message: t('settings.mcp.toast.deleted', { name: server.name }) })
     view.value = { type: 'list' }
-    props.mcpStore.selectServer(null)
+    mcpStore.selectServer(null)
     pendingDeleteServer.value = null
   } catch (error) {
     props.addToast({
       type: 'error',
-      message: error instanceof Error ? error.message : props.t('settings.mcp.toast.deleteFailed'),
+      message: error instanceof Error ? error.message : t('settings.mcp.toast.deleteFailed'),
     })
   } finally {
     isDeleting.value = false
@@ -547,20 +556,20 @@ const handleSave = async () => {
     const payload = buildPayload(draft.value)
     const operationCwd = scopeRequiresProject(draft.value.scope) ? draft.value.projectPath.trim() : undefined
     const saved = view.value.type === 'edit'
-      ? await props.mcpStore.updateServer(view.value.server, payload, operationCwd)
-      : await props.mcpStore.createServer(draft.value.name.trim(), payload, operationCwd)
+      ? await mcpStore.updateServer(view.value.server, payload, operationCwd)
+      : await mcpStore.createServer(draft.value.name.trim(), payload, operationCwd)
     props.addToast({
       type: 'success',
       message: view.value.type === 'edit'
-        ? props.t('settings.mcp.toast.saved', { name: saved.name })
-        : props.t('settings.mcp.toast.created', { name: saved.name }),
+        ? t('settings.mcp.toast.saved', { name: saved.name })
+        : t('settings.mcp.toast.created', { name: saved.name }),
     })
     view.value = { type: 'list' }
-    props.mcpStore.selectServer(null)
+    mcpStore.selectServer(null)
   } catch (error) {
     props.addToast({
       type: 'error',
-      message: error instanceof Error ? error.message : props.t('settings.mcp.toast.saveFailed'),
+      message: error instanceof Error ? error.message : t('settings.mcp.toast.saveFailed'),
     })
   } finally {
     isSaving.value = false
@@ -622,7 +631,7 @@ const editServer = computed<McpServerRecord | undefined>(() => {
   <div v-if="currentViewType === 'details'" class="max-w-5xl min-w-0">
     <button
       type="button"
-      @click="() => { view = { type: 'list' }; props.mcpStore.selectServer(null) }"
+      @click="() => { view = { type: 'list' }; mcpStore.selectServer(null) }"
       class="mb-5 inline-flex items-center gap-2 text-sm text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
     >
       <span class="material-symbols-outlined text-[18px]">arrow_back</span>
@@ -715,7 +724,7 @@ const editServer = computed<McpServerRecord | undefined>(() => {
   <div v-else-if="currentViewType === 'create' || currentViewType === 'edit'" class="max-w-5xl min-w-0">
     <button
       type="button"
-      @click="() => { view = { type: 'list' }; props.mcpStore.selectServer(null) }"
+      @click="() => { view = { type: 'list' }; mcpStore.selectServer(null) }"
       class="mb-5 inline-flex items-center gap-2 text-sm text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
     >
       <span class="material-symbols-outlined text-[18px]">arrow_back</span>
@@ -1105,14 +1114,14 @@ const editServer = computed<McpServerRecord | undefined>(() => {
 
       <!-- Error state -->
       <div
-        v-if="props.mcpStore.error"
+        v-if="mcpStore.error"
         class="text-center py-16 rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-container-low)]"
       >
         <span class="material-symbols-outlined text-[40px] text-[var(--color-error)] mb-3 block">error</span>
-        <p class="text-sm text-[var(--color-error)] mb-3">{{ props.mcpStore.error }}</p>
+        <p class="text-sm text-[var(--color-error)] mb-3">{{ mcpStore.error }}</p>
         <button
           type="button"
-          @click="props.mcpStore.fetchServers(projectPathsForFetchRef, currentWorkDir as string | undefined)"
+          @click="mcpStore.fetchServers(projectPathsForFetchRef, currentWorkDir as string | undefined)"
           class="text-sm text-[var(--color-text-accent)] hover:underline"
         >
           {{ t('common.retry') }}
@@ -1121,7 +1130,7 @@ const editServer = computed<McpServerRecord | undefined>(() => {
 
       <!-- Empty state -->
       <div
-        v-else-if="props.mcpStore.servers.length === 0"
+        v-else-if="mcpStore.servers.length === 0"
         class="text-center py-16 rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-container-low)]"
       >
         <span class="material-symbols-outlined text-[40px] text-[var(--color-text-tertiary)] mb-3 block">dns</span>

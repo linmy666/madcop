@@ -26,3 +26,6 @@ frontend/
 
 # Vue 3 parallel build output (not loaded by Electron)
 dist-vue/
+
+# backup files
+*.bak

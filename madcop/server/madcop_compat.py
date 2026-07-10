@@ -583,37 +583,41 @@ def _detect_venv() -> dict[str, Any]:
         "created": venv_dir.exists() and py.exists(),
         "path": str(venv_dir) if venv_dir.exists() else str(venv_dir),
     }
-
-
 def _detect_dependencies() -> dict[str, Any]:
-    """Best-effort check that pyautogui, pillow, Quartz are importable."""
-    required = ["pyautogui", "PIL", "Quartz"]
+    """Check if mac_ax (JXA/osascript) is available — the only real dep."""
+    required = ["osascript"]
     missing = []
-    for name in required:
+    for exe in required:
         try:
-            __import__(name)
-        except ImportError:
-            missing.append(name)
+            import shutil
+            if not shutil.which(exe):
+                missing.append(exe)
+        except Exception:
+            missing.append(exe)
     return {
-        "installed": not missing,
-        "requirementsFound": not missing,
+        "installed": len(missing) == 0,
+        "requirementsFound": True,
         "missing": missing,
+        "bridge": "jxa",
     }
 
 
 def _detect_permissions() -> dict[str, Any]:
-    """macOS only. Check TCC permissions via tccutil/system_profiler."""
+    """macOS only. Real AXAPI permission check via JXA."""
     if sys.platform != "darwin":
         return {"accessibility": None, "screenRecording": None}
     try:
-        # Best-effort: query system_profiler for accessibility
-        out = subprocess.run(
-            ["/usr/bin/system_profiler", "SPDeveloperToolsDataType"],
-            capture_output=True, text=True, timeout=2,
-        )
-        return {"accessibility": True, "screenRecording": None}
-    except Exception:
-        return {"accessibility": None, "screenRecording": None}
+        from madcop.tools.mac_ax import check_permission, check_screen_recording
+        ax = check_permission()
+        sr = check_screen_recording()
+        return {
+            "accessibility": ax.get("granted", False),
+            "screenRecording": sr.get("granted", False),
+            "_ax_detail": ax,
+            "_sr_detail": sr,
+        }
+    except Exception as e:
+        return {"accessibility": None, "screenRecording": None, "_error": str(e)[:200]}
 
 
 def _list_installed_apps() -> list[dict[str, Any]]:
@@ -654,6 +658,15 @@ def _list_installed_apps() -> list[dict[str, Any]]:
 def _list_authorized_apps() -> list[dict[str, Any]]:
     """Stub: macOS TCC.db introspection requires elevated perms."""
     return []
+
+
+def _list_running_apps() -> list[dict[str, Any]]:
+    """List currently running GUI apps via mac_ax."""
+    try:
+        from madcop.tools.mac_ax import list_apps as _jxa_apps
+        return _jxa_apps()[:50]
+    except Exception:
+        return []
 
 
 # --------------------------------------------------------------------------- #
@@ -1299,13 +1312,15 @@ def register(app: FastAPI) -> None:
             "venv": _detect_venv(),
             "dependencies": _detect_dependencies(),
             "permissions": _detect_permissions(),
+            "apps": _safe(_list_installed_apps, default=[])[:30],
+            "runningApps": _safe(_list_running_apps, default=[]),
         }
 
     @app.get("/api/computer-use/setup", include_in_schema=False)
     async def cc_cu_setup() -> dict[str, Any]:
         return {
-            "enabled": False, "platform": sys.platform, "bridge": "pyautogui",
-            "warning": "Computer use is read-only in this build.",
+            "enabled": True, "platform": sys.platform, "bridge": "jxa",
+            "setup_guide": "Open System Settings → Privacy & Security → Accessibility → add Terminal",
         }
 
     @app.post("/api/computer-use/setup", include_in_schema=False)

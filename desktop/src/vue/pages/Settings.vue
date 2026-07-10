@@ -54,7 +54,6 @@ const navItems: NavItem[] = [
   // AI Features
   { id: 'memory',      label: '记忆',       icon: 'psychology', group: 'ai' },
   { id: 'mcp',         label: 'MCP 工具',   icon: 'build',   group: 'ai' },
-  { id: 'plugins',     label: '插件',       icon: 'extension', group: 'ai' },
   { id: 'skills',      label: '技能构建',  icon: 'auto_awesome', group: 'ai' },
   { id: 'adapters',    label: '适配器',    icon: 'chat',     group: 'ai' },
   { id: 'h5Access',    label: 'H5 访问',   icon: 'qr_code_2', group: 'ai' },
@@ -474,11 +473,7 @@ onMounted(loadLearning)
         <div v-else-if="activeTab === 'skills'" class="settings-section settings-section--fullbleed">
           <SkillSettingsPage />
         </div>
-        <!-- ═══ Plugins ═══ -->
-        <div v-else-if="activeTab === 'plugins'" class="settings-section settings-section--fullbleed">
-          <PluginSettingsPage />
-        </div>
-        <!-- ═══ ComputerUse ═══ -->
+                <!-- ═══ ComputerUse ═══ -->
         <div v-else-if="activeTab === 'computerUse'" class="settings-section settings-section--fullbleed">
           <ComputerUseSettingsPage />
         </div>

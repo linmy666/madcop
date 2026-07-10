@@ -321,10 +321,38 @@ madcop/
 │   └── workflow-editor/      Workflow editor docs
 │
 ├── tests/                    1,300+ pytest tests (backend-focused)
+├── start.sh                  One-command startup script
 ├── README.md
 ├── LICENSE
 └── pyproject.toml
 ```
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone & build
+git clone https://github.com/linmy666/madcop.git
+cd madcop
+chmod +x start.sh
+./start.sh
+
+# Or manually:
+# Backend:
+pip install -e .
+uvicorn madcop.server.app:app --host 127.0.0.1 --port 8765 --reload
+
+# Frontend (separate terminal):
+cd desktop
+npm install
+npx vite build --config vite.vue.config.ts
+npm run dev
+```
+
+**macOS Computer Use** requires two permissions:
+1. **Accessibility** — System Settings → Privacy & Security → Accessibility → add Terminal/Electron
+2. **Screen Recording** — System Settings → Privacy & Security → Screen Recording → add Terminal/Electron
 
 ---
 
