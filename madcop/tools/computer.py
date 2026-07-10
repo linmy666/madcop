@@ -115,7 +115,8 @@ class ComputerUseTool(Tool):
                 "action": {
                     "type": "string",
                     "enum": ["screenshot", "click", "type", "key", "scroll",
-                             "find_element", "list_apps", "focus_app", "dump_tree"],
+                             "find_element", "list_apps", "focus_app", "dump_tree",
+                             "launch_app", "list_windows", "check_permission"],
                     "description": "The computer-use action to perform.",
                 },
                 "x": {
@@ -168,6 +169,10 @@ class ComputerUseTool(Tool):
                 "max_depth": {
                     "type": "integer",
                     "description": "Max recursion depth for AX tree search (default 20).",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "App name or bundle ID (for launch_app action).",
                 },
             },
             "required": ["action"],
@@ -263,6 +268,12 @@ class ComputerUseTool(Tool):
                 pid=kwargs.get("pid", 0),
                 max_depth=kwargs.get("max_depth", 5),
             )
+        elif action == "launch_app":
+            return self._launch_app(kwargs.get("name", ""))
+        elif action == "list_windows":
+            return self._list_windows()
+        elif action == "check_permission":
+            return self._check_permission()
         else:
             return {"error": f"unknown action: {action}"}
 
@@ -496,6 +507,43 @@ class ComputerUseTool(Tool):
             return {"error": f"AXAPI not available: {e}"}
         except Exception as e:
             return {"error": f"AXAPI error: {e}"}
+
+    def _launch_app(self, name: str) -> dict[str, Any]:
+        """Launch an application by name or bundle ID."""
+        if not name:
+            return {"error": "name required"}
+        try:
+            from .mac_ax import launch_app
+            return launch_app(name)
+        except ImportError as e:
+            return {"error": f"AXAPI not available: {e}"}
+        except Exception as e:
+            return {"error": f"launch error: {e}"}
+
+    def _list_windows(self) -> dict[str, Any]:
+        """List all visible windows on screen."""
+        try:
+            from .mac_ax import list_windows
+            windows = list_windows()
+            return {
+                "action": "list_windows",
+                "windows": windows,
+                "count": len(windows),
+            }
+        except ImportError as e:
+            return {"error": f"AXAPI not available: {e}"}
+        except Exception as e:
+            return {"error": f"window list error: {e}"}
+
+    def _check_permission(self) -> dict[str, Any]:
+        """Check if AXAPI accessibility permission is granted."""
+        try:
+            from .mac_ax import check_permission
+            return check_permission()
+        except ImportError as e:
+            return {"error": f"AXAPI not available: {e}"}
+        except Exception as e:
+            return {"error": f"permission check error: {e}"}
 
 
 __all__ = [

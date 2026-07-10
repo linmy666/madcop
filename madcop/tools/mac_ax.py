@@ -1,283 +1,325 @@
 """macOS Accessibility API bridge — element discovery without visual models.
 
-Uses macOS's built-in Accessibility API (AXAPI) to read the UI element
-tree of any running application. No screenshots, no ML, no Playwright.
-
-The key insight: macOS already knows every button, text field, menu item,
-and window on screen — it's how VoiceOver, Siri, and automation tools
-work. We just ask the system.
+Uses macOS's built-in Accessibility API via osascript (JXA).
+No pyobjc, no ctypes, no fragile bindings — just Apple's own
+JavaScript for Automation runtime, which every macOS has.
 
 Architecture:
-  mac_ax.discover()     → list all running applications
-  mac_ax.focus(pid)     → bring an app to front
-  mac_ax.find(pid, label, role) → recursively search the AX tree
-  mac_ax.attrs(element) → dump all attributes of an element
-  mac_ax.hierarchy(pid) → print the full AX tree for debugging
+  mac_ax.list_apps()      → osascript → ["Chrome", "Terminal", ...]
+  mac_ax.focus("Chrome")  → osascript → bring to front
+  mac_ax.find("搜索框")   → osascript → AX tree search
+  mac_ax.click(x, y)      → osascript → mouse click
 
-Dependencies:
-  - pyobjc (installed with MadCop) — bridges Python to macOS's
-    Objective-C runtime
-  - ApplicationServices.framework — the AXAPI itself
-
-Safety:
-  - READ-ONLY: does not inject input itself (use pyautogui for that)
-  - Permission: the user must grant Accessibility permission in
-    System Settings → Privacy & Security → Accessibility
-    (MadCop's Privacy permission request handles this)
+Requires:
+  - macOS
+  - Accessibility permission in System Settings → Privacy → Accessibility
+    (the very first action when permission is missing pops a dialog)
 """
 
 from __future__ import annotations
 
 import logging
-import time
+import os
+import subprocess
+import tempfile
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Lazy imports — pyobjc is available but we don't want import-time failures
-# ---------------------------------------------------------------------------
-_Quartz = None
-_NSWorkspace = None
-_NSRunningApplication = None
+# ── JXA scripts (embedded as strings) ─────────────────────────────
 
 
-def _ensure_imports() -> None:
-    global _Quartz, _NSWorkspace, _NSRunningApplication
-    if _Quartz is not None:
-        return
+def _jxa(script: str, timeout: float = 15) -> str:
+    """Run a JXA script via osascript and return stdout."""
+    # Write to a temp file to avoid shell escaping issues with complex scripts
+    fd, path = tempfile.mkstemp(suffix=".js", prefix="mac_ax_")
     try:
-        import Quartz
-        from AppKit import NSWorkspace
-        from AppKit import NSRunningApplication
-
-        _Quartz = Quartz
-        _NSWorkspace = NSWorkspace
-        _NSRunningApplication = NSRunningApplication
-    except ImportError as e:
-        raise ImportError(
-            "pyobjc is required for macOS AXAPI. "
-            "Install: pip install pyobjc-framework-Quartz pyobjc-framework-AppKit"
-        ) from e
-
-
-# ---------------------------------------------------------------------------
-# AXAPI wrappers — thin wrappers over C APIs
-# ---------------------------------------------------------------------------
-
-def _ax_element_for_pid(pid: int) -> Any | None:
-    """Get the root AXUIElement for a process."""
-    _ensure_imports()
-    app = _Quartz.AXUIElementCreateApplication(pid)
-    if app is None:
-        return None
-    return app
+        with os.fdopen(fd, "w") as f:
+            f.write("ObjC.import('Cocoa');\n")
+            f.write(script)
+        result = subprocess.run(
+            ["osascript", "-l", "JavaScript", path],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            if "assistive access" in stderr.lower() or "-25211" in stderr:
+                return '{"_error": "ACCESS_DENIED", "_message": "Accessibility permission required. Open System Settings → Privacy & Security → Accessibility → add your terminal app."}'
+            return f'{{"_error": "JXA_ERROR", "_message": {stderr!r}}}'
+        return result.stdout.strip() or "{}"
+    except subprocess.TimeoutExpired:
+        return '{"_error": "TIMEOUT"}'
+    except Exception as e:
+        return f'{{"_error": "EXCEPTION", "_message": {str(e)!r}}}'
+    finally:
+        try:
+            os.unlink(path)
+        except Exception:
+            pass
 
 
-def _ax_attribute(element: Any, attr: str) -> Any | None:
-    """Get a single AX attribute. Returns None on error/missing."""
-    _ensure_imports()
-    err, value = _Quartz.AXUIElementCopyAttributeValue(element, attr, None)
-    if err != 0:
-        return None
-    return value
+def _jxa_json(script: str, timeout: float = 15) -> Any:
+    """Run JXA and parse the result as JSON."""
+    out = _jxa(script, timeout=timeout)
+    import json
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError:
+        return {"_error": "PARSE_FAILED", "_raw": out[:500]}
 
 
-def _ax_attributes(element: Any) -> list[str]:
-    """List all attribute names for an element."""
-    _ensure_imports()
-    err, attrs = _Quartz.AXUIElementCopyAttributeNames(element, None)
-    if err != 0:
-        return []
-    return list(attrs)
+# ── Public API ────────────────────────────────────────────────────
 
 
-def _ax_children(element: Any) -> list[Any]:
-    """Get all children of an AX element."""
-    raw = _ax_attribute(element, "AXChildren")
-    if not raw:
-        return []
-    return list(raw)
-
-
-def _ax_role(element: Any) -> str:
-    """Get the role of an AX element (e.g. AXButton, AXTextField)."""
-    val = _ax_attribute(element, "AXRole")
-    return val if val else ""
-
-
-def _ax_label(element: Any) -> str:
-    """Get the human-readable label / title of an element."""
-    for attr in ("AXTitle", "AXDescription", "AXLabel", "AXValue"):
-        val = _ax_attribute(element, attr)
-        if val and isinstance(val, str) and val.strip():
-            return val.strip()
-    return ""
-
-
-def _ax_focused(element: Any) -> bool:
-    """Check if an element has keyboard focus."""
-    val = _ax_attribute(element, "AXFocused")
-    return bool(val)
-
-
-def _ax_position(element: Any) -> tuple[float, float, float, float] | None:
-    """Get (x, y, width, height) of an element in screen coordinates."""
-    pos = _ax_attribute(element, "AXPosition")
-    size = _ax_attribute(element, "AXSize")
-    if pos and size:
-        return (pos.x, pos.y, size.width, size.height)
-    return None
-
-
-def _ax_enabled(element: Any) -> bool:
-    val = _ax_attribute(element, "AXEnabled")
-    return val if val is not None else True
-
-
-# ---------------------------------------------------------------------------
-# High-level API
-# ---------------------------------------------------------------------------
-
-def list_apps() -> list[dict[str, Any]]:
-    """List all running GUI applications with their PID, name, bundle ID."""
-    _ensure_imports()
-    workspace = _NSWorkspace.sharedWorkspace()
-    apps = workspace.runningApplications()
-    result = []
-    for app in apps:
-        if not app.activationPolicy() or app.activationPolicy() == 0:
-            continue  # skip background processes
-        result.append({
-            "pid": app.processIdentifier(),
-            "name": app.localizedName() or "",
-            "bundleId": app.bundleIdentifier() or "",
-            "frontmost": app.isActive(),
-        })
+def check_permission() -> dict[str, Any]:
+    """Check if Accessibility permission is granted."""
+    result = _jxa_json(
+        """
+        var se = Application("System Events");
+        var front = se.processes.whose({frontmost: true})[0];
+        if (front) {
+            JSON.stringify({granted: true, frontmost: front.name()});
+        } else {
+            JSON.stringify({granted: true, frontmost: "none"});
+        }
+        """
+    )
+    if result.get("_error") == "ACCESS_DENIED":
+        return {"granted": False, "error": result["_message"]}
     return result
 
 
-def focus_app(pid: int) -> bool:
+def list_apps() -> list[dict[str, Any]]:
+    """List all running GUI applications with their properties."""
+    result = _jxa_json(
+        """
+        var se = Application("System Events");
+        var procs = se.processes();
+        var apps = [];
+        for (var i = 0; i < procs.length; i++) {
+            var p = procs[i];
+            try {
+                apps.push({
+                    name: p.name(),
+                    pid: p.unixId(),
+                    frontmost: p.frontmost(),
+                    visible: p.visible(),
+                });
+            } catch(e) {}
+        }
+        JSON.stringify(apps);
+        """
+    )
+    if isinstance(result, list):
+        return result
+    return []
+
+
+def list_windows() -> list[dict[str, Any]]:
+    """List all visible windows."""
+    result = _jxa_json(
+        """
+        var se = Application("System Events");
+        var procs = se.processes();
+        var wins = [];
+        for (var i = 0; i < procs.length; i++) {
+            try {
+                var proc = procs[i];
+                var windows = proc.windows();
+                for (var j = 0; j < windows.length; j++) {
+                    var w = windows[j];
+                    try {
+                        var pos = w.position();
+                        var size = w.size();
+                        wins.push({
+                            owner: proc.name(),
+                            title: w.title(),
+                            pid: proc.unixId(),
+                            x: pos[0],
+                            y: pos[1],
+                            width: size[0],
+                            height: size[1],
+                            minimized: w.minimized(),
+                        });
+                    } catch(e2) {}
+                }
+            } catch(e) {}
+        }
+        JSON.stringify(wins);
+        """
+    )
+    if isinstance(result, list):
+        return result
+    return []
+
+
+def focus_app(name_or_pid: str | int) -> dict[str, Any]:
     """Bring an app to the foreground."""
-    _ensure_imports()
-    workspace = _NSWorkspace.sharedWorkspace()
-    for app in workspace.runningApplications():
-        if app.processIdentifier() == pid:
-            app.activateWithOptions(0)
-            return True
-    return False
+    result = _jxa_json(
+        f"""
+        var se = Application("System Events");
+        var target = "{name_or_pid}";
+        var procs = se.processes();
+        for (var i = 0; i < procs.length; i++) {{
+            if (procs[i].name() === target || String(procs[i].unixId()) === target) {{
+                procs[i].frontmost = true;
+                JSON.stringify({{success: true, name: procs[i].name(), pid: procs[i].unixId()}});
+                return;
+            }}
+        }}
+        JSON.stringify({{success: false, error: "not found"}});
+        """
+    )
+    return result
+
+
+def launch_app(name: str) -> dict[str, Any]:
+    """Launch an application by name."""
+    result = _jxa_json(
+        f"""
+        var app = Application("{name}");
+        app.activate();
+        JSON.stringify({{launched: true, name: "{name}"}});
+        """
+    )
+    return result
+
+
+def click(x: int, y: int) -> dict[str, Any]:
+    """Click at screen coordinates using System Events."""
+    result = _jxa_json(
+        f"""
+        var se = Application("System Events");
+        se.clickAt({{x: {x}, y: {y}}});
+        JSON.stringify({{x: {x}, y: {y}, clicked: true}});
+        """
+    )
+    return result
+
+
+def type_text(text: str) -> dict[str, Any]:
+    """Type text using System Events."""
+    # Escape for JXA string
+    escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    result = _jxa_json(
+        f"""
+        var se = Application("System Events");
+        se.keyStrokes("{escaped}");
+        JSON.stringify({{typed: true, length: {len(text)}}});
+        """
+    )
+    return result
+
+
+def press_key(key: str) -> dict[str, Any]:
+    """Press a key."""
+    result = _jxa_json(
+        f"""
+        var se = Application("System Events");
+        se.keyCode({_key_to_code(key)});
+        JSON.stringify({{key: "{key}", pressed: true}});
+        """
+    )
+    return result
 
 
 def find_element(
-    pid: int,
     label: str | None = None,
     role: str | None = None,
-    max_depth: int = 20,
-    timeout: float = 5.0,
+    frontmost_only: bool = True,
 ) -> list[dict[str, Any]]:
-    """Recursively search the AX tree of an app for matching elements.
-
-    Args:
-        pid: Process ID of the target application.
-        label: Substring to match against element title/label/description.
-        role: Exact AX role to match (e.g. "AXButton", "AXTextField").
-        max_depth: Maximum recursion depth.
-        timeout: Max seconds to search.
-
-    Returns:
-        List of matching elements with their attributes.
-    """
-    root = _ax_element_for_pid(pid)
-    if root is None:
+    """Search for UI elements by label or role in the frontmost app."""
+    if not label and not role:
         return []
 
-    results: list[dict[str, Any]] = []
-    _visited = set()
-    deadline = time.monotonic() + timeout
+    role_filter = ""
+    if role:
+        role_filter = f"el.role() === '{role}'"
+    label_filter = ""
+    if label:
+        escaped_label = label.replace("'", "\\'")
+        label_filter = f"el.title() && el.title().toLowerCase().includes('{escaped_label.lower()}')"
 
-    def _search(element: Any, depth: int) -> None:
-        if time.monotonic() > deadline or depth > max_depth:
-            return
-        # Avoid cycles
-        elem_id = id(element)
-        if elem_id in _visited:
-            return
-        _visited.add(elem_id)
+    filters = []
+    if role_filter:
+        filters.append(role_filter)
+    if label_filter:
+        filters.append(label_filter)
+    condition = " && ".join(filters) if filters else "true"
 
-        el_role = _ax_role(element)
-        el_label = _ax_label(element)
-
-        # Check if this element matches
-        if role and el_role != role:
-            pass  # role doesn't match — keep searching children
-        elif label and label.lower() not in el_label.lower():
-            pass  # label doesn't match — keep searching
-        else:
-            # Matched!
-            pos = _ax_position(element)
-            entry = {
-                "role": el_role,
-                "label": el_label,
-                "enabled": _ax_enabled(element),
-                "focused": _ax_focused(element),
-            }
-            if pos:
-                entry["x"] = round(pos[0])
-                entry["y"] = round(pos[1])
-                entry["width"] = round(pos[2])
-                entry["height"] = round(pos[3])
-            results.append(entry)
-
-        # Recurse into children
-        for child in _ax_children(element):
-            _search(child, depth + 1)
-
-    _search(root, 0)
-    return results
-
-
-def dump_tree(pid: int, max_depth: int = 5) -> list[str]:
-    """Print the AX tree of an app for debugging. Returns formatted lines."""
-    root = _ax_element_for_pid(pid)
-    lines: list[str] = []
-
-    def _walk(element: Any, depth: int) -> None:
-        if depth > max_depth:
-            return
-        role = _ax_role(element)
-        label = _ax_label(element)
-        pos = _ax_position(element)
-        indent = "  " * depth
-        line = f"{indent}{role}"
-        if label:
-            line += f" \"{label}\""
-        if pos:
-            line += f" [{pos[0]:.0f},{pos[1]:.0f} {pos[2]:.0f}x{pos[3]:.0f}]"
-        lines.append(line)
-        for child in _ax_children(element):
-            _walk(child, depth + 1)
-
-    _walk(root, 0)
-    return lines
+    script = f"""
+    var se = Application("System Events");
+    var frontApp = se.processes.whose({{frontmost: true}})[0];
+    if (!frontApp) {{ JSON.stringify([]); }}
+    var results = [];
+    var windows = frontApp.windows();
+    for (var w = 0; w < windows.length; w++) {{
+        try {{
+            var elems = windows[w].uiElements();
+            for (var e = 0; e < elems.length; e++) {{
+                try {{
+                    var el = elems[e];
+                    if ({condition}) {{
+                        try {{
+                            var pos = el.position();
+                            var size = el.size();
+                            results.push({{
+                                role: el.role(),
+                                label: el.title() || el.description() || "",
+                                x: pos[0], y: pos[1],
+                                width: size[0], height: size[1],
+                                enabled: el.enabled(),
+                            }});
+                        }} catch(e2) {{}}
+                    }}
+                    // Recurse into children
+                    var kids = el.uiElements();
+                    for (var k = 0; k < kids.length; k++) {{
+                        try {{
+                            var kid = kids[k];
+                            if ({condition}) {{
+                                var pos = kid.position();
+                                var size = kid.size();
+                                results.push({{
+                                    role: kid.role(),
+                                    label: kid.title() || kid.description() || "",
+                                    x: pos[0], y: pos[1],
+                                    width: size[0], height: size[1],
+                                    enabled: kid.enabled(),
+                                }});
+                            }}
+                        }} catch(e3) {{}}
+                    }}
+                }} catch(e4) {{}}
+            }}
+        }} catch(e5) {{}}
+    }}
+    JSON.stringify(results);
+    """
+    result = _jxa_json(script)
+    if isinstance(result, list):
+        return result
+    return []
 
 
-def element_attrs(pid: int, depth: int = 0) -> dict[str, Any]:
-    """Dump all attributes of the root element (for debugging)."""
-    root = _ax_element_for_pid(pid)
-    if root is None:
-        return {"error": "no element"}
-    attrs = _ax_attributes(root)
-    result: dict[str, Any] = {}
-    for attr in sorted(attrs):
-        val = _ax_attribute(root, attr)
-        if val is not None:
-            # Stringify non-primitive values
-            if hasattr(val, "description"):
-                val = val.description()
-            elif hasattr(val, "__len__") and not isinstance(val, (str, bytes)):
-                try:
-                    val = len(val)
-                except Exception:
-                    val = str(val)[:100]
-            result[attr] = str(val)[:200]
-    return result
+def _key_to_code(key: str) -> str:
+    """Convert a human-readable key name to macOS key code."""
+    mapping = {
+        "enter": "36", "return": "36",
+        "tab": "48", "space": "49",
+        "delete": "51", "backspace": "51",
+        "escape": "53", "esc": "53",
+        "up": "126", "down": "125", "left": "123", "right": "124",
+        "f1": "122", "f2": "120", "f3": "99", "f4": "118",
+        "f5": "96", "f6": "97", "f7": "98", "f8": "100",
+        "home": "115", "end": "119", "pageup": "116", "pagedown": "121",
+        "cmd": "55", "command": "55",
+        "shift": "56", "option": "58", "alt": "58", "ctrl": "59",
+    }
+    key_lower = key.lower().strip()
+    if key_lower in mapping:
+        return mapping[key_lower]
+    # Try to use the key as a character
+    if len(key) == 1:
+        return str(ord(key))
+    return "0"
