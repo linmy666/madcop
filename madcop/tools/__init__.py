@@ -70,8 +70,10 @@ def default_registry(store: MemoryStore | None = None, workspace_dir: str | None
     _write_dirs: list[str] = []
     if workspace_dir:
         _write_dirs.append(workspace_dir)
+    _preview_dir = str(_P.home() / ".madcop" / "preview")
+    _write_dirs.append(_preview_dir)
     _write_dirs.extend([_os.getcwd(), _user_home])
-    reg.register(ReadFileTool(allowed_dirs=[_user_home, _os.getcwd()]))   # v2.7.0 — file read for workflows
+    reg.register(ReadFileTool(allowed_dirs=[_user_home, _os.getcwd(), _preview_dir]))   # v2.7.0 — file read for workflows
     reg.register(WriteFileTool(allowed_dirs=_write_dirs))  # v3.0 — write to user's workspace
     reg.register(EditFileTool(allowed_dirs=_write_dirs))   # v3.0 — edit in user's workspace
     if store is not None:

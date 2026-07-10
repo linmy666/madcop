@@ -2380,6 +2380,25 @@ def create_app() -> FastAPI:
         except WebSocketDisconnect:
             return
 
+    # ------------------------------------------------------------------- #
+    # Preview server — serves ~/.madcop/preview/ as static files
+    # The agent writes HTML files here via WriteFileTool, the frontend
+    # loads them in an iframe for real-time preview.
+    # ------------------------------------------------------------------- #
+    _preview_dir = Path.home() / ".madcop" / "preview"
+    _preview_dir.mkdir(parents=True, exist_ok=True)
+    # Write a default index.html so the preview always has something
+    _default = _preview_dir / "index.html"
+    if not _default.exists():
+        _default.write_text(
+            "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+            "<title>Preview</title><style>body{font-family:sans-serif;"
+            "padding:2rem;color:#666;background:#fafafa;display:flex;"
+            "align-items:center;justify-content:center;height:90vh;}"
+            "</style></head><body>← 写一个 index.html 到这里开始预览</body></html>"
+        )
+    app.mount("/preview", StaticFiles(directory=str(_preview_dir), html=True), name="preview")
+
     return app
 
 

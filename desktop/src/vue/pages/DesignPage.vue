@@ -14,6 +14,7 @@
 
 import { ref, computed, watch, onMounted } from 'vue'
 import DesignCanvas, { type DesignData } from '../components/design/DesignCanvas.vue'
+import PreviewPanel from '../components/design/PreviewPanel.vue'
 import { getApiUrl } from '../api/client'
 
 interface DesignPageData { id: string; name: string; data: DesignData }
@@ -90,6 +91,8 @@ const error = ref<string | null>(null)
 const showGenAll = ref(false)
 const newProjectName = ref('')
 const newProjectNameInput = ref<HTMLInputElement | null>(null)
+const viewMode = ref<'editor' | 'preview'>('editor')
+const previewRefreshKey = ref(0)
 
 watch(projects, (val) => saveProjects(val), { deep: true })
 
@@ -432,12 +435,41 @@ function formatRelative(ts: number): string {
       </div>
     </div>
 
-    <!-- Canvas -->
-    <div v-if="activePage && !loading" class="flex-1 overflow-hidden">
-      <DesignCanvas
-        :initial-data="activePage.data"
-        @save="(data) => updatePageData(activePage.id, data)"
-      />
+    <!-- Camera / Preview tabs -->
+    <div v-if="activePage && !loading" class="flex-1 flex flex-col overflow-hidden">
+      <!-- Tab bar -->
+      <div class="px-5 pt-2 pb-0 border-b border-[var(--color-border)] bg-[var(--color-surface)] flex items-center gap-0 flex-shrink-0">
+        <button
+          @click="viewMode = 'editor'"
+          :class="['preview-tab', viewMode === 'editor' ? 'preview-tab--active' : '']"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="margin-right:4px;">
+            <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+          </svg>
+          编辑
+        </button>
+        <button
+          @click="viewMode = 'preview'"
+          :class="['preview-tab', viewMode === 'preview' ? 'preview-tab--active' : '']"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="margin-right:4px;">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          预览
+        </button>
+      </div>
+      <!-- Editor -->
+      <div v-show="viewMode === 'editor'" class="flex-1 overflow-hidden">
+        <DesignCanvas
+          :initial-data="activePage.data"
+          @save="(data) => updatePageData(activePage.id, data)"
+        />
+      </div>
+      <!-- Preview -->
+      <div v-show="viewMode === 'preview'" class="flex-1 overflow-hidden">
+        <PreviewPanel :refresh-key="previewRefreshKey" />
+      </div>
     </div>
 
     <!-- Error toast -->
@@ -754,5 +786,26 @@ function formatRelative(ts: number): string {
 .design-fade-enter-from, .design-fade-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(8px);
+}
+
+/* ── Preview tabs ─────────────────────────────────── */
+.preview-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-tertiary, #999);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+  margin-bottom: -1px;
+}
+.preview-tab:hover { color: var(--color-text-primary, #222); }
+.preview-tab--active {
+  color: var(--color-brand, #333);
+  border-bottom-color: var(--color-brand, #333);
 }
 </style>
