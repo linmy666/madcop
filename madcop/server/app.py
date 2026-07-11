@@ -1088,7 +1088,9 @@ def create_app() -> FastAPI:
                     # Extract attachment content directly (real file or dataUrl)
                     content = _read_attachment_direct(att)
                     if content:
-                        extra_parts.append(f"\n--- ATTACHMENT: {att.name} ---\n{content}\n--- END ---")
+                        extra_parts.append(f"\n--- ATTACHMENT: {att.name} (ID: {att.id}) ---\n{content}\n--- END ---")
+                    else:
+                        extra_parts.append(f"\n--- ATTACHMENT: {att.name} (ID: {att.id}) ---\n(no readable content)\n--- END ---")
                 messages.append(Message(role=m.role, content="\n".join(extra_parts)))
             else:
                 messages.append(Message(role=m.role, content=m.content or ""))

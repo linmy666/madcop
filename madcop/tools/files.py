@@ -135,10 +135,14 @@ class ReadFileTool(Tool):
                             "content": text,
                         }
                     return {
-                        "error": f"could not extract text from PDF: {name} (scanned/image-only PDF?)"
+                        "path": att.get("id") or name,
+                        "content": f"[PDF text extraction returned no content: {name} (scanned/image-only PDF?)]"
                     }
                 except Exception as e:
-                    return {"error": f"failed to parse PDF {name}: {e}"}
+                    return {
+                        "path": att.get("id") or name,
+                        "content": f"[PDF parse error: {e}]"
+                    }
             # Binary: return metadata; LLM can decide what to do.
             # Excel xlsx — extract as text via openpyxl
             if name.lower().endswith(".xlsx") or name.lower().endswith(".xls") or mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
