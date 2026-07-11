@@ -197,6 +197,25 @@ const skillTags = computed<Array<string>>(() => {
   }
   return Array.from(tools)
 })
+
+// Sidebar visibility: default true. User can disable via localStorage key
+// `madcop_plan_sidebar_enabled` set to '0'.
+const planSidebarEnabled = ref(true)
+onMounted(() => {
+  try {
+    const v = localStorage.getItem('madcop_plan_sidebar_enabled')
+    if (v === '0') planSidebarEnabled.value = false
+  } catch {}
+})
+function togglePlanSidebar() {
+  planSidebarEnabled.value = !planSidebarEnabled.value
+  try {
+    localStorage.setItem(
+      'madcop_plan_sidebar_enabled',
+      planSidebarEnabled.value ? '1' : '0'
+    )
+  } catch {}
+}
 function onArtifactOpen(path: string) {
   // Best-effort: reveal in file manager on macOS via Electron desktopRuntime.
   // For now just emit to console + chat composer.
@@ -733,29 +752,29 @@ function openTerminalInTab() {
         </div>
       </div>
 
-      <!-- Plan sidebar: tasks + artifacts (visible when a plan is active) -->
-      <template v-if="chatStore.sessions[activeTabId]?.plan">
-        <aside
-          data-testid="plan-sidebar"
-          class="flex h-full shrink-0 flex-col border-l border-[var(--color-border)] bg-[var(--color-surface)]"
-          style="width: 320px; min-width: 320px;"
-        >
-          <!-- 任务监控 (top, scrollable) -->
-          <div class="flex-1 min-h-0 overflow-y-auto">
-            <PlanTasksPanel :plan="chatStore.sessions[activeTabId].plan" />
-          </div>
-          <!-- 产物 (bottom) -->
-          <div class="shrink-0 border-t border-[var(--color-border)]" style="max-height: 45%;">
-            <PlanArtifactsPanel
-              :workspace-dir="workspaceDirForArtifacts"
-              :final-artifact="finalArtifact"
-              :working-files="workingFiles"
-              :skill-tags="skillTags"
-              @open="onArtifactOpen"
-            />
-          </div>
-        </aside>
-      </template>
+      <!-- Plan sidebar: tasks (only when a plan is active) + artifacts (always visible) -->
+      <aside
+        v-if="planSidebarEnabled"
+        data-testid="plan-sidebar"
+        class="flex h-full shrink-0 flex-col border-l border-[var(--color-border)] bg-[var(--color-surface)]"
+        style="width: 320px; min-width: 320px;"
+      >
+        <!-- 任务监控 (top, only when a plan is active) -->
+        <div v-if="chatStore.sessions[activeTabId]?.plan" class="shrink-0 overflow-y-auto" style="max-height: 50%;">
+          <PlanTasksPanel :plan="chatStore.sessions[activeTabId].plan" />
+        </div>
+        <!-- 产物 (always visible) -->
+        <div class="flex-1 min-h-0 border-t border-[var(--color-border)]" :class="chatStore.sessions[activeTabId]?.plan ? '' : 'border-t-0'">
+          <PlanArtifactsPanel
+            :workspace-dir="workspaceDirForArtifacts"
+            :final-artifact="finalArtifact"
+            :working-files="workingFiles"
+            :skill-tags="skillTags"
+            :session-title="session?.title"
+            @open="onArtifactOpen"
+          />
+        </div>
+      </aside>
 
       <!-- Workspace resize handle + Workbench panel -->
       <template v-if="showWorkbench">

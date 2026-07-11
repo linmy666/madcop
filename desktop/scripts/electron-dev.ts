@@ -36,6 +36,8 @@ async function waitForRenderer(rendererUrl: string) {
   throw new Error(`Timed out waiting for Vite renderer at ${rendererUrl}`)
 }
 
+import * as path from 'node:path'
+
 async function main() {
   const desktopRoot = new URL('..', import.meta.url).pathname
   const childEnv = createElectronDevEnv()
@@ -43,7 +45,7 @@ async function main() {
   process.env.NO_PROXY = childEnv.NO_PROXY
   process.env.no_proxy = childEnv.no_proxy
 
-  const vite = Bun.spawn(['bun', 'run', 'dev'], {
+  const vite = Bun.spawn(['bun', 'x', 'vite', '--config', 'vite.vue.dev.config.ts'], {
     cwd: desktopRoot,
     env: childEnv,
     stdout: 'inherit',
@@ -65,7 +67,8 @@ async function main() {
 
   await waitForRenderer(rendererUrl)
 
-  const electron = Bun.spawn(['bunx', 'electron', './electron-dist/main.cjs'], {
+  const electronBin = path.join(desktopRoot, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron')
+  const electron = Bun.spawn([electronBin, './electron-dist/main.cjs'], {
     cwd: desktopRoot,
     env: childEnv,
     stdout: 'inherit',

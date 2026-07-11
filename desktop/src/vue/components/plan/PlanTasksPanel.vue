@@ -34,11 +34,18 @@ const activeStep = computed(() =>
   props.plan?.steps.find((s) => s.status === 'in_progress') || null
 )
 const completedSteps = computed(() =>
-  props.plan?.steps.filter((s) => s.status === 'completed') || []
+  [...(props.plan?.steps || [])]
+    .reverse()
+    .filter((s) => s.status === 'completed')
 )
 const failedSteps = computed(() =>
-  props.plan?.steps.filter((s) => s.status === 'failed') || []
+  [...(props.plan?.steps || [])]
+    .reverse()
+    .filter((s) => s.status === 'failed')
 )
+
+const totalSteps = computed(() => props.plan?.total_steps || 0)
+const completedCount = computed(() => props.plan?.completed_steps || 0)
 
 function truncate(s: string | null, max = 36): string {
   if (!s) return ''
@@ -47,201 +54,235 @@ function truncate(s: string | null, max = 36): string {
 </script>
 
 <template>
-  <aside class="plan-tasks-panel">
+  <aside class="tasks-panel" v-if="plan">
     <!-- Header -->
-    <header class="ptp__head">
-      <h3 class="ptp__title">任务监控</h3>
+    <header class="tp__head">
+      <div class="tp__head-top">
+        <h3 class="tp__title">任务监控</h3>
+        <span class="tp__count">{{ completedCount }}/{{ totalSteps }}</span>
+      </div>
+      <!-- Progress -->
+      <div class="tp__progress">
+        <div
+          class="tp__progress-fill"
+          :style="{ width: (totalSteps ? (completedCount / totalSteps) * 100 : 0) + '%' }"
+        ></div>
+      </div>
     </header>
 
-    <!-- Sections -->
-    <div v-if="plan" class="ptp__body">
+    <div class="tp__body">
       <!-- 进行中 -->
-      <section v-if="activeStep" class="ptp__section ptp__section--active">
-        <div class="ptp__label">进行中</div>
-        <div class="ptp__row ptp__row--active">
-          <div class="ptp__check">
-            <div class="ptp__spinner"></div>
+      <section v-if="activeStep" class="tp__section">
+        <div class="tp__label">进行中</div>
+        <div class="tp__row tp__row--active">
+          <div class="tp__check tp__check--active">
+            <div class="tp__spinner"></div>
           </div>
-          <div class="ptp__action">{{ truncate(activeStep.action, 30) }}</div>
+          <div class="tp__action">{{ truncate(activeStep.action, 32) }}</div>
         </div>
       </section>
 
       <!-- 待办 -->
-      <section v-if="queuedSteps.length > 0" class="ptp__section">
-        <div class="ptp__label">待办</div>
+      <section v-if="queuedSteps.length > 0" class="tp__section">
+        <div class="tp__label">待办</div>
         <div
           v-for="step in queuedSteps"
           :key="step.step"
-          class="ptp__row ptp__row--queued"
+          class="tp__row"
         >
-          <div class="ptp__check ptp__check--empty"></div>
-          <div class="ptp__action">{{ truncate(step.action, 30) }}</div>
+          <div class="tp__check tp__check--empty"></div>
+          <div class="tp__action">{{ truncate(step.action, 32) }}</div>
         </div>
       </section>
 
       <!-- 已完成 -->
-      <section v-if="completedSteps.length > 0" class="ptp__section">
-        <div class="ptp__label">已完成</div>
+      <section v-if="completedSteps.length > 0" class="tp__section">
+        <div class="tp__label">已完成</div>
         <div
           v-for="step in completedSteps"
           :key="step.step"
-          class="ptp__row ptp__row--done"
+          class="tp__row tp__row--done"
         >
-          <div class="ptp__check">✓</div>
-          <div class="ptp__action">{{ truncate(step.action, 30) }}</div>
+          <div class="tp__check tp__check--done">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <div class="tp__action">{{ truncate(step.action, 32) }}</div>
         </div>
       </section>
 
       <!-- 失败 -->
-      <section v-if="failedSteps.length > 0" class="ptp__section ptp__section--failed">
-        <div class="ptp__label">失败</div>
+      <section v-if="failedSteps.length > 0" class="tp__section tp__section--failed">
+        <div class="tp__label">失败</div>
         <div
           v-for="step in failedSteps"
           :key="step.step"
-          class="ptp__row ptp__row--fail"
+          class="tp__row"
         >
-          <div class="ptp__check ptp__check--fail">✗</div>
-          <div class="ptp__action">{{ truncate(step.action, 30) }}</div>
+          <div class="tp__check tp__check--fail">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </div>
+          <div class="tp__action">{{ truncate(step.action, 32) }}</div>
         </div>
       </section>
 
       <!-- Goal summary -->
-      <section class="ptp__goal-summary">
-        <div class="ptp__goal-label">目标</div>
-        <div class="ptp__goal-text">{{ truncate(plan.goal, 60) }}</div>
+      <section v-if="plan.goal" class="tp__goal-summary">
+        <div class="tp__label">目标</div>
+        <div class="tp__goal-text">{{ truncate(plan.goal, 100) }}</div>
       </section>
     </div>
   </aside>
 </template>
 
 <style scoped>
-.plan-tasks-panel {
+.tasks-panel {
   width: 100%;
-  height: 100%;
-  background: var(--color-surface, #fff);
-  border-left: 1px solid var(--color-border, #e5e5e5);
-  display: flex;
-  flex-direction: column;
+  background: var(--color-surface, #fcfcfd);
+  border-bottom: 1px solid var(--color-border, #e8e8ec);
   font-size: 13px;
-  color: var(--color-text-primary, #222);
+  color: var(--color-text-primary, #1a1a1f);
+  -webkit-font-smoothing: antialiased;
 }
 
-.ptp__head {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--color-border, #e5e5e5);
+.tp__head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border, #e8e8ec);
 }
-.ptp__title {
-  font-size: 14px;
+.tp__head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.tp__title {
+  font-size: 13px;
   font-weight: 600;
   margin: 0;
-  letter-spacing: 0.2px;
-  color: var(--color-text-primary, #222);
+  letter-spacing: 0;
+  color: var(--color-text-primary, #1a1a1f);
+}
+.tp__count {
+  font-size: 10px;
+  color: var(--color-text-tertiary, #888);
+  font-family: ui-monospace, 'SF Mono', monospace;
 }
 
-.ptp__body {
-  flex: 1;
+.tp__progress {
+  height: 3px;
+  background: var(--color-border, #e8e8ec);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.tp__progress-fill {
+  height: 100%;
+  background: rgb(99, 91, 255);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.tp__body {
+  max-height: 280px;
   overflow-y: auto;
-  padding: 8px 0 16px 0;
+  padding: 4px 0 12px 0;
 }
 
-.ptp__section {
+.tp__section {
   padding: 8px 0;
 }
-.ptp__section--active {
-  background: rgba(37, 99, 235, 0.03);
-  border-radius: 0;
-}
-.ptp__section--failed {
-  background: rgba(220, 38, 38, 0.03);
+
+.tp__section--failed {
+  background: rgba(220, 38, 38, 0.02);
 }
 
-.ptp__label {
-  padding: 6px 18px;
-  font-size: 11px;
+.tp__label {
+  padding: 4px 16px 4px 16px;
+  font-size: 10px;
   font-weight: 600;
-  color: var(--color-text-tertiary, #999);
+  color: var(--color-text-tertiary, #888);
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.8px;
 }
 
-.ptp__row {
+.tp__row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 18px;
+  padding: 5px 16px;
   font-size: 13px;
 }
 
-.ptp__check {
-  width: 14px;
-  height: 14px;
+.tp__row--active {
+  background: rgba(99, 91, 255, 0.04);
+}
+
+.tp__row--done .tp__action {
+  color: var(--color-text-tertiary, #888);
+}
+
+.tp__check {
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: #16a34a;
-  color: #fff;
-  font-size: 9px;
-  font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.ptp__check--empty {
+.tp__check--done {
+  background: rgb(34, 197, 94);
+  color: #fff;
+}
+.tp__check--fail {
+  background: rgb(220, 38, 38);
+  color: #fff;
+}
+.tp__check--active {
+  background: rgba(99, 91, 255, 0.12);
+}
+.tp__check--empty {
   background: transparent;
   border: 1.5px solid #d4d4d8;
 }
-.ptp__check--fail {
-  background: #dc2626;
-}
 
-.ptp__row--active .ptp__action {
-  color: var(--color-text-primary, #222);
-  font-weight: 500;
-}
-.ptp__row--queued .ptp__action {
-  color: var(--color-text-tertiary, #999);
-}
-.ptp__row--done .ptp__action {
-  color: var(--color-text-secondary, #555);
-}
-.ptp__row--fail .ptp__action {
-  color: #dc2626;
-}
-
-.ptp__action {
+.tp__action {
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--color-text-primary, #1a1a1f);
 }
 
-.ptp__spinner {
+.tp__row--active .tp__action {
+  color: rgb(99, 91, 255);
+  font-weight: 500;
+}
+
+.tp__spinner {
   width: 10px;
   height: 10px;
-  border: 2px solid var(--color-border, #e5e5e5);
-  border-top-color: #2563eb;
+  border: 2px solid rgba(99, 91, 255, 0.3);
+  border-top-color: rgb(99, 91, 255);
   border-radius: 50%;
-  animation: ptp-spin 0.6s linear infinite;
+  animation: tp-spin 0.6s linear infinite;
 }
-@keyframes ptp-spin {
+@keyframes tp-spin {
   to { transform: rotate(360deg); }
 }
 
-.ptp__goal-summary {
-  margin-top: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--color-border, #e5e5e5);
+.tp__goal-summary {
+  border-top: 1px solid var(--color-border, #e8e8ec);
+  margin-top: 4px;
+  padding: 10px 0 4px 0;
 }
-.ptp__goal-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-tertiary, #999);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  margin-bottom: 4px;
-}
-.ptp__goal-text {
+.tp__goal-text {
+  padding: 0 16px;
   font-size: 12px;
   color: var(--color-text-secondary, #555);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 </style>

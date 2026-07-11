@@ -132,6 +132,8 @@ export type PerSessionState = {
   activeToolUseId: string | null
   activeToolName: string | null
   activeThinkingId: string | null
+  /** Plan-and-Execute mode toggle (per-session) */
+  planModeEnabled: boolean
   /** Plan-and-Execute state */
   plan: {
     goal: string
@@ -204,6 +206,7 @@ function createDefaultSessionState(): PerSessionState {
     activeToolUseId: null,
     activeToolName: null,
     activeThinkingId: null,
+    planModeEnabled: true,  // v2.6.0.1 — Plan-and-Execute mode default ON
     plan: null,
     pendingPermission: null,
     pendingComputerUsePermission: null,
@@ -380,6 +383,8 @@ export const useChatStore = defineStore('chat', {
           })),
           temperature: 0.7,
           max_tokens: 8192,
+          conversation_id: sessionId,
+          plan_mode: !!session.planModeEnabled,
         }),
       })
         .then(async (res) => {

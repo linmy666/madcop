@@ -1135,34 +1135,38 @@ def create_app() -> FastAPI:
             try:
                 # -- Phase 0: Plan-and-Execute (if plan_mode) ---------- #
                 if body.plan_mode:
-                    from madcop.workflow.planner import generate_plan, verify_step
+                    from madcop.workflow.planner import generate_plan, verify_step, StepStatus
                     from madcop.workflow.planner import execute_step as _exec_step
                     _task = body.messages[-1].content if body.messages else ""
                     if _task:
-                        def _plan_llm(msgs):
-                            r = client.chat([Message(role=m.get("role","user"), content=m.get("content","")) for m in msgs], model=body.model, temperature=0.5)
+                        def _plan_llm(msgs, _tools=None):
+                            r = client.chat(
+                                [Message(role=m.get("role","user"), content=m.get("content","")) for m in msgs],
+                                model=body.model, temperature=0.5,
+                                tools=_tools if _tools is not None else None,
+                            )
                             return r.content or ""
                         _plan = generate_plan(_task, llm_complete=_plan_llm, max_steps=6)
                         _plan.status = "running"
                         yield f"data: {json.dumps({'type': 'plan', 'plan': _plan.to_dict()}, ensure_ascii=False)}\n\n"
                         for _step in _plan.steps:
-                            _step.status = "in_progress"
+                            _step.status = StepStatus.IN_PROGRESS
                             _plan.current_step = _step.step
                             yield f"data: {json.dumps({'type': 'plan_step', 'step': _step.to_dict()}, ensure_ascii=False)}\n\n"
                             try:
-                                _result = _exec_step(_step, _plan.goal, llm_complete=_plan_llm)
+                                _result = _exec_step(_step, _plan.goal, llm_complete=lambda msgs: _plan_llm(msgs, _tools=tool_schemas))
                                 _step.result = _result
-                                _passed, _reason = verify_step(_step, llm_complete=_plan_llm)
+                                _passed, _reason = verify_step(_step, llm_complete=lambda msgs: _plan_llm(msgs, _tools=tool_schemas))
                                 if _passed:
-                                    _step.status = "completed"
+                                    _step.status = StepStatus.COMPLETED
                                 else:
-                                    _step.status = "failed"
+                                    _step.status = StepStatus.FAILED
                                     _step.error = f"验证失败: {_reason}"
                             except Exception as _e:
-                                _step.status = "failed"
+                                _step.status = StepStatus.FAILED
                                 _step.error = f"异常: {_e}"
                             yield f"data: {json.dumps({'type': 'plan_step', 'step': _step.to_dict()}, ensure_ascii=False)}\n\n"
-                            if _step.status == "failed":
+                            if _step.status == StepStatus.FAILED:
                                 _plan.status = "failed"
                                 break
                         if _plan.failed_steps == 0:

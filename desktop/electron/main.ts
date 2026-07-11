@@ -353,11 +353,20 @@ function registerIpcHandlers() {
 async function createMainWindow() {
   const restoredState = readWindowState(app, screen.getAllDisplays())
   const bounds = windowOptionsFromState(restoredState)
+  // v2.6.0.1 — Use the primary display's visible frame as anchor so the
+  // window always appears on screen (not on a non-active space).
+  const primaryDisplay = screen.getPrimaryDisplay()
+  const workArea = primaryDisplay.workArea
   mainWindow = new BrowserWindow({
     ...bounds,
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     show: false,
+    // Force window to appear on primary display, centered.
+    x: Math.max(workArea.x, workArea.x + (workArea.width - 1280) / 2),
+    y: Math.max(workArea.y, workArea.y + (workArea.height - 820) / 2),
+    width: 1280,
+    height: 820,
     ...windowChromeOptionsForPlatform(process.platform),
     webPreferences: {
       preload: preloadPath(),
@@ -394,6 +403,15 @@ async function createMainWindow() {
 
   restoreWindowMaximized(mainWindow, restoredState)
   showMainWindow(mainWindow, app)
+  // v2.6.0.1 — Force-show after first paint, in case showMainWindow was
+  // blocked by macOS single-instance show callback. Ensures window is on
+  // screen even if the user minimised it on last quit.
+  const mw = mainWindow
+  mw.once('ready-to-show', () => {
+    try { mw.show(); mw.focus() } catch {}
+  })
+  // Hard show after a short delay (race-free)
+  setTimeout(() => { try { mw.show(); mw.focus() } catch {} }, 1500)
   writeWindowSmokeSnapshot(mainWindow, 'after-final-show')
 }
 

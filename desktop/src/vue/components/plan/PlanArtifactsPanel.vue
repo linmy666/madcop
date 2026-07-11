@@ -9,30 +9,26 @@ const props = defineProps<{
   workingFiles?: string[]
   /** 用到的技能/MCP tag */
   skillTags?: string[]
+  /** 当前会话标题 */
+  sessionTitle?: string
 }>()
 
 const emit = defineEmits<{
   (e: 'open', path: string): void
 }>()
 
-const parts = computed(() => {
-  if (!props.workspaceDir) return []
-  return props.workspaceDir.split('/').filter(Boolean)
-})
-
-const workingFilesList = computed(() => {
-  return props.workingFiles || []
-})
-
 function basename(p: string): string {
   return p.split('/').pop() || p
 }
+
+const workingFilesList = computed(() => props.workingFiles || [])
 </script>
 
 <template>
   <aside class="artifacts-panel">
     <header class="ap__head">
       <h3 class="ap__title">产物</h3>
+      <span class="ap__count">{{ workingFilesList.length + 1 }}</span>
     </header>
 
     <div class="ap__body">
@@ -40,7 +36,7 @@ function basename(p: string): string {
       <section class="ap__section">
         <div class="ap__label">默认工作目录</div>
         <div class="ap__path-row" :title="workspaceDir || '(未设置)'">
-          <svg class="ap__icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <svg class="ap__icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
           <span class="ap__path">{{ workspaceDir || '~ 默认' }}</span>
@@ -57,14 +53,20 @@ function basename(p: string): string {
           :title="finalArtifact"
         >
           <div class="ap__artifact-icon">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
           </div>
           <div class="ap__artifact-name">{{ basename(finalArtifact) }}</div>
+          <svg class="ap__chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
         </div>
-        <div v-else class="ap__empty">— 尚未生成</div>
+        <div v-else class="ap__empty">
+          <span class="ap__empty-dot"></span>
+          尚未生成
+        </div>
       </section>
 
       <!-- Working files -->
@@ -74,12 +76,12 @@ function basename(p: string): string {
           <div
             v-for="(file, i) in workingFilesList"
             :key="i"
-            class="ap__artifact ap__artifact--working"
+            class="ap__artifact"
             @click="emit('open', file)"
             :title="file"
           >
             <div class="ap__artifact-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
               </svg>
@@ -98,10 +100,7 @@ function basename(p: string): string {
             :key="i"
             class="ap__skill"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-            <span>{{ tag }}</span>
+            {{ tag }}
           </div>
         </div>
       </section>
@@ -113,57 +112,70 @@ function basename(p: string): string {
 .artifacts-panel {
   width: 100%;
   height: 100%;
-  background: var(--color-surface, #fff);
-  border-left: 1px solid var(--color-border, #e5e5e5);
+  background: var(--color-surface, #fcfcfd);
+  border-left: 1px solid var(--color-border, #e8e8ec);
   display: flex;
   flex-direction: column;
   font-size: 13px;
-  color: var(--color-text-primary, #222);
+  color: var(--color-text-primary, #1a1a1f);
+  -webkit-font-smoothing: antialiased;
 }
 
 .ap__head {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--color-border, #e5e5e5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border, #e8e8ec);
 }
 .ap__title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   margin: 0;
-  letter-spacing: 0.2px;
-  color: var(--color-text-primary, #222);
+  letter-spacing: 0;
+  color: var(--color-text-primary, #1a1a1f);
+}
+.ap__count {
+  font-size: 10px;
+  color: var(--color-text-tertiary, #999);
+  font-family: ui-monospace, 'SF Mono', monospace;
 }
 
 .ap__body {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 0 16px 0;
+  padding: 4px 0 16px 0;
 }
 
 .ap__section {
-  padding: 10px 0;
+  padding: 12px 0 4px 0;
 }
 
 .ap__label {
-  padding: 0 18px 6px 18px;
-  font-size: 11px;
+  padding: 0 16px 6px 16px;
+  font-size: 10px;
   font-weight: 600;
-  color: var(--color-text-tertiary, #999);
+  color: var(--color-text-tertiary, #888);
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.8px;
 }
 
 .ap__path-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 18px;
+  padding: 6px 16px;
   font-size: 12px;
   color: var(--color-text-secondary, #555);
   font-family: ui-monospace, 'SF Mono', monospace;
+  transition: background 0.1s;
+}
+.ap__path-row:hover {
+  background: var(--color-surface-container, #f5f5f5);
 }
 .ap__icon {
   flex-shrink: 0;
-  color: var(--color-text-tertiary, #999);
+  color: var(--color-text-tertiary, #888);
 }
 .ap__path {
   flex: 1;
@@ -181,7 +193,7 @@ function basename(p: string): string {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 18px;
+  padding: 7px 16px;
   cursor: pointer;
   transition: background 0.1s;
 }
@@ -190,54 +202,67 @@ function basename(p: string): string {
 }
 
 .ap__artifact-icon {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
-  background: var(--color-surface-container, #f0f0f0);
+  background: var(--color-surface-container, #f0f0f2);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-secondary, #555);
+  color: var(--color-text-tertiary, #888);
   flex-shrink: 0;
 }
 
 .ap__artifact--final .ap__artifact-icon {
-  background: rgba(37, 99, 235, 0.08);
-  color: #2563eb;
+  background: rgba(99, 91, 255, 0.08);
+  color: rgb(99, 91, 255);
 }
 
 .ap__artifact-name {
   flex: 1;
   font-size: 12px;
-  color: var(--color-text-primary, #222);
+  color: var(--color-text-primary, #1a1a1f);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.ap__chevron {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary, #999);
+}
+
 .ap__empty {
-  padding: 6px 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
   font-size: 12px;
-  color: var(--color-text-tertiary, #888);
-  font-style: italic;
+  color: var(--color-text-tertiary, #999);
+}
+.ap__empty-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary, #d0d0d0);
+  flex-shrink: 0;
 }
 
 .ap__skill-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 18px;
+  padding: 4px 16px 0 16px;
 }
 
 .ap__skill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  background: var(--color-surface-container, #f5f5f5);
-  border-radius: 4px;
+  padding: 3px 9px;
+  background: var(--color-surface-container, #f0f0f2);
+  border: 1px solid var(--color-border, #e8e8ec);
+  border-radius: 999px;
   font-size: 11px;
   color: var(--color-text-secondary, #555);
-  font-family: ui-monospace, 'SF Mono', monospace;
 }
 </style>
