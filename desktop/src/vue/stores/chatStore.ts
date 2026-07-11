@@ -372,7 +372,7 @@ export const useChatStore = defineStore('chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: _options?.model || 'glm-4-plus',
+          model: _options?.model || 'sensenova-6.7-flash-lite',
           messages: requestMessages,
           attachments: _attachments?.map((a) => ({
             id: a.id,

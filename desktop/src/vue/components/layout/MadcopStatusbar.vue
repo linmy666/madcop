@@ -15,7 +15,7 @@ defineProps<{
     <span class="madcop-statusbar__ok">●</span>
     <span>{{ provider || 'sensenova' }}</span>
     <span class="madcop-statusbar__sep">·</span>
-    <span>{{ model || 'glm-4-plus' }}</span>
+    <span>{{ model || 'sensenova-6.7-flash-lite' }}</span>
     <span v-if="sessionId" class="madcop-statusbar__sep">·</span>
     <span v-if="sessionId" :title="sessionId">session {{ sessionId.slice(0, 8) }}</span>
     <span class="madcop-statusbar__spacer" />

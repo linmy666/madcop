@@ -27,7 +27,7 @@ async function directChat() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'glm-4-plus',
+        model: 'sensenova-6.7-flash-lite',
         messages: [{ role: 'user', content: text }],
         temperature: 0.7,
         max_tokens: 2048,

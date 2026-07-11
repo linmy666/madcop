@@ -806,7 +806,7 @@ function getModelLabel(model: string): string {
   if (!model) return ''
   // Map model name to friendly label
   if (model.includes('qwen3')) return 'NVIDIA Qwen3-80B'
-  if (model.includes('glm-5.2')) return 'Sensenova GLM-5.2'
+  if (model.includes('sensenova')) return 'Sensenova 6.7 Flash Lite'
   if (model.includes('gpt-4')) return 'OpenAI GPT-4'
   if (model.includes('claude')) return 'Anthropic Claude'
   return model

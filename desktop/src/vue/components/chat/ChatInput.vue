@@ -158,7 +158,7 @@ const atCursorPos = ref(-1)
 const plusMenuOpen = ref(false)
 const localSlashPanel = ref<LocalSlashCommandName | null>(null)
 const selectedMode = ref('react')
-const selectedModel = ref('glm-4-plus')
+const selectedModel = ref('sensenova-6.7-flash-lite')
 const composingRef = ref(false)
 const previousActiveTabIdRef = ref<string | null>(null)
 
