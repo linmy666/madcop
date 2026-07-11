@@ -507,6 +507,18 @@ export const useChatStore = defineStore('chat', {
                   } else if (event.type === 'plan_done') {
                     // Plan-and-Execute: all steps complete
                     // Plan stays in the session state for display
+                  } else if (event.type === 'error' && event.message) {
+                    // Backend error (API error, rate limit, etc.)
+                    session.chatState = 'error'
+                    // Add an assistant message showing the error
+                    const errId = nextId()
+                    session.messages.push({
+                      type: 'assistant_text',
+                      content: `错误: ${event.message}`,
+                      id: errId,
+                      timestamp: Date.now(),
+                      model: session.messages.find((m: any) => m.type === 'assistant_text')?.model,
+                    } as any)
                   }
                 } catch {}
               }
