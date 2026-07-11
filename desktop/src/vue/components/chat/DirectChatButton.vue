@@ -27,7 +27,7 @@ async function directChat() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'glm-5.2',
+        model: 'glm-4-plus',
         messages: [{ role: 'user', content: text }],
         temperature: 0.7,
         max_tokens: 2048,

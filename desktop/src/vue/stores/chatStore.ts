@@ -372,7 +372,7 @@ export const useChatStore = defineStore('chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: _options?.model || 'glm-5.2',
+          model: _options?.model || 'glm-4-plus',
           messages: requestMessages,
           attachments: _attachments?.map((a) => ({
             id: a.id,
