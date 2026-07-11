@@ -315,7 +315,7 @@ export const useChatStore = defineStore('chat', {
       sessionId: string,
       content: string,
       _attachments?: AttachmentRef[],
-      _options?: { displayContent?: string; displayAttachments?: AttachmentRef[]; hideDisplayContent?: boolean },
+      _options?: { displayContent?: string; displayAttachments?: AttachmentRef[]; hideDisplayContent?: boolean, model?: string },
     ) {
       const session = this.getSession(sessionId)
       session.chatState = 'busy'
@@ -372,7 +372,7 @@ export const useChatStore = defineStore('chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'glm-5.2',
+          model: _options?.model || 'glm-5.2',
           messages: requestMessages,
           attachments: _attachments?.map((a) => ({
             id: a.id,

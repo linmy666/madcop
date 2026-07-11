@@ -140,6 +140,32 @@ class ReadFileTool(Tool):
                 except Exception as e:
                     return {"error": f"failed to parse PDF {name}: {e}"}
             # Binary: return metadata; LLM can decide what to do.
+            # Excel xlsx — extract as text via openpyxl
+            if name.lower().endswith(".xlsx") or name.lower().endswith(".xls") or mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                import base64 as _b64
+                raw_bytes = _b64.b64decode(body)
+                try:
+                    import io as _io, openpyxl as _xl
+                    wb = _xl.load_workbook(_io.BytesIO(raw_bytes), data_only=True, read_only=True)
+                    parts = []
+                    for sheet_name in wb.sheetnames:
+                        ws = wb[sheet_name]
+                        rows = list(ws.iter_rows(values_only=True))
+                        if not rows: continue
+                        parts.append(f"## Sheet: {sheet_name} ({len(rows)} rows, {len(rows[0])} cols)")
+                        header = " | ".join(str(c or "") for c in rows[0])
+                        sep = " | ".join("---" for _ in rows[0])
+                        body_rows = []
+                        for row in rows[1:201]:
+                            body_rows.append(" | ".join(str(c or "") for c in row))
+                        parts.append(f"| {header} |\n| {sep} |\n" + "\n".join(f"| {r} |" for r in body_rows))
+                        if len(rows) > 201:
+                            parts.append(f"... ({len(rows) - 201} more rows)")
+                    wb.close()
+                    content = "\n\n".join(parts)
+                    return {"path": att.get("id") or name, "content": content[:60_000] or "[empty xlsx]"}
+                except Exception as _xe:
+                    return {"path": att.get("id") or name, "content": f"[xlsx parse error: {_xe}]"}
             return {
                 "path": att.get("id") or name,
                 "content": f"[binary file: {name}, type: {mime}, size: {len(body)} base64 chars — describe what you see or do not try to render]",

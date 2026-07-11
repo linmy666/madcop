@@ -158,6 +158,7 @@ const atCursorPos = ref(-1)
 const plusMenuOpen = ref(false)
 const localSlashPanel = ref<LocalSlashCommandName | null>(null)
 const selectedMode = ref('react')
+const selectedModel = ref('glm-5.2')
 const composingRef = ref(false)
 const previousActiveTabIdRef = ref<string | null>(null)
 
@@ -713,6 +714,7 @@ const handleSubmit = async () => {
           ? t('chat.contextReferencesOnly', { count: workspaceReferences.value.length })
           : ''),
         displayAttachments: visibleAttachmentPayload,
+        model: selectedModel.value,
       },
     )
   }
@@ -1417,6 +1419,8 @@ watch(input, (v) => {
               <ModelSelector
                 :compact="useCompactControls"
                 :disabled="isSubmitting"
+                :selected-model="selectedModel"
+                @update:selected-model="(m: string) => { selectedModel = m }"
               />
               <ModeSelector
                 :current-mode="selectedMode"

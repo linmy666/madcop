@@ -134,6 +134,33 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                 pass
 
         # Binary/image files — not readable as text
+        # Excel xlsx — extract as text via openpyxl
+        if name.lower().endswith(".xlsx") or name.lower().endswith(".xls"):
+            try:
+                import io as _io, openpyxl as _xl
+                wb = _xl.load_workbook(_io.BytesIO(raw), data_only=True, read_only=True)
+                parts = []
+                for sheet_name in wb.sheetnames:
+                    ws = wb[sheet_name]
+                    rows = list(ws.iter_rows(values_only=True))
+                    if not rows:
+                        continue
+                    # Build a markdown table from the first 200 rows
+                    parts.append(f"## Sheet: {sheet_name} ({len(rows)} rows, {len(rows[0])} cols)")
+                    header = " | ".join(str(c or "") for c in rows[0])
+                    sep = " | ".join("---" for _ in rows[0])
+                    body = []
+                    for row in rows[1:201]:
+                        body.append(" | ".join(str(c or "") for c in row))
+                    parts.append(f"| {header} |\n| {sep} |\n" + "\n".join(f"| {r} |" for r in body))
+                    if len(rows) > 201:
+                        parts.append(f"... ({len(rows) - 201} more rows)")
+                wb.close()
+                t = "\n\n".join(parts)
+                return t[:60_000] if t else f"[empty xlsx: {name}]"
+            except Exception as _xe:
+                return f"[xlsx parse error: {_xe}]"
+
         return f"[binary file: {name}, size: {len(body)} base64 chars]"
 
     # Case C: nothing usable
@@ -1145,6 +1172,21 @@ def create_app() -> FastAPI:
                                 model=body.model, temperature=0.5,
                                 tools=_tools if _tools is not None else None,
                             )
+                            if r.tool_calls:
+                                # Auto-execute the tool call and return its result
+                                import traceback as _tb
+                                _results = []
+                                for _tc in r.tool_calls:
+                                    try:
+                                        _tool = registry.get(_tc.name)
+                                        if _tool:
+                                            _out = _tool(**_tc.arguments)
+                                            _results.append(str(_out)[:500])
+                                        else:
+                                            _results.append(f"[TOOL {_tc.name} not found]")
+                                    except Exception as _te:
+                                        _results.append(f"[TOOL ERROR: {_te}]")
+                                return "; ".join(_results) if _results else "(no result)"
                             return r.content or ""
                         _plan = generate_plan(_task, llm_complete=_plan_llm, max_steps=6)
                         _plan.status = "running"
@@ -1167,10 +1209,12 @@ def create_app() -> FastAPI:
                                 _step.error = f"异常: {_e}"
                             yield f"data: {json.dumps({'type': 'plan_step', 'step': _step.to_dict()}, ensure_ascii=False)}\n\n"
                             if _step.status == StepStatus.FAILED:
-                                _plan.status = "failed"
-                                break
+                                # Continue with remaining steps (don't break)
+                                pass
                         if _plan.failed_steps == 0:
                             _plan.status = "completed"
+                        else:
+                            _plan.status = "completed_with_errors"
                         yield f"data: {json.dumps({'type': 'plan', 'plan': _plan.to_dict()}, ensure_ascii=False)}\n\n"
                         yield f"data: {json.dumps({'type': 'plan_done'}, ensure_ascii=False)}\n\n"
 
