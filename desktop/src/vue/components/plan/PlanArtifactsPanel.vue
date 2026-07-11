@@ -195,12 +195,14 @@ const workingFilesList = computed(() => props.workingFiles || [])
   gap: 10px;
   padding: 7px 16px;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.1s, transform 0.15s;
 }
 .ap__artifact:hover {
   background: var(--color-surface-container, #f5f5f5);
 }
-
+.ap__artifact:active {
+  transform: scale(0.98);
+}
 .ap__artifact-icon {
   width: 24px;
   height: 24px;
@@ -211,6 +213,10 @@ const workingFilesList = computed(() => props.workingFiles || [])
   justify-content: center;
   color: var(--color-text-tertiary, #888);
   flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+.ap__artifact:hover .ap__artifact-icon {
+  transform: scale(1.05);
 }
 
 .ap__artifact--final .ap__artifact-icon {
