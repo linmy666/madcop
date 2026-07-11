@@ -145,16 +145,14 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                     rows = list(ws.iter_rows(values_only=True))
                     if not rows:
                         continue
-                    # Build a markdown table from the first 200 rows
+                    # Build a markdown table from all rows
                     parts.append(f"## Sheet: {sheet_name} ({len(rows)} rows, {len(rows[0])} cols)")
                     header = " | ".join(str(c or "") for c in rows[0])
                     sep = " | ".join("---" for _ in rows[0])
                     body = []
-                    for row in rows[1:201]:
+                    for row in rows[1:]:
                         body.append(" | ".join(str(c or "") for c in row))
                     parts.append(f"| {header} |\n| {sep} |\n" + "\n".join(f"| {r} |" for r in body))
-                    if len(rows) > 201:
-                        parts.append(f"... ({len(rows) - 201} more rows)")
                 wb.close()
                 t = "\n\n".join(parts)
                 return t[:60_000] if t else f"[empty xlsx: {name}]"

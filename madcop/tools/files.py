@@ -156,11 +156,9 @@ class ReadFileTool(Tool):
                         header = " | ".join(str(c or "") for c in rows[0])
                         sep = " | ".join("---" for _ in rows[0])
                         body_rows = []
-                        for row in rows[1:201]:
+                        for row in rows[1:]:
                             body_rows.append(" | ".join(str(c or "") for c in row))
                         parts.append(f"| {header} |\n| {sep} |\n" + "\n".join(f"| {r} |" for r in body_rows))
-                        if len(rows) > 201:
-                            parts.append(f"... ({len(rows) - 201} more rows)")
                     wb.close()
                     content = "\n\n".join(parts)
                     return {"path": att.get("id") or name, "content": content[:60_000] or "[empty xlsx]"}
