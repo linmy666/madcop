@@ -12,22 +12,22 @@ This document explains the *why* behind the major design decisions — written f
 
 <table>
   <tr>
-    <td align="center"><b>Multi-model chat</b><br/>Sidebar · Tabs · Workspace · Tool calls</td>
+    <td align="center"><b>Clarify &amp; choose</b><br/>Interactive question chips · User avatar · Task monitor panel</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/01-chat.png" alt="Chat interface"/></td>
+    <td><img src="docs/screenshots/01-chat.png" alt="Chat interface with clarify choices"/></td>
   </tr>
   <tr>
-    <td align="center"><b>Streaming report generation</b><br/>LLM streaming output with tool calls</td>
+    <td align="center"><b>Structured report output</b><br/>Markdown tables · Key takeaways · Assistant avatar</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/02-generating.png" alt="Generating report"/></td>
+    <td><img src="docs/screenshots/02-generating.png" alt="Generated report"/></td>
   </tr>
   <tr>
-    <td align="center"><b>Rich report with tables</b><br/>Markdown + data visualization</td>
+    <td align="center"><b>Plan-driven execution</b><br/>Step-by-step planning progress · Live task tracking</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/03-report.png" alt="Generated report"/></td>
+    <td><img src="docs/screenshots/03-report.png" alt="Planning mode"/></td>
   </tr>
 </table>
 
@@ -250,7 +250,6 @@ MadCop is built for **power users who have a clear sense of "I have a task" and 
 
 It is **not** built for:
 
-- Users who want a "polished" SaaS experience. The UI is functional, not pretty.
 - Users who want a cloud sync model. There is no cloud sync. (If you want one, file an issue.)
 - Users who are not comfortable with a config screen full of model API keys. The trade-off for "any model you want" is "you have to bring your own API key".
 
@@ -266,9 +265,9 @@ cd madcop
 pip install -e .
 python -m madcop.server  # terminal 1: backend on :8765
 cd desktop
-bun install
-bun run build:electron  # terminal 2: build the Electron app
-./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron \
+npm install
+npx vite build --config vite.vue.config.ts   # terminal 2: build Vue renderer
+node ./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron \
   ./electron-dist/main.cjs --no-sandbox
 ```
 
@@ -296,10 +295,10 @@ Each item is independently shippable. None of them require rewriting what alread
 ```
 madcop/
 ├── desktop/                  Electron desktop (Vue 3 + Pinia + Tailwind v4)
-│   ├── src/vue/              ~155 .vue files (renderer)
+│   ├── src/vue/              ~285 .vue files (renderer)
 │   ├── public/               Static assets (mascot, icons)
 │   ├── electron/             Main process scripts
-│   └── theme/                CSS theme system
+│   └── theme/                CSS theme system (light / dark / white)
 │
 ├── madcop/                   Python backend
 │   ├── server/               FastAPI app, route handlers, SSE streaming
