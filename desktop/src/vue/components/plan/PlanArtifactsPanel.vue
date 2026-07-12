@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import Tooltip from '../common/Tooltip.vue'
 
 const props = defineProps<{
   workspaceDir?: string | null
@@ -15,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open', path: string): void
+  (e: 'close'): void
 }>()
 
 function basename(p: string): string {
@@ -27,8 +29,24 @@ const workingFilesList = computed(() => props.workingFiles || [])
 <template>
   <aside class="artifacts-panel">
     <header class="ap__head">
-      <h3 class="ap__title">产物</h3>
-      <span class="ap__count">{{ workingFilesList.length + 1 }}</span>
+      <div class="ap__head-left">
+        <h3 class="ap__title">产物</h3>
+        <span class="ap__count">{{ workingFilesList.length + 1 }}</span>
+      </div>
+      <Tooltip label="关闭产物面板">
+        <button
+          class="ap__close"
+          type="button"
+          title="关闭产物面板"
+          aria-label="关闭产物面板"
+          @click="emit('close')"
+        >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M18 6 6 18" />
+          <path d="m6 6 12 12" />
+        </svg>
+      </button>
+      </Tooltip>
     </header>
 
     <div class="ap__body">
@@ -128,6 +146,32 @@ const workingFilesList = computed(() => props.workingFiles || [])
   padding: 14px 16px;
   border-bottom: 1px solid var(--color-border, #e8e8ec);
 }
+.ap__head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ap__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: -4px -4px -4px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-tertiary, #999);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.ap__close:hover {
+  background: var(--color-surface-container, #f0f0f2);
+  color: var(--color-text-primary, #1a1a1f);
+}
+.ap__close:active {
+  transform: scale(0.94);
+}
 .ap__title {
   font-size: 13px;
   font-weight: 600;
@@ -220,8 +264,8 @@ const workingFilesList = computed(() => props.workingFiles || [])
 }
 
 .ap__artifact--final .ap__artifact-icon {
-  background: rgba(99, 91, 255, 0.08);
-  color: rgb(99, 91, 255);
+  background: rgba(124, 58, 237, 0.10);
+  color: var(--color-brand, #7C3AED);
 }
 
 .ap__artifact-name {

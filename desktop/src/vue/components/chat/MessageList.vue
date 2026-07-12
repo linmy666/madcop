@@ -155,6 +155,22 @@ const isAIThinking = computed(() => {
 })
 const streamingText = computed(() => sessionState.value?.streamingText ?? '')
 const reasoningContent = computed(() => sessionState.value?.reasoningContent ?? null)
+// Live "what is the AI doing right now" context for the thinking indicator.
+const liveToolName = computed(() => sessionState.value?.activeToolName ?? null)
+const planStep = computed(() => {
+  const plan = sessionState.value?.plan
+  if (!plan || !plan.steps || plan.steps.length === 0) return null
+  const cur = plan.current_step
+  const step = plan.steps.find((s: any) => s.step === cur) || plan.steps[0]
+  const idx = plan.steps.findIndex((s: any) => s.step === (step?.step ?? cur))
+  return {
+    label: step?.action || `第 ${cur} 步`,
+    tool: step?.tool || null,
+    index: idx >= 0 ? idx + 1 : 1,
+    total: plan.steps.length,
+    status: step?.status,
+  }
+})
 const streamingToolInput = computed(() => sessionState.value?.streamingToolInput ?? '')
 const activeThinkingId = computed(() => sessionState.value?.activeThinkingId ?? null)
 const activeToolUseId = computed(() => sessionState.value?.activeToolUseId ?? null)
@@ -899,6 +915,7 @@ function renderItemContent(item: RenderItem) {
     return h(UserMessage, {
       content: msg.content || '',
       attachments: (msg as any).attachments,
+      sessionId: msg.sessionId,
       compact: props.compact,
     })
   }
@@ -982,7 +999,7 @@ function renderItemContent(item: RenderItem) {
       </div>
 
       <!-- Messages list -->
-      <div v-else ref="scrollContentRef" class="space-y-3">
+      <div v-else ref="scrollContentRef" class="mx-auto max-w-[820px] space-y-3">
         <template
           v-for="(renderedItem, index) in virtualTranscriptWindow.items"
           :key="itemKeys[renderedItem.index]"
@@ -1026,6 +1043,8 @@ function renderItemContent(item: RenderItem) {
         <ThinkingIndicator
           v-if="isAIThinking"
           :reasoning-content="reasoningContent"
+          :active-tool-name="liveToolName"
+          :plan-step="planStep"
         />
 
         <!-- Streaming indicator (tool_executing or thinking with no active block) -->

@@ -1,8 +1,18 @@
 <template>
-  <div v-if="hasContent" data-message-shell="assistant" data-layout="document" class="assistant-message group py-4">
-    <div class="assistant-message__body">
+  <div v-if="hasContent" data-message-shell="assistant" data-layout="document" class="assistant-message group flex gap-3 py-4">
+    <MascotAvatar :size="28" class="mt-0.5 shrink-0" />
+    <div class="assistant-message__body min-w-0 flex-1">
+      <!-- Error message: styled card instead of raw text -->
+      <div v-if="isError" class="error-card" role="alert">
+        <span class="material-symbols-outlined text-[18px] shrink-0">error_outline</span>
+        <div class="min-w-0 flex-1">
+          <p class="error-card__title">{{ errorTitle }}</p>
+          <p class="error-card__detail">{{ errorDetail }}</p>
+        </div>
+      </div>
+
       <!-- If this is a clarify/choices JSON, render question + chips -->
-      <template v-if="clarifyData">
+      <template v-else-if="clarifyData">
         <p class="text-[14px] leading-[1.7] text-[var(--color-text-primary)] mb-3">
           {{ clarifyData.question }}
         </p>
@@ -27,20 +37,40 @@
           :streaming="isStreaming"
           class="text-[14px] leading-[1.7] text-[var(--color-text-primary)]"
         />
-        <span
-          v-if="isStreaming"
-          class="ml-0.5 inline-block h-4 w-0.5 bg-[var(--color-brand)] align-text-bottom animate-caret-blink"
-        />
+        <!-- Streaming indicator: breathing dots before the first token,
+             then a soft breathing caret once text starts flowing. -->
+        <div v-if="isStreaming" class="mt-1.5 flex items-center gap-1.5">
+          <template v-if="!cleanContent">
+            <span class="typing-dot" />
+            <span class="typing-dot" />
+            <span class="typing-dot" />
+          </template>
+          <span
+            v-else
+            class="inline-block h-[18px] w-[3px] rounded-full bg-[var(--color-brand)] align-text-bottom animate-caret-breathe"
+          />
+        </div>
       </template>
+
+      <!-- Hover actions -->
+      <div class="assistant-message__actions mt-2 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+        <button type="button" class="msg-action" :title="copied ? '已复制' : '复制'" @click="copy">
+          <span class="material-symbols-outlined text-[16px]">{{ copied ? 'check' : 'content_copy' }}</span>
+        </button>
+        <button v-if="!isStreaming" type="button" class="msg-action" title="重新生成" @click="regenerate">
+          <span class="material-symbols-outlined text-[16px]">refresh</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useChatStore } from '../../stores/chatStore'
 import { useTabStore } from '../../stores/tabs'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
+import MascotAvatar from '../common/MascotAvatar.vue'
 
 interface ClarifyPayload {
   clarify?: boolean
@@ -52,14 +82,35 @@ interface ClarifyPayload {
 const props = withDefaults(defineProps<{
   content: string
   isStreaming?: boolean
+  sessionId?: string
 }>(), {
   isStreaming: false,
+  sessionId: '',
 })
 
 const chatStore = useChatStore()
 const tabStore = useTabStore()
 
+const copied = ref(false)
+
 const hasContent = computed(() => (props.content || '').trim().length > 0)
+
+// Detect error messages pushed by pushChatError ("错误: ...")
+const isError = computed(() => {
+  const c = (props.content || '').trim()
+  return c.startsWith('错误:') || c.startsWith('Error:') || c.toLowerCase().startsWith('failed')
+})
+const errorTitle = computed(() => {
+  const raw = (props.content || '').trim()
+  const match = raw.match(/^(错误|Error):\s*(.+)/)
+  return match ? '请求出错' : '连接失败'
+})
+const errorDetail = computed(() => {
+  const raw = (props.content || '').trim()
+  // Strip the "错误: " or "Error: " prefix
+  const stripped = raw.replace(/^(错误|Error)[:\s]*/, '')
+  return stripped || raw
+})
 
 // Detect clarify/choices JSON at the start of content
 const clarifyData = computed<ClarifyPayload | null>(() => {
@@ -104,6 +155,34 @@ function pickOption(opt: string) {
   const fullQuery = `${originalQuery}（${opt}）`
   chatStore.sendMessage(sessionId, fullQuery)
 }
+
+async function copy() {
+  try {
+    await navigator.clipboard.writeText(props.content)
+    copied.value = true
+    window.setTimeout(() => (copied.value = false), 1500)
+  } catch {
+    /* clipboard unavailable */
+  }
+}
+
+function regenerate() {
+  if (!props.sessionId || props.isStreaming) return
+  const session = chatStore.sessions[props.sessionId]
+  if (!session) return
+  // Find the most recent user prompt that produced this assistant turn
+  let lastUserIdx = -1
+  for (let i = session.messages.length - 1; i >= 0; i--) {
+    if (session.messages[i].type === 'user_text') {
+      lastUserIdx = i
+      break
+    }
+  }
+  if (lastUserIdx === -1) return
+  const query = session.messages[lastUserIdx].content || ''
+  if (!query.trim()) return
+  chatStore.sendMessage(props.sessionId, query)
+}
 </script>
 
 <style scoped>
@@ -113,6 +192,49 @@ function pickOption(opt: string) {
 .assistant-message__body {
   position: relative;
 }
+
+.assistant-message__actions {
+  min-height: 0;
+}
+
+.msg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border-radius: 7px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.msg-action:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+.msg-action:active {
+  transform: scale(0.94);
+}
+
+/* Breathing typing dots (pre-first-token) */
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  opacity: 0.35;
+  animation: typing-breathe 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.18s; }
+.typing-dot:nth-child(3) { animation-delay: 0.36s; }
+@keyframes typing-breathe {
+  0%, 100% { opacity: 0.25; transform: translateY(0) scale(0.85); }
+  50% { opacity: 0.9; transform: translateY(-2px) scale(1); }
+}
+
 
 .clarify-chip {
   display: inline-flex;
@@ -143,11 +265,36 @@ function pickOption(opt: string) {
   opacity: 1;
 }
 
-@keyframes caret-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+@keyframes caret-breathe {
+  0%, 100% { opacity: 0.35; transform: scaleY(0.78); }
+  50% { opacity: 1; transform: scaleY(1); }
 }
-.animate-caret-blink {
-  animation: caret-blink 1s step-end infinite;
+.animate-caret-breathe {
+  animation: caret-breathe 1.1s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+/* Error card */
+.error-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 11px;
+  background: var(--color-error-container, rgba(220, 38, 38, 0.07));
+  border: 1px solid var(--color-error, rgba(220, 38, 38, 0.18));
+  color: var(--color-on-error-container, #991b1b);
+}
+.error-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 2px;
+}
+.error-card__detail {
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.8;
+  word-break: break-word;
 }
 </style>

@@ -73,15 +73,31 @@
     <div class="flex-1 min-w-0 pt-0.5">
       <div class="flex items-baseline gap-2">
         <span class="text-[12px] font-semibold text-[var(--color-text-primary)]">
-          {{ phaseLabel }}
+          {{ statusLabel }}
         </span>
         <span class="text-[10px] text-[var(--color-text-tertiary)] tabular-nums ml-auto">
           {{ elapsedText }}
         </span>
       </div>
       <div class="text-[11px] text-[var(--color-text-secondary)] mt-0.5 italic font-hand">
-        {{ phaseHint }}
+        {{ statusHint }}
       </div>
+
+      <!-- Live reasoning chain (model's real thinking) — collapsible -->
+      <div v-if="reasoningContent && reasoningContent.trim()" class="mt-1.5">
+        <button
+          type="button"
+          class="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] underline-offset-2 hover:underline"
+          @click="showReasoning = !showReasoning"
+        >
+          {{ showReasoning ? '收起思考过程' : '查看思考过程' }}
+        </button>
+        <pre
+          v-if="showReasoning"
+          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[var(--color-surface-2,#f5f5f4)] px-2 py-1.5 text-[11px] leading-[1.6] text-[var(--color-text-secondary)]"
+        >{{ reasoningContent.trim() }}</pre>
+      </div>
+
       <div class="relative mt-1.5 h-[2px] overflow-hidden rounded-full bg-[var(--color-border)]/40">
         <div
           class="h-full rounded-full transition-all duration-700 ease-out bg-[var(--color-text-primary)]"
@@ -98,31 +114,63 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 const props = defineProps<{
   reasoningContent?: string | null
   hasText?: boolean
+  activeToolName?: string | null
+  /** Current plan step context: { label, tool, index, total, status } */
+  planStep?: {
+    label: string
+    tool: string | null
+    index: number
+    total: number
+    status: string
+  } | null
 }>()
+
+const showReasoning = ref(false)
 
 const elapsedMs = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
-let phaseHintTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   timer = setInterval(() => {
     elapsedMs.value += 100
   }, 100)
-  phaseHintTimer = setInterval(() => {
-    hintIndex.value = (hintIndex.value + 1) % 3
-  }, 2500)
 })
 
 onUnmounted(() => {
   if (timer) clearInterval(timer)
-  if (phaseHintTimer) clearInterval(phaseHintTimer)
 })
 
-const currentPhase = computed(() => {
+// A tool call is the most concrete "what's happening" signal.
+const isToolPhase = computed(() => Boolean(props.activeToolName))
+// Plan steps being generated/executed.
+const isPlanPhase = computed(() => Boolean(props.planStep))
+
+const currentPhase = computed<'analyzing' | 'reasoning' | 'generating'>(() => {
+  if (isToolPhase.value) return 'generating'
+  if (isPlanPhase.value) return 'reasoning'
   const t = elapsedMs.value
   if (t < 2500) return 'analyzing'
   if (t < 5500) return 'reasoning'
   return 'generating'
+})
+
+// Real, data-driven status line instead of fake rotating hints.
+const statusLabel = computed(() => {
+  if (isToolPhase.value) return `正在调用工具 · ${props.activeToolName}`
+  if (isPlanPhase.value) {
+    return `正在规划 · 第 ${props.planStep!.index}/${props.planStep!.total} 步`
+  }
+  return phaseLabel.value
+})
+
+const statusHint = computed(() => {
+  if (isToolPhase.value) return `执行 ${props.activeToolName} 工具，请稍候…`
+  if (isPlanPhase.value) {
+    const step = props.planStep!
+    const toolNote = step.tool ? `（工具：${step.tool}）` : ''
+    return `${step.label}${toolNote}`
+  }
+  return phaseHint.value
 })
 
 const phaseLabel = computed(() => {
@@ -153,7 +201,11 @@ const hints = {
 }
 const phaseHint = computed(() => hints[currentPhase.value][hintIndex.value])
 
+// Progress: plan step completion, else a gentle decorative pulse.
 const progressPercent = computed(() => {
+  if (isPlanPhase.value && props.planStep) {
+    return Math.round((props.planStep.index / props.planStep.total) * 100)
+  }
   const t = elapsedMs.value
   if (t < 2500) return (t / 2500) * 100
   if (t < 5500) return ((t - 2500) / 3000) * 100

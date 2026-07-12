@@ -5,7 +5,10 @@ const ENV_BASE_URL =
     ? import.meta.env.VITE_DESKTOP_SERVER_URL
     : undefined
 
-const DEFAULT_BASE_URL = ENV_BASE_URL || 'http://127.0.0.1:3456'
+// Default only used before initializeDesktopServerUrl() runs. The desktop
+// preload resolves the real server URL (http://127.0.0.1:8765) and calls
+// setBaseUrl(); this matches that so REST and chat/WS share one source of truth.
+const DEFAULT_BASE_URL = ENV_BASE_URL || 'http://127.0.0.1:8765'
 
 let baseUrl = DEFAULT_BASE_URL
 let authToken: string | null = null
@@ -13,8 +16,43 @@ const DIAGNOSTICS_PATH = '/api/diagnostics/events'
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000
 
 function getErrorMessage(status: number, body: unknown) {
-  if (body && typeof body === 'object' && 'message' in body && typeof body.message === 'string') {
-    return body.message
+  if (body && typeof body === 'object') {
+    const obj = body as Record<string, unknown>
+
+    // Our own handlers use { message }
+    if (typeof obj.message === 'string' && obj.message.trim().length > 0) {
+      return obj.message
+    }
+
+    // FastAPI HTTPException serializes as { detail }. `detail` can be a
+    // plain string, or a list of validation errors ({ loc, msg, type }).
+    const detail = obj.detail
+    if (typeof detail === 'string' && detail.trim().length > 0) {
+      return detail
+    }
+    if (Array.isArray(detail) && detail.length > 0) {
+      const msgs = detail
+        .map((d) =>
+          d && typeof d === 'object' && typeof (d as Record<string, unknown>).msg === 'string'
+            ? (d as Record<string, unknown>).msg
+            : typeof d === 'string'
+              ? d
+              : null,
+        )
+        .filter((m): m is string => !!m)
+      if (msgs.length > 0) {
+        return msgs.join('; ')
+      }
+    }
+
+    // Some upstreams nest the real error under { error } / { error: { message } }
+    const err = obj.error
+    if (typeof err === 'string' && err.trim().length > 0) {
+      return err
+    }
+    if (err && typeof err === 'object' && typeof (err as Record<string, unknown>).message === 'string') {
+      return (err as Record<string, unknown>).message as string
+    }
   }
 
   if (typeof body === 'string' && body.trim().length > 0) {

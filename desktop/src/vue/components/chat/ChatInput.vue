@@ -33,6 +33,7 @@ import ModeSelector from './ModeSelector.vue'
 import ClarifyHints from './ClarifyHints.vue'
 import PermissionModeSelector from '../controls/PermissionModeSelector.vue'
 import RepositoryLaunchControls from '../shared/RepositoryLaunchControls.vue'
+import Tooltip from '../common/Tooltip.vue'
 import FileSearchMenu from './FileSearchMenu.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ModelSelector from '../controls/ModelSelector.vue'
@@ -1103,7 +1104,7 @@ watch(input, (v) => {
     class="w-full"
     :class="[
       isHeroComposer
-        ? `bg-[var(--color-surface)] ${isMobileViewport() ? 'px-4 pb-3' : 'px-8 pb-4'}`
+        ? `bg-[var(--color-surface)] ${isMobileViewport() ? 'px-4 pb-4' : 'px-8 pb-6'}`
         : compact
           ? `border-t border-[var(--color-border)]/70 bg-[var(--color-surface)] ${isMobileViewport() ? 'px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2' : 'px-3 py-3'}`
           : `bg-[var(--color-surface)] ${isMobileViewport() ? 'px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2' : 'px-4 py-4'}`,
@@ -1129,7 +1130,7 @@ watch(input, (v) => {
         data-testid="chat-input-panel"
         :class="[
           isHeroComposer
-            ? `glass-panel relative flex flex-col gap-3 overflow-visible ${embedLaunchControlsInHero ? 'rounded-xl' : 'rounded-t-xl rounded-b-none'} p-4 transition-colors ${isDragActive ? 'composer-drop-target-active' : ''}`
+            ? `glass-panel relative flex flex-col gap-3 overflow-visible rounded-xl p-4 shadow-[var(--shadow-composer)] transition-colors ${isDragActive ? 'composer-drop-target-active' : ''}`
             : compact
               ? `glass-panel relative overflow-visible p-3 transition-colors ${isMobileViewport() ? 'rounded-2xl shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl'} ${isDragActive ? 'composer-drop-target-active' : ''}`
               : `glass-panel relative overflow-visible transition-colors ${isMobileViewport() ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl p-4'} ${isDragActive ? 'composer-drop-target-active' : ''}`,
@@ -1277,7 +1278,7 @@ watch(input, (v) => {
                 @click="startEditingQueuedMessage(message.id, message.displayContent)"
                 :aria-label="t('chat.pendingMessageEdit')"
                 :title="t('chat.pendingMessageEdit')"
-                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] hover:bg>[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
               >
                 <span class="material-symbols-outlined text-[15px]" aria-hidden="true">edit</span>
               </button>
@@ -1286,7 +1287,7 @@ watch(input, (v) => {
                 @click="chatStore.removeQueuedUserMessage(activeTabId!, message.id)"
                 :aria-label="t('chat.pendingMessageDelete')"
                 :title="t('chat.pendingMessageDelete')"
-                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] hover:bg>[var(--color-surface-hover)] hover:text>[var(--color-error)]"
+                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-error)]"
               >
                 <span class="material-symbols-outlined text-[15px]" aria-hidden="true">delete</span>
               </button>
@@ -1366,7 +1367,7 @@ watch(input, (v) => {
                   @click="plusMenuOpen = !plusMenuOpen"
                   :aria-label="'Open composer tools'"
                   :class="[
-                    'text-[var(--color-text-secondary)] transition-colors hover:bg>[var(--color-surface-hover)]',
+                    'text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)]',
                     isMobileViewport() ? 'inline-flex h-11 w-11 items-center justify-center rounded-xl' : 'rounded-[var(--radius-md)] p-1.5',
                   ]"
                 >
@@ -1382,17 +1383,17 @@ watch(input, (v) => {
                 >
                   <button
                     @click="openAttachmentPicker"
-                    class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg>[var(--color-surface-hover)]"
+                    class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--color-surface-hover)]"
                   >
-                    <span class="material-symbols-outlined text-[18px] text>[var(--color-text-secondary)]">attach_file</span>
-                    <span class="text-sm text>[var(--color-text-primary)]">{{ addFilesLabel }}</span>
+                    <span class="material-symbols-outlined text-[18px] text-[var(--color-text-secondary)]">attach_file</span>
+                    <span class="text-sm text-[var(--color-text-primary)]">{{ addFilesLabel }}</span>
                   </button>
                   <button
                     @click="insertSlashCommand"
-                    class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg>[var(--color-surface-hover)]"
+                    class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--color-surface-hover)]"
                   >
-                    <span class="w-[24px] text-center text-[18px] font-bold text>[var(--color-text-secondary)]">/</span>
-                    <span class="text-sm text>[var(--color-text-primary)]">{{ slashCommandsLabel }}</span>
+                    <span class="w-[24px] text-center text-[18px] font-bold text-[var(--color-text-secondary)]">/</span>
+                    <span class="text-sm text-[var(--color-text-primary)]">{{ slashCommandsLabel }}</span>
                   </button>
                 </div>
               </div>
@@ -1430,34 +1431,42 @@ watch(input, (v) => {
             </template>
 
             <!-- Send / Stop button -->
-            <button
-              :disabled="!isMemberSession && isActive ? false : !canSubmit"
-              @click="handleSubmit" 
-              :aria-label="(!isMemberSession && isActive) ? t('common.stop') : (isMemberSession ? t('common.send') : t('common.run'))"
-              :title="
+            <Tooltip
+              :label="
                 !isMemberSession && isActive
                   ? t('chat.stopTitle')
-                  : iconOnlyAction
-                    ? (isMemberSession ? t('common.send') : t('common.run'))
-                    : undefined
+                  : (isMemberSession ? t('common.send') : t('common.run'))
               "
-              :class="[
-                'flex shrink-0 items-center justify-center gap-1 rounded-lg text-xs font-semibold transition-all hover:brightness-105 disabled:opacity-30',
-                iconOnlyAction
-                  ? `${isMobileViewport() ? 'h-11 w-11 rounded-xl px-0 py-0' : 'h-8 w-8 px-0 py-0'}`
-                  : 'w-[112px] px-3 py-1.5',
-                !isMemberSession && isActive
-                  ? 'bg>[var(--color-error-container)] text>[var(--color-on-error-container)]'
-                  : 'bg>[image:var(--gradient-btn-primary)] text>[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)]',
-              ]"
             >
-              <span class="material-symbols-outlined text-[14px]">
-                {{ !isMemberSession && isActive ? 'stop' : 'arrow_forward' }}
-              </span>
-              <span v-if="!iconOnlyAction">
-                {{ !isMemberSession && isActive ? t('common.stop') : (isMemberSession ? t('common.send') : t('common.run')) }}
-              </span>
-            </button>
+              <button
+                :disabled="!isMemberSession && isActive ? false : !canSubmit"
+                @click="handleSubmit" 
+                :aria-label="(!isMemberSession && isActive) ? t('common.stop') : (isMemberSession ? t('common.send') : t('common.run'))"
+                :title="
+                  !isMemberSession && isActive
+                    ? t('chat.stopTitle')
+                    : iconOnlyAction
+                      ? (isMemberSession ? t('common.send') : t('common.run'))
+                      : undefined
+                "
+                :class="[
+                  'flex shrink-0 items-center justify-center gap-1 rounded-lg text-xs font-semibold transition-all hover:brightness-105 disabled:opacity-30',
+                  iconOnlyAction
+                    ? `${isMobileViewport() ? 'h-11 w-11 rounded-xl px-0 py-0' : 'h-8 w-8 px-0 py-0'}`
+                    : 'w-[112px] px-3 py-1.5',
+                  !isMemberSession && isActive
+                    ? 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
+                    : 'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)]',
+                ]"
+              >
+                <span class="material-symbols-outlined text-[14px]">
+                  {{ !isMemberSession && isActive ? 'stop' : 'arrow_forward' }}
+                </span>
+                <span v-if="!iconOnlyAction">
+                  {{ !isMemberSession && isActive ? t('common.stop') : (isMemberSession ? t('common.send') : t('common.run')) }}
+                </span>
+              </button>
+            </Tooltip>
           </div>
         </div>
 

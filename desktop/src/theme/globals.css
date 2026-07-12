@@ -175,8 +175,8 @@
 [data-theme="dark"] .settings-zoom-control {
   --settings-zoom-track-empty: var(--color-surface-container-highest);
   --settings-zoom-thumb-bg: var(--color-surface-bright);
-  --settings-zoom-thumb-border: rgba(94, 234, 212, 0.78);
-  --settings-zoom-thumb-shadow: 0 0 0 3px rgba(94, 234, 212, 0.16), 0 10px 24px rgba(0, 0, 0, 0.5);
+  --settings-zoom-thumb-border: rgba(167, 139, 250, 0.78);
+  --settings-zoom-thumb-shadow: 0 0 0 3px rgba(167, 139, 250, 0.16), 0 10px 24px rgba(0, 0, 0, 0.5);
 }
 
 .settings-zoom-control.is-dragging {
@@ -459,14 +459,14 @@
   --color-goal-chip-bg: var(--color-surface);
   --color-goal-chip-border: var(--color-border);
   --color-model-option-selected-bg: var(--color-primary-fixed);
-  --color-model-option-selected-border: rgba(15, 118, 110, 0.2);
+  --color-model-option-selected-border: rgba(124, 58, 237, 0.22);
   --color-activity-heat-0: var(--color-surface-container);
   --color-activity-heat-1: #FBE9E2;
   --color-activity-heat-2: var(--color-primary-fixed);
   --color-activity-heat-3: var(--color-primary-fixed-dim);
   --color-activity-heat-4: var(--color-primary);
   --color-activity-cell-border: rgba(135, 115, 109, 0.3);
-  --color-activity-cell-border-hover: rgba(15, 118, 110, 0.58);
+  --color-activity-cell-border-hover: rgba(124, 58, 237, 0.45);
   --color-activity-cell-border-active: var(--color-text-primary);
   --shadow-activity-cell-hover: 0 0 0 2px rgba(124, 58, 237, 0.12), 0 8px 18px rgba(65, 54, 48, 0.16);
   --color-activity-tooltip-surface: #2F312E;
@@ -531,6 +531,7 @@
   --shadow-focus-ring: 0 0 0 1px rgba(124, 58, 237, 0.16);
   --shadow-error-ring: 0 0 0 1px rgba(186, 26, 26, 0.18);
   --shadow-button-primary: 0 8px 24px rgba(124, 58, 237, 0.18);
+  --shadow-composer: 0 8px 28px rgba(27, 28, 26, 0.08);
 
   /* Button colors */
   --color-btn-primary-fg: var(--color-on-primary);
@@ -667,7 +668,7 @@
   --color-goal-chip-bg: var(--color-surface);
   --color-goal-chip-border: var(--color-border);
   --color-model-option-selected-bg: #FFF0EA;
-  --color-model-option-selected-border: rgba(15, 118, 110, 0.2);
+  --color-model-option-selected-border: rgba(124, 58, 237, 0.22);
   --color-activity-heat-0: #EEF2F6;
   --color-activity-heat-1: #FFF0EA;
   --color-activity-heat-2: var(--color-primary-fixed);
@@ -820,8 +821,8 @@
 
   --color-secondary: #CDBDFF;
   --color-secondary-container: #3A3050;
-  --color-tertiary: #00DAF3;
-  --color-tertiary-container: #003D44;
+  --color-tertiary: #A78BFA;
+  --color-tertiary-container: #2E1065;
 
   --color-error: #FFB4AB;
   --color-error-container: #93000A;
@@ -829,12 +830,12 @@
 
   --color-inverse-surface: #E5E2E1;
   --color-inverse-on-surface: #1B1C1A;
-  --color-inverse-primary: #0F766E;
+  --color-inverse-primary: #A78BFA;
 
   --color-success: #7EDB8B;
   --color-success-container: rgba(126, 219, 139, 0.16);
-  --color-info: #74E0F7;
-  --color-info-container: rgba(116, 224, 247, 0.16);
+  --color-info: #A78BFA;
+  --color-info-container: rgba(167, 139, 250, 0.16);
   --color-warning: #F7C46C;
   --color-warning-container: rgba(247, 196, 108, 0.16);
 
@@ -851,28 +852,28 @@
   --color-goal-icon-bg: var(--color-memory-icon-bg);
   --color-goal-chip-bg: var(--color-surface-container-low);
   --color-goal-chip-border: var(--color-border);
-  --color-model-option-selected-bg: rgba(94, 234, 212, 0.13);
-  --color-model-option-selected-border: rgba(94, 234, 212, 0.34);
+  --color-model-option-selected-bg: rgba(167, 139, 250, 0.13);
+  --color-model-option-selected-border: rgba(167, 139, 250, 0.34);
   --color-activity-heat-0: #242322;
   --color-activity-heat-1: #3A2823;
   --color-activity-heat-2: #674032;
   --color-activity-heat-3: #A76549;
   --color-activity-heat-4: var(--color-primary);
   --color-activity-cell-border: rgba(229, 226, 225, 0.08);
-  --color-activity-cell-border-hover: rgba(94, 234, 212, 0.58);
+  --color-activity-cell-border-hover: rgba(167, 139, 250, 0.58);
   --color-activity-cell-border-active: #FBE7E1;
-  --shadow-activity-cell-hover: 0 0 0 2px rgba(94, 234, 212, 0.16), 0 8px 18px rgba(0, 0, 0, 0.34);
+  --shadow-activity-cell-hover: 0 0 0 2px rgba(167, 139, 250, 0.16), 0 8px 18px rgba(0, 0, 0, 0.34);
   --color-activity-tooltip-surface: #F2F1ED;
-  --color-activity-tooltip-border: rgba(94, 234, 212, 0.36);
+  --color-activity-tooltip-border: rgba(167, 139, 250, 0.36);
   --color-activity-tooltip-text: #1B1C1A;
-  --color-activity-tooltip-muted: #0F766E;
+  --color-activity-tooltip-muted: #A78BFA;
   --color-inspector-surface: #131211;
   --color-inspector-panel: #1C1B1B;
   --color-inspector-chip: #252120;
-  --color-inspector-border: rgba(94, 234, 212, 0.18);
-  --color-inspector-accent: #5EEAD4;
+  --color-inspector-border: rgba(167, 139, 250, 0.18);
+  --color-inspector-accent: #A78BFA;
   --color-inspector-accent-hover: #FFD4C8;
-  --color-inspector-accent-secondary: #74E0F7;
+  --color-inspector-accent-secondary: #A78BFA;
   --color-inspector-text: #E5E2E1;
   --color-inspector-heading: #F3D6CC;
   --color-inspector-muted: #A89A95;
@@ -894,13 +895,13 @@
   --color-sidebar-search-border: rgba(255, 255, 255, 0.06);
   --color-sidebar-item-hover: rgba(255, 255, 255, 0.04);
   --color-sidebar-item-active: rgba(255, 255, 255, 0.06);
-  --color-sidebar-item-active-border: rgba(94, 234, 212, 0.14);
+  --color-sidebar-item-active-border: rgba(167, 139, 250, 0.14);
   --sidebar-panel-bg-image:
-    radial-gradient(circle at top left, rgba(94, 234, 212, 0.045), transparent 34%),
+    radial-gradient(circle at top left, rgba(167, 139, 250, 0.045), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
 
   --color-border: rgba(90, 65, 56, 0.18);
-  --color-border-focus: rgba(94, 234, 212, 0.55);
+  --color-border-focus: rgba(167, 139, 250, 0.55);
   --color-border-separator: rgba(90, 65, 56, 0.12);
 
   --color-text-primary: var(--color-on-surface);
@@ -916,6 +917,7 @@
   --shadow-focus-ring: 0 0 0 1px rgba(167, 139, 250, 0.32);
   --shadow-error-ring: 0 0 0 1px rgba(248, 113, 113, 0.26);
   --shadow-button-primary: 0 12px 24px rgba(124, 58, 237, 0.18);
+  --shadow-composer: 0 8px 28px rgba(0, 0, 0, 0.42);
 
   --gradient-btn-primary: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
   --gradient-btn-primary-hover: linear-gradient(135deg, var(--color-primary-container), var(--color-primary));

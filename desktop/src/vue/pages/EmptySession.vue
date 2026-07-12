@@ -451,6 +451,19 @@ const handleSubmit = async () => {
   }
 }
 
+// Example prompt chips shown on the empty ("new chat") screen.
+// Clicking one prefills the composer and submits immediately.
+const suggestions = [
+  '帮我分析这个项目的代码结构',
+  '阅读 src/ 下的核心模块并总结',
+  '给当前目录里的代码写一份单元测试',
+  '解释这段报错日志的原因',
+]
+function useSuggestion(text: string) {
+  input.value = text
+  void handleSubmit()
+}
+
 const handleInputChange = (value: string, cursorPos: number) => {
   input.value = value
   const token = findSlashToken(value, cursorPos)
@@ -677,8 +690,13 @@ const insertSlashCommand = () => {
       class="flex flex-1 flex-col items-center justify-center"
       :class="isMobileComposer ? 'px-6 pb-[230px] pt-10' : 'p-8 pb-32'"
     >
+      <!-- Soft radial brand glow behind the mascot -->
       <div
-        class="flex flex-col items-center text-center"
+        class="pointer-events-none absolute left-1/2 top-1/2 -z-0 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-50 blur-3xl"
+        style="background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%); opacity: 0.12;"
+      />
+      <div
+        class="relative z-10 flex flex-col items-center text-center"
         :class="isMobileComposer ? 'max-w-[300px]' : 'max-w-md'"
       >
         <MadCopLoader
@@ -700,6 +718,19 @@ const insertSlashCommand = () => {
         >
           {{ t('empty.subtitle') }}
         </p>
+
+        <!-- Example prompt chips -->
+        <div class="mt-7 flex flex-wrap justify-center gap-2">
+          <button
+            v-for="s in suggestions"
+            :key="s"
+            type="button"
+            class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-3.5 py-1.5 text-[12.5px] text-[var(--color-text-secondary)] transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)] hover:text-[var(--color-text-primary)] hover:shadow-sm"
+            @click="useSuggestion(s)"
+          >
+            {{ s }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -715,7 +746,7 @@ const insertSlashCommand = () => {
           : 'bottom-4 px-8'
       "
     >
-      <div class="flex w-full flex-col" :class="isMobileComposer ? 'max-w-none' : 'max-w-3xl'">
+      <div class="flex w-full flex-col" :class="isMobileComposer ? 'max-w-none' : 'max-w-[820px]'">
         <div
           ref="panelRef"
           v-bind="dragHandlers"

@@ -81,7 +81,7 @@ export function isBrowserH5Runtime() {
  * The api client caches the resolved base after startup: `initializeDesktopServerUrl`
  * calls `invoke('get_server_url')` (desktop) or resolves a browser/H5 URL, then
  * `setBaseUrl(...)`. Until that runs, `getBaseUrl()` returns the default
- * (`http://127.0.0.1:3456` or `VITE_DESKTOP_SERVER_URL`).
+ * (`http://127.0.0.1:8765` or `VITE_DESKTOP_SERVER_URL`).
  */
 export function getServerBaseUrl(): string {
   return getBaseUrl()

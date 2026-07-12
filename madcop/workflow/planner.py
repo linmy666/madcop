@@ -29,6 +29,65 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _extract_json_object(text: str) -> dict | None:
+    """Find and parse the first balanced JSON object ``{...}`` in arbitrary
+    text, tolerating markdown code fences and trailing prose.
+
+    Models frequently wrap JSON in ```json fences or append commentary. A
+    naive ``json.loads(raw)`` fails on both; this scans for the first ``{``,
+    tracks brace depth (respecting strings/escapes), and parses exactly the
+    balanced span. Returns ``None`` if no valid object is found.
+    """
+    if not text:
+        return None
+    text = text.strip()
+    # Strip a leading ```... or ```json fence
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start:i + 1])
+                except (json.JSONDecodeError, ValueError):
+                    return None
+    return None
+
+
+def _coerce_bool(value: Any) -> bool:
+    """Best-effort conversion of an LLM's `passed` field to a bool."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes", "passed", "ok")
+    if isinstance(value, (int, float)):
+        return value != 0
+    return False
+
+
 # ─────────────────────────────────────────────────────────
 # Types
 # ─────────────────────────────────────────────────────────
@@ -187,9 +246,8 @@ def generate_plan(
         {"role": "user", "content": f"请为以下任务制定执行计划：\n\n{task}"},
     ]
     raw = llm_complete(messages)
-    try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
+    data = _extract_json_object(raw)
+    if data is None:
         logger.warning("Planner returned invalid JSON: %s", raw[:200])
         # Fallback: wrap the entire task as a single step
         return Plan(
@@ -238,24 +296,11 @@ def verify_step(
         result=step.result[:2000],
     )
     raw = llm_complete([{"role": "user", "content": prompt}])
-    # Try to extract JSON — any format, any nesting
-    import re as _re
-    _cleaned = raw.strip()
-    # Strip markdown fences
-    if _cleaned.startswith("```"):
-        _cleaned = _cleaned.split("\n", 1)[-1] if "\n" in _cleaned else _cleaned[3:]
-        _cleaned = _cleaned.rsplit("```", 1)[0] if "```" in _cleaned else _cleaned
-        _cleaned = _cleaned.strip()
-    # Find first { ... } block
-    for _start in range(len(_cleaned)):
-        if _cleaned[_start] == "{":
-            try:
-                import json as _j
-                _data = _j.loads(_cleaned[_start:])
-                return bool(_data.get("passed", False)), str(_data.get("reason", ""))
-            except (json.JSONDecodeError, ValueError):
-                # Try shorter substring
-                pass
+    # Robustly extract the first balanced JSON object from the verifier's
+    # reply (it may be wrapped in ```json fences or have trailing prose).
+    _data = _extract_json_object(raw)
+    if _data is not None:
+        return _coerce_bool(_data.get("passed")), str(_data.get("reason", "") or "")
     # Optimistic default: if result is non-empty, assume passed
     if step.result and len(step.result) > 20:
         return True, "result produced, assuming passed"
@@ -281,14 +326,17 @@ def execute_step(
 
     Returns the LLM response text.
     """
+    _tool_hint = ""
+    if step.tool:
+        _tool_hint = f"\n\n你需要调用工具「{step.tool}」来完成这一步。不要光描述，直接调用工具。"
     messages = [
         {"role": "system", "content": (
             "你是 MadCop 助手，正在按计划逐步执行任务。\n"
             f"总体目标：{context}\n"
-            f"当前步骤 ({step.step}/{step.step}): {step.action}\n"
-            f"提示：{step.input_hint}\n"
-            f"预期结果：{step.expected_result}\n\n"
-            "请完成当前步骤。如果需要工具，调用对应的 tool。"
+            f"当前步骤: {step.action}\n"
+            f"预期结果：{step.expected_result}"
+            f"{_tool_hint}\n\n"
+            "直接调用工具并获取结果，不要只描述打算做什么。"
         )},
         {"role": "user", "content": step.input_hint or step.action},
     ]

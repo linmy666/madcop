@@ -558,6 +558,11 @@ function openTerminalInTab() {
         >
           <!-- Subtle gradient background -->
           <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-[var(--color-surface)] via-transparent to-[var(--color-surface)] opacity-40" />
+          <!-- Soft radial brand glow behind the mascot -->
+          <div
+            class="pointer-events-none absolute left-1/2 top-1/2 h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+            style="background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%); opacity: 0.12;"
+          />
 
           <div class="relative z-10 flex max-w-md flex-col items-center text-center px-6">
             <!-- Member session empty -->
@@ -752,19 +757,21 @@ function openTerminalInTab() {
         </div>
       </div>
 
-      <!-- Plan sidebar: tasks (only when a plan is active) + artifacts (always visible) -->
+      <!-- Plan sidebar: tasks (only when a plan is active) + artifacts.
+           Hidden on a brand-new empty session so the welcome hero can center
+           cleanly (matches the EmptySession / 新对话页 layout). -->
       <aside
-        v-if="planSidebarEnabled"
+        v-if="planSidebarEnabled && !isEmpty"
         data-testid="plan-sidebar"
         class="flex h-full shrink-0 flex-col border-l border-[var(--color-border)] bg-[var(--color-surface)]"
         style="width: 320px; min-width: 320px;"
       >
-        <!-- 任务监控 (top, only when a plan is active) -->
-        <div v-if="chatStore.sessions[activeTabId]?.plan" class="shrink-0 overflow-y-auto" style="max-height: 50%;">
-          <PlanTasksPanel :plan="chatStore.sessions[activeTabId].plan" />
+        <!-- 任务监控 (always visible when sidebar open; shows loading state while waiting for new plan) -->
+        <div class="shrink-0 overflow-y-auto" style="max-height: 50%;">
+          <PlanTasksPanel :plan="chatStore.sessions[activeTabId]?.plan ?? null" />
         </div>
         <!-- 产物 (always visible) -->
-        <div class="flex-1 min-h-0 border-t border-[var(--color-border)]" :class="chatStore.sessions[activeTabId]?.plan ? '' : 'border-t-0'">
+        <div class="flex-1 min-h-0 border-t border-[var(--color-border)]">
           <PlanArtifactsPanel
             :workspace-dir="workspaceDirForArtifacts"
             :final-artifact="finalArtifact"
@@ -772,6 +779,7 @@ function openTerminalInTab() {
             :skill-tags="skillTags"
             :session-title="session?.title"
             @open="onArtifactOpen"
+            @close="togglePlanSidebar"
           />
         </div>
       </aside>

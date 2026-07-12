@@ -206,7 +206,7 @@ function createDefaultSessionState(): PerSessionState {
     activeToolUseId: null,
     activeToolName: null,
     activeThinkingId: null,
-    planModeEnabled: true,  // v2.6.0.1 — Plan-and-Execute mode default ON
+    planModeEnabled: true,  // Plan-and-Execute mode default ON
     plan: null,
     pendingPermission: null,
     pendingComputerUsePermission: null,
@@ -350,9 +350,22 @@ export const useChatStore = defineStore('chat', {
       // Clear composer state
       session.composerPrefill = null
       session.composerInsertion = null
-      
-      // Call the backend API
-      const apiUrl = 'http://127.0.0.1:8765/api/chat'
+
+      // Clear stale plan so the task panel doesn't show the previous
+      // message's completed plan while the new one is being generated.
+      // The new SSE stream will populate fresh plan data.
+      session.plan = null
+
+      // Abort any in-flight request for this session so stale SSE events
+      // from the old message can't overwrite the new plan / messages.
+      if (session._abortCtrl) { try { session._abortCtrl.abort() } catch {} }
+      session._abortCtrl = new AbortController()
+
+      // Call the backend API. Route through getApiUrl() so the chat
+      // endpoint respects the single base-URL source of truth (set at
+      // startup via initializeDesktopServerUrl / setBaseUrl) instead of
+      // a second hard-coded port that can drift out of sync.
+      const apiUrl = getApiUrl('/api/chat')
       // v3.0: include the locally-cached message history so the
       // backend LLM can see context. Without this, after a reload
       // the assistant thinks the user is starting a new chat because
@@ -362,17 +375,32 @@ export const useChatStore = defineStore('chat', {
         .map((m: any) => ({ role: m.role || (m.type === 'user_text' ? 'user' : 'assistant'), content: m.content || '' }))
         // Cap at the last 20 messages to keep the request small
         .slice(-20)
-      // v3.0: auto-router + workspace + tools system prompt
-      const ws = (() => { try { return localStorage.getItem('madcop_workspace_dir') || '' } catch { return '' } })()
-      const toolUsePrompt = `你有以下工具可供使用：web_search（联网搜索）、web_fetch（抓取网页内容）、weather（查天气）、clarify（向用户追问）、read_file（读取文件）、write_file（写入文件）、edit_file（编辑文件）。当用户让你做任何需要实时信息的事情时，你必须调用 web_search 工具，不要自己编造答案。直接调用工具，不要输出工具的参数描述。`
-      const sysBase = ws ? `当前用户的工作目录是 ${ws}。当用户要求保存文件、生成报告、写入代码等操作时，请将文件保存在该目录下。` : `当前用户的工作目录是当前目录。当用户要求保存文件时，请保存在当前目录下。`
-      const sysMsg = `${sysBase}\n\n${toolUsePrompt}`
-      const requestMessages = [{ role: 'system', content: sysMsg }, ...history, { role: 'user', content }]
+      // NOTE: The system prompt is owned by the backend (madcop/server/app.py
+      // prepends a memory + workspace + tool system message and replaces any
+      // frontend-sent `system` role). Sending a frontend-authored system
+      // message here would be dead code, so we intentionally omit it.
+      const requestMessages = [...history, { role: 'user', content }]
+      // Shared error surfacer: mark the session errored and append a visible
+      // assistant message so the reason is never silently swallowed.
+      const pushChatError = (message: string) => {
+        session.chatState = 'error'
+        session.messages.push({
+          type: 'assistant_text',
+          content: `错误: ${message}`,
+          id: nextId(),
+          timestamp: Date.now(),
+          model: session.messages.find((m: any) => m.type === 'assistant_text')?.model,
+        } as any)
+      }
       fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: session._abortCtrl.signal,
         body: JSON.stringify({
-          model: _options?.model || 'sensenova-6.7-flash-lite',
+          // Prefer the model the user picked in the session selector
+          // (_options.model, set from ChatInput's selectedModel). If none is
+          // selected, omit it and let the backend use its active provider model.
+          model: _options?.model || '',
           messages: requestMessages,
           attachments: _attachments?.map((a) => ({
             id: a.id,
@@ -389,13 +417,39 @@ export const useChatStore = defineStore('chat', {
       })
         .then(async (res) => {
           if (!res.ok) {
-            session.chatState = 'error'
+            // The backend sends a real reason (FastAPI { detail }, our
+            // { message }, or a plain-text body). Surface it instead of a
+            // blank red state so the user can actually see what went wrong.
+            let reason = ''
+            try {
+              const raw = await res.text()
+              if (raw) {
+                try {
+                  const parsed = JSON.parse(raw)
+                  const d = parsed && (parsed.detail ?? parsed.message ?? parsed.error)
+                  if (typeof d === 'string') {
+                    reason = d
+                  } else if (Array.isArray(d)) {
+                    // FastAPI validation errors: [{ loc, msg, type }]
+                    reason = d
+                      .map((x: any) => (x && x.msg) || (typeof x === 'string' ? x : ''))
+                      .filter(Boolean)
+                      .join('; ')
+                  } else if (d && typeof d === 'object') {
+                    reason = d.message || JSON.stringify(d)
+                  }
+                } catch {
+                  reason = raw
+                }
+              }
+            } catch {}
+            pushChatError(reason || `请求失败 (HTTP ${res.status})`)
             return
           }
           // Read the SSE stream
           const reader = res.body?.getReader()
           if (!reader) {
-            session.chatState = 'error'
+            pushChatError('无法读取服务器返回的数据流')
             return
           }
           session.reasoningContent = null
@@ -407,16 +461,18 @@ export const useChatStore = defineStore('chat', {
           // event so tool_use messages that arrive earlier are placed before
           // the assistant message in the timeline.
           let assistantPushed = false
+          let assistantMsgObj: any = null
 
           const ensureAssistantPushed = () => {
             if (assistantPushed) return
             assistantPushed = true
-            session.messages.push({
+            assistantMsgObj = {
               type: 'assistant_text',
               content: assistantMsg,
               id: assistantId,
               timestamp: Date.now(),
-            })
+            }
+            session.messages.push(assistantMsgObj)
           }
           
           while (true) {
@@ -438,22 +494,36 @@ export const useChatStore = defineStore('chat', {
                     // tool → assistant instead of assistant → tool.
                     ensureAssistantPushed()
                     assistantMsg += event.content
-                    // Update the placeholder message
-                    const msg = session.messages.find((m: any) => m.id === assistantId)
-                    if (msg) msg.content = assistantMsg
+                    // Update the placeholder message via the cached reference
+                    // (avoids an O(n) Array.find on every streamed token).
+                    if (assistantMsgObj) assistantMsgObj.content = assistantMsg
+                    // The final answer is now streaming in. Switch out of the
+                    // "thinking" state so the hand-drawn planning animation is
+                    // hidden and the text trickles in live (instead of popping
+                    // out all at once at `done`). Planning/tool phases keep the
+                    // animation because they run while chatState is still
+                    // 'busy'/'tool_executing'.
+                    if (session.chatState !== 'streaming') {
+                      session.chatState = 'streaming'
+                      if (assistantMsgObj) assistantMsgObj.isStreaming = true
+                    }
                   } else if (event.type === 'done') {
                     session.chatState = 'idle'
                     // Update the final message
-                    const msg = session.messages.find((m: any) => m.id === assistantId)
-                    if (msg) msg.content = assistantMsg
+                    if (assistantMsgObj) {
+                      assistantMsgObj.content = assistantMsg
+                      assistantMsgObj.isStreaming = false
+                    }
                   } else if (event.type === 'reasoning' && event.content) {
                     session.reasoningContent = (session.reasoningContent || '') + event.content
                   } else if (event.type === 'tool' && event.name) {
                     // AI is calling a tool — show it transparently under the
                     // thinking indicator so the user can see what's happening.
+                    session.activeToolName = event.name
+                    session.activeToolUseId = event.tool_use_id || `tool-${Date.now()}-${Math.random()}`
                     const toolMsg: UIMessage = {
                       type: 'tool_use',
-                      toolUseId: event.tool_use_id || `tool-${Date.now()}-${Math.random()}`,
+                      toolUseId: session.activeToolUseId,
                       toolName: event.name,
                       input: event.args,
                       id: nextId(),
@@ -481,6 +551,11 @@ export const useChatStore = defineStore('chat', {
                         timestamp: Date.now(),
                       })
                     }
+                    // Clear the live "calling tool" status line.
+                    if (session.activeToolName && (!prev || prev.toolName === session.activeToolName)) {
+                      session.activeToolName = null
+                    }
+                    session.activeToolUseId = null
                   } else if (event.type === 'session_title' && event.title) {
                     // Backend-generated Claude-style title — replace the local
                     // heuristic title with a more meaningful one.
@@ -509,16 +584,7 @@ export const useChatStore = defineStore('chat', {
                     // Plan stays in the session state for display
                   } else if (event.type === 'error' && event.message) {
                     // Backend error (API error, rate limit, etc.)
-                    session.chatState = 'error'
-                    // Add an assistant message showing the error
-                    const errId = nextId()
-                    session.messages.push({
-                      type: 'assistant_text',
-                      content: `错误: ${event.message}`,
-                      id: errId,
-                      timestamp: Date.now(),
-                      model: session.messages.find((m: any) => m.type === 'assistant_text')?.model,
-                    } as any)
+                    pushChatError(event.message)
                   }
                 } catch {}
               }
@@ -526,8 +592,17 @@ export const useChatStore = defineStore('chat', {
           }
           session.chatState = 'idle'
         })
-        .catch(() => {
-          session.chatState = 'error'
+        .catch((err: any) => {
+          // A new message aborts the previous in-flight request via
+          // session._abortCtrl — that's expected, not an error.
+          if (err && err.name === 'AbortError') return
+          // Network-level failure (backend down, connection refused, etc.).
+          // Surface a concrete reason instead of a blank red state.
+          const reason =
+            err && err.message
+              ? `无法连接到后端服务 (${err.message})`
+              : '无法连接到后端服务，请确认服务已启动'
+          pushChatError(reason)
         })
     },
 
@@ -616,7 +691,9 @@ export const useChatStore = defineStore('chat', {
         }))
         this.sessions[sessionId] = {
           ...(this.sessions[sessionId] ?? {}),
-          messages: normalized,
+          // Don't clobber locally-hydrated threads with an empty backend
+          // response — keep the existing messages if the backend has none.
+          messages: normalized.length > 0 ? normalized : (this.sessions[sessionId]?.messages ?? normalized),
           historyStatus: 'ready',
           historyError: undefined,
         }

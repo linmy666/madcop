@@ -10,7 +10,6 @@ import InlineImageGallery from './InlineImageGallery.vue'
 import type { AgentTaskNotification } from '../../types/chat'
 import PlanPreviewCard from './PlanModePreview.vue'
 import { extractPlanPreview, isExitPlanModeTool } from './planModePreviewHelpers'
-import PlanToolCallBlock from './PlanToolCallBlock.vue'
 
 // ─── Props ────────────────────────────────────────────────────
 

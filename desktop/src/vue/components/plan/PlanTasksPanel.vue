@@ -54,13 +54,16 @@ function truncate(s: string | null, max = 36): string {
 </script>
 
 <template>
-  <aside class="tasks-panel" v-if="plan">
+  <aside class="tasks-panel">
     <header class="tp__head">
       <div class="tp__head-top">
         <h3 class="tp__title">任务监控</h3>
-        <span class="tp__count" :key="completedCount">{{ completedCount }}<span class="tp__count-slash">/</span>{{ totalSteps }}</span>
+        <span v-if="plan" class="tp__count" :key="completedCount">{{ completedCount }}<span class="tp__count-slash">/</span>{{ totalSteps }}</span>
+        <span v-else class="tp__count tp__count--loading">
+          <span class="tp__dot-pulse"></span>
+        </span>
       </div>
-      <div class="tp__progress">
+      <div v-if="plan" class="tp__progress">
         <div
           class="tp__progress-fill"
           :style="{ width: (totalSteps ? (completedCount / totalSteps) * 100 : 0) + '%' }"
@@ -68,7 +71,15 @@ function truncate(s: string | null, max = 36): string {
       </div>
     </header>
 
-    <div class="tp__body">
+    <!-- Waiting for plan from new message -->
+    <div v-if="!plan" class="tp__body tp__body--loading">
+      <div class="tp__loading-row">
+        <div class="tp__check tp__check--active"><div class="tp__spinner"></div></div>
+        <div class="tp__action">正在分析任务，生成执行计划…</div>
+      </div>
+    </div>
+
+    <div v-else class="tp__body">
       <!-- 进行中 -->
       <Transition name="tp-fade">
         <section v-if="activeStep" class="tp__section" key="active">
@@ -373,5 +384,40 @@ function truncate(s: string | null, max = 36): string {
 @keyframes tp-section-out {
   from { opacity: 1; max-height: 200px; }
   to { opacity: 0; max-height: 0; padding: 0; }
+}
+
+/* ── Loading / null-plan state ── */
+.tp__body--loading {
+  display: flex;
+  align-items: center;
+  padding: 20px 0;
+}
+.tp__loading-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 16px;
+  font-size: 13px;
+  width: 100%;
+}
+.tp__loading-row .tp__action {
+  color: var(--color-text-secondary, #555);
+}
+.tp__count--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tp__dot-pulse {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(99, 91, 255);
+  animation: tp-dot-bounce 1.2s ease-in-out infinite;
+}
+@keyframes tp-dot-bounce {
+  0%, 80%, 100% { transform: scale(0.5); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
 }
 </style>

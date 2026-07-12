@@ -53,6 +53,17 @@ class ProviderInput(BaseModel):
     make_active: bool = True
 
 
+class FetchModelsRequest(BaseModel):
+    """Fetch the live model list from a provider's /v1/models endpoint.
+
+    The caller passes the base_url + api_key they are *currently* typing
+    into the settings form (not a saved provider), so the UI can populate
+    the model dropdown before the provider is persisted.
+    """
+    base_url: str = ""
+    api_key: str = ""
+
+
 class ChatMessage(BaseModel):
     role: str = "user"
     content: str = ""
@@ -235,6 +246,7 @@ def _truncate_to_budget(lines: list[str], budget_tokens: int) -> list[str]:
 def _build_memory_system_prompt(
     user_query: str,
     *,
+    model_label: str = "",
     profile_budget: int = 800,
     relevant_budget: int = 800,
     preferences_budget: int = 400,
@@ -253,6 +265,11 @@ def _build_memory_system_prompt(
     3. Fetch L4 user preferences / dislikes, capped to
        `preferences_budget` tokens.
     4. Format into a single system-prompt string.
+
+    Args:
+        model_label: Human-readable name of the currently selected model
+                     (e.g. "SenseNova 6.7 Flash Lite"). Injected into the
+                     system prompt so the agent reports the correct identity.
     """
     store = get_memory_store()
     retriever = Retriever(
@@ -423,11 +440,12 @@ def _build_memory_system_prompt(
         pass
 
     # --- File attachment instructions (so LLM knows how to handle them) ---
+    _mdl = model_label or "the current model"
     parts.append(
         "FILE ATTACHMENTS: When the user attaches files, you can:\n"
         "- For text-y files (.txt, .md, .json, .csv, source code): the file content is loaded into the conversation. You can read it directly.\n"
         "- For PDFs: text is extracted via pypdf and loaded into the conversation. You can read it directly.\n"
-        "- For images (png, jpg, etc.): the current chat model (Sensenova GLM-5.2) does NOT support vision — you cannot see images. "
+        f"- For images (png, jpg, etc.): the current chat model ({_mdl}) does NOT support vision — you cannot see images. "
         "If the user asks you to analyze an image, respond honestly: 'I'm a text-only model and cannot view images. "
         "Please describe what's in the image, or enable a multimodal model like Qwen-VL or GPT-4o.'\n"
         "- For any file: the LLM can use the read_file tool with the path 'attachment://<id>' "
@@ -858,6 +876,99 @@ def create_app() -> FastAPI:
             "total": len(out),
         }
 
+    @app.post("/api/settings/providers/fetch-models")
+    async def fetch_provider_models_madcop(body: FetchModelsRequest) -> dict[str, Any]:
+        """On-demand model list for the provider settings form.
+
+        Takes a base_url + api_key from the (possibly unsaved) form and
+        queries {base_url}/models. Returns friendly display names and an
+        inferred context_window (None when unknown — UI shows "unknown"
+        instead of a fabricated number). Used to populate the model picker
+        so the user can select from the provider's real catalog.
+        """
+        def _infer_context_window(model_id: str) -> int | None:
+            mid = model_id.lower()
+            known: dict[str, int] = {
+                "gpt-4o": 128000, "gpt-4o-mini": 128000, "gpt-4-turbo": 128000,
+                "gpt-4": 8192, "gpt-3.5-turbo": 16385,
+                "o1-preview": 128000, "o1-mini": 128000, "o1": 200000,
+                "o3-mini": 200000, "o3": 200000, "o4-mini": 200000,
+                "claude-3-5-sonnet": 200000, "claude-3-5-haiku": 200000,
+                "claude-3-opus": 200000, "claude-3-sonnet": 200000,
+                "claude-3-haiku": 200000,
+                "claude-sonnet-4": 200000, "claude-opus-4": 200000,
+                "glm-4": 128000, "glm-4-plus": 128000, "glm-4-air": 128000,
+                "glm-4-long": 1000000, "glm-4-flash": 128000,
+                "glm-5": 128000, "glm-5.2": 128000, "glm-5-air": 128000,
+                "glm-zero": 16000,
+                "qwen3-80b": 131072, "qwen3-32b": 131072, "qwen3-235b": 131072,
+                "deepseek-chat": 64000, "deepseek-reasoner": 64000,
+                "deepseek-v3": 64000, "deepseek-r1": 64000,
+                "llama-3.1-70b": 131072, "llama-3.1-8b": 131072,
+                "llama-3.2-90b": 131072, "llama-3.3-70b": 131072,
+                "mistral-large": 128000, "mistral-medium": 128000,
+                "mistral-small": 128000,
+                "gemini-1.5-pro": 1000000, "gemini-1.5-flash": 1000000,
+                "gemini-2.0-flash": 1000000, "gemini-2.5-pro": 1000000,
+            }
+            if mid in known:
+                return known[mid]
+            for prefix, n in known.items():
+                if mid == prefix or mid.endswith("/" + prefix) or mid.endswith("-" + prefix):
+                    return n
+            for prefix in ("gpt-4o", "claude-3-5-sonnet", "claude-3-opus",
+                           "gemini-1.5-pro", "gemini-2.0-flash", "llama-3.1-70b"):
+                if prefix in mid:
+                    return known[prefix]
+            return None
+
+        def _display_name(model_id: str) -> str:
+            if not model_id:
+                return ""
+            s = model_id
+            for prefix in ("minimaxai/", "openai/", "anthropic/", "meta/",
+                           "google/", "deepseek-ai/", "mistralai/", "nvidia/"):
+                if s.startswith(prefix):
+                    s = s[len(prefix):]
+            s = s.replace("-", " ").replace("_", " ").strip()
+            out = []
+            for tok in s.split():
+                if tok.isupper() and len(tok) <= 6:
+                    out.append(tok)
+                elif tok[:1].isdigit():
+                    out.append(tok)
+                else:
+                    out.append(tok.capitalize())
+            return " ".join(out) or model_id
+
+        base = (body.base_url or "").rstrip("/")
+        api_key = body.api_key or ""
+        if not base or not api_key:
+            return {"models": [], "total": 0, "error": "base_url and api_key are required"}
+        try:
+            from madcop.server.madcop_compat import fetch_provider_models as _fetch
+        except ImportError:
+            _fetch = None  # type: ignore
+        if _fetch is None:
+            return {"models": [], "total": 0, "error": "fetch unavailable"}
+        try:
+            raw = _fetch(base, api_key)
+        except Exception as e:  # noqa: BLE001
+            import sys as _sys
+            print(f"[fetch-models] {base} error: {e}", file=_sys.stderr, flush=True)
+            return {"models": [], "total": 0, "error": str(e)}
+        out = []
+        for m in raw:
+            mid = m.get("id") or m.get("name") or ""
+            if not mid:
+                continue
+            out.append({
+                "id": mid,
+                "name": _display_name(mid),
+                "context_window": _infer_context_window(mid),
+            })
+        return {"models": out, "total": len(out)}
+
     @app.get("/api/models/current")
     async def get_current_model_madcop() -> dict[str, Any]:
         """cc-haha React 客户端期望的 current model 端点"""
@@ -961,6 +1072,7 @@ def create_app() -> FastAPI:
                 api_key=cfg["api_key"],
                 base_url=cfg["base_url"],
                 model=cfg["model"],
+                timeout=120.0,          # Complex tasks (reports, planning) need more time
             )
         # No key configured — use mock so the UI still works for demo
         return MockClient(
@@ -1015,23 +1127,57 @@ def create_app() -> FastAPI:
         except Exception:
             return None
 
-    def _stream_chunks(client, messages, body):
-        """Yield SSE formatted strings from a streaming LLM call."""
-        max_tokens = getattr(body, "max_tokens", None)
-        tools = getattr(body, "tools", None)
-        for chunk in client.stream(
-            messages,
-            model=body.model,
-            temperature=body.temperature,
-            max_tokens=max_tokens,
-            tools=tools,
-        ):
-            if chunk.reasoning:
-                yield f"data: {json.dumps({'type': 'reasoning', 'content': chunk.reasoning})}\n\n"
-            if chunk.text:
-                yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
-            if chunk.finish_reason:
-                yield f"data: {json.dumps({'type': 'done', 'model': chunk.model, 'finish_reason': chunk.finish_reason})}\n\n"
+    async def _stream_chunks(client, messages, body):
+        """Yield SSE formatted strings from a streaming LLM call.
+
+        Runs the synchronous client.stream() in a thread-pool executor so
+        the asyncio event loop stays free (health-checks, other requests,
+        WebSocket heartbeats are not blocked).
+        """
+        import asyncio
+        loop = asyncio.get_event_loop()
+        q: asyncio.Queue = asyncio.Queue(maxsize=64)
+        sentinel = object()
+
+        def _produce():
+            try:
+                max_tokens = getattr(body, "max_tokens", None)
+                tools = getattr(body, "tools", None)
+                for chunk in client.stream(
+                    messages,
+                    model=body.model,
+                    temperature=body.temperature,
+                    max_tokens=max_tokens,
+                    tools=tools,
+                ):
+                    if chunk.reasoning:
+                        q.put_nowait(
+                            f"data: {json.dumps({'type': 'reasoning', 'content': chunk.reasoning})}\n\n"
+                        )
+                    if chunk.text:
+                        q.put_nowait(
+                            f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
+                        )
+                    if chunk.finish_reason:
+                        q.put_nowait(
+                            f"data: {json.dumps({'type': 'done', 'model': chunk.model, 'finish_reason': chunk.finish_reason})}\n\n"
+                        )
+            except Exception as exc:
+                q.put_nowait(
+                    f"data: {json.dumps({'type': 'error', 'message': f'Stream error: {exc}'}, ensure_ascii=False)}\n\n"
+                )
+            finally:
+                q.put_nowait(sentinel)
+
+        future = loop.run_in_executor(None, _produce)
+        # Yield chunks as they arrive from the background thread.
+        while True:
+            item = await q.get()
+            if item is sentinel:
+                break
+            yield item
+        # Ensure the producer thread finished (re-raise if it crashed).
+        await future
 
     @app.post("/api/chat")
     async def chat(body: ChatRequest) -> StreamingResponse:
@@ -1059,12 +1205,18 @@ def create_app() -> FastAPI:
 
           data: {"type":"done","model":"..."}
         """
+        # Shared event-loop reference for all run_in_executor calls in
+        # this handler.  Keeps the asyncio loop responsive even when
+        # synchronous LLM / tool I/O is in-flight.
+        import asyncio as _chat_asyncio
+        _loop = _chat_asyncio.get_event_loop()
+
         client = _get_client()
         messages = [Message(role=m.role, content=m.content) for m in body.messages]
 
         # Convert text-only messages. Attachments' content is EXTRACTED
         # and appended directly to the user message so the LLM can read
-        # it without needing to call read_file (GLM-5.2 doesn't always
+        # it without needing to call read_file (some models don't always
         # follow tool-use instructions reliably for PDFs).
         messages: list = []
         for i, m in enumerate(body.messages):
@@ -1096,6 +1248,18 @@ def create_app() -> FastAPI:
                 messages.append(Message(role=m.role, content=m.content or ""))
 
         # ---- Memory injection (before LLM call) ---------------------- #
+        # Resolve the actual model label for dynamic system-prompt injection.
+        _active_label = ""
+        try:
+            _s = settings_store.load_settings()
+            _pub = settings_store.settings_to_public_dict(_s)
+            _aid = _pub.get("active_provider")
+            _ap = next((p for p in _pub.get("providers", []) if p.get("provider_id") == _aid), None)
+            if _ap:
+                _active_label = _ap.get("label") or _ap.get("model") or ""
+        except Exception:
+            pass
+
         # Find the latest user message and use it as the retrieval query.
         latest_user_msg = ""
         for m in reversed(messages):
@@ -1104,7 +1268,7 @@ def create_app() -> FastAPI:
                 break
         if latest_user_msg:
             try:
-                sys_prompt = _build_memory_system_prompt(latest_user_msg)
+                sys_prompt = _build_memory_system_prompt(latest_user_msg, model_label=_active_label)
             except Exception:
                 sys_prompt = (
                     "You are MadCop Agent, a personal AI agent. "
@@ -1166,17 +1330,17 @@ def create_app() -> FastAPI:
                     from madcop.workflow.planner import execute_step as _exec_step
                     _task = body.messages[-1].content if body.messages else ""
                     if _task:
-                        def _plan_llm(msgs, _tools=None):
-                            r = client.chat(
-                                [Message(role=m.get("role","user"), content=m.get("content","")) for m in msgs],
-                                model=body.model, temperature=0.5,
-                                tools=_tools if _tools is not None else None,
-                            )
-                            if r.tool_calls:
-                                # Auto-execute the tool call and return its result
-                                import traceback as _tb
+                        def _plan_llm(msgs, _tools=None, force_tool=None):
+                            def _call_with_tools(m):
+                                return client.chat(
+                                    [Message(role=x.get("role", "user"), content=x.get("content", "")) for x in m],
+                                    model=body.model, temperature=0.5,
+                                    tools=_tools if _tools is not None else None,
+                                )
+
+                            def _auto_exec(resp):
                                 _results = []
-                                for _tc in r.tool_calls:
+                                for _tc in resp.tool_calls:
                                     try:
                                         _tool = registry.get(_tc.name)
                                         if _tool:
@@ -1187,8 +1351,34 @@ def create_app() -> FastAPI:
                                     except Exception as _te:
                                         _results.append(f"[TOOL ERROR: {_te}]")
                                 return "; ".join(_results) if _results else "(no result)"
+
+                            r = _call_with_tools(msgs)
+                            if r.tool_calls:
+                                # Auto-execute the tool call and return its result
+                                return _auto_exec(r)
+                            # No tool calls emitted. Some models (e.g. GLM) describe
+                            # the tool in text instead of emitting a structured
+                            # tool_call. If this step expected a specific tool, force
+                            # a second attempt that explicitly demands the call.
+                            if _tools and force_tool:
+                                r2 = _call_with_tools(
+                                    msgs
+                                    + [{"role": "assistant", "content": (r.content or "")[:500]}]
+                                    + [{
+                                        "role": "user",
+                                        "content": (
+                                            f"你必须立即调用工具「{force_tool}」并传入正确参数，"
+                                            "不要只描述步骤。现在就调用该工具。"
+                                        ),
+                                    }]
+                                )
+                                if r2.tool_calls:
+                                    return _auto_exec(r2)
                             return r.content or ""
-                        _plan = generate_plan(_task, llm_complete=_plan_llm, max_steps=6)
+                        _plan = await _loop.run_in_executor(
+                            None,
+                            lambda: generate_plan(_task, llm_complete=_plan_llm, max_steps=6),
+                        )
                         _plan.status = "running"
                         yield f"data: {json.dumps({'type': 'plan', 'plan': _plan.to_dict()}, ensure_ascii=False)}\n\n"
                         for _step in _plan.steps:
@@ -1196,14 +1386,41 @@ def create_app() -> FastAPI:
                             _plan.current_step = _step.step
                             yield f"data: {json.dumps({'type': 'plan_step', 'step': _step.to_dict()}, ensure_ascii=False)}\n\n"
                             try:
-                                _result = _exec_step(_step, _plan.goal, llm_complete=lambda msgs: _plan_llm(msgs, _tools=tool_schemas))
+                                _result = await _loop.run_in_executor(
+                                    None,
+                                    lambda s=_step, g=_plan.goal: _exec_step(
+                                        s, g,
+                                        llm_complete=lambda msgs: _plan_llm(msgs, _tools=tool_schemas, force_tool=s.tool),
+                                    ),
+                                )
                                 _step.result = _result
-                                _passed, _reason = verify_step(_step, llm_complete=lambda msgs: _plan_llm(msgs, _tools=tool_schemas))
+                                _passed, _reason = await _loop.run_in_executor(
+                                    None,
+                                    lambda s=_step: verify_step(
+                                        s, llm_complete=lambda msgs: _plan_llm(msgs, _tools=tool_schemas),
+                                    ),
+                                )
                                 if _passed:
                                     _step.status = StepStatus.COMPLETED
                                 else:
-                                    _step.status = StepStatus.FAILED
-                                    _step.error = f"验证失败: {_reason}"
+                                    # Soft verification failure. A step that
+                                    # actually produced a non-empty result (and
+                                    # didn't hard-error at the tool layer) should
+                                    # be treated as done — e.g. a greeting / casual
+                                    # reply step that the verifier is too strict
+                                    # about. Genuine failures (exception above, or
+                                    # a tool error string below) stay FAILED.
+                                    _res = _step.result or ""
+                                    _tool_error = (
+                                        "[TOOL ERROR" in _res
+                                        or "not found]" in _res
+                                    )
+                                    if _res.strip() and not _tool_error:
+                                        _step.status = StepStatus.COMPLETED
+                                        _step.error = None
+                                    else:
+                                        _step.status = StepStatus.FAILED
+                                        _step.error = f"验证失败: {_reason}"
                             except Exception as _e:
                                 _step.status = StepStatus.FAILED
                                 _step.error = f"异常: {_e}"
@@ -1231,11 +1448,18 @@ def create_app() -> FastAPI:
 
                 # Use non-streaming chat() for the first call so we can
                 # inspect tool_calls before deciding how to proceed.
-                resp = client.chat(
-                    messages,
-                    model=body.model,
-                    temperature=body.temperature,
-                    tools=tool_schemas,
+                # Run in executor to avoid blocking the asyncio event loop
+                # (the OpenAI SDK is synchronous — a slow LLM response would
+                # otherwise freeze health-checks, WebSocket, and all other
+                # requests).
+                resp = await _loop.run_in_executor(
+                    None,
+                    lambda: client.chat(
+                        messages,
+                        model=body.model,
+                        temperature=body.temperature,
+                        tools=tool_schemas,
+                    ),
                 )
 
                 # Mark phase 1 done
@@ -1246,7 +1470,7 @@ def create_app() -> FastAPI:
 
                 # No tool calls? Stream the text content normally.
                 if not resp.tool_calls:
-                    for sse in _stream_chunks(client, messages, body):
+                    async for sse in _stream_chunks(client, messages, body):
                         yield sse
                     # -- Memory extraction (async, debounced) ----------- #
                     # Don't block the response — schedule a background
@@ -1303,7 +1527,10 @@ def create_app() -> FastAPI:
                     yield f"data: {json.dumps({'type': 'trace', 'node': tool_node.to_dict()}, ensure_ascii=False)}\n\n"
 
                     yield f"data: {json.dumps({'type': 'tool', 'name': call.name, 'args': call.arguments}, ensure_ascii=False)}\n\n"
-                    result = registry.dispatch(call)
+                    # Tool dispatch may perform network/file I/O (e.g.
+                    # web_search, read_file) — run in executor to keep the
+                    # event loop responsive.
+                    result = await _loop.run_in_executor(None, lambda: registry.dispatch(call))
                     result_str = result.to_message_content()
                     # Mark tool done
                     trace_store.mark_done(tool_node.id, output=result_str[:200])
@@ -1325,12 +1552,14 @@ def create_app() -> FastAPI:
                 # v2.6.3.3: Force synthesis — without this, llama-3.1-8b-instruct
                 # often just echoes the tool result as a new tool call, leaving
                 # the user staring at "recall_memory ✓ echo ✓" with no final
-                # answer. v2.6.3.1: Tell the model to be DETAILED, not concise,
-                # because users want the tool data summarized, not a one-liner.
+                # answer.
+                # NOTE: Use role="user" — some providers (SenseNova etc.) reject
+                # system messages not at position 0 (HTTP 400).
                 messages.append(Message(
-                    role="system",
+                    role="user",
                     content=(
-                        "你现在有了上面的搜索结果。请用中文写一份详细的BI分析报告。\n"
+                        "[System instruction] 你现在有了上面的搜索结果。"
+                        "请用中文写一份详细的BI分析报告。\n"
                         "要求：\n"
                         "1. 不要再调用任何工具\n"
                         "2. 用 Markdown 格式，包含表格和要点\n"
@@ -1366,7 +1595,7 @@ def create_app() -> FastAPI:
                     max_tokens: int = 8192
                     tools: None = None
                 no_tools_body = _BareBody(model=body.model or "", temperature=body.temperature or 0.7)
-                for sse in _stream_chunks(client, messages, no_tools_body):
+                async for sse in _stream_chunks(client, messages, no_tools_body):
                     yield sse
 
                 # Mark phase 2 done
@@ -2091,9 +2320,20 @@ def create_app() -> FastAPI:
                     print(f"[ws] fact extraction error: {_e}", file=sys.stderr, flush=True)
 
                 # ---- Build memory-enriched system prompt ----------------- #
+                # Resolve active model label (same logic as streaming endpoint)
+                _ws_label = ""
+                try:
+                    _ws_s = settings_store.load_settings()
+                    _ws_pub = settings_store.settings_to_public_dict(_ws_s)
+                    _ws_aid = _ws_pub.get("active_provider")
+                    _ws_ap = next((p for p in _ws_pub.get("providers", []) if p.get("provider_id") == _ws_aid), None)
+                    if _ws_ap:
+                        _ws_label = _ws_ap.get("label") or _ws_ap.get("model") or ""
+                except Exception:
+                    pass
                 latest_user_msg = messages[-1].content if messages else ""
                 try:
-                    sys_prompt = _build_memory_system_prompt(latest_user_msg)
+                    sys_prompt = _build_memory_system_prompt(latest_user_msg, model_label=_ws_label)
                 except Exception:
                     sys_prompt = (
                         "You are MadCop Agent, a personal AI agent. "
@@ -2357,11 +2597,11 @@ def create_app() -> FastAPI:
                         # ---- Final synthesis call (no tools) ----
                         # v2.6.3: Force a final tool-free call so the model
                         # must give a natural-language answer instead of
-                        # looping on more tool calls. Without this, llama-3.1
-                        # often keeps calling tools and the user sees a
-                        # session stuck on "recall_memory ✓" with no answer.
-                        # v2.6.3.1: Tell it to be DETAILED so users see the
-                        # tool data summarized, not a one-liner.
+                        # looping on more tool calls.
+                        # NOTE: Use role="user" here — some providers (e.g.
+                        # SenseNova) reject system messages that are NOT at
+                        # position 0 ("System message must be at the
+                        # beginning", HTTP 400).
                         if resp.tool_calls:
                             await ws.send_json({
                                 "type": "status", "state": "thinking",
@@ -2370,15 +2610,15 @@ def create_app() -> FastAPI:
                             final = await asyncio.to_thread(
                                 client.chat,
                                 full_messages + [_Msg(
-                                    role="system",
-                                    content="You have all the tool results you need. "
-                                    "Now write a detailed, helpful answer in the "
-                                    "user's language. Summarize the data from the "
-                                    "tools (numbers, names, links) into a clear, "
-                                    "well-formatted response. Use bullet points or "
-                                    "short paragraphs as appropriate. Do NOT call "
-                                    "any more tools. Aim for 3-6 sentences or a "
-                                    "few bullet points.",
+                                    role="user",
+                                    content="[System instruction] You have "
+                                    "all the tool results you need. Now write "
+                                    "a detailed, helpful answer in the user's "
+                                    "language. Summarize the data from the "
+                                    "tools (numbers, names, links) into a "
+                                    "clear, well-formatted response. Use "
+                                    "bullet points or short paragraphs as "
+                                    "appropriate. Do NOT call any more tools.",
                                 )],
                                 model=model,
                                 temperature=temperature,

@@ -11,7 +11,7 @@
  */
 
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { getApiUrl } from '../../api/client'
+import { getApiUrl, getBaseUrl } from '../../api/client'
 
 interface Provider {
   provider_id: string
@@ -48,6 +48,7 @@ const allModels = ref<ModelInfo[]>([])
 const loading = ref(false)
 const currentLabel = ref('选择模型')
 const currentContextWindow = ref<number | null>(null)
+const loadError = ref<string | null>(null)
 
 // Manual context override (per model)
 const CONTEXT_OVERRIDES_KEY = 'madcop_context_overrides'
@@ -66,10 +67,14 @@ function saveContextOverride(modelId: string, value: number) {
 
 async function loadAll() {
   loading.value = true
+  loadError.value = null
   try {
     // 1. Load providers
     const res = await fetch(getApiUrl('/api/settings'))
-    if (!res.ok) return
+    if (!res.ok) {
+      loadError.value = `后端返回 ${res.status}，请确认后端已启动 (${getBaseUrl()})`
+      return
+    }
     const data = await res.json()
     const allProviders: Provider[] = data.providers || []
     providers.value = allProviders.filter((p) => p.model && p.has_key)
@@ -78,8 +83,15 @@ async function loadAll() {
     let allData: any = { models: [] }
     try {
       const modelsRes = await fetch(getApiUrl('/api/models'))
+      if (!modelsRes.ok) {
+        loadError.value = `模型列表接口返回 ${modelsRes.status}`
+        return
+      }
       if (modelsRes.ok) allData = await modelsRes.json()
-    } catch {}
+    } catch (e: any) {
+      loadError.value = `无法连接后端: ${e?.message || '网络错误'}`
+      return
+    }
 
     const overrides = loadContextOverrides()
     const models: ModelInfo[] = []
@@ -123,8 +135,8 @@ async function loadAll() {
         currentContextWindow.value = found.context_window ?? null
       }
     }
-  } catch {
-    // ignore
+  } catch (e: any) {
+    loadError.value = `加载失败: ${e?.message || '未知错误'}`
   } finally {
     loading.value = false
   }
@@ -236,6 +248,11 @@ watch(() => props.selectedModel, (val) => {
 
     <div v-if="open" class="model-selector__dropdown" data-testid="model-selector-dropdown">
       <div v-if="loading" class="model-selector__empty">加载模型列表…</div>
+      <div v-else-if="loadError" class="model-selector__empty model-selector__error">
+        <div style="font-size: 13px; margin-bottom: 6px;">⚠ {{ loadError }}</div>
+        <button @click="loadAll()" class="model-selector__retry-btn">重试</button>
+        <div style="font-size: 10px; margin-top: 8px; opacity: 0.7;">提示：确认后端运行在 {{ getBaseUrl() }}</div>
+      </div>
       <div v-else-if="allModels.length === 0" class="model-selector__empty">
         还没有可用的模型
         <div style="font-size: 10px; margin-top: 4px; opacity: 0.7;">在「设置 → 模型供应商」中添加</div>
@@ -342,6 +359,20 @@ watch(() => props.selectedModel, (val) => {
   font-size: 12px;
   color: var(--color-text-tertiary);
 }
+.model-selector__error {
+  color: var(--color-error);
+}
+.model-selector__retry-btn {
+  margin-top: 8px;
+  padding: 6px 16px;
+  background: var(--color-brand);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.model-selector__retry-btn:hover { opacity: 0.9; }
 .model-selector__group {
   padding: 4px 0;
 }

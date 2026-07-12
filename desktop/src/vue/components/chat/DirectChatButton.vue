@@ -6,6 +6,7 @@
  */
 
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 const log = ref<string[]>([])
 
@@ -23,11 +24,10 @@ async function directChat() {
   addLog(`📤 sending: "${text.slice(0, 40)}..."`)
   
   try {
-    const res = await fetch('http://127.0.0.1:8765/api/chat', {
+    const res = await fetch(getApiUrl('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'sensenova-6.7-flash-lite',
         messages: [{ role: 'user', content: text }],
         temperature: 0.7,
         max_tokens: 2048,

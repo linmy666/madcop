@@ -50,6 +50,29 @@ def _resolve_in_allowlist(
     )
 
 
+def _extract_docx_text(raw_bytes: bytes) -> str:
+    """Extract text from a .docx (Office Open XML) document via python-docx.
+
+    Returns the extracted text (paragraphs + tables), or an empty string on
+    failure so the caller can decide how to report it.
+    """
+    try:
+        import io as _io
+        from docx import Document as _DocxDocument
+        doc = _DocxDocument(_io.BytesIO(raw_bytes))
+        parts: list[str] = []
+        for para in doc.paragraphs:
+            if para.text and para.text.strip():
+                parts.append(para.text)
+        for ti, table in enumerate(doc.tables):
+            parts.append(f"\n[Table {ti + 1}]")
+            for row in table.rows:
+                parts.append(" | ".join(c.text.strip() for c in row.cells))
+        return "\n".join(parts).strip()
+    except Exception:
+        return ""
+
+
 # --------------------------------------------------------------------------- #
 # ReadFileTool
 # --------------------------------------------------------------------------- #
@@ -168,9 +191,28 @@ class ReadFileTool(Tool):
                     return {"path": att.get("id") or name, "content": content[:60_000] or "[empty xlsx]"}
                 except Exception as _xe:
                     return {"path": att.get("id") or name, "content": f"[xlsx parse error: {_xe}]"}
+            # Word .docx — extract text via python-docx
+            if name.lower().endswith(".docx") or mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                import base64 as _b64
+                raw_bytes = _b64.b64decode(body)
+                text = _extract_docx_text(raw_bytes)
+                if text:
+                    max_chars = 30_000
+                    if len(text) > max_chars:
+                        text = text[:max_chars] + f"\n\n[truncated at {max_chars} chars of {len(text)} total]"
+                    return {"path": att.get("id") or name, "content": text}
+                return {
+                    "path": att.get("id") or name,
+                    "content": f"[docx parse returned no text: {name} (image-only or corrupted?)]",
+                }
+            if name.lower().endswith(".doc"):
+                return {
+                    "path": att.get("id") or name,
+                    "content": f"[.doc (legacy Word) not supported: {name} — please convert to .docx]",
+                }
             return {
                 "path": att.get("id") or name,
-                "content": f"[binary file: {name}, type: {mime}, size: {len(body)} base64 chars — describe what you see or do not try to render]",
+                "content": f"[binary file: {name}, type: {mime}, size: {len(body)} base64 chars — describe what you see or do not try render]",
             }
         # Raw text fallback.
         return {"path": att.get("id") or name, "content": data}
@@ -227,6 +269,19 @@ class ReadFileTool(Tool):
                 return {"error": f"could not extract text from PDF: {p.name} (scanned/image-only PDF?)"}
             except Exception as e:
                 return {"error": f"failed to parse PDF {p.name}: {e}"}
+
+        # .docx — extract text via python-docx (binary, not UTF-8 readable)
+        if str(p).lower().endswith(".docx"):
+            try:
+                text = _extract_docx_text(p.read_bytes())
+                if text:
+                    max_chars = 60_000
+                    if len(text) > max_chars:
+                        text = text[:max_chars] + f"\n\n[truncated at {max_chars} chars of {len(text)} total]"
+                    return {"path": str(p), "content": text}
+                return {"error": f"could not extract text from docx: {p.name}"}
+            except Exception as e:
+                return {"error": f"failed to parse docx {p.name}: {e}"}
 
         try:
             content = p.read_text(
@@ -392,8 +447,103 @@ class EditFileTool(Tool):
             return {"error": f"{type(e).__name__}: {e}"}
 
 
+# --------------------------------------------------------------------------- #
+# WriteXlsxTool
+# --------------------------------------------------------------------------- #
+
+
+class WriteXlsxTool(Tool):
+    """Generate a new .xlsx spreadsheet from structured data.
+
+    Lets the agent *produce* spreadsheets, not just read them. The model
+    supplies a list of sheets, each with a name and a list of rows (rows are
+    lists of cell values). Paths are confined to the allowlist like the
+    other file tools.
+    """
+
+    name = "write_xlsx"
+    description = (
+        "Generate a new .xlsx spreadsheet file from structured data. "
+        "Provide `sheets`: a list where each item has `name` (sheet name) and "
+        "`rows` (a list of rows, each row a list of cell values). "
+        "Path must be inside allowed dirs."
+    )
+
+    def __init__(self, allowed_dirs: Sequence[str | Path] | None = None) -> None:
+        self._allowed_dirs = list(allowed_dirs or [os.getcwd()])
+
+    @property
+    def parameters_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Output .xlsx path (e.g. /workspace/report.xlsx).",
+                },
+                "sheets": {
+                    "type": "array",
+                    "description": (
+                        "Sheets to write. Each item: "
+                        "{'name': str, 'rows': list[list[cell]]}."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "rows": {
+                                "type": "array",
+                                "items": {"type": "array"},
+                            },
+                        },
+                        "required": ["name", "rows"],
+                    },
+                },
+            },
+            "required": ["path", "sheets"],
+        }
+
+    def __call__(self, **kwargs: Any) -> dict[str, Any]:
+        path_str = kwargs.get("path", "")
+        sheets = kwargs.get("sheets", [])
+        if not path_str:
+            return {"error": "missing 'path'"}
+        if not isinstance(sheets, list) or not sheets:
+            return {"error": "missing or invalid 'sheets' (expected a non-empty list)"}
+
+        try:
+            p = _resolve_in_allowlist(path_str, self._allowed_dirs)
+        except PermissionError as e:
+            return {"error": str(e)}
+
+        try:
+            import openpyxl as _xl
+            wb = _xl.Workbook()
+            for i, sh in enumerate(sheets):
+                name = str(sh.get("name", f"Sheet{i + 1}"))[:31]
+                rows = sh.get("rows", []) or []
+                ws = wb.active if i == 0 else wb.create_sheet(title=name)
+                if i == 0:
+                    ws.title = name
+                for row in rows:
+                    if not isinstance(row, list):
+                        row = [row]
+                    ws.append(["" if c is None else c for c in row])
+            wb.save(str(p))
+            wb.close()
+            return {
+                "path": str(p),
+                "status": "ok",
+                "sheets": len(sheets),
+                "bytes": p.stat().st_size,
+            }
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+
 __all__ = [
     "ReadFileTool",
     "WriteFileTool",
     "EditFileTool",
+    "WriteXlsxTool",
 ]

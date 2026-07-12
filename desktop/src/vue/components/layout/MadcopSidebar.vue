@@ -4,6 +4,7 @@
 // Sub-components (NavItem, etc.) are render-function helpers or TODO placeholders.
 
 import { ref, computed, onMounted, onUnmounted, watch, h, defineComponent, nextTick } from 'vue'
+import Tooltip from '../common/Tooltip.vue'
 import { useSessionStore } from '../../stores/sessionStore'
 import { useUIStore } from '../../stores/uiStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -509,6 +510,15 @@ function primaryNavClass(isActive: boolean): string {
     isActive
       ? 'bg-[var(--color-sidebar-item-active)] text-[var(--color-text-primary)]'
       : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-sidebar-item-hover)] hover:text-[var(--color-text-primary)]'
+  } ${!expanded ? 'justify-center' : ''}`
+}
+
+// Distinct, prominent treatment for the primary "New chat" action
+function newChatClass(isActive: boolean): string {
+  return `group flex w-full h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-semibold transition-all duration-150 ${
+    isActive
+      ? 'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)]'
+      : 'bg-[var(--color-primary-fixed-dim)] text-[var(--color-primary)] hover:bg-[var(--color-primary-fixed)]'
   } ${!expanded ? 'justify-center' : ''}`
 }
 
@@ -1378,48 +1388,54 @@ const projectMenuData = computed(() => {
     <!-- Primary nav: 2 entries, each with stroke-outline icon -->
     <nav :class="`px-3 pb-3 flex flex-col ${expanded ? 'gap-0.5' : 'items-center gap-1.5'}`" aria-label="Primary">
       <!-- 对话 -->
-      <button
-        type="button"
-        @click="() => {
-          const curTabId = tabStore.activeTabId
-          const curSession = curTabId ? sessionStore.sessions.find((s) => s.id === curTabId) : null
-          void createSessionForWorkDir(curSession?.workDir || curSession?.projectRoot || undefined)
-          closeMobileDrawer()
-        }"
-        :class="primaryNavClass(activeTabType === 'session' || activeTabType === null)"
-        :aria-label="t('sidebar.newSession')"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.newSession') }}</span>
-        <span
-          v-if="expanded && activeSessionCount > 0"
-          class="ml-auto text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
-          style="fontFamily: ui-monospace, 'SF Mono', monospace"
-        >{{ activeSessionCount }}</span>
-      </button>
+      <Tooltip :label="t('sidebar.newSession')" full>
+        <button
+          type="button"
+          @click="() => {
+            const curTabId = tabStore.activeTabId
+            const curSession = curTabId ? sessionStore.sessions.find((s) => s.id === curTabId) : null
+            void createSessionForWorkDir(curSession?.workDir || curSession?.projectRoot || undefined)
+            closeMobileDrawer()
+          }"
+          :class="newChatClass(activeTabType === 'session' || activeTabType === null)"
+          :aria-label="t('sidebar.newSession')"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.newSession') }}</span>
+          <span
+            v-if="expanded && activeSessionCount > 0"
+            class="ml-auto text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
+            style="fontFamily: ui-monospace, 'SF Mono', monospace"
+          >{{ activeSessionCount }}</span>
+        </button>
+      </Tooltip>
 
 
       <!-- 知识库 -->
-      <button
-        v-if="!isMobileComputed"
-        type="button"
-        :class="primaryNavClass(activeTabType === 'knowledge')"
-        aria-label="知识库"
-        @click="() => { tabStore.openTab('__knowledge__', '知识库', 'knowledge' as any); closeMobileDrawer() }"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-        <span v-if="expanded" class="flex-1 text-left">知识库</span>
-      </button>
+      <Tooltip label="知识库" full>
+        <button
+          v-if="!isMobileComputed"
+          type="button"
+          :class="primaryNavClass(activeTabType === 'knowledge')"
+          aria-label="知识库"
+          @click="() => { tabStore.openTab('__knowledge__', '知识库', 'knowledge' as any); closeMobileDrawer() }"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span v-if="expanded" class="flex-1 text-left">知识库</span>
+        </button>
+      </Tooltip>
       <!-- Agent (previously 工作流) -->
-      <button
-        type="button"
-        :class="primaryNavClass(activeTabType === 'workflows')"
-        aria-label="Agent"
-        @click="() => { tabStore.openWorkflowsTab(); closeMobileDrawer() }"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/><line x1="6.5" y1="6.5" x2="10" y2="10"/><line x1="17.5" y1="6.5" x2="14" y2="10"/><line x1="6.5" y1="17.5" x2="10" y2="14"/><line x1="17.5" y1="17.5" x2="14" y2="14"/></svg>
-        <span v-if="expanded" class="flex-1 text-left">Agent</span>
-      </button>
+      <Tooltip label="Agent" full>
+        <button
+          type="button"
+          :class="primaryNavClass(activeTabType === 'workflows')"
+          aria-label="Agent"
+          @click="() => { tabStore.openWorkflowsTab(); closeMobileDrawer() }"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/><line x1="6.5" y1="6.5" x2="10" y2="10"/><line x1="17.5" y1="6.5" x2="14" y2="10"/><line x1="6.5" y1="17.5" x2="10" y2="14"/><line x1="17.5" y1="17.5" x2="14" y2="14"/></svg>
+          <span v-if="expanded" class="flex-1 text-left">Agent</span>
+        </button>
+      </Tooltip>
     </nav>
 
     <!-- Divider: primary / secondary -->

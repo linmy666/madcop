@@ -73,6 +73,11 @@ function closeTab(tab: Tab, e: MouseEvent) {
   tabStore.closeTab(tab.sessionId)
   // Also disconnect the session
   chatStore.disconnectSession(tab.sessionId)
+  // Sync: remove from sidebar workspace list so closing a tab
+  // also removes its entry from the left panel.
+  if (!tab.sessionId.startsWith('__')) {
+    void sessionStore.deleteSession(tab.sessionId)
+  }
 }
 
 function newSession() {
@@ -136,13 +141,21 @@ function onContextMenu(e: MouseEvent, tab: Tab) {
 
 function closeOthers(tab: Tab) {
   const others = tabStore.tabs.filter((t) => t.sessionId !== tab.sessionId)
-  for (const t of others) tabStore.closeTab(t.sessionId)
+  for (const t of others) {
+    tabStore.closeTab(t.sessionId)
+    chatStore.disconnectSession(t.sessionId)
+    if (!t.sessionId.startsWith('__')) void sessionStore.deleteSession(t.sessionId)
+  }
   contextMenu.value = null
 }
 
 function closeAll() {
   const ids = tabStore.tabs.map((t) => t.sessionId)
-  for (const id of ids) tabStore.closeTab(id)
+  for (const id of ids) {
+    tabStore.closeTab(id)
+    chatStore.disconnectSession(id)
+    if (!id.startsWith('__')) void sessionStore.deleteSession(id)
+  }
   contextMenu.value = null
 }
 
