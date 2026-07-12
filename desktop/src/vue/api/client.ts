@@ -85,6 +85,30 @@ export function getApiUrl(pathOrUrl: string) {
   }
 }
 
+// --- Production Electron fix -------------------------------------------------
+// In the production build the Vue renderer is loaded from file://, so any
+// relative `fetch('/api/...')` (written assuming the dev server also hosts the
+// API) resolves to `file:///api/...` and fails with ERR_FILE_NOT_FOUND. Rewrite
+// relative /api paths to the real backend base URL. Absolute URLs and local
+// asset paths (e.g. /assets/*.js) are passed through untouched.
+// This single shim fixes every legacy raw-fetch call site at once.
+function installApiFetchShim() {
+  if (typeof window === 'undefined' || typeof window.fetch !== 'function') return
+  const nativeFetch = window.fetch.bind(window)
+  const rewrite = (url: string) => (url.startsWith('/api/') ? getApiUrl(url) : url)
+  // @ts-expect-error - intentionally overriding the global fetch
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    if (typeof input === 'string') {
+      return nativeFetch(rewrite(input), init)
+    }
+    if (input instanceof Request && input.url.startsWith('/api/')) {
+      return nativeFetch(new Request(rewrite(input.url), input), init)
+    }
+    return nativeFetch(input, init)
+  }
+}
+installApiFetchShim()
+
 export function setAuthToken(token: string | null) {
   const trimmed = token?.trim() ?? ''
   authToken = trimmed.length > 0 ? trimmed : null

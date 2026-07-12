@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 /**
  * InlineImageGallery — Vue 3 port of components/chat/InlineImageGallery.tsx
@@ -30,7 +31,9 @@ function extractImagePaths(text: string): string[] {
 }
 
 function fileUrl(filePath: string): string {
-  return `/api/filesystem/file?path=${encodeURIComponent(filePath)}`
+  // Use the absolute backend URL — under file:// a relative path would
+  // resolve to file:///api/... and fail to load the image.
+  return getApiUrl(`/api/filesystem/file?path=${encodeURIComponent(filePath)}`)
 }
 
 function fileName(filePath: string): string {
