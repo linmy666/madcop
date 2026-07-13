@@ -110,7 +110,20 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
     - PDFs (via pypdf)
     - Word .docx (via python-docx)
     - Excel .xlsx/.xls (via openpyxl)
+
+    All text outputs are capped at ~12 K tokens (~48 K chars for CJK-heavy
+    text, ~50 K chars for ASCII) to leave room for the rest of the prompt.
+    CSV files get special treatment: header + first N rows so the LLM sees
+    the schema without drowning in data.
     """
+    # Token budget caps per format (characters). These are deliberately
+    # conservative so that even a single large attachment doesn't blow
+    # the context window by itself.
+    _CAP_TEXT = 48_000      # plain text, json, csv, code
+    _CAP_DOCX = 60_000       # Word documents
+    _CAP_PDF = 60_000        # PDFs
+    _CAP_XLSX = 60_000       # Excel spreadsheets (already table-formatted)
+    _CSV_SAMPLE_ROWS = 200   # max data rows to keep from a CSV
     name = att.name or "file"
     lower = name.lower()
     mime_hint = (att.dataUrl or "")[:100]
@@ -135,7 +148,7 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                             pages.append("")
                     t = "\n\n---\n\n".join(pp.strip() for pp in pages if pp.strip())
                     if t:
-                        return t[:60_000]
+                        return t[:_CAP_PDF]
                 except Exception:
                     pass
             # Word .docx
@@ -145,7 +158,7 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                         from madcop.tools.files import _extract_docx_text
                         text = _extract_docx_text(raw)
                         if text:
-                            return text[:60_000]
+                            return text[:_CAP_DOCX]
                     except Exception:
                         pass
             # Excel
@@ -153,10 +166,20 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                 if raw is not None:
                     t = _xlsx_bytes_to_text(raw)
                     if t and not t.startswith("[xlsx parse error"):
-                        return t[:60_000]
-            # Plain text / json / csv / source
+                        return t[:_CAP_XLSX]
+            # CSV — keep header + sample rows (don't dump 100K+ rows)
+            if lower.endswith(".csv"):
+                try:
+                    lines = p.read_text("utf-8", errors="replace").splitlines()
+                    if len(lines) > _CSV_SAMPLE_ROWS + 1:
+                        kept = lines[:1] + lines[1:_CSV_SAMPLE_ROWS + 1]
+                        return "\n".join(kept) + f"\n…({len(lines) - _CSV_SAMPLE_ROWS - 1} more rows truncated)"
+                    return p.read_text("utf-8", errors="replace")[:_CAP_TEXT]
+                except Exception:
+                    pass
+            # Plain text / json / source
             try:
-                return p.read_text("utf-8", errors="replace")[:60_000]
+                return p.read_text("utf-8", errors="replace")[:_CAP_TEXT]
             except Exception:
                 pass
             return f"[binary file: {name}]"
@@ -164,10 +187,10 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
 
     # Case B: base64 dataUrl from the chat composer
     if att.dataUrl and att.dataUrl.startswith("data:") and "," in att.dataUrl:
-        _, body = att.dataUrl.split(",", 1)
+        _, body_b64 = att.dataUrl.split(",", 1)
         try:
             import base64 as _b64
-            raw = _b64.b64decode(body)
+            raw = _b64.b64decode(body_b64)
         except Exception:
             return f"[failed to decode {name}]"
 
@@ -184,7 +207,7 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                         pages.append("")
                 t = "\n\n---\n\n".join(pp.strip() for pp in pages if pp.strip())
                 if t:
-                    return t[:60_000]
+                    return t[:_CAP_PDF]
                 return "[PDF text extraction returned no content (scanned/image-only PDF?)]"
             except Exception as e:
                 return f"[PDF parse error: {e}]"
@@ -195,15 +218,27 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                 from madcop.tools.files import _extract_docx_text
                 text = _extract_docx_text(raw)
                 if text:
-                    return text[:60_000]
-                return "[docx parse returned no text (image-only or corrupted?)]"
+                    return text[:_CAP_DOCX]
+                return "[docx returned no text (image-only or corrupted?)]"
             except Exception as e:
                 return f"[docx parse error: {e}]"
 
-        # Text files
+        # CSV — smart sample
+        if lower.endswith(".csv"):
+            try:
+                text = raw.decode("utf-8", errors="replace")
+                lines = text.splitlines()
+                if len(lines) > _CSV_SAMPLE_ROWS + 1:
+                    kept = lines[:1] + lines[1:_CSV_SAMPLE_ROWS + 1]
+                    return "\n".join(kept) + f"\n…({len(lines) - _CSV_SAMPLE_ROWS - 1} more rows truncated)"
+                return text[:_CAP_TEXT]
+            except Exception:
+                pass
+
+        # Text files (explicit mime)
         if att.dataUrl.startswith("data:text/") or att.dataUrl.startswith("data:application/json"):
             try:
-                return raw.decode("utf-8", errors="replace")[:60_000]
+                return raw.decode("utf-8", errors="replace")[:_CAP_TEXT]
             except Exception:
                 pass
 
@@ -211,10 +246,25 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
         if lower.endswith((".xlsx", ".xls")):
             t = _xlsx_bytes_to_text(raw)
             if t and not t.startswith("[xlsx parse error"):
-                return t[:60_000]
+                return t[:_CAP_XLSX]
             return t or f"[empty xlsx: {name}]"
 
-        return f"[binary file: {name}, size: {len(body)} base64 chars]"
+        # Fallback for other files with dataUrl: try decode as text
+        try:
+            text = raw.decode("utf-8", errors="replace")
+            if lower.endswith((".csv", ".tsv", ".txt", ".md", ".json", ".log",
+                                ".xml", ".html", ".css", ".py", ".js", ".ts",
+                                ".java", ".c", ".cpp", ".h", ".go", ".rs",
+                                ".sh", ".bat", ".sql", ".yaml", ".yml", ".toml",
+                                ".ini", ".cfg", ".conf")):
+                lines = text.splitlines()
+                if len(lines) > _CSV_SAMPLE_ROWS * 2:
+                    return "\n".join(lines[:_CSV_SAMPLE_ROWS * 2]) + f"\n…({len(lines) - _CSV_SAMPLE_ROWS * 2} more lines truncated)"
+                return text[:_CAP_TEXT]
+        except Exception:
+            pass
+
+        return f"[binary file: {name}, size: {len(body_b64)} base64 chars]"
 
     # Case C: nothing usable
     return f"[no readable content for {name}]"
@@ -1498,6 +1548,65 @@ def create_app() -> FastAPI:
                 # (the OpenAI SDK is synchronous — a slow LLM response would
                 # otherwise freeze health-checks, WebSocket, and all other
                 # requests).
+                # -- Pre-call token budget check ---------------------------- #
+                # Large file attachments can blow past the model's context
+                # window.  Estimate total tokens and, if over budget, truncate
+                # attachment content aggressively instead of letting the LLM
+                # API return a raw 400 error that confuses users.
+                # _infer_context_window is defined inside other handlers in
+                # this same create_app() scope; fall back to 128K if not
+                # visible from here.
+                try:
+                    _ctx_window = _infer_context_window(body.model or "") or 128_000
+                except NameError:
+                    _ctx_window = 128_000
+                _max_prompt = _ctx_window - getattr(body, "max_tokens", 8192) - 2048  # safety margin
+                _estimated = sum(_estimate_tokens(getattr(m, "content", "") or "") for m in messages)
+                if _estimated > _max_prompt:
+                    # Find the last user message (the one with attachments) and
+                    # shrink its ATTACHMENT blocks to fit.
+                    _over = _estimated - _max_prompt
+                    for _mi in range(len(messages) - 1, -1, -1):
+                        _m = messages[_mi]
+                        if getattr(_m, "role", "") == "user" and _m.content and "ATTACHMENT:" in _m.content:
+                            import re as _re
+                            # Shrink each ATTACHMENT block proportionally
+                            _parts = _re.split(r'(\n--- ATTACHMENT:.*?--- END ---\n)', _m.content)
+                            _new_parts = []
+                            _att_text_len = sum(len(p) for p in _parts if "ATTACHMENT:" in p)
+                            if _att_text_len > 1000:  # worth truncating
+                                _ratio = max(0.1, (_att_text_len - _over * 3) / _att_text_len)
+                                for p in _parts:
+                                    if "ATTACHMENT:" in p and len(p) > 200:
+                                        # Keep header + truncate body
+                                        _header_end = p.find("\n", p.find("---\n") + 3)
+                                        if _header_end > 0:
+                                            _header = p[:_header_end + 1]
+                                            _body = p[_header_end + 1:]
+                                            _body = _body[:int(len(_body) * _ratio)]
+                                            _new_parts.append(_header + _body + "\n…(truncated to fit context window)\n")
+                                        else:
+                                            _new_parts.append(p[:int(len(p) * _ratio)])
+                                    else:
+                                        _new_parts.append(p)
+                                _m.content = "".join(_new_parts)
+                            break  # only modify the last user message
+                    # Re-estimate after truncation
+                    _estimated2 = sum(_estimate_tokens(getattr(m, "content", "") or "") for m in messages)
+                    if _estimated2 > _max_prompt:
+                        # Still too big — emit a clear error instead of raw 400
+                        _overflow_msg = (
+                            f"附件+对话内容过长（约 {_estimated2//1000}K tokens），"
+                            f"超出当前模型上下文窗口（{_ctx_window//1000}K tokens）。"
+                            f"请尝试：缩小文件、减少对话历史、或换用更大上下文的模型。"
+                        )
+                        yield f"data: {json.dumps({'type': 'error', 'message': _overflow_msg}, ensure_ascii=False)}\n\n"
+                        tr = trace_store.get(trace_root.id)
+                        if tr:
+                            trace_store.mark_done(trace_root.id, output="context overflow")
+                            yield f"data: {json.dumps({'type': 'trace', 'node': tr.to_dict()}, ensure_ascii=False)}\n\n"
+                        return
+
                 resp = await _loop.run_in_executor(
                     None,
                     lambda: client.chat(

@@ -613,6 +613,23 @@ function openTerminalInTab() {
                 >
                   {{ session?.title || t('session.untitled') }}
                 </h1>
+                <!-- Plan sidebar toggle -->
+                <button
+                  v-if="!isEmpty"
+                  type="button"
+                  :title="planSidebarEnabled ? '隐藏计划面板' : '显示计划面板'"
+                  :class="[
+                    'flex shrink-0 items-center justify-center rounded-md p-1 transition-colors',
+                    planSidebarEnabled
+                      ? 'text-[var(--color-primary)] bg-[var(--color-primary)]/[0.08] hover:bg-[var(--color-primary)]/15'
+                      : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]'
+                  ]"
+                  @click.stop="togglePlanSidebar"
+                >
+                  <span class="material-symbols-outlined text-[18px] leading-none">
+                    {{ planSidebarEnabled ? 'task_alt' : 'task' }}
+                  </span>
+                </button>
               </div>
               <div
                 :class="showRightPanel
