@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { deriveSessionTitle, isPlaceholderTitle } from '../lib/autoTitle'
 import { saveToStorage } from './sessionStore'
 import { useSessionStore } from './sessionStore'
+import { useSessionRuntimeStore } from './sessionRuntimeStore'
 import { getApiUrl } from '../api/client'
 
 // v3.0: local persistence for per-session messages. The chat API
@@ -390,7 +391,11 @@ export const useChatStore = defineStore('chat', {
       // prepends a memory + workspace + tool system message and replaces any
       // frontend-sent `system` role). Sending a frontend-authored system
       // message here would be dead code, so we intentionally omit it.
-      const requestMessages = [...history, { role: 'user', content }]
+      // NOTE: `userMsg` was already pushed into `session.messages` above
+      // (line ~342), so it is already part of `history`. Do NOT append it a
+      // second time — that previously duplicated every user message in the
+      // request and doubled token usage / confused the model.
+      const requestMessages = [...history]
       // Shared error surfacer: mark the session errored and append a visible
       // assistant message so the reason is never silently swallowed.
       const pushChatError = (message: string) => {
@@ -403,6 +408,10 @@ export const useChatStore = defineStore('chat', {
           model: session.messages.find((m: any) => m.type === 'assistant_text')?.model,
         } as any)
       }
+      // Per-session reasoning intensity (effort), from the session runtime
+      // selection. 'auto' (or unset) means: let the backend/model decide.
+      const _effort =
+        useSessionRuntimeStore(this.$pinia).selections[sessionId]?.effortLevel || 'auto'
       fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -424,6 +433,7 @@ export const useChatStore = defineStore('chat', {
           max_tokens: 8192,
           conversation_id: sessionId,
           plan_mode: !!session.planModeEnabled,
+          effort: _effort === 'auto' ? null : _effort,
         }),
       })
         .then(async (res) => {

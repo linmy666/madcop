@@ -278,6 +278,7 @@ class ChatRequest(BaseModel):
     skip_title_gen: bool = False  # set true to skip Claude-style auto title generation
     attachments: list[ChatAttachment] = []  # file/image attachments from the user
     plan_mode: bool = False  # enable Plan-and-Execute mode
+    effort: str | None = None  # reasoning intensity: auto|low|medium|high|max (per session)
 
 
 class SetActiveRequest(BaseModel):
@@ -1245,6 +1246,7 @@ def create_app() -> FastAPI:
                     temperature=body.temperature,
                     max_tokens=max_tokens,
                     tools=tools,
+                    effort=body.effort,
                 ):
                     if chunk.reasoning:
                         q.put_nowait(
@@ -1614,6 +1616,7 @@ def create_app() -> FastAPI:
                         model=body.model,
                         temperature=body.temperature,
                         tools=tool_schemas,
+                        effort=body.effort,
                     ),
                 )
 
@@ -2547,6 +2550,7 @@ def create_app() -> FastAPI:
                         model=model,
                         temperature=temperature,
                         tools=tool_schemas or None,
+                        effort=body.effort,
                     )
                     content = resp.content or ""
                     # 4) content_delta: ship the whole text in one chunk
@@ -2690,6 +2694,7 @@ def create_app() -> FastAPI:
                                 model=model,
                                 temperature=temperature,
                                 tools=tool_schemas or None,
+                                effort=body.effort,
                             )
                             content2 = resp2.content or ""
                             if content2:
@@ -2778,6 +2783,7 @@ def create_app() -> FastAPI:
                                 model=model,
                                 temperature=temperature,
                                 tools=None,  # no tools — must answer
+                                effort=body.effort,
                             )
                             final_content = final.content or ""
                             if final_content:

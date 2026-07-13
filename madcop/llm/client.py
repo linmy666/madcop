@@ -17,6 +17,7 @@ swap them via injection.
 from __future__ import annotations
 
 import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator
@@ -227,7 +228,29 @@ class OpenAICompatClient(ChatClient):
         api_key     -> MADCOP_OPENAI_API_KEY  (or OPENAI_API_KEY)
         base_url    -> MADCOP_OPENAI_BASE_URL (default OpenAI)
         model       -> MADCOP_OPENAI_MODEL    (default 'gpt-4o-mini')
+
+    Reasoning intensity (effort): when ``effort`` is set and the target
+    model is a reasoning model (OpenAI o-series / GPT-5), the client
+    injects ``extra_body={"reasoning_effort": <level>}``. Non-reasoning
+    models (e.g. GLM via Sensenova, Qwen via NVIDIA) silently ignore the
+    setting — see ``_supports_reasoning``.
     """
+
+    # UI effort level -> OpenAI ``reasoning_effort`` value.
+    _REASONING_EFFORT_MAP = {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "max": "xhigh",
+    }
+    # Models that accept ``reasoning_effort`` (OpenAI reasoning series).
+    _REASONING_RE = re.compile(r"(?:^|/)(o1|o3|o4)[-_a-z0-9]*$|gpt-5", re.IGNORECASE)
+
+    @staticmethod
+    def _supports_reasoning(model_id: str | None) -> bool:
+        if not model_id:
+            return False
+        return bool(OpenAICompatClient._REASONING_RE.search(model_id))
 
     def __init__(
         self,
@@ -235,6 +258,7 @@ class OpenAICompatClient(ChatClient):
         base_url: str | None = None,
         model: str | None = None,
         timeout: float = 30.0,
+        effort: str | None = None,
     ):
         # Late import so the package isn't a hard dependency for mock users
         from openai import OpenAI
@@ -246,6 +270,8 @@ class OpenAICompatClient(ChatClient):
         )
         self.model = model or os.environ.get("MADCOP_OPENAI_MODEL", "gpt-4o-mini")
         self.timeout = timeout
+        # Per-client default reasoning intensity; can be overridden per call.
+        self.effort = effort
         if not self.api_key:
             raise ValueError(
                 "OpenAICompatClient requires an API key. "
@@ -258,6 +284,17 @@ class OpenAICompatClient(ChatClient):
             timeout=timeout,
         )
 
+    def _reasoning_effort_extra_body(self, effort: str | None, model: str | None) -> dict | None:
+        """Return ``extra_body`` with reasoning_effort, or None if N/A."""
+        eff = effort if effort is not None else self.effort
+        if not eff or eff == "auto":
+            return None
+        effective_model = model or self.model
+        if not self._supports_reasoning(effective_model):
+            return None
+        level = self._REASONING_EFFORT_MAP.get(eff, "medium")
+        return {"reasoning_effort": level}
+
     def chat(
         self,
         messages: Iterable[Message],
@@ -267,6 +304,7 @@ class OpenAICompatClient(ChatClient):
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | None = None,
+        effort: str | None = None,
     ) -> ChatResponse:
         payload = [m.to_dict() for m in messages]
         kwargs: dict[str, Any] = {
@@ -280,6 +318,9 @@ class OpenAICompatClient(ChatClient):
             kwargs["tools"] = tools
             if tool_choice:
                 kwargs["tool_choice"] = tool_choice
+        extra = self._reasoning_effort_extra_body(effort, model or self.model)
+        if extra:
+            kwargs["extra_body"] = extra
         resp = self._client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message
@@ -316,6 +357,7 @@ class OpenAICompatClient(ChatClient):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        effort: str | None = None,
     ) -> Iterator[StreamChunk]:
         """Real token-level streaming via the OpenAI SDK.
 
@@ -336,6 +378,9 @@ class OpenAICompatClient(ChatClient):
             kwargs["max_tokens"] = max_tokens
         if tools:
             kwargs["tools"] = tools
+        extra = self._reasoning_effort_extra_body(effort, model or self.model)
+        if extra:
+            kwargs["extra_body"] = extra
         # `stream=True` makes the SDK return a Stream iterator rather
         # than a single ChatCompletion.
         stream_obj = self._client.chat.completions.create(**kwargs)

@@ -24,7 +24,7 @@ import { useChatStore, type AttachmentRef, type QueuedUserMessage } from '../../
 import { useTabStore } from '../../stores/tabs'
 import { useSessionStore } from '../../stores/sessionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { useSessionRuntimeStore } from '../../stores/sessionRuntimeStore'
+import { useSessionRuntimeStore, DRAFT_RUNTIME_SELECTION_KEY } from '../../stores/sessionRuntimeStore'
 import { useWorkspaceChatContextStore } from '../../stores/workspaceChatContextStore'
 import { useTranslation } from '../../i18n'
 import { detectAmbiguity } from '../../lib/clarify'
@@ -37,6 +37,7 @@ import Tooltip from '../common/Tooltip.vue'
 import FileSearchMenu from './FileSearchMenu.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ModelSelector from '../controls/ModelSelector.vue'
+import EffortSelector from '../controls/EffortSelector.vue'
 import LocalSlashCommandPanel from './LocalSlashCommandPanel.vue'
 import ComposerDropOverlay from './ComposerDropOverlay.vue'
 import ProjectContextChip from '../shared/ProjectContextChip.vue'
@@ -1438,6 +1439,11 @@ watch(input, (v) => {
                 :disabled="isSubmitting"
                 :selected-model="selectedModel"
                 @update:selected-model="(m: string) => { selectedModel = m }"
+              />
+              <EffortSelector
+                :selection-key="activeTabId || DRAFT_RUNTIME_SELECTION_KEY"
+                :compact="useCompactControls"
+                :disabled="isSubmitting"
               />
               <ModeSelector
                 :current-mode="selectedMode"
