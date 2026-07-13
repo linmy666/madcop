@@ -53,7 +53,7 @@ function formatPluginNames(plugins: PluginSummary[]): string {
 const t = useTranslation()
 const pluginStore = usePluginStore()
 const sessionStore = useSessionStore()
-const addToast = useUIStore((s) => s.addToast)
+const { addToast } = useUIStore()
 
 // Local state (mirrors React useState)
 const selectedPluginIds = ref<Set<string>>(new Set())

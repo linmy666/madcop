@@ -460,7 +460,7 @@ function getHeatmapCellDetail(
 // ─── Reactive State ─────────────────────────────────────────────────────────
 
 const t = useTranslation()
-const locale = useSettingsStore((state) => state.locale)
+const settingsStore = useSettingsStore()
 
 const heatmapMeasureRef = ref<HTMLDivElement | null>(null)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
@@ -575,7 +575,7 @@ onUnmounted(() => {
 // ─── Computed ────────────────────────────────────────────────────────────────
 
 const days = computed(() => buildHeatmapDays(stats.value, heatmapMode.value))
-const monthLabels = computed(() => buildMonthLabels(days.value, locale))
+const monthLabels = computed(() => buildMonthLabels(days.value, settingsStore.locale))
 const today = computed(() => (days.value.length > 0 ? days.value[days.value.length - 1] : null))
 const activeTooltipDate = computed(() => hoveredDate.value ?? focusedDate.value)
 const tooltipDay = computed(() => days.value.find((day) => day.date === activeTooltipDate.value) ?? null)
@@ -638,11 +638,11 @@ const metrics = computed<SummaryMetric[]>(() => [
   {
     label: t('settings.activity.peakTokens'),
     value: formatTokens(peakTokens.value),
-    detail: stats.value?.peakActivityDay ? formatDateLabel(stats.value.peakActivityDay, locale) : undefined,
+    detail: stats.value?.peakActivityDay ? formatDateLabel(stats.value.peakActivityDay, settingsStore.locale) : undefined,
   },
   {
     label: t('settings.activity.longestTask'),
-    value: formatTaskDuration(stats.value?.longestSession?.duration, locale, t),
+    value: formatTaskDuration(stats.value?.longestSession?.duration, settingsStore.locale, t),
     detail: stats.value?.longestSession ? formatMessageCount(stats.value.longestSession.messageCount, t) : undefined,
   },
   {
@@ -660,7 +660,7 @@ const metrics = computed<SummaryMetric[]>(() => [
 const insightMetrics = computed<InsightMetric[]>(() => [
   {
     label: t('settings.activity.activeRate'),
-    value: formatPercent(stats.value?.activeDays ?? 0, stats.value?.totalDays ?? 0, locale),
+    value: formatPercent(stats.value?.activeDays ?? 0, stats.value?.totalDays ?? 0, settingsStore.locale),
   },
   {
     label: t('settings.activity.mostUsedModel'),
@@ -669,19 +669,19 @@ const insightMetrics = computed<InsightMetric[]>(() => [
   },
   {
     label: t('settings.activity.exploredSkills'),
-    value: formatInteger(exploredSkillsCount.value, locale),
+    value: formatInteger(exploredSkillsCount.value, settingsStore.locale),
   },
   {
     label: t('settings.activity.totalSkillUses'),
-    value: formatInteger(totalSkillUses.value, locale),
+    value: formatInteger(totalSkillUses.value, settingsStore.locale),
   },
   {
     label: t('settings.activity.totalToolCalls'),
-    value: formatInteger(totalToolCalls.value, locale),
+    value: formatInteger(totalToolCalls.value, settingsStore.locale),
   },
   {
     label: t('settings.activity.totalSessions'),
-    value: formatInteger(stats.value?.totalSessions ?? 0, locale),
+    value: formatInteger(stats.value?.totalSessions ?? 0, settingsStore.locale),
   },
 ])
 
@@ -1091,7 +1091,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
                   :key="day.date"
                   type="button"
                   role="gridcell"
-                  :aria-label="`${getHeatmapCellTitle(day, locale, t)}: ${getHeatmapCellDetail(day, t)}`"
+                  :aria-label="`${getHeatmapCellTitle(day, settingsStore.locale, t)}: ${getHeatmapCellDetail(day, t)}`"
                   :aria-describedby="activeTooltipDate === day.date ? `activity-day-tooltip-${day.date}` : undefined"
                   class="activity-heat-cell rounded-[3px] border focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:ring-offset-2 focus:ring-offset-[var(--color-surface)]"
                   :class="
@@ -1120,7 +1120,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
               :style="tooltipStyle"
             >
               <div class="font-medium text-[var(--color-activity-tooltip-text)]">
-                {{ getHeatmapCellTitle(tooltipDay, locale, t) }}
+                {{ getHeatmapCellTitle(tooltipDay, settingsStore.locale, t) }}
               </div>
               <div class="mt-1 text-[var(--color-activity-tooltip-muted)]">
                 {{ getHeatmapCellDetail(tooltipDay, t) }}

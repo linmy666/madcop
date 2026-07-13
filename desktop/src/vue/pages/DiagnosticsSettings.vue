@@ -55,7 +55,7 @@ function formatEventForCopy(event: DiagnosticEvent): string {
 // ─── Reactive state ──────────────────────────────────────────
 
 const t = useTranslation()
-const addToast = useUIStore((s) => s.addToast)
+const { addToast } = useUIStore()
 
 const status = ref<DiagnosticsStatus | null>(null)
 const events = ref<DiagnosticEvent[]>([])

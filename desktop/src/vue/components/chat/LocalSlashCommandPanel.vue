@@ -53,9 +53,13 @@ const props = defineProps({
 })
 
 const t = useTranslation()
-const setPendingSettingsTab = useUIStore((s) => s.setPendingSettingsTab)
-const selectServer = useMcpStore((s) => s.selectServer)
-const fetchSkillDetail = useSkillStore((s) => s.fetchSkillDetail)
+// NOTE: defineStore() returns a hook that takes NO selector argument.
+// Passing a selector like (s) => s.foo makes Pinia treat it as the `pinia`
+// instance, which then crashes with "Cannot read properties of undefined
+// (reading 'has')". Actions are safely destructured; state needs storeToRefs.
+const { setPendingSettingsTab } = useUIStore()
+const { selectServer } = useMcpStore()
+const { fetchSkillDetail } = useSkillStore()
 
 // ══════════════════════════════════════════════════════════════
 // Helper functions
