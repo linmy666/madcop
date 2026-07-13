@@ -1050,11 +1050,14 @@ def register(app: FastAPI) -> None:
         session = _ensure_session(sid)
         if work_dir:
             session["workDir"] = work_dir
+        if body.get("title"):
+            session["title"] = body["title"]
         if repo.get("branch"):
             session["branch"] = repo["branch"]
         if body.get("permissionMode"):
             session["permissionMode"] = body["permissionMode"]
-        return {"sessionId": sid, "workDir": session.get("workDir")}
+        return {"sessionId": sid, "workDir": session.get("workDir"),
+                "title": session.get("title")}
 
     @app.delete("/api/sessions/{session_id}", include_in_schema=False)
     async def cc_delete_session(session_id: str) -> dict[str, Any]:

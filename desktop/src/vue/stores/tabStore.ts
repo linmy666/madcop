@@ -37,7 +37,19 @@ const ACTIVE_TAB_STORAGE_KEY = 'madcop_active_tab'
 function loadTabs(): Tab[] {
   try {
     const raw = localStorage.getItem(TAB_STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Tab[]
+      // Deduplicate: if multiple tabs share the same sessionId, keep
+      // only the first one.  This cleans up stale duplicates left by
+      // earlier versions where every "New Chat" click spawned both a new
+      // session AND a new tab without checking.
+      const seen = new Set<string>()
+      return parsed.filter((t) => {
+        if (seen.has(t.sessionId)) return false
+        seen.add(t.sessionId)
+        return true
+      })
+    }
   } catch {}
   return []
 }

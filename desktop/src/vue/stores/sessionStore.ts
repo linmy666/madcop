@@ -149,6 +149,33 @@ async function backendDeleteSession(id: string) {
   } catch {}
 }
 
+// ── Collapse duplicate empty sessions ────────────────────────────
+// When "New Chat" is clicked repeatedly, multiple untitled zero-message
+// sessions accumulate (each with a unique id).  This helper keeps at most
+// one such session — the active one if it's already empty, otherwise the
+// most-recently-modified.
+const DEFAULT_TITLES = new Set(['新对话', 'New Session'])
+function collapseEmptySessions(
+  sessions: SessionListItem[],
+  activeId: string | null,
+): SessionListItem[] {
+  const empties = sessions.filter(
+    (s) => s.messageCount === 0 && DEFAULT_TITLES.has(s.title),
+  )
+  if (empties.length <= 1) return sessions
+  const keepId =
+    (activeId && empties.find((s) => s.id === activeId)?.id) ||
+    empties
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime(),
+      )[0].id
+  return sessions.filter(
+    (s) => !(DEFAULT_TITLES.has(s.title) && s.messageCount === 0 && s.id !== keepId),
+  )
+}
+
 export const useSessionStore = defineStore('session', {
   state: () => ({
     sessions: loadFromStorage() as SessionListItem[],
@@ -163,21 +190,28 @@ export const useSessionStore = defineStore('session', {
     async fetchSessions(_project?: string) {
       this.isLoading = true
       this.error = null
-      // Load the local (offline-cache) list, then merge in any sessions
-      // the backend already has for the current workspace. Because we now
-      // use the SAME session id on both sides, merging by id is safe and
-      // gives workspace-scoped, portable history without losing the local
-      // cache. If both are empty, seed a default so the input works.
       const local = loadFromStorage()
       const wd = getCurrentWorkspaceDir()
       let backend: SessionListItem[] = []
       if (wd) backend = await backendLoadSessions(wd)
+
+      // Scope local sessions to the current workspace so that sessions
+      // created under a different project don't leak into this view.
+      const localScoped = wd
+        ? local.filter((s) => (s.workDir || s.projectRoot || s.projectPath) === wd)
+        : local
+
+      // Merge by id (local wins for fields like title).
       const byId = new Map<string, SessionListItem>()
-      for (const s of local) byId.set(s.id, s)
+      for (const s of localScoped) byId.set(s.id, s)
       for (const s of backend) {
         if (!byId.has(s.id)) byId.set(s.id, s)
       }
       let merged = [...byId.values()]
+
+      // Collapse duplicate empty "新对话" sessions to a single one.
+      merged = collapseEmptySessions(merged, this.activeSessionId)
+
       if (merged.length === 0) {
         merged = [
           {
@@ -193,10 +227,17 @@ export const useSessionStore = defineStore('session', {
       this.isLoading = false
     },
     async createSession(_workDir?: string, _options?: any): Promise<string> {
-      // Keep using a local id (`session-...`) so the sidebar, tab list,
-      // and localStorage message map stay in sync. We ALSO push the
-      // session to the backend so it gets persisted under the workspace
-      // directory (<workDir>/.madcop/...).
+      // Reuse an existing empty "新对话" session rather than spawning a
+      // brand-new one every time "New Chat" is clicked.  This prevents the
+      // tab bar and sidebar from filling up with duplicate empty entries.
+      const existingEmpty = this.sessions.find(
+        (s) => s.messageCount === 0 && DEFAULT_TITLES.has(s.title),
+      )
+      if (existingEmpty) {
+        this.activeSessionId = existingEmpty.id
+        return existingEmpty.id
+      }
+
       const id = `session-${Date.now()}`
       const now = new Date().toISOString()
       const workDir = _workDir || getCurrentWorkspaceDir() || ''
