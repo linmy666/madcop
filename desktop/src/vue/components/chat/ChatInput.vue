@@ -487,34 +487,50 @@ function handlePaste(event: ClipboardEvent) {
 }
 
 // ─── Files to attachments ──────────────────────────────────────
+// NOTE: This MUST capture the REAL absolute file path (Electron's `file.path`)
+// AND inline the file content as a dataUrl. Sending only `file.name` (a bare
+// filename) made the attachment undiscoverable on the backend, so the LLM
+// never received any file content. The same logic lives in
+// lib/composerAttachments.ts (used by the empty-state composer); keep them in
+// sync.
+
+// Cap inlined content so large files don't blow up the request / memory.
+// Files larger than this rely on the absolute `path` (the desktop backend
+// runs on the same machine and can read the file directly from disk).
+const MAX_INLINE_BYTES = 12 * 1024 * 1024 // 12 MB
 
 function filesToComposerAttachments(files: FileList | File[]): Promise<ComposerAttachment[]> {
   return Promise.all(
-    Array.from(files).map((file) => {
+    Array.from(files).map(async (file) => {
       const id = `att-${Date.now()}-${Math.random().toString(36).slice(2)}`
-      const type = file.type.startsWith('image/') ? 'image' : 'file'
-      if (type === 'image') {
-        return new Promise<ComposerAttachment>((resolve) => {
-          const reader = new FileReader()
-          reader.onload = () => {
-            resolve({
-              id,
-              name: file.name,
-              type: 'image',
-              mimeType: file.type,
-              previewUrl: reader.result as string,
-              data: reader.result as string,
-            })
-          }
-          reader.readAsDataURL(file)
-        })
-      }
-      return Promise.resolve({
+      const isImage =
+        file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name || '')
+      // Electron exposes the real on-disk path of a dropped/picked file. The
+      // backend runs locally, so capturing it lets the server read the file
+      // straight from disk (most reliable path).
+      const nativePath = (file as File & { path?: unknown }).path
+      const absPath =
+        typeof nativePath === 'string' && nativePath.length > 0 ? nativePath : undefined
+      // Also inline the file content (capped) so the backend can parse it from
+      // the request payload even if the path isn't usable there.
+      const shouldInline = isImage || file.size <= MAX_INLINE_BYTES
+      const data = shouldInline
+        ? await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}`))
+            reader.readAsDataURL(file)
+          })
+        : undefined
+      return {
         id,
         name: file.name,
-        type: 'file',
-        path: file.name,
-      })
+        type: isImage ? 'image' : 'file',
+        mimeType: file.type || undefined,
+        path: absPath,
+        previewUrl: isImage ? data : undefined,
+        data,
+      }
     }),
   )
 }

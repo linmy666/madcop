@@ -77,20 +77,54 @@ class ChatAttachment(BaseModel):
     dataUrl: str | None = None  # base64 data URL for inline previews
 
 
+def _xlsx_bytes_to_text(raw: bytes) -> str:
+    """Convert an .xlsx/.xls workbook's bytes into a markdown-ish text dump."""
+    try:
+        import io as _io, openpyxl as _xl
+        wb = _xl.load_workbook(_io.BytesIO(raw), data_only=True, read_only=True)
+        parts = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            rows = list(ws.iter_rows(values_only=True))
+            if not rows:
+                continue
+            parts.append(f"## Sheet: {sheet_name} ({len(rows)} rows, {len(rows[0])} cols)")
+            header = " | ".join(str(c or "") for c in rows[0])
+            sep = " | ".join("---" for _ in rows[0])
+            body = []
+            for row in rows[1:]:
+                body.append(" | ".join(str(c or "") for c in row))
+            parts.append(f"| {header} |\n| {sep} |\n" + "\n".join(f"| {r} |" for r in body))
+        wb.close()
+        return "\n\n".join(parts)
+    except Exception as _xe:
+        return f"[xlsx parse error: {_xe}]"
+
+
 def _read_attachment_direct(att: ChatAttachment) -> str:
     """Extract attachment content as plain text — no tool call needed.
 
     Supports:
-    - Text files (base64 dataUrl with text/* mime)
+    - Text / json / csv / source files (decoded from a base64 dataUrl or read
+      from a real OS file path)
     - PDFs (via pypdf)
-    - Anything else → short metadata description
+    - Word .docx (via python-docx)
+    - Excel .xlsx/.xls (via openpyxl)
     """
     name = att.name or "file"
+    lower = name.lower()
+    mime_hint = (att.dataUrl or "")[:100]
+
     # Case A: real OS file path on the backend server
     if att.path:
         p = Path(att.path).expanduser()
         if p.exists() and p.is_file():
-            if name.lower().endswith(".pdf"):
+            try:
+                raw = p.read_bytes()
+            except Exception:
+                raw = None
+            # PDF
+            if lower.endswith(".pdf"):
                 try:
                     from pypdf import PdfReader as _PdfReader
                     pages = []
@@ -99,15 +133,33 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                             pages.append(pg.extract_text() or "")
                         except Exception:
                             pages.append("")
-                    t = "\n\n---\n\n".join(p.strip() for p in pages if p.strip())
+                    t = "\n\n---\n\n".join(pp.strip() for pp in pages if pp.strip())
                     if t:
                         return t[:60_000]
                 except Exception:
                     pass
+            # Word .docx
+            if lower.endswith(".docx") or "wordprocessingml" in mime_hint:
+                if raw is not None:
+                    try:
+                        from madcop.tools.files import _extract_docx_text
+                        text = _extract_docx_text(raw)
+                        if text:
+                            return text[:60_000]
+                    except Exception:
+                        pass
+            # Excel
+            if lower.endswith((".xlsx", ".xls")):
+                if raw is not None:
+                    t = _xlsx_bytes_to_text(raw)
+                    if t and not t.startswith("[xlsx parse error"):
+                        return t[:60_000]
+            # Plain text / json / csv / source
             try:
                 return p.read_text("utf-8", errors="replace")[:60_000]
             except Exception:
                 pass
+            return f"[binary file: {name}]"
         return f"[file not readable on server: {name}]"
 
     # Case B: base64 dataUrl from the chat composer
@@ -120,7 +172,7 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
             return f"[failed to decode {name}]"
 
         # PDF via pypdf
-        if name.lower().endswith(".pdf") or "application/pdf" in att.dataUrl[:100]:
+        if lower.endswith(".pdf") or "application/pdf" in mime_hint:
             try:
                 import io as _io
                 from pypdf import PdfReader as _PdfReader
@@ -130,12 +182,23 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                         pages.append(pg.extract_text() or "")
                     except Exception:
                         pages.append("")
-                t = "\n\n---\n\n".join(p.strip() for p in pages if p.strip())
+                t = "\n\n---\n\n".join(pp.strip() for pp in pages if pp.strip())
                 if t:
                     return t[:60_000]
                 return "[PDF text extraction returned no content (scanned/image-only PDF?)]"
             except Exception as e:
                 return f"[PDF parse error: {e}]"
+
+        # Word .docx via python-docx
+        if lower.endswith(".docx") or "wordprocessingml" in mime_hint:
+            try:
+                from madcop.tools.files import _extract_docx_text
+                text = _extract_docx_text(raw)
+                if text:
+                    return text[:60_000]
+                return "[docx parse returned no text (image-only or corrupted?)]"
+            except Exception as e:
+                return f"[docx parse error: {e}]"
 
         # Text files
         if att.dataUrl.startswith("data:text/") or att.dataUrl.startswith("data:application/json"):
@@ -144,31 +207,12 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
             except Exception:
                 pass
 
-        # Binary/image files — not readable as text
-        # Excel xlsx — extract as text via openpyxl
-        if name.lower().endswith(".xlsx") or name.lower().endswith(".xls"):
-            try:
-                import io as _io, openpyxl as _xl
-                wb = _xl.load_workbook(_io.BytesIO(raw), data_only=True, read_only=True)
-                parts = []
-                for sheet_name in wb.sheetnames:
-                    ws = wb[sheet_name]
-                    rows = list(ws.iter_rows(values_only=True))
-                    if not rows:
-                        continue
-                    # Build a markdown table from all rows
-                    parts.append(f"## Sheet: {sheet_name} ({len(rows)} rows, {len(rows[0])} cols)")
-                    header = " | ".join(str(c or "") for c in rows[0])
-                    sep = " | ".join("---" for _ in rows[0])
-                    body = []
-                    for row in rows[1:]:
-                        body.append(" | ".join(str(c or "") for c in row))
-                    parts.append(f"| {header} |\n| {sep} |\n" + "\n".join(f"| {r} |" for r in body))
-                wb.close()
-                t = "\n\n".join(parts)
-                return t[:60_000] if t else f"[empty xlsx: {name}]"
-            except Exception as _xe:
-                return f"[xlsx parse error: {_xe}]"
+        # Excel xlsx/xls — extract as text via openpyxl
+        if lower.endswith((".xlsx", ".xls")):
+            t = _xlsx_bytes_to_text(raw)
+            if t and not t.startswith("[xlsx parse error"):
+                return t[:60_000]
+            return t or f"[empty xlsx: {name}]"
 
         return f"[binary file: {name}, size: {len(body)} base64 chars]"
 
@@ -445,6 +489,8 @@ def _build_memory_system_prompt(
         "FILE ATTACHMENTS: When the user attaches files, you can:\n"
         "- For text-y files (.txt, .md, .json, .csv, source code): the file content is loaded into the conversation. You can read it directly.\n"
         "- For PDFs: text is extracted via pypdf and loaded into the conversation. You can read it directly.\n"
+        "- For Word documents (.docx): text is extracted via python-docx and loaded into the conversation. You can read it directly.\n"
+        "- For Excel files (.xlsx): cell values are extracted and loaded into the conversation as a markdown table. You can read it directly.\n"
         f"- For images (png, jpg, etc.): the current chat model ({_mdl}) does NOT support vision — you cannot see images. "
         "If the user asks you to analyze an image, respond honestly: 'I'm a text-only model and cannot view images. "
         "Please describe what's in the image, or enable a multimodal model like Qwen-VL or GPT-4o.'\n"
