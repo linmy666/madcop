@@ -92,8 +92,118 @@ _SLASH_COMMANDS: list[dict[str, Any]] = [
 ]
 
 
-_SESSIONS_FILE = Path.home() / ".madcop" / "sessions.json"
-_MESSAGES_DIR = Path.home() / ".madcop" / "session_messages"
+# ── Workspace-scoped on-disk storage ────────────────────────────────
+# Each workspace's sessions live under its own directory so they are
+# isolated, portable, and human-readable:
+#   <work_dir>/.madcop/sessions.json                (session index)
+#   <work_dir>/.madcop/session_messages/<id>.json   (per-session msgs)
+# A registry at ~/.madcop/workspaces.json lists known workspace roots
+# so we can reload them on startup. Sessions without a resolvable
+# workDir fall back to the legacy ~/.madcop/ global location.
+
+_WORKSPACES_REGISTRY = Path.home() / ".madcop" / "workspaces.json"
+_LEGACY_SESSIONS_FILE = Path.home() / ".madcop" / "sessions.json"
+_LEGACY_MESSAGES_DIR = Path.home() / ".madcop" / "session_messages"
+
+
+def _workspace_madcop_dir(work_dir: str | None) -> Path | None:
+    if not work_dir:
+        return None
+    p = Path(work_dir)
+    if not p.is_absolute():
+        return None
+    return p / ".madcop"
+
+
+def _register_workspace(work_dir: str | None) -> None:
+    if not work_dir:
+        return
+    try:
+        _WORKSPACES_REGISTRY.parent.mkdir(parents=True, exist_ok=True)
+        reg: set[str] = set()
+        if _WORKSPACES_REGISTRY.exists():
+            try:
+                reg = set(json.loads(_WORKSPACES_REGISTRY.read_text()))
+            except Exception:
+                reg = set()
+        if work_dir not in reg:
+            reg.add(work_dir)
+            _WORKSPACES_REGISTRY.write_text(json.dumps(sorted(reg), ensure_ascii=False, indent=2))
+    except Exception:
+        pass
+
+
+def _resolve_work_dir(sess: dict | None, fallback: str | None = None) -> str | None:
+    if sess:
+        wd = sess.get("workDir") or sess.get("projectPath") or sess.get("projectRoot")
+        if wd:
+            return wd
+    return fallback
+
+
+def _persist_session_to_disk(sess: dict) -> None:
+    wd = _resolve_work_dir(sess)
+    mdir = _workspace_madcop_dir(wd)
+    if mdir is None:
+        # Legacy global fallback for sessions with no workspace.
+        try:
+            _LEGACY_SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            index: dict[str, Any] = {}
+            if _LEGACY_SESSIONS_FILE.exists():
+                try:
+                    index = json.loads(_LEGACY_SESSIONS_FILE.read_text())
+                except Exception:
+                    index = {}
+            index[sess["id"]] = sess
+            _LEGACY_SESSIONS_FILE.write_text(json.dumps(index, ensure_ascii=False, indent=2))
+        except Exception:
+            pass
+        return
+    try:
+        _register_workspace(wd)
+        mdir.mkdir(parents=True, exist_ok=True)
+        idx_path = mdir / "sessions.json"
+        index: dict[str, Any] = {}
+        if idx_path.exists():
+            try:
+                index = json.loads(idx_path.read_text())
+            except Exception:
+                index = {}
+        index[sess["id"]] = sess
+        idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
+    except Exception:
+        pass
+
+
+def _persist_messages_to_disk(session_id: str, msgs: list) -> None:
+    sess = _SESSIONS.get(session_id)
+    wd = _resolve_work_dir(sess)
+    mdir = _workspace_madcop_dir(wd)
+    target_dir = (mdir / "session_messages") if mdir is not None else _LEGACY_MESSAGES_DIR
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / f"{session_id}.json").write_text(json.dumps(msgs, ensure_ascii=False, indent=2))
+    except Exception:
+        pass
+
+
+def _load_from_dir(sessions_file: Path, messages_dir: Path) -> None:
+    if not sessions_file.exists():
+        return
+    try:
+        data = json.loads(sessions_file.read_text())
+        for sid, s in data.items():
+            _SESSIONS.setdefault(sid, s)
+        if messages_dir.exists():
+            for f in messages_dir.glob("*.json"):
+                sid = f.stem
+                try:
+                    _MESSAGES.setdefault(sid, json.loads(f.read_text()))
+                except Exception:
+                    pass
+    except Exception as e:
+        import sys as _sys
+        print(f"[cc-haha-compat] load error: {e}", file=_sys.stderr, flush=True)
 
 
 def _ensure_session(session_id: str) -> dict[str, Any]:
@@ -118,47 +228,37 @@ def _ensure_session(session_id: str) -> dict[str, Any]:
 
 
 def _persist_sessions() -> None:
-    """Save sessions + messages to disk so they survive restarts."""
+    """Save sessions + messages to disk so they survive restarts.
+    Each workspace's data is written under <work_dir>/.madcop/."""
     try:
-        _SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _MESSAGES_DIR.mkdir(parents=True, exist_ok=True)
-        # Build a JSON-safe copy (no nested non-serializable values)
-        safe_sessions: dict[str, Any] = {}
         for sid, s in _SESSIONS.items():
-            safe_sessions[sid] = {
+            safe = {
                 k: v for k, v in s.items()
                 if isinstance(v, (str, int, float, bool, type(None), list, dict))
             }
-        _SESSIONS_FILE.write_text(json.dumps(safe_sessions, ensure_ascii=False, indent=2))
-        # Save each session's messages to its own file
+            _persist_session_to_disk(safe)
         for sid, msgs in _MESSAGES.items():
-            ( _MESSAGES_DIR / f"{sid}.json").write_text(
-                json.dumps(msgs, ensure_ascii=False, indent=2)
-            )
+            _persist_messages_to_disk(sid, msgs)
     except Exception as e:
         import sys as _sys
         print(f"[cc-haha-compat] persist error: {e}", file=_sys.stderr, flush=True)
 
 
 def _load_sessions() -> None:
-    """Restore sessions + messages from disk at startup."""
-    if not _SESSIONS_FILE.exists():
-        return
-    try:
-        data = json.loads(_SESSIONS_FILE.read_text())
-        for sid, s in data.items():
-            _SESSIONS[sid] = s
-        # Load messages per session
-        if _MESSAGES_DIR.exists():
-            for f in _MESSAGES_DIR.glob("*.json"):
-                sid = f.stem
-                try:
-                    _MESSAGES[sid] = json.loads(f.read_text())
-                except Exception:
-                    pass
-    except Exception as e:
-        import sys as _sys
-        print(f"[cc-haha-compat] load error: {e}", file=_sys.stderr, flush=True)
+    """Restore sessions + messages from disk at startup.
+    Loads the legacy global store plus every registered workspace."""
+    # 1) Legacy global location (backward compatible)
+    _load_from_dir(_LEGACY_SESSIONS_FILE, _LEGACY_MESSAGES_DIR)
+    # 2) Every registered workspace directory
+    if _WORKSPACES_REGISTRY.exists():
+        try:
+            for wd in json.loads(_WORKSPACES_REGISTRY.read_text()):
+                mdir = _workspace_madcop_dir(wd)
+                if mdir is None:
+                    continue
+                _load_from_dir(mdir / "sessions.json", mdir / "session_messages")
+        except Exception:
+            pass
 
 
 # Load on import
@@ -915,10 +1015,15 @@ def register(app: FastAPI) -> None:
         limit: int = 50,
         project: str | None = None,
     ) -> dict[str, Any]:
-        items = [
-            _to_public_session(s)
-            for sid, s in list(_SESSIONS.items())[-limit:]
-        ]
+        items = [_to_public_session(s) for s in _SESSIONS.values()]
+        # Actually filter by workspace when a project is requested so the
+        # UI only sees sessions that belong to the current workspace.
+        if project:
+            items = [
+                s for s in items
+                if (s.get("workDir") or s.get("projectPath") or s.get("projectRoot")) == project
+            ]
+        items = items[-limit:]
         return {"sessions": items, "total": len(items)}
 
     @app.get("/api/sessions/search", include_in_schema=False)
@@ -953,8 +1058,33 @@ def register(app: FastAPI) -> None:
 
     @app.delete("/api/sessions/{session_id}", include_in_schema=False)
     async def cc_delete_session(session_id: str) -> dict[str, Any]:
+        sess = _SESSIONS.get(session_id)
+        wd = _resolve_work_dir(sess)
+        mdir = _workspace_madcop_dir(wd)
         _SESSIONS.pop(session_id, None)
         _MESSAGES.pop(session_id, None)
+        # Remove from the workspace's on-disk index + message file.
+        try:
+            if mdir is not None:
+                idx_path = mdir / "sessions.json"
+                if idx_path.exists():
+                    index = json.loads(idx_path.read_text())
+                    index.pop(session_id, None)
+                    idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
+                try:
+                    (mdir / "session_messages" / f"{session_id}.json").unlink(missing_ok=True)
+                except BaseException:
+                    # tolerate environments where unlink is intercepted
+                    # (e.g. safe-delete shims); the session is already gone
+                    # from memory, so a leftover file is harmless.
+                    pass
+            else:
+                try:
+                    _LEGACY_MESSAGES_DIR.joinpath(f"{session_id}.json").unlink(missing_ok=True)
+                except BaseException:
+                    pass
+        except Exception:
+            pass
         return {"ok": True, "deleted": session_id}
 
     @app.post("/api/sessions/batch-delete", include_in_schema=False)
@@ -965,8 +1095,29 @@ def register(app: FastAPI) -> None:
             body = {}
         ids = body.get("ids", []) if isinstance(body, dict) else []
         for sid in ids:
+            sess = _SESSIONS.get(sid)
+            wd = _resolve_work_dir(sess)
+            mdir = _workspace_madcop_dir(wd)
             _SESSIONS.pop(sid, None)
             _MESSIONS.pop(sid, None)
+            try:
+                if mdir is not None:
+                    idx_path = mdir / "sessions.json"
+                    if idx_path.exists():
+                        index = json.loads(idx_path.read_text())
+                        index.pop(sid, None)
+                        idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
+                    try:
+                        (mdir / "session_messages" / f"{sid}.json").unlink(missing_ok=True)
+                    except BaseException:
+                        pass
+                else:
+                    try:
+                        _LEGACY_MESSAGES_DIR.joinpath(f"{sid}.json").unlink(missing_ok=True)
+                    except BaseException:
+                        pass
+            except Exception:
+                pass
         return {"ok": True, "successes": list(ids), "failures": []}
 
     @app.get("/api/sessions/recent-projects", include_in_schema=False)
@@ -996,6 +1147,44 @@ def register(app: FastAPI) -> None:
             "messages": _MESSAGES.get(session_id, []),
             "taskNotifications": [],
         }
+
+    @app.post("/api/sessions/{session_id}/messages", include_in_schema=False)
+    async def cc_save_session_messages(session_id: str, request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        msgs = body.get("messages") if isinstance(body, dict) else None
+        if not isinstance(msgs, list):
+            msgs = []
+        _MESSAGES[session_id] = msgs
+        if session_id not in _SESSIONS:
+            _ensure_session(session_id)
+        # Persist to the workspace's on-disk store immediately so a crash
+        # between saves doesn't lose the user's conversation.
+        try:
+            _persist_messages_to_disk(session_id, msgs)
+        except Exception:
+            pass
+        return {"ok": True, "count": len(msgs)}
+
+    @app.patch("/api/sessions/{session_id}", include_in_schema=False)
+    async def cc_update_session(session_id: str, request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        sess = _SESSIONS.get(session_id)
+        if not sess:
+            sess = _ensure_session(session_id)
+        for key in ("title", "workDir", "projectPath", "projectRoot", "permissionMode", "model"):
+            if isinstance(body, dict) and key in body and body[key] is not None:
+                sess[key] = body[key]
+        try:
+            _persist_session_to_disk(sess)
+        except Exception:
+            pass
+        return {"ok": True, "session": _to_public_session(sess)}
 
     @app.get("/api/sessions/{session_id}/slash-commands", include_in_schema=False)
     async def cc_session_slash_commands(session_id: str) -> dict[str, Any]:
@@ -3269,18 +3458,6 @@ def register(app: FastAPI) -> None:
         _MESSAGES[new_sid] = new_msgs
         return {"sessionId": new_sid, "title": _SESSIONS[new_sid]["title"],
                 "workDir": _SESSIONS[new_sid].get("workDir")}
-
-    @app.patch("/api/sessions/{session_id}", include_in_schema=False)
-    async def cc_sess_patch(session_id: str, request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        sess = _SESSIONS.get(session_id)
-        if not sess:
-            return {"ok": False, "error": "not found"}
-        sess.update(body)
-        return {"ok": True, "session": _to_public_session(sess)}
 
     @app.get("/api/sessions/{session_id}/trace/calls/{call_id}",
               include_in_schema=False)

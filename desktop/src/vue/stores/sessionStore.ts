@@ -91,6 +91,64 @@ export function saveToStorage(sessions: SessionListItem[]) {
   } catch {}
 }
 
+// ── Backend session sync ──────────────────────────────────────────
+// Sessions are also persisted to the backend, which stores them under
+// the workspace directory (<workDir>/.madcop/...). localStorage stays a
+// fast offline cache; the backend is the durable, portable copy that
+// follows the project instead of living in opaque Electron LevelDB.
+async function backendLoadSessions(workDir: string): Promise<SessionListItem[]> {
+  try {
+    const res = await fetch(getApiUrl(`/api/sessions?project=${encodeURIComponent(workDir)}`))
+    if (!res.ok) return []
+    const data = await res.json()
+    const list = (data?.sessions as any[]) || []
+    return list.map((s: any) => ({
+      id: s.id,
+      title: s.title || '新对话',
+      createdAt: s.createdAt || new Date().toISOString(),
+      modifiedAt: s.modifiedAt || new Date().toISOString(),
+      messageCount: s.messageCount ?? 0,
+      projectPath: s.projectPath ?? '',
+      workDir: s.workDir ?? null,
+      projectRoot: s.projectRoot ?? null,
+      workDirExists: s.workDirExists ?? true,
+      permissionMode: s.permissionMode,
+    }))
+  } catch {
+    return []
+  }
+}
+
+async function backendUpsertSession(s: SessionListItem) {
+  try {
+    await fetch(getApiUrl('/api/sessions'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: s.id,
+        workDir: s.workDir || s.projectPath || s.projectRoot || '',
+        title: s.title,
+      }),
+    })
+  } catch {}
+}
+
+async function backendPatchSession(id: string, patch: Record<string, any>) {
+  try {
+    await fetch(getApiUrl(`/api/sessions/${encodeURIComponent(id)}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+  } catch {}
+}
+
+async function backendDeleteSession(id: string) {
+  try {
+    await fetch(getApiUrl(`/api/sessions/${encodeURIComponent(id)}`), { method: 'DELETE' })
+  } catch {}
+}
+
 export const useSessionStore = defineStore('session', {
   state: () => ({
     sessions: loadFromStorage() as SessionListItem[],
@@ -105,48 +163,52 @@ export const useSessionStore = defineStore('session', {
     async fetchSessions(_project?: string) {
       this.isLoading = true
       this.error = null
-      // v3.0: Don't replace local sessions with backend sessions.
-      // Each side has a different session id scheme (local uses
-      // `session-...`, backend uses UUIDs) and a different message
-      // store. Trying to merge them caused the sidebar to switch the
-      // active tab to an id that no longer existed in the tab list,
-      // leaving the user on a blank chat. The pragmatic fix is to
-      // keep them separate: local sessions own local tabs and
-      // localStorage-persisted history, backend sessions are kept
-      // for cross-device sync but aren't shown in the sidebar UI yet.
-      // If the local list is empty (first run, cleared storage), seed
-      // with a default so the chat input still works.
-      if (this.sessions.length === 0) {
-        this.sessions = [
+      // Load the local (offline-cache) list, then merge in any sessions
+      // the backend already has for the current workspace. Because we now
+      // use the SAME session id on both sides, merging by id is safe and
+      // gives workspace-scoped, portable history without losing the local
+      // cache. If both are empty, seed a default so the input works.
+      const local = loadFromStorage()
+      const wd = getCurrentWorkspaceDir()
+      let backend: SessionListItem[] = []
+      if (wd) backend = await backendLoadSessions(wd)
+      const byId = new Map<string, SessionListItem>()
+      for (const s of local) byId.set(s.id, s)
+      for (const s of backend) {
+        if (!byId.has(s.id)) byId.set(s.id, s)
+      }
+      let merged = [...byId.values()]
+      if (merged.length === 0) {
+        merged = [
           {
             id: 'default', title: '新对话',
             createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(),
             messageCount: 0, projectPath: '', workDir: null, projectRoot: null, workDirExists: true,
           },
         ]
-        this.activeSessionId = this.sessions[0]?.id || null
-        saveToStorage(this.sessions)
+        this.activeSessionId = this.activeSessionId || merged[0]?.id || null
       }
+      this.sessions = merged
+      saveToStorage(this.sessions)
       this.isLoading = false
     },
     async createSession(_workDir?: string, _options?: any): Promise<string> {
-      // v3.0: keep using a local id (`session-...`) so the sidebar,
-      // tab list, and localStorage message map stay in sync. We don't
-      // call the backend here because mixing the two id schemes
-      // caused the sidebar to point at sessions the tabs couldn't
-      // open. The backend still records the chat in its own session
-      // store when messages are streamed to it; we just don't rely on
-      // the backend id on the client.
+      // Keep using a local id (`session-...`) so the sidebar, tab list,
+      // and localStorage message map stay in sync. We ALSO push the
+      // session to the backend so it gets persisted under the workspace
+      // directory (<workDir>/.madcop/...).
       const id = `session-${Date.now()}`
       const now = new Date().toISOString()
+      const workDir = _workDir || getCurrentWorkspaceDir() || ''
       const session: SessionListItem = {
         id, title: '新对话',
         createdAt: now, modifiedAt: now,
-        messageCount: 0, projectPath: _workDir || '', workDir: _workDir || null, projectRoot: _workDir || null, workDirExists: true,
+        messageCount: 0, projectPath: workDir, workDir: workDir || null, projectRoot: workDir || null, workDirExists: true,
       }
       this.sessions.unshift(session)
       this.activeSessionId = id
       saveToStorage(this.sessions)
+      backendUpsertSession(session)
       return id
     },
     async branchSession(_sourceSessionId: string, _targetMessageId: string, _options?: any): Promise<{ sessionId: string; title: string; workDir: string | null }> {
@@ -157,6 +219,7 @@ export const useSessionStore = defineStore('session', {
       this.selectedSessionIds = this.selectedSessionIds.filter(sid => sid !== id)
       if (this.activeSessionId === id) this.activeSessionId = this.sessions[0]?.id || null
       saveToStorage(this.sessions)
+      backendDeleteSession(id)
     },
     async deleteSessions(ids: string[]) {
       this.sessions = this.sessions.filter(s => !ids.includes(s.id))
@@ -165,6 +228,7 @@ export const useSessionStore = defineStore('session', {
         this.activeSessionId = this.sessions[0]?.id || null
       }
       saveToStorage(this.sessions)
+      for (const id of ids) backendDeleteSession(id)
     },
     enterBatchMode() { this.isBatchMode = true },
     exitBatchMode() { this.isBatchMode = false; this.selectedSessionIds = [] },
@@ -195,6 +259,7 @@ export const useSessionStore = defineStore('session', {
         saveTabs(tabStore.tabs)
       } catch {}
       saveToStorage(this.sessions)
+      backendPatchSession(_id, { title })
     },
     updateSessionTitle(id: string, title: string) {
       const s = this.sessions.find(s => s.id === id)
@@ -207,6 +272,7 @@ export const useSessionStore = defineStore('session', {
         saveTabs(tabStore.tabs)
       } catch {}
       saveToStorage(this.sessions)
+      backendPatchSession(id, { title })
     },
     updateSessionPermissionMode(_id: string, _mode: string) {},
     setActiveSession(id: string | null) {

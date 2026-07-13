@@ -29,3 +29,6 @@ dist-vue/
 
 # backup files
 *.bak
+
+# Workspace session storage (per-project, portable)
+.madcop/

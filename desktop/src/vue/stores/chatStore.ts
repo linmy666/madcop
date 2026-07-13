@@ -259,6 +259,17 @@ export const useChatStore = defineStore('chat', {
         title: s.title,
       }
       saveMessagesToStorage(data)
+      // Also persist to the backend so the conversation lives in the
+      // workspace directory (<workDir>/.madcop/...) instead of opaque
+      // Electron localStorage. Best-effort: ignore network failures.
+      try {
+        const payload = JSON.stringify({ messages: s.messages, title: s.title })
+        fetch(getApiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/messages`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        }).catch(() => {})
+      } catch {}
     },
     getSession(sessionId: string): PerSessionState {
       const existing = this.sessions[sessionId]
@@ -678,17 +689,22 @@ export const useChatStore = defineStore('chat', {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
         const list = Array.isArray(data?.messages) ? data.messages : []
-        // Normalize message format: {role, content, ...}
-        const normalized = list.map((m: any) => ({
-          id: m.id || m.messageId || `${sessionId}-${m.createdAt || Math.random()}`,
-          role: m.role || m.type || 'assistant',
-          type: m.type || (m.role === 'user' ? 'user_text' : 'assistant_text'),
-          content: m.content || m.text || '',
-          createdAt: m.createdAt || m.timestamp || new Date().toISOString(),
-          toolCalls: m.toolCalls || [],
-          attachments: m.attachments || [],
-          reasoning: m.reasoning,
-        }))
+        // Normalize message format. If the backend stored our native
+        // UIMessage shape (has both `type` and `id`), keep it as-is so
+        // tool_use/tool_result/plan messages round-trip intact.
+        const normalized = list.map((m: any) => {
+          if (m && m.type && m.id) return m
+          return {
+            id: m.id || m.messageId || `${sessionId}-${m.createdAt || Math.random()}`,
+            role: m.role || m.type || 'assistant',
+            type: m.type || (m.role === 'user' ? 'user_text' : 'assistant_text'),
+            content: m.content || m.text || '',
+            createdAt: m.createdAt || m.timestamp || new Date().toISOString(),
+            toolCalls: m.toolCalls || [],
+            attachments: m.attachments || [],
+            reasoning: m.reasoning,
+          }
+        })
         this.sessions[sessionId] = {
           ...(this.sessions[sessionId] ?? {}),
           // Don't clobber locally-hydrated threads with an empty backend
