@@ -14,10 +14,12 @@ const props = withDefaults(defineProps<{
 
 const failed = ref(false)
 
+// NOTE: there is no spinner.mp4 asset — spinner intentionally has no video
+// source and renders the CSS dot-bounce animation below. Pointing it at a
+// missing file caused a recurring net::ERR_FILE_NOT_FOUND under file://.
 const VIDEO_SRC: Record<string, string> = {
   clover: './animations/clover.mp4',
   ripple: './animations/ripple.mp4',
-  spinner: './animations/spinner.mp4',
 }
 
 const ARIA_LABEL: Record<string, string> = {
@@ -31,7 +33,7 @@ const label = computed(() => props.ariaLabel ?? ARIA_LABEL[props.name] ?? '')
 
 <template>
   <video
-    v-if="!failed"
+    v-if="!failed && VIDEO_SRC[name]"
     :class="$props.class"
     :src="VIDEO_SRC[name]"
     autoplay
