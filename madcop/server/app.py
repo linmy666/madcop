@@ -1716,17 +1716,18 @@ def create_app() -> FastAPI:
                 messages.append(Message(
                     role="user",
                     content=(
-                        "[System instruction] 你现在有了上面的搜索结果。"
-                        "请用中文写一份详细的BI分析报告。\n"
-                        "要求：\n"
-                        "1. 不要再调用任何工具\n"
-                        "2. 用 Markdown 格式，包含表格和要点\n"
-                        "3. 如果有数据适合可视化，用 Mermaid 图表语法（```mermaid 代码块）\n"
-                        "   - 饼图: pie title 标题\\n\"A\" : 30\\n\"B\" : 70\n"
-                        "   - 柱状图: xychart-beta\\ntitle \"标题\"\\nbar [100, 200, 300]\n"
-                        "   - 流程图: flowchart LR\\nA --> B --> C\n"
-                        "4. 报告 300-800 字\n"
-                        "5. 直接开始写报告，不要说废话\n"
+                        "[System instruction] You now have the tool results above. "
+                        "Synthesize a final answer that directly addresses the user's "
+                        "original request.\n"
+                        "Rules:\n"
+                        "1. Do NOT call any more tools.\n"
+                        "2. Respond in the SAME language the user used in their latest "
+                        "message (e.g. if they wrote in English, answer in English).\n"
+                        "3. Be clear and concise. Use Markdown (tables/lists) only when it "
+                        "genuinely improves readability — do not force charts or a report "
+                        "format onto a simple question.\n"
+                        "4. If the tool results are insufficient to answer, say so briefly "
+                        "and suggest what is missing.\n"
                     )
                 ))
 
@@ -2077,6 +2078,20 @@ def create_app() -> FastAPI:
             return {"detail": detail}
         raise HTTPException(404, f"Skill '{name}' not found")
 
+    @app.get("/api/skills/search")
+    async def search_skills(q: str = "") -> dict[str, Any]:
+        """Search user+bundled skills by name/description.
+
+        Registered BEFORE `/api/skills/{name}` so the literal path
+        `/api/skills/search` is not shadowed by the `{name}` parameter.
+        """
+        from madcop.memory.skill_distill import list_user_skills
+        skills = list_user_skills()
+        if q:
+            skills = [s for s in skills if q.lower() in s["name"].lower()
+                      or q.lower() in s.get("description", "").lower()]
+        return {"results": skills, "total": len(skills)}
+
     @app.get("/api/skills/{name}")
     async def get_skill(name: str) -> dict[str, Any]:
         """Get a single skill by name. Returns SkillDetail shape."""
@@ -2151,15 +2166,6 @@ def create_app() -> FastAPI:
             raise HTTPException(404, f"Skill '{name}' not found")
         target.unlink()
         return {"deleted": True, "name": name}
-
-    @app.get("/api/skills/search")
-    async def search_skills(q: str = "") -> dict[str, Any]:
-        from madcop.memory.skill_distill import list_user_skills
-        skills = list_user_skills()
-        if q:
-            skills = [s for s in skills if q.lower() in s["name"].lower()
-                      or q.lower() in s.get("description", "").lower()]
-        return {"results": skills, "total": len(skills)}
 
     # ------------------------------------------------------------------- #
     # WebUI (static HTML at /)
