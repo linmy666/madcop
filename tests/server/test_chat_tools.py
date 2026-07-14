@@ -57,7 +57,7 @@ class FakeToolClient:
         self.chat_calls: list[list[Message]] = []
         self.stream_calls: list[list[Message]] = []
 
-    def chat(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None):
+    def chat(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None, effort=None):
         msgs = list(messages)
         self.chat_calls.append(msgs)
         self._call_count += 1
@@ -77,7 +77,7 @@ class FakeToolClient:
             model="test-model",
         )
 
-    def stream(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None):
+    def stream(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None, effort=None):
         msgs = list(messages)
         self.stream_calls.append(msgs)
         text = "The weather in Shanghai is 22°C and partly cloudy."
@@ -92,7 +92,7 @@ class FakeNoToolClient:
         self.chat_calls: list[list[Message]] = []
         self.stream_calls: list[list[Message]] = []
 
-    def chat(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None):
+    def chat(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None, effort=None):
         msgs = list(messages)
         self.chat_calls.append(msgs)
         return ChatResponse(
@@ -100,7 +100,7 @@ class FakeNoToolClient:
             model="test-model",
         )
 
-    def stream(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None):
+    def stream(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None, effort=None):
         msgs = list(messages)
         self.stream_calls.append(msgs)
         yield StreamChunk(text="Hello! How can I help?", model="test-model")
@@ -115,7 +115,7 @@ class FakeMultiToolClient:
         self.chat_calls: list[list[Message]] = []
         self.stream_calls: list[list[Message]] = []
 
-    def chat(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None):
+    def chat(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None, effort=None):
         msgs = list(messages)
         self.chat_calls.append(msgs)
         self._call_count += 1
@@ -134,7 +134,7 @@ class FakeMultiToolClient:
             model="test-model",
         )
 
-    def stream(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None):
+    def stream(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None, effort=None):
         self.stream_calls.append(list(messages))
         yield StreamChunk(text="Done with both tools.", model="test-model")
         yield StreamChunk(finish_reason="stop", model="test-model")

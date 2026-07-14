@@ -1752,7 +1752,8 @@ def create_app() -> FastAPI:
                     temperature: float
                     max_tokens: int = 8192
                     tools: None = None
-                no_tools_body = _BareBody(model=body.model or "", temperature=body.temperature or 0.7)
+                    effort: str | None = None
+                no_tools_body = _BareBody(model=body.model or "", temperature=body.temperature or 0.7, effort=body.effort)
                 async for sse in _stream_chunks(client, messages, no_tools_body):
                     yield sse
 

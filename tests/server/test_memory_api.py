@@ -53,13 +53,13 @@ class FakeClient:
         self.stream_calls: list[list[Message]] = []
 
     def chat(self, messages, *, model=None, temperature=0.0,
-             max_tokens=None, tools=None):
+             max_tokens=None, tools=None, effort=None):
         msgs = list(messages)
         self.chat_calls.append(msgs)
         return ChatResponse(content=self._response, model="test-model")
 
     def stream(self, messages, *, model=None, temperature=0.0,
-               max_tokens=None, tools=None):
+               max_tokens=None, tools=None, effort=None):
         msgs = list(messages)
         self.stream_calls.append(msgs)
         yield StreamChunk(text=self._response, model="test-model")

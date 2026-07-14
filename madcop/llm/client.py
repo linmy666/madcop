@@ -107,6 +107,7 @@ class ChatClient(ABC):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        effort: str | None = None,
     ) -> ChatResponse:
         """Send messages, return one ChatResponse."""
         raise NotImplementedError
@@ -119,6 +120,7 @@ class ChatClient(ABC):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        effort: str | None = None,
     ) -> Iterator[StreamChunk]:
         """Stream chat completion as a sequence of StreamChunks.
 
@@ -168,6 +170,7 @@ class MockClient(ChatClient):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        effort: str | None = None,
     ) -> ChatResponse:
         msgs = list(messages)
         self.calls.append(msgs)
@@ -191,6 +194,7 @@ class MockClient(ChatClient):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        effort: str | None = None,
     ) -> Iterator[StreamChunk]:
         """Word-level streaming of the scripted/default response.
 
