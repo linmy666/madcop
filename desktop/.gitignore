@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-vue/
+dist-vue.bak*/
 electron-dist/
 build/
 *.tsbuildinfo
@@ -7,3 +9,6 @@ build/
 *.log
 .env
 .env.local
+
+# throwaway debug probe scripts
+etest*.cjs

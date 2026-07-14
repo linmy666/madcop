@@ -1291,7 +1291,7 @@ def register(app: FastAPI) -> None:
             "isIndex": False,
         }}
 
-    # ---- Models / effort / permissions ------------------------------ #
+    # ---- Models / permissions --------------------------------------- #
 
     @app.get("/api/models", include_in_schema=False)
     async def cc_list_models() -> dict[str, Any]:
@@ -1325,17 +1325,10 @@ def register(app: FastAPI) -> None:
             return {"model": None}
         return {"model": {"id": active.model, "name": active.label or active.model}}
 
-    @app.get("/api/effort", include_in_schema=False)
-    async def cc_effort() -> dict[str, Any]:
-        return {"level": "medium", "available": ["low", "medium", "high", "max"]}
-
-    @app.put("/api/effort", include_in_schema=False)
-    async def cc_set_effort(request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        return {"ok": True, "level": body.get("level", "medium")}
+    # NOTE: reasoning intensity (effort) is configured per-session in the Vue
+    # composer and sent on the POST /api/chat body's `effort` field (handled in
+    # madcop/server/app.py). The old global GET/PUT /api/effort stubs never
+    # persisted or applied anything and had no live caller, so they were removed.
 
     @app.get("/api/permissions/mode", include_in_schema=False)
     async def cc_get_permission_mode() -> dict[str, Any]:
