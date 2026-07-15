@@ -21,6 +21,7 @@ import asyncio
 import json
 import os
 import re
+import threading
 import sqlite3
 import subprocess
 import sys
@@ -105,6 +106,21 @@ _WORKSPACES_REGISTRY = Path.home() / ".madcop" / "workspaces.json"
 _LEGACY_SESSIONS_FILE = Path.home() / ".madcop" / "sessions.json"
 _LEGACY_MESSAGES_DIR = Path.home() / ".madcop" / "session_messages"
 
+# Guards the read-modify-write cycles in _persist_session_to_disk /
+# _persist_messages_to_disk / _register_workspace so concurrent requests
+# don't interleave and corrupt the on-disk JSON files.
+_PERSIST_LOCK = threading.RLock()
+
+# session_id / filename whitelist: only word chars, dots, dashes.
+_SESSION_ID_RE = re.compile(r"^[\w.\-]+$")
+
+
+def _safe_session_id(sid: str) -> str | None:
+    """Return sid if it is safe to use as a filename component, else None."""
+    if sid and _SESSION_ID_RE.match(sid):
+        return sid
+    return None
+
 
 def _workspace_madcop_dir(work_dir: str | None) -> Path | None:
     if not work_dir:
@@ -118,19 +134,20 @@ def _workspace_madcop_dir(work_dir: str | None) -> Path | None:
 def _register_workspace(work_dir: str | None) -> None:
     if not work_dir:
         return
-    try:
-        _WORKSPACES_REGISTRY.parent.mkdir(parents=True, exist_ok=True)
-        reg: set[str] = set()
-        if _WORKSPACES_REGISTRY.exists():
-            try:
-                reg = set(json.loads(_WORKSPACES_REGISTRY.read_text()))
-            except Exception:
-                reg = set()
-        if work_dir not in reg:
-            reg.add(work_dir)
-            _WORKSPACES_REGISTRY.write_text(json.dumps(sorted(reg), ensure_ascii=False, indent=2))
-    except Exception:
-        pass
+    with _PERSIST_LOCK:
+        try:
+            _WORKSPACES_REGISTRY.parent.mkdir(parents=True, exist_ok=True)
+            reg: set[str] = set()
+            if _WORKSPACES_REGISTRY.exists():
+                try:
+                    reg = set(json.loads(_WORKSPACES_REGISTRY.read_text()))
+                except Exception:
+                    reg = set()
+            if work_dir not in reg:
+                reg.add(work_dir)
+                _WORKSPACES_REGISTRY.write_text(json.dumps(sorted(reg), ensure_ascii=False, indent=2))
+        except Exception:
+            pass
 
 
 def _resolve_work_dir(sess: dict | None, fallback: str | None = None) -> str | None:
@@ -144,35 +161,39 @@ def _resolve_work_dir(sess: dict | None, fallback: str | None = None) -> str | N
 def _persist_session_to_disk(sess: dict) -> None:
     wd = _resolve_work_dir(sess)
     mdir = _workspace_madcop_dir(wd)
-    if mdir is None:
-        # Legacy global fallback for sessions with no workspace.
+    sid = _safe_session_id(sess.get("id", ""))
+    with _PERSIST_LOCK:
+        if mdir is None:
+            # Legacy global fallback for sessions with no workspace.
+            try:
+                _LEGACY_SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                index: dict[str, Any] = {}
+                if _LEGACY_SESSIONS_FILE.exists():
+                    try:
+                        index = json.loads(_LEGACY_SESSIONS_FILE.read_text())
+                    except Exception:
+                        index = {}
+                if sid:
+                    index[sid] = sess
+                _LEGACY_SESSIONS_FILE.write_text(json.dumps(index, ensure_ascii=False, indent=2))
+            except Exception:
+                pass
+            return
         try:
-            _LEGACY_SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _register_workspace(wd)
+            mdir.mkdir(parents=True, exist_ok=True)
+            idx_path = mdir / "sessions.json"
             index: dict[str, Any] = {}
-            if _LEGACY_SESSIONS_FILE.exists():
+            if idx_path.exists():
                 try:
-                    index = json.loads(_LEGACY_SESSIONS_FILE.read_text())
+                    index = json.loads(idx_path.read_text())
                 except Exception:
                     index = {}
-            index[sess["id"]] = sess
-            _LEGACY_SESSIONS_FILE.write_text(json.dumps(index, ensure_ascii=False, indent=2))
+            if sid:
+                index[sid] = sess
+            idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
         except Exception:
             pass
-        return
-    try:
-        _register_workspace(wd)
-        mdir.mkdir(parents=True, exist_ok=True)
-        idx_path = mdir / "sessions.json"
-        index: dict[str, Any] = {}
-        if idx_path.exists():
-            try:
-                index = json.loads(idx_path.read_text())
-            except Exception:
-                index = {}
-        index[sess["id"]] = sess
-        idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
-    except Exception:
-        pass
 
 
 def _persist_messages_to_disk(session_id: str, msgs: list) -> None:
@@ -180,11 +201,15 @@ def _persist_messages_to_disk(session_id: str, msgs: list) -> None:
     wd = _resolve_work_dir(sess)
     mdir = _workspace_madcop_dir(wd)
     target_dir = (mdir / "session_messages") if mdir is not None else _LEGACY_MESSAGES_DIR
-    try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-        (target_dir / f"{session_id}.json").write_text(json.dumps(msgs, ensure_ascii=False, indent=2))
-    except Exception:
-        pass
+    sid = _safe_session_id(session_id)
+    if not sid:
+        return
+    with _PERSIST_LOCK:
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            (target_dir / f"{sid}.json").write_text(json.dumps(msgs, ensure_ascii=False, indent=2))
+        except Exception:
+            pass
 
 
 def _load_from_dir(sessions_file: Path, messages_dir: Path) -> None:
@@ -1000,18 +1025,6 @@ def register(app: FastAPI) -> None:
 
     # ---- Skills ----------------------------------------------------- #
 
-    @app.get("/api/skills/detail", include_in_schema=False)
-    async def cc_skill_detail(
-        source: str = Query(default="user"),
-        name: str = Query(default=""),
-    ) -> dict[str, Any]:
-        # Use the unified skill_distill reader (handles both user skills
-        # auto-distilled by MadCop and any custom skills on disk).
-        from madcop.memory.skill_distill import read_skill_detail
-        detail = read_skill_detail(name, source)
-        if not detail:
-            return {"detail": None}
-        return {"detail": detail}
 
     # ---- Sessions (in-memory) --------------------------------------- #
 
@@ -1075,28 +1088,28 @@ def register(app: FastAPI) -> None:
         mdir = _workspace_madcop_dir(wd)
         _SESSIONS.pop(session_id, None)
         _MESSAGES.pop(session_id, None)
+        sid = _safe_session_id(session_id)
         # Remove from the workspace's on-disk index + message file.
-        try:
-            if mdir is not None:
-                idx_path = mdir / "sessions.json"
-                if idx_path.exists():
-                    index = json.loads(idx_path.read_text())
-                    index.pop(session_id, None)
-                    idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
-                try:
-                    (mdir / "session_messages" / f"{session_id}.json").unlink(missing_ok=True)
-                except BaseException:
-                    # tolerate environments where unlink is intercepted
-                    # (e.g. safe-delete shims); the session is already gone
-                    # from memory, so a leftover file is harmless.
-                    pass
-            else:
-                try:
-                    _LEGACY_MESSAGES_DIR.joinpath(f"{session_id}.json").unlink(missing_ok=True)
-                except BaseException:
-                    pass
-        except Exception:
-            pass
+        with _PERSIST_LOCK:
+            try:
+                if mdir is not None:
+                    idx_path = mdir / "sessions.json"
+                    if idx_path.exists():
+                        index = json.loads(idx_path.read_text())
+                        index.pop(session_id, None)
+                        idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
+                    if sid:
+                        try:
+                            (mdir / "session_messages" / f"{sid}.json").unlink(missing_ok=True)
+                        except BaseException:
+                            pass
+                elif sid:
+                    try:
+                        _LEGACY_MESSAGES_DIR.joinpath(f"{sid}.json").unlink(missing_ok=True)
+                    except BaseException:
+                        pass
+            except Exception:
+                pass
         return {"ok": True, "deleted": session_id}
 
     @app.post("/api/sessions/batch-delete", include_in_schema=False)
@@ -1111,35 +1124,30 @@ def register(app: FastAPI) -> None:
             wd = _resolve_work_dir(sess)
             mdir = _workspace_madcop_dir(wd)
             _SESSIONS.pop(sid, None)
-            _MESSIONS.pop(sid, None)
-            try:
-                if mdir is not None:
-                    idx_path = mdir / "sessions.json"
-                    if idx_path.exists():
-                        index = json.loads(idx_path.read_text())
-                        index.pop(sid, None)
-                        idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
-                    try:
-                        (mdir / "session_messages" / f"{sid}.json").unlink(missing_ok=True)
-                    except BaseException:
-                        pass
-                else:
-                    try:
-                        _LEGACY_MESSAGES_DIR.joinpath(f"{sid}.json").unlink(missing_ok=True)
-                    except BaseException:
-                        pass
-            except Exception:
-                pass
+            _MESSAGES.pop(sid, None)
+            safe_sid = _safe_session_id(sid)
+            with _PERSIST_LOCK:
+                try:
+                    if mdir is not None:
+                        idx_path = mdir / "sessions.json"
+                        if idx_path.exists():
+                            index = json.loads(idx_path.read_text())
+                            index.pop(sid, None)
+                            idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
+                        if safe_sid:
+                            try:
+                                (mdir / "session_messages" / f"{safe_sid}.json").unlink(missing_ok=True)
+                            except BaseException:
+                                pass
+                    elif safe_sid:
+                        try:
+                            _LEGACY_MESSAGES_DIR.joinpath(f"{safe_sid}.json").unlink(missing_ok=True)
+                        except BaseException:
+                            pass
+                except Exception:
+                    pass
         return {"ok": True, "successes": list(ids), "failures": []}
 
-    @app.get("/api/sessions/recent-projects", include_in_schema=False)
-    async def cc_recent_projects() -> dict[str, Any]:
-        seen: list[dict[str, str]] = []
-        for s in _SESSIONS.values():
-            wd = s.get("workDir")
-            if wd and not any(p.get("path") == wd for p in seen):
-                seen.append({"path": wd, "name": Path(wd).name})
-        return {"projects": seen}
 
     @app.get("/api/sessions/repository-context", include_in_schema=False)
     async def cc_session_repo_context(
@@ -1225,43 +1233,14 @@ def register(app: FastAPI) -> None:
         except Exception:
             return {"trace": [], "nodes": []}
 
-    @app.get("/api/sessions/{session_id}/git-info", include_in_schema=False)
-    async def cc_session_git_info(session_id: str) -> dict[str, Any]:
-        return {
-            "branch": None, "repoName": None,
-            "workDir": "", "changedFiles": 0, "worktree": None,
-        }
 
-    @app.get("/api/sessions/{session_id}/turn-checkpoints", include_in_schema=False)
-    async def cc_turn_checkpoints(session_id: str) -> dict[str, Any]:
-        return {"checkpoints": []}
 
     @app.get("/api/sessions/{session_id}/turn-checkpoints/diff",
               include_in_schema=False)
     async def cc_turn_checkpoint_diff(session_id: str) -> dict[str, Any]:
         return {"diff": "", "files": []}
 
-    @app.get("/api/sessions/{session_id}/inspection",
-              include_in_schema=False)
-    async def cc_session_inspection(session_id: str) -> dict[str, Any]:
-        return {"messages": [], "trace": [], "files": []}
 
-    @app.post("/api/sessions/{session_id}/branch", include_in_schema=False)
-    async def cc_branch_session(
-        session_id: str, request: Request,
-    ) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        import uuid
-        return {
-            "sessionId": uuid.uuid4().hex,
-            "title": body.get("title", "Branched session"),
-            "workDir": None,
-            "sourceSessionId": session_id,
-            "targetMessageId": body.get("targetMessageId", ""),
-        }
 
     @app.post("/api/sessions/{session_id}/rewind", include_in_schema=False)
     async def cc_session_rewind(
@@ -1294,134 +1273,23 @@ def register(app: FastAPI) -> None:
     # used to be here were removed because they shadowed the real handlers
     # (FastAPI matches routes in registration order).
 
-    @app.put("/api/memory/file", include_in_schema=False)
-    async def cc_memory_file_write(request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        return {"ok": True, "file": {
-            "path": body.get("path", ""),
-            "name": body.get("path", "").split("/")[-1] if body.get("path") else "",
-            "bytes": len(body.get("content", "")),
-            "updatedAt": "", "type": "markdown",
-            "description": "",
-            "title": body.get("path", "").split("/")[-1] if body.get("path") else "",
-            "isIndex": False,
-        }}
 
     # ---- Models / permissions --------------------------------------- #
 
-    @app.get("/api/models", include_in_schema=False)
-    async def cc_list_models() -> dict[str, Any]:
-        from madcop.config import settings as settings_store
-        s = settings_store.load_settings()
-        providers = s.providers
-        active_id = s.active_provider
-        active_provider = next((p for p in providers if p.provider_id == active_id), None)
-        models = [{
-            "id": p.model,
-            "name": p.label or p.model,
-            "description": f"{p.provider_id} via {p.base_url}",
-            "context": "auto",
-        } for p in providers if p.model]
-        return {
-            "models": models,
-            "provider": (
-                {"id": active_provider.provider_id,
-                 "name": active_provider.label or active_provider.provider_id}
-                if active_provider else None
-            ),
-        }
 
-    @app.get("/api/models/current", include_in_schema=False)
-    async def cc_current_model() -> dict[str, Any]:
-        from madcop.config import settings as settings_store
-        s = settings_store.load_settings()
-        active_id = s.active_provider
-        active = next((p for p in s.providers if p.provider_id == active_id), None)
-        if not active:
-            return {"model": None}
-        return {"model": {"id": active.model, "name": active.label or active.model}}
 
-    # NOTE: reasoning intensity (effort) is configured per-session in the Vue
-    # composer and sent on the POST /api/chat body's `effort` field (handled in
-    # madcop/server/app.py). The old global GET/PUT /api/effort stubs never
-    # persisted or applied anything and had no live caller, so they were removed.
 
-    @app.get("/api/permissions/mode", include_in_schema=False)
-    async def cc_get_permission_mode() -> dict[str, Any]:
-        return {"mode": "bypassPermissions"}
-
-    @app.put("/api/permissions/mode", include_in_schema=False)
-    async def cc_set_permission_mode(request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        return {"ok": True, "mode": body.get("mode", "bypassPermissions")}
 
     # ---- Settings / cli launcher / output style / user ----------- #
 
-    @app.get("/api/settings/cli-launcher", include_in_schema=False)
-    async def cc_cli_launcher() -> dict[str, Any]:
-        return {
-            "supported": True, "command": "madcop", "installed": True,
-            "launcherPath": str(_madcop_root() / "server" / "__main__.py"),
-            "binDir": str(_madcop_root()),
-            "pathConfigured": True, "pathInCurrentShell": False,
-            "availableInNewTerminals": True, "needsTerminalRestart": False,
-            "configTarget": None, "lastError": None,
-        }
 
     @app.get("/api/settings/output-style", include_in_schema=False)
     async def cc_output_style() -> dict[str, Any]:
         return {"outputStyle": "default", "scope": "userSettings", "workDir": None}
 
-    @app.put("/api/settings/output-style", include_in_schema=False)
-    async def cc_set_output_style(request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        return {
-            "ok": True,
-            "outputStyle": body.get("outputStyle", "default"),
-            "scope": body.get("scope", "userSettings"),
-            "workDir": body.get("workDir"),
-        }
 
-    @app.get("/api/settings/output-styles", include_in_schema=False)
-    async def cc_output_styles() -> dict[str, Any]:
-        return {
-            "outputStyle": "default",
-            "styles": [{
-                "value": "default", "label": "Default",
-                "description": "Balanced assistant style", "source": "built-in",
-            }],
-            "scope": "userSettings", "workDir": None,
-        }
 
-    @app.get("/api/settings/user", include_in_schema=False)
-    async def cc_user_settings() -> dict[str, Any]:
-        return {
-            "theme": "white", "alwaysThinkingEnabled": True,
-            "autoDreamEnabled": False, "chatSendBehavior": "enter",
-            "outputStyle": "default", "skipWebFetchPreflight": True,
-            "desktopNotificationsEnabled": True,
-            "desktopTerminal": {"shell": "/bin/zsh"},
-            "webSearch": {"mode": "auto"},
-            "updateProxy": {"mode": "system", "url": ""},
-            "language": "zh",
-        }
 
-    @app.put("/api/settings/user", include_in_schema=False)
-    async def cc_update_user_settings(request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        return {"ok": True, **body}
 
     @app.put("/api/settings", include_in_schema=False)
     async def cc_update_settings(request: Request) -> dict[str, Any]:
@@ -1582,40 +1450,12 @@ def register(app: FastAPI) -> None:
 
     # ---- Agents / Teams / Tasks / Plugins / MCP / Scheduled / Search - #
 
-    @app.get("/api/agents", include_in_schema=False)
-    async def cc_agents() -> dict[str, Any]:
-        return {"activeAgents": [], "allAgents": []}
 
-    @app.get("/api/teams", include_in_schema=False)
-    async def cc_teams() -> dict[str, Any]:
-        return {"teams": []}
 
-    @app.get("/api/teams/{name}", include_in_schema=False)
-    async def cc_team_detail(name: str) -> dict[str, Any]:
-        return {"name": name, "description": "",
-                "members": [], "createdAt": "", "updatedAt": ""}
 
-    @app.delete("/api/teams/{name}", include_in_schema=False)
-    async def cc_team_delete(name: str) -> dict[str, Any]:
-        return {"ok": True, "deleted": name}
 
-    @app.get("/api/teams/{team_name}/members/{agent_id}/transcript",
-             include_in_schema=False)
-    async def cc_team_member_transcript(team_name: str, agent_id: str) -> dict[str, Any]:
-        # TODO: persist real transcripts in a future iteration
-        return {"messages": [], "teamName": team_name, "agentId": agent_id}
 
-    @app.post("/api/teams/{team_name}/members/{agent_id}/messages",
-              include_in_schema=False)
-    async def cc_team_member_send_message(team_name: str, agent_id: str,
-                                          request: Request) -> dict[str, Any]:
-        # TODO: route to actual sub-agent in a future iteration
-        return {"ok": True, "teamName": team_name, "agentId": agent_id,
-                "queued": True}
 
-    @app.get("/api/tasks", include_in_schema=False)
-    async def cc_tasks() -> dict[str, Any]:
-        return {"tasks": []}
 
     @app.post("/api/tasks", include_in_schema=False)
     async def cc_task_create(request: Request) -> dict[str, Any]:
@@ -1640,91 +1480,32 @@ def register(app: FastAPI) -> None:
     async def cc_task_list_reset_no_param() -> dict[str, Any]:
         return {"ok": True}
 
-    @app.get("/api/tasks/lists/{list_id}/{task_id}",
-              include_in_schema=False)
-    async def cc_task_get_legacy(list_id: str, task_id: str) -> dict[str, Any]:
-        return {"task": {"id": task_id, "listId": list_id, "status": "pending"}}
 
-    @app.get("/api/scheduled-tasks", include_in_schema=False)
-    async def cc_scheduled_tasks() -> dict[str, Any]:
-        return {"tasks": []}
 
-    @app.post("/api/scheduled-tasks", include_in_schema=False)
-    async def cc_scheduled_task_create(request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        return {"task": {"id": body.get("id", "sched-1"), **body}}
 
-    @app.get("/api/scheduled-tasks/runs", include_in_schema=False)
-    async def cc_scheduled_runs() -> dict[str, Any]:
-        return {"runs": []}
 
     @app.post("/api/scheduled-tasks/{id}/run", include_in_schema=False)
     async def cc_scheduled_run(id: str) -> dict[str, Any]:
         return {"runId": f"run-{id}-{int(time.time())}",
                 "scheduledTaskId": id}
 
-    @app.get("/api/scheduled-tasks/{task_id}/runs",
-              include_in_schema=False)
-    async def cc_scheduled_task_runs(task_id: str) -> dict[str, Any]:
-        return {"runs": []}
 
     @app.delete("/api/scheduled-tasks/{id}", include_in_schema=False)
     async def cc_scheduled_delete(id: str) -> dict[str, Any]:
         return {"ok": True, "deleted": id}
 
-    @app.get("/api/mcp", include_in_schema=False)
-    async def cc_mcp_list_legacy() -> dict[str, Any]:
-        return {"servers": []}
 
-    @app.get("/api/mcp/project-paths", include_in_schema=False)
-    async def cc_mcp_paths() -> dict[str, Any]:
-        return {"paths": []}
 
     @app.get("/api/mcp/{name}", include_in_schema=False)
     async def cc_mcp_get(name: str) -> dict[str, Any]:
         return {"server": {"name": name, "status": "disconnected", "tools": []}}
 
-    @app.get("/api/mcp/{name}/status", include_in_schema=False)
-    async def cc_mcp_status_legacy(name: str) -> dict[str, Any]:
-        return {"server": {"name": name, "status": "disconnected"}}
 
-    @app.post("/api/mcp/{name}/reconnect", include_in_schema=False)
-    async def cc_mcp_reconnect_legacy(name: str) -> dict[str, Any]:
-        return {"server": {"name": name, "status": "connecting"}}
 
-    @app.post("/api/mcp/{name}/toggle", include_in_schema=False)
-    async def cc_mcp_toggle_legacy(name: str, request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        return {"server": {"name": name, "enabled": body.get("enabled", True)}}
 
-    @app.put("/api/mcp/{name}", include_in_schema=False)
-    async def cc_mcp_update_legacy(name: str, request: Request) -> dict[str, Any]:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        return {"server": {"name": name, **body}}
 
-    @app.delete("/api/mcp/{name}", include_in_schema=False)
-    async def cc_mcp_delete_legacy(name: str) -> dict[str, Any]:
-        return {"ok": True, "deleted": name}
 
-    @app.get("/api/plugins", include_in_schema=False)
-    async def cc_plugins() -> dict[str, Any]:
-        return {"plugins": []}
 
-    @app.get("/api/plugins/detail", include_in_schema=False)
-    async def cc_plugin_detail(
-        id: str = Query(default=""),
-        cwd: str = Query(default=""),
-    ) -> dict[str, Any]:
-        return {"detail": {"id": id, "name": id, "status": "disabled"}}
 
     @app.post("/api/plugins/enable", include_in_schema=False)
     async def cc_plugin_enable(request: Request) -> dict[str, Any]:
@@ -1946,31 +1727,11 @@ def register(app: FastAPI) -> None:
 
     # ---- OAuth stubs ------------------------------------------------ #
 
-    @app.get("/api/haha-oauth", include_in_schema=False)
-    async def madcop_oauth() -> dict[str, Any]:
-        return {"loggedIn": False}
 
-    @app.post("/api/haha-oauth/start", include_in_schema=False)
-    async def madcop_oauth_start() -> dict[str, Any]:
-        return {"status": "skipped",
-                "reason": "MadCop does not use the upstream OAuth flow"}
 
-    @app.delete("/api/haha-oauth", include_in_schema=False)
-    async def madcop_oauth_delete() -> dict[str, Any]:
-        return {"ok": True}
 
-    @app.get("/api/haha-openai-oauth", include_in_schema=False)
-    async def madcop_openai_oauth() -> dict[str, Any]:
-        return {"loggedIn": False}
 
-    @app.post("/api/haha-openai-oauth/start", include_in_schema=False)
-    async def madcop_openai_oauth_start() -> dict[str, Any]:
-        return {"status": "skipped",
-                "reason": "MadCop does not use ChatGPT OAuth"}
 
-    @app.delete("/api/haha-openai-oauth", include_in_schema=False)
-    async def madcop_openai_oauth_delete() -> dict[str, Any]:
-        return {"ok": True}
 
     # ---- Activity / Traces / Diagnostics / Doctor ---------------- #
 
