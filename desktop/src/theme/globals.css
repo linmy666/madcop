@@ -513,10 +513,12 @@
   --color-border-focus: #8B98A7;
   --color-border-separator: var(--color-outline-variant);
 
-  /* Text aliases */
+  /* Text aliases — tertiary decoupled from --color-outline (which borders
+     share) so small辅助 text can be darkened for WCAG AA without making
+     borders heavier. */
   --color-text-primary: var(--color-on-surface);
   --color-text-secondary: var(--color-on-surface-variant);
-  --color-text-tertiary: var(--color-outline);
+  --color-text-tertiary: #6B5750;
 
   /* Info surface (for team status bar, notifications) */
   --color-surface-info: var(--color-surface-container-low);
@@ -718,8 +720,8 @@
   --color-border-separator: #E5EAF0;
 
   --color-text-primary: var(--color-on-surface);
-  --color-text-secondary: var(--color-on-surface-variant);
-  --color-text-tertiary: #7B8794;
+  --color-text-secondary: #374151;
+  --color-text-tertiary: #5B6573;
 
   --color-surface-info: #F6F8FA;
   --color-brand: var(--color-primary);

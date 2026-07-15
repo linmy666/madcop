@@ -40,7 +40,7 @@ export interface ComponentConfig {
   defaultProps: Record<string, any>
   isContainer?: boolean
   label: string
-  render: (props: Record<string, any>) => string
+  render: (props: Record<string, any>, children?: string) => string
 }
 
 // ── Component Registry ────────────────────────────────────────────────
@@ -57,10 +57,10 @@ const componentRegistry: Record<string, ComponentConfig> = {
     defaultProps: { text: '新标题', level: '2', fontSize: 24 },
     render: ({ text, level, color, fontSize }) => {
       const fontSizePx = `${fontSize || 24}px`
-      const colorHex = color || '#1A1A1A'
+      const colorHex = color || '#111827'
       const text_ = text || '标题'
       const tag = `h${level || 2}`
-      return `<${tag} style="margin: 0 0 8px 0; color: ${colorHex}; font-size: ${fontSizePx}; font-weight: 700;">${text_}</${tag}>`
+      return `<${tag} style="margin: 0 0 8px 0; color: ${colorHex}; font-size: ${fontSizePx}; font-weight: 700; line-height: 1.25;">${text_}</${tag}>`
     },
   },
   Paragraph: {
@@ -81,56 +81,82 @@ const componentRegistry: Record<string, ComponentConfig> = {
       text: { type: 'text', label: '文字' },
       variant: { type: 'select', label: '样式', options: [{ label: '主按钮', value: 'primary' }, { label: '次按钮', value: 'secondary' }] },
       color: { type: 'color', label: '颜色' },
+      width: { type: 'number', label: '宽度' },
     },
     defaultProps: { text: '按钮', variant: 'primary' },
-    render: ({ text, variant, color }) => {
-      const bg = variant === 'primary' ? (color || '#7C3AED') : '#E2E8F0'
-      const fg = variant === 'primary' ? '#fff' : '#1A1A1A'
-      return `<button style="padding: 10px 24px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; font-size: 14px; background: ${bg}; color: ${fg};">${text || '按钮'}</button>`
+    render: ({ text, variant, color, width }) => {
+      const bg = variant === 'primary' ? (color || '#7C3AED') : '#F3F4F6'
+      const fg = variant === 'primary' ? '#FFFFFF' : '#374151'
+      const widthStyle = width ? `width: ${width}px; ` : ''
+      return `<button style="${widthStyle}padding: 10px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 14px; background: ${bg}; color: ${fg}; transition: opacity 0.15s, transform 0.05s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">${text || '按钮'}</button>`
     },
   },
   Image: {
     label: '图片',
     fields: {
       src: { type: 'text', label: '图片地址' },
+      alt: { type: 'text', label: '替代文字' },
       width: { type: 'number', label: '宽度' },
       height: { type: 'number', label: '高度' },
+      borderRadius: { type: 'number', label: '圆角' },
     },
-    defaultProps: { src: 'https://via.placeholder.com/300x200', width: 300, height: 200 },
-    render: ({ src, width, height }) =>
-      `<img src="${src || ''}" alt="" style="max-width: 100%; width: ${width || 300}px; height: ${height || 200}px; object-fit: cover; border-radius: 4px;" />`,
+    defaultProps: { src: '', alt: '', width: 300, height: 200, borderRadius: 8 },
+    render: ({ src, alt, width, height, borderRadius }) => {
+      // Inline SVG placeholder so we never depend on a dead external URL.
+      const w = width || 300
+      const h = height || 200
+      const br = borderRadius ?? 8
+      const realSrc = src && src.trim()
+        ? src
+        : `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'><rect width='${w}' height='${h}' fill='#F3F4F6'/><text x='50%' y='50%' font-family='sans-serif' font-size='14' fill='#9CA3AF' text-anchor='middle' dominant-baseline='middle'>${w}×${h}</text></svg>`)}`
+      return `<img src="${realSrc}" alt="${alt || ''}" style="max-width: 100%; width: ${w}px; height: ${h}px; object-fit: cover; border-radius: ${br}px; display: block;" />`
+    },
   },
   Input: {
     label: '输入框',
     fields: {
       placeholder: { type: 'text', label: '占位文字' },
       width: { type: 'number', label: '宽度' },
+      type: { type: 'select', label: '类型', options: [{ label: '文本', value: 'text' }, { label: '密码', value: 'password' }, { label: '邮箱', value: 'email' }] },
     },
-    defaultProps: { placeholder: '请输入...', width: 300 },
-    render: ({ placeholder, width }) =>
-      `<input type="text" placeholder="${placeholder || ''}" style="padding: 10px 14px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 14px; width: ${width || 300}px;" />`,
+    defaultProps: { placeholder: '请输入...', width: 300, type: 'text' },
+    render: ({ placeholder, width, type }) =>
+      `<input type="${type || 'text'}" placeholder="${placeholder || ''}" style="box-sizing: border-box; padding: 10px 14px; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 14px; width: ${width || 300}px; outline: none; transition: border-color 0.15s;" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#E5E7EB'" />`,
   },
   Card: {
     label: '卡片',
     fields: {
       padding: { type: 'number', label: '内边距' },
+      bgColor: { type: 'color', label: '背景色' },
       radius: { type: 'number', label: '圆角' },
+      shadow: { type: 'select', label: '阴影', options: [{ label: '小', value: 'sm' }, { label: '中', value: 'md' }, { label: '大', value: 'lg' }] },
     },
-    defaultProps: { padding: 20, radius: 12 },
+    defaultProps: { padding: 24, bgColor: '#FFFFFF', radius: 12, shadow: 'md' },
     isContainer: true,
-    render: ({ padding, radius }, children = '') =>
-      `<div style="background: #fff; border: 1px solid #E5E7EB; border-radius: ${radius || 12}px; padding: ${padding || 20}px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">${children}</div>`,
+    render: ({ padding, bgColor, radius, shadow }, children = '') => {
+      const shadows: Record<string, string> = {
+        sm: '0 1px 2px rgba(0,0,0,0.05)',
+        md: '0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.05)',
+        lg: '0 10px 24px -4px rgba(0,0,0,0.12), 0 4px 8px -4px rgba(0,0,0,0.08)',
+      }
+      return `<div style="background: ${bgColor || '#FFFFFF'}; border: 1px solid #E5E7EB; border-radius: ${radius || 12}px; padding: ${padding || 24}px; box-shadow: ${shadows[shadow || 'md']};">${children}</div>`
+    },
   },
   Flex: {
     label: '弹性布局',
     fields: {
       direction: { type: 'select', label: '方向', options: [{ label: '横向', value: 'row' }, { label: '纵向', value: 'column' }] },
       gap: { type: 'number', label: '间距' },
+      justify: { type: 'select', label: '主轴对齐', options: [{ label: '起始', value: 'start' }, { label: '居中', value: 'center' }, { label: '末尾', value: 'end' }, { label: '两端', value: 'between' }, { label: '环绕', value: 'around' }] },
+      align: { type: 'select', label: '交叉对齐', options: [{ label: '起始', value: 'start' }, { label: '居中', value: 'center' }, { label: '末尾', value: 'end' }, { label: '拉伸', value: 'stretch' }] },
     },
-    defaultProps: { direction: 'column', gap: 8 },
+    defaultProps: { direction: 'column', gap: 16, justify: 'start', align: 'stretch' },
     isContainer: true,
-    render: ({ direction, gap }, children = '') =>
-      `<div style="display: flex; flex-direction: ${direction || 'column'}; gap: ${gap || 8}px;">${children}</div>`,
+    render: ({ direction, gap, justify, align }, children = '') => {
+      const jc = { start: 'flex-start', center: 'center', end: 'flex-end', between: 'space-between', around: 'space-around' }[justify || 'start'] || 'flex-start'
+      const ac = { start: 'flex-start', center: 'center', end: 'flex-end', stretch: 'stretch' }[align || 'stretch'] || 'stretch'
+      return `<div style="display: flex; flex-direction: ${direction || 'column'}; gap: ${gap || 16}px; justify-content: ${jc}; align-items: ${ac};">${children}</div>`
+    },
   },
   Grid: {
     label: '网格',
@@ -138,35 +164,43 @@ const componentRegistry: Record<string, ComponentConfig> = {
       columns: { type: 'number', label: '列数' },
       gap: { type: 'number', label: '间距' },
     },
-    defaultProps: { columns: 2, gap: 12 },
+    defaultProps: { columns: 2, gap: 16 },
     isContainer: true,
     render: ({ columns, gap }, children = '') =>
-      `<div style="display: grid; grid-template-columns: repeat(${columns || 2}, 1fr); gap: ${gap || 12}px;">${children}</div>`,
+      `<div style="display: grid; grid-template-columns: repeat(${columns || 2}, 1fr); gap: ${gap || 16}px;">${children}</div>`,
   },
   Section: {
     label: '区块',
     fields: {
-      padding: { type: 'number', label: '内边距' },
       bgColor: { type: 'color', label: '背景色' },
+      padding: { type: 'number', label: '内边距' },
+      maxWidth: { type: 'number', label: '最大宽度' },
     },
-    defaultProps: { padding: 40, bgColor: '#F9FAFB' },
+    defaultProps: { bgColor: '#F9FAFB', padding: 40, maxWidth: 960 },
     isContainer: true,
-    render: ({ padding, bgColor }, children = '') =>
-      `<section style="padding: ${padding || 40}px; background: ${bgColor || '#F9FAFB'};">${children}</section>`,
+    render: ({ bgColor, padding, maxWidth }, children = '') => {
+      const mw = maxWidth ? `max-width: ${maxWidth}px; margin: 0 auto; ` : ''
+      return `<section style="${mw}padding: ${padding || 40}px; background: ${bgColor || '#F9FAFB'};">${children}</section>`
+    },
   },
   Divider: {
     label: '分割线',
-    fields: {},
-    defaultProps: {},
-    render: () => `<hr style="margin: 16px 0; border: none; border-top: 1px solid #E5E7EB;" />`,
+    fields: {
+      color: { type: 'color', label: '颜色' },
+      thickness: { type: 'number', label: '粗细' },
+      margin: { type: 'number', label: '上下间距' },
+    },
+    defaultProps: { color: '#E5E7EB', thickness: 1, margin: 16 },
+    render: ({ color, thickness, margin }) =>
+      `<hr style="margin: ${margin || 16}px 0; border: none; border-top: ${thickness || 1}px solid ${color || '#E5E7EB'};" />`,
   },
   Space: {
     label: '间距',
     fields: {
       height: { type: 'number', label: '高度' },
     },
-    defaultProps: { height: 20 },
-    render: ({ height }) => `<div style="height: ${height || 20}px;"></div>`,
+    defaultProps: { height: 16 },
+    render: ({ height }) => `<div style="height: ${height || 16}px;"></div>`,
   },
 }
 
@@ -441,7 +475,8 @@ const contentHtml = computed(() => data.value.content.map(renderItem).join(''))
           background: data.root.props.bgColor || '#FFFFFF',
           padding: (data.root.props.padding || 40) + 'px',
           minHeight: '100%',
-          width: '800px',
+          maxWidth: '800px',
+          width: '100%',
           margin: '0 auto',
           boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
         }"

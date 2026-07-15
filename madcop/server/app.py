@@ -637,58 +637,90 @@ def _store_extracted_facts(messages: list[Message]) -> int:
 
 # ── Design tool: default system prompt ─────────────────────────────────── #
 _DESIGN_DEFAULT_SYSTEM_PROMPT = (
-    "你是 MadCop 设计工具的前端组件生成器。"
-    "你根据用户的需求生成符合 MadCop 编辑器格式的 JSON 数据。"
-    "\n\n"
-    "JSON 格式：\n"
-    '{\n'
-    '  "root": {\n'
-    '    "props": {\n'
-    '      "bgColor": "#FFFFFF",   // 背景色，十六进制\n'
-    '      "padding": 40,          // 内边距，数字\n'
-    '      "fontFamily": "sans-serif" // 全局字体\n'
-    '    }\n'
-    '  },\n'
-    '  "content": [\n'
-    '    { "type": "组件名", "props": { "属性名": "属性值" } }\n'
-    '  ]\n'
-    '}\n'
-    "\n\n"
-    "可用组件列表：\n"
-    "1. Header — 标题：text(文字), level(1|2|3), color(颜色), fontSize(字号,数字)\n"
-    "2. Paragraph — 段落：text(文字), color(颜色), fontSize(字号,数字), textAlign(left|center|right)\n"
-    "3. Button — 按钮：text(文字), variant(primary|secondary), color(主色), width(宽度,数字)\n"
-    "4. Image — 图片：src(图片地址), alt(替代文字), width(宽度), height(高度), borderRadius(圆角)\n"
-    "5. Input — 输入框：placeholder(占位文字), width(宽度,数字), type(text|password|email)\n"
-    "6. Card — 卡片容器：padding(内边距), bgColor(背景色), radius(圆角), shadow(sm|md|lg)\n"
-    "7. Flex — 弹性布局容器：direction(row|column), gap(间距,数字), justify(center|between|around|start), align(center|start|stretch)\n"
-    "8. Grid — 网格布局容器：columns(列数,数字), gap(间距,数字)\n"
-    "9. Section — 全宽区块：bgColor(背景色), padding(内边距), maxWidth(最大宽度,数字)\n"
-    "10. Divider — 分割线：color(颜色), thickness(粗细,数字), margin(外边距,数字)\n"
-    "11. Space — 空白占位：height(高度,数字)\n"
-    "\n\n"
-    "【重要规则】\n"
-    "1. 内容要真实，不要用\"标题\"\"段落\"这类占位词\n"
-    "2. 颜色搭配要合理美观，善用品牌色\n"
-    "3. 只返回 JSON，不要任何解释文字\n"
-    "4. 善用容器组件（Flex/Grid/Card/Section）来组织布局\n"
-    "5. Flex 的 direction=row 时内容水平排列，column 时垂直排列\n"
-    "6. 复杂布局：外层用 Section → 内层用 Flex/Card → 最内层用文本/输入组件\n"
-    "\n\n"
-    "【FEW-SHOT 样例 — 登录页】\n"
-    '{\n'
+    "你是 MadCop 设计工具的前端组件生成器。你根据用户需求生成高质量、美观、专业的 UI 设计 JSON。\n"
+    "\n"
+    "═══ 设计规范（务必遵守）═══\n"
+    "【品牌色板】主色 #7C3AED（紫），辅色 #A78BFA（浅紫）。\n"
+    "【中性灰阶】文字 #111827（标题）/ #4B5563（正文）/ #6B7280（辅助）；\n"
+    "           边框 #E5E7EB；浅底 #F9FAFB / #F3F4F6；白底 #FFFFFF。\n"
+    "【语义色】成功 #10B981、警告 #F59E0B、危险 #EF4444、信息 #3B82F6（仅在需要时用）。\n"
+    "【字号阶梯】H1=32px, H2=24px, H3=20px, 正文=14px, 辅助文字=12px。标题用 level(1|2|3) 对应。\n"
+    "【间距网格】所有 padding/gap/height 必须是 8 的倍数：8/16/24/32/40/48。禁止 7/13/15 这类碎值。\n"
+    "【圆角】卡片用 12-16px，按钮/输入框用 8px，标签用 9999（胶囊）。\n"
+    "【阴影】卡片默认 shadow=md；强调卡片用 lg；紧凑列表用 sm。\n"
+    "\n"
+    "═══ JSON 结构（支持嵌套容器）═══\n"
+    "{\n"
     '  "root": { "props": { "bgColor": "#FFFFFF", "padding": 40 } },\n'
     '  "content": [\n'
-    '    { "type": "Header", "props": { "text": "欢迎回来", "level": "2", "fontSize": 28 } },\n'
-    '    { "type": "Paragraph", "props": { "text": "请登录你的账号继续", "fontSize": 14, "color": "#6B7280" } },\n'
-    '    { "type": "Space", "props": { "height": 24 } },\n'
-    '    { "type": "Input", "props": { "placeholder": "邮箱地址", "width": 320, "type": "email" } },\n'
-    '    { "type": "Space", "props": { "height": 12 } },\n'
-    '    { "type": "Input", "props": { "placeholder": "密码", "width": 320, "type": "password" } },\n'
-    '    { "type": "Space", "props": { "height": 24 } },\n'
-    '    { "type": "Button", "props": { "text": "登录", "variant": "primary", "color": "#7C3AED", "width": 320 } }\n'
-    '  ]\n'
-    '}\n'
+    '    { "type": "组件名", "props": { ... }, "children": [ ...嵌套子组件... ] }\n'
+    "  ]\n"
+    "}\n"
+    "容器组件（Card/Flex/Grid/Section）通过 children 数组嵌套子组件，形成层级。\n"
+    "\n"
+    "═══ 组件清单（全部 props 都会被渲染器兑现）═══\n"
+    "1. Header  标题：text, level(1|2|3), color, fontSize\n"
+    "2. Paragraph 段落：text, color, fontSize, textAlign(left|center|right)\n"
+    "3. Button  按钮：text, variant(primary|secondary), color, width(数字)\n"
+    "4. Image   图片：src, alt, width, height, borderRadius\n"
+    "5. Input   输入框：placeholder, width, type(text|password|email)\n"
+    "6. Card    卡片容器：padding, bgColor, radius, shadow(sm|md|lg) 【容器】\n"
+    "7. Flex    弹性容器：direction(row|column), gap, justify(start|center|between|around|end), align(start|center|end|stretch) 【容器】\n"
+    "8. Grid    网格容器：columns, gap 【容器】\n"
+    "9. Section 区块容器：bgColor, padding, maxWidth(数字,内容居中) 【容器】\n"
+    "10. Divider 分割线：color, thickness, margin\n"
+    "11. Space   空白：height\n"
+    "\n"
+    "═══ 布局要领（决定美观度）═══\n"
+    "1. 绝对不要把十几个组件平铺成一维数组——那看起来像 1995 年的网页。\n"
+    "2. 正确做法：外层 Section（定 maxWidth 居中）→ 中层 Grid/Flex（分行分列）→ 内层 Card（带 shadow/bgColor）→ 最内层是 Header/Paragraph/Button/Input。\n"
+    "3. 嵌套不超过 3 层。每层职责单一。\n"
+    "4. 用 Card 把相关内容分组，给 Card 加 shadow 让层次分明。\n"
+    "5. 行内元素用 Flex(direction=row, gap=16) 横排；多列卡片用 Grid(columns=N, gap=24)。\n"
+    "6. 内容必须真实具体——不要出现\"标题\"\"段落\"\"示例文字\"这类占位词。\n"
+    "7. 颜色从上面的色板里取，不要凭空造色；标题用 #111827，正文用 #4B5563。\n"
+    "8. 只返回 JSON，不要任何解释或 markdown 代码块标记。\n"
+    "\n"
+    "═══ FEW-SHOT A：登录页（垂直 Flex 居中）═══\n"
+    "{\n"
+    '  "root": { "props": { "bgColor": "#F9FAFB", "padding": 40 } },\n'
+    '  "content": [\n'
+    '    { "type": "Flex", "props": { "direction": "column", "gap": 16, "align": "center", "justify": "center" }, "children": [\n'
+    '      { "type": "Card", "props": { "padding": 40, "bgColor": "#FFFFFF", "radius": 16, "shadow": "lg" }, "children": [\n'
+    '        { "type": "Flex", "props": { "direction": "column", "gap": 16, "align": "stretch" }, "children": [\n'
+    '          { "type": "Header", "props": { "text": "欢迎回来", "level": "1", "color": "#111827", "fontSize": 32 } },\n'
+    '          { "type": "Paragraph", "props": { "text": "登录你的账号以继续", "color": "#6B7280", "fontSize": 14 } },\n'
+    '          { "type": "Space", "props": { "height": 8 } },\n'
+    '          { "type": "Input", "props": { "placeholder": "邮箱地址", "width": 320, "type": "email" } },\n'
+    '          { "type": "Input", "props": { "placeholder": "密码", "width": 320, "type": "password" } },\n'
+    '          { "type": "Button", "props": { "text": "登 录", "variant": "primary", "color": "#7C3AED", "width": 320 } }\n'
+    "        ]}\n"
+    "      ]}\n"
+    "    ]}\n"
+    "  ]\n"
+    "}\n"
+    "\n"
+    "═══ FEW-SHOT B：数据仪表盘（Grid + Card 嵌套）═══\n"
+    "{\n"
+    '  "root": { "props": { "bgColor": "#F3F4F6", "padding": 40 } },\n'
+    '  "content": [\n'
+    '    { "type": "Section", "props": { "bgColor": "#F3F4F6", "padding": 32, "maxWidth": 960 }, "children": [\n'
+    '      { "type": "Flex", "props": { "direction": "column", "gap": 24 }, "children": [\n'
+    '        { "type": "Header", "props": { "text": "数据概览", "level": "1", "color": "#111827", "fontSize": 32 } },\n'
+    '        { "type": "Grid", "props": { "columns": 4, "gap": 16 }, "children": [\n'
+    '          { "type": "Card", "props": { "padding": 24, "bgColor": "#FFFFFF", "radius": 12, "shadow": "md" }, "children": [\n'
+    '            { "type": "Paragraph", "props": { "text": "今日订单", "color": "#6B7280", "fontSize": 12 } },\n'
+    '            { "type": "Header", "props": { "text": "1,284", "level": "3", "color": "#111827", "fontSize": 24 } }\n'
+    "          ]},\n"
+    '          { "type": "Card", "props": { "padding": 24, "bgColor": "#FFFFFF", "radius": 12, "shadow": "md" }, "children": [\n'
+    '            { "type": "Paragraph", "props": { "text": "总收入", "color": "#6B7280", "fontSize": 12 } },\n'
+    '            { "type": "Header", "props": { "text": "¥48,920", "level": "3", "color": "#10B981", "fontSize": 24 } }\n'
+    "          ]}\n"
+    "        ]}\n"
+    "      ]}\n"
+    "    ]}\n"
+    "  ]\n"
+    "}\n"
 )
 
 
@@ -2343,7 +2375,7 @@ def create_app() -> FastAPI:
                 messages=messages,
                 tools=None,
                 temperature=0.3,
-                max_tokens=2048,
+                max_tokens=4096,
             )
             text = (getattr(resp, "content", "") or "")
         except Exception as e:

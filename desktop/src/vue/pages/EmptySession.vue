@@ -689,7 +689,7 @@ const insertSlashCommand = () => {
          ═══════════════════════════════════════════════════════════════ -->
     <div
       class="flex flex-1 flex-col items-center justify-center"
-      :class="isMobileComposer ? 'px-6 pb-[230px] pt-10' : 'p-8 pb-32'"
+      :class="isMobileComposer ? 'px-6 pb-[230px] pt-10' : 'p-8 pb-44'"
     >
       <!-- Soft radial brand glow behind the mascot -->
       <div
@@ -703,10 +703,10 @@ const insertSlashCommand = () => {
         <MadCopLoader
           :state="isSubmitting ? 'working' : 'ready'"
           :size="isMobileComposer ? 128 : 200"
-          :class="isMobileComposer ? 'mb-4' : 'mb-6'"
+          :class="isMobileComposer ? 'mb-4' : 'mb-8'"
         />
         <h1
-          class="mb-2 font-extrabold tracking-tight text-[var(--color-text-primary)]"
+          class="mb-3 font-extrabold tracking-tight text-[var(--color-text-primary)]"
           :class="isMobileComposer ? 'text-2xl' : 'text-3xl'"
           :style="{ fontFamily: 'var(--font-headline)' }"
         >
@@ -754,7 +754,7 @@ const insertSlashCommand = () => {
           data-testid="empty-session-composer-panel"
           class="glass-panel relative flex flex-col gap-3 overflow-visible"
           :class="[
-            isMobileComposer ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl p-0',
+            isMobileComposer ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl p-0 shadow-[var(--shadow-composer)]',
             { 'composer-drop-target-active': isDragActive },
           ]"
         >
@@ -976,7 +976,7 @@ const insertSlashCommand = () => {
 
               <!-- Right: context indicator + model + submit -->
               <div
-                class="flex items-center gap-3"
+                class="flex items-center gap-2"
                 :class="
                   isMobileComposer
                     ? 'flex min-w-0 flex-1 items-center justify-end gap-2'

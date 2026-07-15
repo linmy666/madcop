@@ -51,10 +51,14 @@ const defaultsFor: Record<string, Record<string, any>> = {
   Header: { text: '标题', level: '2', fontSize: 24 },
   Paragraph: { text: '文字', fontSize: 14 },
   Button: { text: '按钮', variant: 'primary' },
-  Card: { padding: 20, radius: 12 },
-  Flex: { direction: 'column', gap: 8 },
-  Grid: { columns: 2, gap: 12 },
-  Space: { height: 20 },
+  Card: { padding: 24, bgColor: '#FFFFFF', radius: 12, shadow: 'md' },
+  Flex: { direction: 'column', gap: 16, justify: 'start', align: 'stretch' },
+  Grid: { columns: 2, gap: 16 },
+  Section: { bgColor: '#F9FAFB', padding: 40, maxWidth: 960 },
+  Divider: { color: '#E5E7EB', thickness: 1, margin: 16 },
+  Space: { height: 16 },
+  Image: { width: 300, height: 200, borderRadius: 8 },
+  Input: { placeholder: '请输入...', width: 300, type: 'text' },
 }
 function autoRepair(data: any): DesignData {
   if (!data.root) data.root = { props: { bgColor: '#FFFFFF', padding: 40 } }
@@ -63,8 +67,13 @@ function autoRepair(data: any): DesignData {
   if (!data.root.props.padding) data.root.props.padding = 40
   if (!Array.isArray(data.content)) data.content = []
   function repairItem(item: any): any {
-    if (!item.type) return null
-    if (!componentNames[item.type]) return null
+    if (!item || !item.type) return null
+    // Unknown component types are NOT silently dropped — surface them as a
+    // visible Paragraph so the user can see what the LLM emitted instead of
+    // wondering why content disappeared.
+    if (!componentNames[item.type]) {
+      return { type: 'Paragraph', props: { text: `[未知组件: ${item.type}]`, color: '#EF4444', fontSize: 12 } }
+    }
     if (!item.props) item.props = {}
     if (defaultsFor[item.type]) {
       for (const [k, v] of Object.entries(defaultsFor[item.type])) {
