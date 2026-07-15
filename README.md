@@ -66,7 +66,7 @@ So the design goal is: a thin local shell that lets the user pick their own mode
 │                            │  └──────────────────┘  │  │
 │                            │  ┌──────────────────┐  │  │
 │                            │  │  Workflow Engine  │  │  │
-│                            │  │  + 12 Modes       │  │  │
+│                            │  │  + Agent Modes    │  │  │
 │                            │  └──────────────────┘  │  │
 │                            │  ┌──────────────────┐  │  │
 │                            │  │  Memory Pipeline  │  │  │
@@ -102,30 +102,28 @@ Different models from different vendors have wildly different tool-use quality. 
 
 This works around the most common failure mode of self-hosted Chinese-tuned models (outputting the JSON schema as text instead of as a structured `tool_calls` array).
 
-### Axis 3: Intent classification → workflow mode
+### Axis 3: Intent classification → execution mode
 
-A single chat turn can be either "answer this" (one LLM call) or "search the web, write a report, save to disk" (many LLM calls with tool side effects). The Mode Selector in the composer exposes **12 preset modes** from Google's "Agent design patterns" catalog:
+A single chat turn can be either "answer this" (one LLM call) or "search the web, read a file, write a report" (many LLM calls with tool side effects). Rather than exposing a dozen graph presets, MadCop collapses this into one **unified four-way mode selector** that simultaneously picks the workflow *and* the reasoning effort:
 
-- `single_agent` — one LLM + tools, the default
-- `sequential` — Agent A → B → C, each consuming the previous output
-- `parallel` — same input fanned out to N workers, results merged
-- `coordinator` — a router agent classifies input, dispatches to a specialist
-- `hierarchical` — top-level plan, sub-tasks, recurse
-- `swarm` — many agents with shared blackboard
-- `loop` — produce, critique, revise until a quality threshold is met
-- `review_critique` — producer + reviewer
-- `iterative_refine` — feedback loop with a separate evaluator
-- `human_in_loop` — explicit user checkpoint
-- `react` — Reason + Act
-- `custom` — user-defined graph
+| Mode | Label | Workflow | Effort | Typical prompt |
+|------|-------|----------|--------|----------------|
+| `auto` | 自动 | router decides | derived from task | default — hands off to the classifier |
+| `quick` | 快速 | single direct LLM call | low | "什么是闭包", "lambda 语法怎么写" |
+| `standard` | 标准 | ReAct loop (Thought → Action → Observation) | medium | "修复 auth.py 的 bug", "加一个 email 字段" |
+| `deep` | 深度 | multi-agent DAG (plan → code → review) | high | "重构整个认证模块", "代码审查" |
 
-When a mode is selected, the chat endpoint hands the request to the workflow engine (`madcop/workflow/executor.py`), which walks the mode's graph of nodes. Each node is a Python class with an `execute(ctx)` method that receives the inputs from upstream nodes and yields a result. The engine emits SSE events at each step so the UI can show progress live.
+This replaces the earlier `EffortSelector` (a standalone low/medium/high picker) and a defunct "R Act 推理" button — the two were conflated and users could not tell them apart. The selector lives in the composer bar; the old effort control is demoted to a node-config panel in the topology editor for advanced users.
 
-For users who don't want to pick a mode, the frontend performs a lightweight keyword-based intent classifier (`_classifyAndPlan` in `chatStore.ts`) that detects multi-step requests (contains words like 调研 / 搜索 / 保存 / 生成 / 写到) and injects an inline task plan into the system prompt:
+**Routing (`auto`).** When the user leaves the selector on `auto`, the backend's task router (`madcop/agent_network/task_router.py`) classifies the input with pure keyword analysis, checking in priority order: deep patterns (`重构 / 架构 / 代码审查 / 前端.*后端`) → quick patterns (`什么是 / 语法 / 怎么写`) → standard action verbs (`修复 / 添加 / 实现 / 测试`), with a short-text fast path (<15 chars, no action verb → quick). The `/api/agent/route` endpoint returns the decision plus a human-readable reason ("匹配 2 个复杂任务模式"), so the UI can show *why* a mode was chosen.
 
-> "First, search using web_search. Second, generate the report and save it to ~/Downloads/madcop/ as report.md using write_file. Third, reply to the user when done."
+**Execution.** The three non-auto modes are real engines, not prompts:
 
-This gives the user the *experience* of the multi-agent system without the cognitive overhead of picking a mode from a dropdown.
+- `quick` → one `client.chat()` call, streamed as text.
+- `standard` → `madcop/agent_network/react_engine.py` runs a bounded ReAct loop (default 10 steps) that dispatches tool calls through the shared `ToolRegistry` and streams each Thought / Action / Observation as an SSE event.
+- `deep` → `madcop/agent_network/engine.py` builds a multi-agent DAG and walks it with `graphlib` topological sort + parallel waves; each node is an agent (planner → coder → reviewer) whose output feeds the next wave.
+
+All three are mounted inside `/api/chat` behind an `agent_mode` field, and each engine's output is mapped onto the existing `text` / `tool` / `tool_result` / `reasoning` / `done` event vocabulary — so the frontend's SSE parser and the existing `ToolCallBlock` / `ToolResultBlock` / `ThinkingBlock` render the steps with no special-casing.
 
 ---
 
@@ -178,33 +176,15 @@ The reason this matters: the backend's session store uses UUIDs but the frontend
 
 ## How does the multi-agent routing actually work in practice?
 
-The current v0.9 implementation has two layers:
+The unified mode selector (Axis 3 above) is the user-facing surface; behind it are three real execution engines plus an automatic classifier. Concretely:
 
-**Layer 1: Local keyword intent classification.** Before every chat, the frontend's `chatStore._classifyAndPlan` runs a regex over the user's input:
+**Auto routing.** When the user sends with `auto` selected, `task_router.route_task()` scores the input against three keyword sets (`_DEEP_PATTERNS`, `_QUICK_PATTERNS`, `_STANDARD_PATTERNS`) in priority order and returns a `RouteDecision(mode, confidence, reason)`. Deep-pattern hits win even on short text (so "重构 X" is deep, not quick); short text with no action verb falls to quick. The decision is attached to the response so the UI can surface the reasoning.
 
-- contains `调研 / 搜索 / 查 / 报告 / 行业` → `needsResearch = true`
-- contains `保存 / 生成 / 写到 / md / 存到` → `needsFileWrite = true`
-- contains `代码 / 实现 / 写个 / 做个` → `needsCode = true`
+**Standard mode = a bounded ReAct loop.** `react_engine.ReActEngine.run()` prompts the LLM with the tool catalog and a strict `Thought: / Action: / Action Input:` format, parses the reply with anchored regexes, dispatches the action through `ToolRegistry.dispatch(ToolCall)` (which returns a `ToolResult` with `to_message_content()`), appends the observation, and loops — capped at `max_steps` (default 10), after which it forces a `FINAL_ANSWER`. Tool dispatch reuses the *same* registry the normal chat loop uses, so ReAct gets `read_file` / `write_file` / `web_search` / `ask_user` / etc. for free.
 
-If any of these match, a plan prompt is injected into the system message:
+**Deep mode = a multi-agent DAG.** `engine.AgentEngine.run()` is async: it reads the network's nodes + edges, builds an upstream map, runs `graphlib.TopologicalSorter.static_order()`, groups nodes into parallel waves (`_build_waves`), and `await asyncio.gather`s each wave. `input`/`start` nodes pass `user_input` through; `merge`/`output` nodes concatenate their upstream outputs; agent nodes call the LLM with a role-tailored system prompt. The default deep network is plan → code → review.
 
-> "## Task plan
-> Step 1: Search the web. Call `web_search` to find relevant information.
-> Step 2: Generate a file. Use `write_file` to save the report to `/Users/.../madcop/report.md`.
-> Final: Reply to the user."
-
-This is intentionally **not a real LLM call** — it adds no latency to the chat flow. The trade-off is that regex matching misses nuance (e.g. "查一下明天的天气" wouldn't match), but the most common multi-step requests (research + write) are caught reliably.
-
-**Layer 2: Per-mode workflow execution.** The 12 preset modes are not "tricks" — they are real graph executors. When the user explicitly picks `coordinator` from the Mode Selector, the chat endpoint hands the request to the workflow engine, which:
-
-1. Spins up a "RequirementAnalysis" node that uses the LLM to extract structured intent from the user input.
-2. Picks a specialist agent based on the extracted intent (a `coordinator` LLM call).
-3. Dispatches the actual work to that specialist, with a tailored prompt.
-4. A `synthesis` node merges results and streams the final response.
-
-Each node is a Python class implementing `execute(ctx) -> NodeResult`. The engine persists each step to a `workflow_node_runs` table so the trace can be replayed. The UI shows a live graph of which node is currently running with timing.
-
-For users who don't want to pick a mode, the keyword layer (Layer 1) gives them most of the benefit.
+**Why one selector instead of twelve.** The earlier 12-preset workflow catalog (coordinator / swarm / loop / ...) was real code but nobody could tell which to pick, and it conflicted with a separate effort picker. Collapsing to four modes that each bind a concrete workflow to a concrete effort level removed that ambiguity. The topology editor (`AgentOverview.vue`) still ships four buildable graph shapes — chain, parallel, debate, ensemble — for users who want to hand-author a DAG and run it via `/api/agents/networks/run-adhoc`.
 
 ---
 
@@ -225,13 +205,13 @@ The interesting design decision here is that the canvas is **not** an iframe of 
 
 ## How is quality controlled?
 
-A test suite of **1,321 tests** (all passing) covers:
+A test suite of **1,340+ tests** (all passing on a clean checkout) covers:
 
 - The memory store, the consolidation / pruning pipeline, the prescreen for sensitive content.
 - The statistics engine (CUSUM, z-score anomaly detection, counterfactual cost).
 - The design tool's component tree compiler.
-- The workflow engine's executor and all 12 modes.
-- The backend's HTTP routes and SSE streaming.
+- The agent-mode system: task router routing cases, the ReAct parser, the ReAct loop with mocked tools, and the `max_steps` guard (`tests/test_agent_mode.py`).
+- The backend's HTTP routes, SSE streaming, and session persistence.
 
 The key test discipline is that **the backend is exercised as a black box** — the tests build a FastAPI app, make real HTTP requests, and assert on the response shape. This means the same tests catch the kind of regression that a unit test of `madcop.brain.store` would miss (e.g. a routing change that breaks the URL pattern).
 
@@ -319,8 +299,9 @@ madcop/
 │   │   ├── sandbox.py        Bash/shell execution sandbox
 │   │   ├── eventbus.py       Event bus + webhook subscriptions
 │   │   └── docker_sandbox.py Docker container sandbox
-│   ├── workflow/             Workflow engine + 12 mode presets + node types
-│   ├── agent_network/        Agent network API
+│   ├── workflow/             Plan-and-Execute workflow engine + node types
+│   ├── agent_network/        Agent mode system: task router, ReAct engine,
+│   │                         multi-agent DAG engine, and the /api/agents API
 │   ├── memory/               5-tier memory system (episodic / semantic / reflective / scenario / persona / insight)
 │   ├── training/             Continuous learning (local feedback, opt-in)
 │   ├── arena/                Multi-LLM comparison endpoint
@@ -335,7 +316,7 @@ madcop/
 │   ├── design-tool/          Design tool docs
 │   └── workflow-editor/      Workflow editor docs
 │
-├── tests/                    1,300+ pytest tests (backend-focused)
+├── tests/                    1,340+ pytest tests (backend-focused)
 ├── start.sh                  One-command startup script
 ├── README.md
 ├── LICENSE
