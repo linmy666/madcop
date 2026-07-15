@@ -42,7 +42,7 @@ import { SETTINGS_TAB_ID, useTabStore } from '../stores/tabStore'
 import RepositoryLaunchControls from '../components/shared/RepositoryLaunchControls.vue'
 import PermissionModeSelector from '../components/controls/PermissionModeSelector.vue'
 import ModelSelector from '../components/controls/ModelSelector.vue'
-import EffortSelector from '../components/controls/EffortSelector.vue'
+import AgentModeSelector from '../components/controls/AgentModeSelector.vue'
 import AttachmentGallery from '../components/chat/AttachmentGallery.vue'
 import ComposerDropOverlay from '../components/chat/ComposerDropOverlay.vue'
 import ContextUsageIndicator from '../components/chat/ContextUsageIndicator.vue'
@@ -996,7 +996,7 @@ const insertSlashCommand = () => {
                   :disabled="isSubmitting"
                   :compact="isMobileComposer"
                 />
-                <EffortSelector
+                <AgentModeSelector
                   :selection-key="DRAFT_RUNTIME_SELECTION_KEY"
                   :disabled="isSubmitting"
                   :compact="isMobileComposer"

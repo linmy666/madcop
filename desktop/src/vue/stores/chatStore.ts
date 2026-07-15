@@ -61,7 +61,7 @@ export interface TokenUsage { input_tokens: number; output_tokens: number }
 export interface AttachmentRef { id: string; name: string; path?: string; type?: string }
 export interface UIAttachment { id: string; name: string; type: string; path?: string }
 export interface PermissionUpdate { toolName: string; allowed: boolean }
-export interface RuntimeSelection { providerId: string; modelId: string; effortLevel: string }
+export interface RuntimeSelection { providerId: string; modelId: string; effortLevel: string; agentMode?: string; workDir?: string | null }
 export interface PermissionMode {}
 
 export type ServerMessage = Record<string, unknown>
@@ -418,8 +418,11 @@ export const useChatStore = defineStore('chat', {
       }
       // Per-session reasoning intensity (effort), from the session runtime
       // selection. 'auto' (or unset) means: let the backend/model decide.
-      const _effort =
-        useSessionRuntimeStore(this.$pinia).selections[sessionId]?.effortLevel || 'auto'
+      const _runtimeSel = useSessionRuntimeStore(this.$pinia).selections[sessionId]
+      const _effort = _runtimeSel?.effortLevel || 'auto'
+      // Unified agent mode (quick/standard/deep). 'auto'/unset falls through
+      // to the normal chat flow on the backend.
+      const _agentMode = _runtimeSel?.agentMode || 'auto'
       fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -442,6 +445,7 @@ export const useChatStore = defineStore('chat', {
           conversation_id: sessionId,
           plan_mode: !!session.planModeEnabled,
           effort: _effort === 'auto' ? null : _effort,
+          agent_mode: _agentMode === 'auto' ? null : _agentMode,
         }),
       })
         .then(async (res) => {

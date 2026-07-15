@@ -10,6 +10,7 @@ export type RuntimeSelection = {
   providerId: string
   modelId: string
   effortLevel: string
+  agentMode?: string
   workDir?: string | null
 }
 

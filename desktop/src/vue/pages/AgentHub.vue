@@ -1,14 +1,12 @@
 <script setup lang="ts">
-// v3.0 — Agent Hub: the entry point for MadCop's Agent Network.
-// Shows available agents (local + hub), status, and quick actions.
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { getApiUrl } from '../api/client'
 
 interface Agent {
   id: string
   name: string
   description: string
-  icon: string          // material-symbols name
+  icon: string
   model: string
   status: 'online' | 'offline' | 'busy'
   capabilities: string[]
@@ -17,81 +15,112 @@ interface Agent {
   installs?: number
 }
 
-// ── Built-in agents ────────────────────────────────────────────────
-const builtins: Agent[] = [
-  { id: 'assistant', name: '通用助手', description: '全能型对话 agent，适合日常问题、代码编写和一般任务。', icon: 'smart_toy', model: 'GLM-5.2', status: 'online', capabilities: ['对话', '代码', '工具调用', '文件读写'], source: 'builtin' },
-  { id: 'coder', name: '编码专家', description: '专注于代码生成、审查和调试。多文件编辑能力强。', icon: 'code', model: 'DeepSeek-V4', status: 'online', capabilities: ['代码生成', '代码审查', '调试', '重构'], source: 'builtin' },
-  { id: 'designer', name: '设计助手', description: '生成 UI 原型和设计稿。集成 DesignCanvas。', icon: 'palette', model: 'GLM-5.2', status: 'online', capabilities: ['UI 设计', '原型生成', 'CSS 编写'], source: 'builtin' },
-  { id: 'researcher', name: '研究员', description: '联网搜索、资料整理、报告生成。', icon: 'travel_explore', model: 'Qwen3-80B', status: 'online', capabilities: ['网页搜索', '信息提取', '报告生成'], source: 'builtin' },
-  { id: 'planner', name: '规划师', description: '将复杂任务分解为多步骤计划，协调其他 agent。', icon: 'account_tree', model: 'GLM-5.2', status: 'online', capabilities: ['任务分解', '协调', '调度'], source: 'builtin' },
-  { id: 'reviewer', name: '审查员', description: '代码审查、安全审计、质量检查。', icon: 'rate_review', model: 'DeepSeek-V4', status: 'offline', capabilities: ['代码审查', '安全审计', '性能分析'], source: 'builtin' },
-]
-
-// ── Hub agents (discoverable) ──────────────────────────────────────
-const hubAgents: Agent[] = [
-  { id: 'data-analyst', name: '数据分析师', description: 'SQL 查询、Excel 处理、数据可视化图表。', icon: 'bar_chart', model: 'GPT-5.4', status: 'offline', capabilities: ['SQL', '数据分析', '图表'], source: 'hub', rating: 4.8, installs: 1240 },
-  { id: 'translator', name: '翻译官', description: '中英日韩等多语言翻译，保留格式。', icon: 'translate', model: 'GLM-5.2', status: 'offline', capabilities: ['翻译', '本地化', '校对'], source: 'hub', rating: 4.6, installs: 892 },
-  { id: 'devops', name: '运维助手', description: 'Docker/K8s/CI-CD 管道管理。', icon: 'terminal', model: 'DeepSeek-V4', status: 'offline', capabilities: ['Docker', 'K8s', 'CI/CD'], source: 'hub', rating: 4.7, installs: 567 },
-  { id: 'writer', name: '写作助手', description: '营销文案、技术文档、创意写作。', icon: 'edit_note', model: 'GLM-5.2', status: 'offline', capabilities: ['写作', '润色', '摘要'], source: 'hub', rating: 4.5, installs: 2103 },
-]
-
+const builtinAgents = ref<Agent[]>([])
+const installedAgents = ref<Agent[]>([])
 const search = ref('')
 const activeTab = ref<'local' | 'hub'>('local')
 const installing = ref<Set<string>>(new Set())
+const loading = ref(true)
+
+const hubAgents: Agent[] = [
+  { id: 'data-analyst', name: '数据分析师', description: 'SQL 查询、Excel 处理、数据可视化图表。', icon: 'bar_chart', model: 'GPT-5.4', status: 'offline', capabilities: ['SQL', '数据分析', '图表'], source: 'hub', rating: 4.8, installs: 1240 },
+]
+
+const localAgents = computed(() => [...builtinAgents.value, ...installedAgents.value])
 
 const filtered = computed(() => {
-  const pool = activeTab.value === 'local' ? builtins : hubAgents
+  const pool = activeTab.value === 'local' ? localAgents.value : hubAgents
   const q = search.value.trim().toLowerCase()
   if (!q) return pool
   return pool.filter(a => a.name.toLowerCase().includes(q) || a.description.toLowerCase().includes(q) || a.capabilities.some(c => c.includes(q)))
 })
 
-function installAgent(id: string) {
-  installing.value.add(id)
-  setTimeout(() => {
-    installing.value.delete(id)
-    // In real app: POST /api/agents/install
-  }, 1500)
+async function loadAgents() {
+  loading.value = true
+  try {
+    const res = await fetch(getApiUrl('/api/agents'))
+    if (res.ok) {
+      const data = await res.json()
+      builtinAgents.value = (data.builtin || []).map((a: any) => ({ ...a, source: 'builtin' }))
+      installedAgents.value = (data.installed || []).map((a: any) => ({ ...a, source: 'installed' }))
+    }
+  } catch {
+    // Fallback: keep empty arrays
+  } finally {
+    loading.value = false
+  }
 }
 
-function openChat(id: string) {
-  // In real app: navigate to a new session with this agent
+async function installAgent(agent: Agent) {
+  installing.value.add(agent.id)
+  try {
+    const res = await fetch(getApiUrl('/api/agents'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: agent.name,
+        description: agent.description,
+        icon: agent.icon,
+        model: agent.model,
+        capabilities: agent.capabilities,
+      }),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      installedAgents.value.push({ ...created, source: 'installed', status: 'online' })
+    }
+  } catch {
+  } finally {
+    installing.value.delete(agent.id)
+  }
 }
 
-function openConfig(id: string) {
-  // In real app: open Agent Detail page
+function openChat(_id: string) {
+  // Navigation is tab-based (see tabStore); opening a chat tab for a
+  // specific agent is not yet wired. Left as a no-op placeholder so the
+  // card click doesn't throw.
 }
+
+function openConfig(_id: string) {
+  // Agent detail/config tab not yet implemented — no-op for now.
+}
+
+onMounted(loadAgents)
 </script>
 
 <template>
   <div class="agent-hub">
     <div class="agent-hub__inner">
-      <!-- Header -->
       <div class="agent-hub__head">
         <div>
           <h1 class="agent-hub__title">Agent Network</h1>
-          <p class="agent-hub__sub">发现、配置和编排你的 AI agent 团队。内置 6 个专业 agent，hub 上有更多。</p>
+          <p class="agent-hub__sub">发现、配置和编排你的 AI agent 团队。内置 {{ builtinAgents.length }} 个专业 agent，已安装 {{ installedAgents.length }} 个。</p>
         </div>
+        <button class="agent-hub__refresh" @click="loadAgents" title="刷新">
+          <span class="material-symbols-outlined text-[18px]">refresh</span>
+        </button>
       </div>
 
-      <!-- Search -->
       <div class="agent-hub__search">
         <span class="material-symbols-outlined text-[18px] text-[var(--color-text-tertiary)]">search</span>
         <input v-model="search" type="text" placeholder="搜索 agent 名称、描述或能力..." class="agent-hub__search-input" />
       </div>
 
-      <!-- Tabs -->
       <div class="agent-hub__tabs">
         <button :class="['agent-hub__tab', { 'agent-hub__tab--active': activeTab === 'local' }]" @click="activeTab = 'local'">
-          我的 Agents ({{ builtins.length }})
+          我的 Agents ({{ localAgents.length }})
         </button>
         <button :class="['agent-hub__tab', { 'agent-hub__tab--active': activeTab === 'hub' }]" @click="activeTab = 'hub'">
           Agent Hub ({{ hubAgents.length }})
         </button>
       </div>
 
-      <!-- Agent Grid -->
-      <div class="agent-hub__grid">
+      <div v-if="loading" class="agent-hub__empty">
+        <span class="material-symbols-outlined text-[48px] text-[var(--color-text-tertiary)] animate-spin">progress_activity</span>
+        <p>加载 agents...</p>
+      </div>
+
+      <div v-else class="agent-hub__grid">
         <div v-for="agent in filtered" :key="agent.id" class="agent-card" @click="openChat(agent.id)">
           <div class="agent-card__head">
             <div class="agent-card__icon" :class="`agent-card__icon--${agent.status}`">
@@ -109,23 +138,20 @@ function openConfig(id: string) {
 
           <p class="agent-card__desc">{{ agent.description }}</p>
 
-          <!-- Capabilities -->
           <div class="agent-card__caps">
             <span v-for="cap in agent.capabilities" :key="cap" class="agent-card__cap">{{ cap }}</span>
           </div>
 
-          <!-- Hub-specific: rating + installs -->
           <div v-if="agent.source === 'hub'" class="agent-card__meta">
             <span class="agent-card__rating">★ {{ agent.rating }}</span>
             <span class="agent-card__installs">{{ agent.installs }} 次安装</span>
           </div>
 
-          <!-- Actions -->
           <div class="agent-card__actions">
             <button
               v-if="agent.source === 'hub'"
               :class="['agent-card__btn', { 'agent-card__btn--loading': installing.has(agent.id) }]"
-              @click.stop="installAgent(agent.id)"
+              @click.stop="installAgent(agent)"
             >
               {{ installing.has(agent.id) ? '安装中…' : '安装' }}
             </button>
@@ -139,8 +165,7 @@ function openConfig(id: string) {
         </div>
       </div>
 
-      <!-- Empty state -->
-      <div v-if="filtered.length === 0" class="agent-hub__empty">
+      <div v-if="!loading && filtered.length === 0" class="agent-hub__empty">
         <span class="material-symbols-outlined text-[48px] text-[var(--color-text-tertiary)]">search_off</span>
         <p>没有找到匹配的 agent。试试其他关键词。</p>
       </div>
@@ -158,9 +183,11 @@ function openConfig(id: string) {
   max-width: 1080px; margin: 0 auto;
   padding: 32px 24px;
 }
-.agent-hub__head { margin-bottom: 24px; }
+.agent-hub__head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
 .agent-hub__title { font-size: 26px; font-weight: 700; color: var(--color-text-primary); letter-spacing: -0.025em; margin: 0; }
 .agent-hub__sub   { font-size: 14px; color: var(--color-text-secondary); margin-top: 6px; line-height: 1.5; }
+.agent-hub__refresh { background: transparent; border: 1px solid var(--color-border); padding: 6px; cursor: pointer; color: var(--color-text-tertiary); display: flex; align-items: center; }
+.agent-hub__refresh:hover { color: var(--color-text-primary); border-color: var(--color-primary); }
 
 .agent-hub__search {
   display: flex; align-items: center; gap: 10px;

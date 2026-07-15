@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, JSONResponse
 from madcop.config import settings as settings_store
 
 # --------------------------------------------------------------------------- #
@@ -1807,14 +1808,94 @@ def register(app: FastAPI) -> None:
     async def cc_diag_open_log_dir() -> dict[str, Any]:
         return {"ok": True}
 
+    # ---- OAuth (not configured — returns safe defaults) -------------- #
+
+    @app.get("/api/auth/oauth/status", include_in_schema=False)
+    async def cc_oauth_status() -> dict[str, Any]:
+        """OAuth login status. Returns not-configured until an OAuth
+        provider is set up via ~/.madcop/oauth_config.json."""
+        return {"authenticated": False, "provider": None, "user": None}
+
+    @app.post("/api/auth/oauth/login", include_in_schema=False)
+    async def cc_oauth_login() -> dict[str, Any]:
+        """Initiate OAuth login. Not configured — returns a hint."""
+        return {"authorizeUrl": None, "error": "OAuth not configured"}
+
+    @app.post("/api/auth/oauth/logout", include_in_schema=False)
+    async def cc_oauth_logout() -> dict[str, Any]:
+        """OAuth logout. No-op when not configured."""
+        return {"ok": True}
+
     @app.get("/api/doctor/report", include_in_schema=False)
     async def cc_doctor_report() -> dict[str, Any]:
         return _safe(_get_doctor_report,
                       default={"report": {"issues": [], "checked": 0}})
 
+    @app.post("/api/doctor", include_in_schema=False)
+    async def cc_doctor_run() -> dict[str, Any]:
+        """Run a doctor diagnostic + cleanup pass.
+
+        Cleans stale provider entries (empty api_key, unreachable base_url),
+        orphaned WebSocket session references, and invalid cache entries.
+        Never touches encrypted data or chat history.
+        """
+        removed_keys: list[str] = []
+        failed_keys: list[str] = []
+        try:
+            s = settings_store.load_settings()
+            changed = False
+            for p in list(s.providers):
+                pid = getattr(p, "provider_id", "") or getattr(p, "model", "")
+                # Remove providers with no API key AND no base_url (fully empty)
+                api_key = getattr(p, "api_key", "") or ""
+                base_url = getattr(p, "base_url", "") or ""
+                if not api_key and not base_url:
+                    removed_keys.append(pid)
+                    s.providers.remove(p)
+                    changed = True
+            if changed:
+                settings_store.save_settings(s)
+        except Exception as e:
+            failed_keys.append(f"settings: {e!s}"[:200])
+        # Clean stale session entries (sessions with no messages)
+        try:
+            stale = [sid for sid, sess in _SESSIONS.items()
+                     if not _MESSAGES.get(sid) and sess.get("title") in ("", "New Session", "新对话")]
+            for sid in stale[:50]:  # cap cleanup
+                _SESSIONS.pop(sid, None)
+                removed_keys.append(f"session:{sid}")
+        except Exception as e:
+            failed_keys.append(f"sessions: {e!s}"[:200])
+        return {"local": {"removedKeys": removed_keys, "failedKeys": failed_keys}}
+
     @app.post("/api/doctor/repair", include_in_schema=False)
     async def cc_doctor_repair() -> dict[str, Any]:
-        return {"result": {"ok": True, "repaired": []}}
+        """Alias for POST /api/doctor — runs the same cleanup."""
+        return await cc_doctor_run()
+
+    @app.get("/api/settings/models", include_in_schema=False)
+    async def cc_settings_models() -> dict[str, Any]:
+        """Alias for /api/models — some frontend pages call this path."""
+        return await cc_models_list()
+
+    @app.get("/api/settings/providers/presets", include_in_schema=False)
+    async def cc_provider_presets() -> dict[str, Any]:
+        """Built-in provider templates for quick setup."""
+        presets = [
+            {"provider_id": "openai", "label": "OpenAI", "model": "gpt-4o",
+             "base_url": "https://api.openai.com/v1", "api_key": ""},
+            {"provider_id": "deepseek", "label": "DeepSeek", "model": "deepseek-chat",
+             "base_url": "https://api.deepseek.com/v1", "api_key": ""},
+            {"provider_id": "sensenova", "label": "SenseNova", "model": "SenseChat-5",
+             "base_url": "https://api.sensenova.cn/compatible-mode/v1", "api_key": ""},
+            {"provider_id": "anthropic", "label": "Anthropic", "model": "claude-sonnet-4-20250514",
+             "base_url": "https://api.anthropic.com/v1", "api_key": ""},
+            {"provider_id": "moonshot", "label": "Moonshot (Kimi)", "model": "moonshot-v1-8k",
+             "base_url": "https://api.moonshot.cn/v1", "api_key": ""},
+            {"provider_id": "openrouter", "label": "OpenRouter", "model": "auto",
+             "base_url": "https://openrouter.ai/api/v1", "api_key": ""},
+        ]
+        return {"presets": presets}
 
     # ---- Search ---------------------------------------------------- #
 
@@ -1847,6 +1928,18 @@ def register(app: FastAPI) -> None:
     ) -> dict[str, Any]:
         return _safe(lambda: _fs_browse(path or cwd or str(Path.home())),
                       default={"entries": [], "path": ""})
+
+    @app.get("/api/filesystem/file", include_in_schema=False)
+    async def cc_fs_file(path: str = Query(default="")):
+        """Serve a local file as a response (used by InlineImageGallery)."""
+        if not path:
+            raise HTTPException(400, "path is required")
+        p = Path(path).expanduser()
+        if not p.is_absolute():
+            raise HTTPException(400, "path must be absolute")
+        if not p.is_file():
+            raise HTTPException(404, "file not found")
+        return FileResponse(str(p))
 
     # ================================================================= #
     # v2.6.0 — Real implementations for the 33 stub endpoints
@@ -3869,4 +3962,13 @@ def install_catch_all(app: FastAPI) -> None:
                     f"[DIAGNOSTIC] parse error: {e}",
                     file=sys.stderr, flush=True,
                 )
-        return {}
+            return {}
+        # Log unmatched API calls so frontend/backend gaps are visible
+        # instead of silently returning empty data.
+        print(
+            f"[CATCH-ALL] unmatched {request.method} /api/{path} "
+            f"-> returning 404",
+            file=sys.stderr, flush=True,
+        )
+        from fastapi import HTTPException as _HE
+        raise _HE(status_code=404, detail=f"Not found: /api/{path}")

@@ -39,6 +39,7 @@ from madcop.memory import (
 )
 from madcop.memory.retriever import RetrievalConfig
 from madcop.tools import default_registry
+from madcop.agent_network.agent_mode_api import router as agent_mode_router
 
 # --------------------------------------------------------------------------- #
 # Pydantic models
@@ -279,6 +280,7 @@ class ChatRequest(BaseModel):
     attachments: list[ChatAttachment] = []  # file/image attachments from the user
     plan_mode: bool = False  # enable Plan-and-Execute mode
     effort: str | None = None  # reasoning intensity: auto|low|medium|high|max (per session)
+    agent_mode: str | None = None  # unified mode: auto|quick|standard|deep (overrides workflow)
 
 
 class SetActiveRequest(BaseModel):
@@ -1421,6 +1423,97 @@ def create_app() -> FastAPI:
             trace_store.mark_running(trace_root.id)
             yield f"data: {json.dumps({'type': 'trace', 'node': trace_root.to_dict()}, ensure_ascii=False)}\n\n"
 
+            # -- Phase -1: Agent Mode (quick/standard/deep) ------------- #
+            # Unified mode picker. When the user explicitly selects quick
+            # (direct LLM), standard (ReAct loop), or deep (multi-agent
+            # DAG), route the task through the corresponding engine and
+            # map its output onto the existing SSE event vocabulary so the
+            # frontend chat stream needs no special-casing. 'auto'/None
+            # falls through to the normal Phase 0/1 flow below.
+            _agent_mode = (body.agent_mode or "auto").lower()
+            if _agent_mode in ("quick", "standard", "deep"):
+                from madcop.agent_network.task_router import route_task, get_mode_config
+                _task_text = body.messages[-1].content if body.messages else ""
+                try:
+                    _cfg = get_mode_config(_agent_mode)
+                except Exception:
+                    _cfg = {"workflow": "react", "effort": "medium"}
+                _eff = _cfg.get("effort")
+                # Resolve the active client + model (same helper the rest
+                # of this handler relies on).
+                _am_client = client
+                _am_model = body.model or None
+                try:
+                    if _agent_mode == "quick":
+                        # Direct single-shot LLM call.
+                        _resp = await _loop.run_in_executor(
+                            None,
+                            lambda: _am_client.chat(
+                                messages,
+                                model=_am_model,
+                                temperature=0.5,
+                                max_tokens=4096,
+                                effort=_eff,
+                            ),
+                        )
+                        _answer = getattr(_resp, "content", "") or str(_resp)
+                        yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
+                    elif _agent_mode == "standard":
+                        # ReAct loop. Stream each step as tool/tool_result
+                        # so the existing UI surfaces Thought/Action/Observation.
+                        from madcop.agent_network.react_engine import ReActEngine
+                        _eng = ReActEngine(
+                            client=_am_client,
+                            tools=default_registry(workspace_dir=_ws_state[0]).openai_schemas(),
+                            max_steps=10,
+                            model=_am_model,
+                        )
+                        _result = await _loop.run_in_executor(
+                            None, lambda: _eng.run(_task_text, work_dir=_ws_state[0])
+                        )
+                        for _st in _result.steps:
+                            if _st.thought:
+                                yield f"data: {json.dumps({'type': 'reasoning', 'content': _st.thought}, ensure_ascii=False)}\n\n"
+                            if _st.action and _st.action != "FINAL_ANSWER":
+                                yield f"data: {json.dumps({'type': 'tool', 'name': _st.action, 'args': _st.action_input, 'tool_use_id': f'react-{_st.step_num}'}, ensure_ascii=False)}\n\n"
+                                yield f"data: {json.dumps({'type': 'tool_result', 'name': _st.action, 'result': _st.observation, 'tool_use_id': f'react-{_st.step_num}'}, ensure_ascii=False)}\n\n"
+                        _answer = _result.final_answer or ""
+                        if _answer:
+                            yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
+                    else:  # deep — multi-agent DAG
+                        from madcop.agent_network.engine import build_engine
+                        _dag = build_engine()
+                        _net = {
+                            "name": "deep",
+                            "nodes": [
+                                {"id": "input", "agentId": "", "name": "输入"},
+                                {"id": "planner", "agentId": "planner", "name": "规划"},
+                                {"id": "coder", "agentId": "coder", "name": "编码"},
+                                {"id": "reviewer", "agentId": "reviewer", "name": "审查"},
+                                {"id": "output", "agentId": "", "name": "输出"},
+                            ],
+                            "edges": [
+                                {"from": "input", "to": "planner"},
+                                {"from": "planner", "to": "coder"},
+                                {"from": "coder", "to": "reviewer"},
+                                {"from": "reviewer", "to": "output"},
+                            ],
+                        }
+                        _res = await _dag.run(_net, user_input=_task_text)
+                        for _ns in _res.steps:
+                            if _ns.node_id in ("input", "output"):
+                                continue
+                            yield f"data: {json.dumps({'type': 'tool', 'name': _ns.agent_name or _ns.node_id, 'args': {'node': _ns.node_id}, 'tool_use_id': f'dag-{_ns.node_id}'}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'tool_result', 'name': _ns.agent_name or _ns.node_id, 'result': _ns.output, 'tool_use_id': f'dag-{_ns.node_id}'}, ensure_ascii=False)}\n\n"
+                        _answer = _res.outputs.get("output", "")
+                        if _answer:
+                            yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
+                except Exception as _am_err:
+                    yield f"data: {json.dumps({'type': 'error', 'message': f'Agent 模式执行失败: {_am_err}'}, ensure_ascii=False)}\n\n"
+                trace_store.mark_completed(trace_root.id)
+                yield f"data: {json.dumps({'type': 'done', 'model': body.model or ''}, ensure_ascii=False)}\n\n"
+                return
+
             try:
                 # -- Phase 0: Plan-and-Execute (if plan_mode) ---------- #
                 if body.plan_mode:
@@ -2195,6 +2288,7 @@ def create_app() -> FastAPI:
     # v3.0 — Extras API (SkillBuilder + UsageStats) — MadCop-exclusive
     from madcop.extras.api import router as extras_router
     app.include_router(extras_router)
+    app.include_router(agent_mode_router)
     app.include_router(agent_router)
     app.include_router(training_router)
     app.include_router(arena_router)

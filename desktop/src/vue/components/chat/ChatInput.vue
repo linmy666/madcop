@@ -37,7 +37,7 @@ import Tooltip from '../common/Tooltip.vue'
 import FileSearchMenu from './FileSearchMenu.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ModelSelector from '../controls/ModelSelector.vue'
-import EffortSelector from '../controls/EffortSelector.vue'
+import AgentModeSelector from '../controls/AgentModeSelector.vue'
 import LocalSlashCommandPanel from './LocalSlashCommandPanel.vue'
 import ComposerDropOverlay from './ComposerDropOverlay.vue'
 import ProjectContextChip from '../shared/ProjectContextChip.vue'
@@ -1440,7 +1440,7 @@ watch(input, (v) => {
                 :selected-model="selectedModel"
                 @update:selected-model="(m: string) => { selectedModel = m }"
               />
-              <EffortSelector
+              <AgentModeSelector
                 :selection-key="activeTabId || DRAFT_RUNTIME_SELECTION_KEY"
                 :compact="useCompactControls"
                 :disabled="isSubmitting"

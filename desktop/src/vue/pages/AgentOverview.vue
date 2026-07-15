@@ -114,61 +114,6 @@ const presets: TopologyPreset[] = [
       { id: 'e6', from: 'n3', to: 'n4', type: 'dependency' },
     ],
   },
-  {
-    id: 'loop',
-    name: '环',
-    nameEn: 'Loop',
-    desc: '迭代优化: 执行 → 评估 → 修正 → 再执行',
-    buildNodes: () => [
-      { id: 'n1', label: '执行', detail: '', x: 250, y: 200, status: 'idle' },
-      { id: 'n2', label: '评估', detail: '', x: 650, y: 200, status: 'idle' },
-      { id: 'n3', label: '修正', detail: '', x: 450, y: 450, status: 'idle' },
-    ],
-    buildEdges: () => [
-      { id: 'e1', from: 'n1', to: 'n2', type: 'dependency' },
-      { id: 'e2', from: 'n2', to: 'n3', type: 'control', label: '不通过' },
-      { id: 'e3', from: 'n3', to: 'n1', type: 'flow', label: '修正后' },
-    ],
-  },
-  {
-    id: 'hierarchical',
-    name: '层级',
-    nameEn: 'Hierarchical',
-    desc: '协调者分配子任务给执行者',
-    buildNodes: () => [
-      { id: 'n0', label: '协调者', detail: '', x: 500, y: 120, status: 'idle' },
-      { id: 'n1', label: '执行 A', detail: '', x: 250, y: 350, status: 'idle' },
-      { id: 'n2', label: '执行 B', detail: '', x: 500, y: 350, status: 'idle' },
-      { id: 'n3', label: '执行 C', detail: '', x: 750, y: 350, status: 'idle' },
-    ],
-    buildEdges: () => [
-      { id: 'e1', from: 'n0', to: 'n1', type: 'control', label: '分配' },
-      { id: 'e2', from: 'n0', to: 'n2', type: 'control', label: '分配' },
-      { id: 'e3', from: 'n0', to: 'n3', type: 'control', label: '分配' },
-      { id: 'e4', from: 'n1', to: 'n0', type: 'dependency', label: '汇报' },
-      { id: 'e5', from: 'n2', to: 'n0', type: 'dependency', label: '汇报' },
-      { id: 'e6', from: 'n3', to: 'n0', type: 'dependency', label: '汇报' },
-    ],
-  },
-  {
-    id: 'blackboard',
-    name: '黑板',
-    nameEn: 'Blackboard',
-    desc: '多专家共享上下文，独立读写',
-    buildNodes: () => [
-      { id: 'n0', label: '黑板', detail: '', x: 500, y: 300, status: 'idle' },
-      { id: 'n1', label: '专家 A', detail: '', x: 200, y: 150, status: 'idle' },
-      { id: 'n2', label: '专家 B', detail: '', x: 800, y: 150, status: 'idle' },
-      { id: 'n3', label: '专家 C', detail: '', x: 200, y: 450, status: 'idle' },
-      { id: 'n4', label: '专家 D', detail: '', x: 800, y: 450, status: 'idle' },
-    ],
-    buildEdges: () => [
-      { id: 'e1', from: 'n1', to: 'n0', type: 'flow', label: '读写' },
-      { id: 'e2', from: 'n2', to: 'n0', type: 'flow', label: '读写' },
-      { id: 'e3', from: 'n3', to: 'n0', type: 'flow', label: '读写' },
-      { id: 'e4', from: 'n4', to: 'n0', type: 'flow', label: '读写' },
-    ],
-  },
 ]
 
 // ─── Active state ──────────────────────────────────────────────────────
@@ -234,7 +179,7 @@ const graphMetrics = computed(() => {
   // Average degree
   const avgDeg = n > 0 ? ((e * 2) / n).toFixed(1) : '0'
   // Is it a DAG? (no cycles — simplified check)
-  const hasCycle = activePresetId.value === 'loop' || activePresetId.value === 'debate'
+  const hasCycle = activePresetId.value === 'debate'
   return { n, e, avgDeg, type: hasCycle ? '有环图' : 'DAG' }
 })
 

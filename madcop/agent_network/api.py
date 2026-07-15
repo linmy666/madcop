@@ -7,19 +7,19 @@ import json, time, uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
-# ── Storage (SQLite-like JSON files for simplicity) ────────────────── #
-# In production, replace with a proper database.
+# ── Storage ────────────────────────────────────────────────────────── #
 
 _DATA_DIR = Path.home() / ".madcop" / "agent_network"
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 _AGENTS_FILE = _DATA_DIR / "agents.json"
 _KB_FILE = _DATA_DIR / "knowledge.json"
+_NETWORKS_FILE = _DATA_DIR / "networks.json"
 
 def _load(path: Path) -> list[dict]:
     if not path.exists(): return []
@@ -38,7 +38,7 @@ BUILTIN_AGENTS = [
     {"id": "designer", "name": "设计助手", "description": "生成 UI 原型和设计稿。集成 DesignCanvas。", "icon": "palette", "model": "glm-5.2", "status": "online", "capabilities": ["UI 设计", "原型生成", "CSS 编写"], "source": "builtin"},
     {"id": "researcher", "name": "研究员", "description": "联网搜索、资料整理、报告生成。", "icon": "travel_explore", "model": "qwen3-80b", "status": "online", "capabilities": ["网页搜索", "信息提取", "报告生成"], "source": "builtin"},
     {"id": "planner", "name": "规划师", "description": "将复杂任务分解为多步骤计划，协调其他 agent。", "icon": "account_tree", "model": "glm-5.2", "status": "online", "capabilities": ["任务分解", "协调", "调度"], "source": "builtin"},
-    {"id": "reviewer", "name": "审查员", "description": "代码审查、安全审计、质量检查。", "icon": "rate_review", "model": "deepseek-v4-flash", "status": "offline", "capabilities": ["代码审查", "安全审计", "性能分析"], "source": "builtin"},
+    {"id": "reviewer", "name": "审查员", "description": "代码审查、安全审计、质量检查。", "icon": "rate_review", "model": "deepseek-v4-flash", "status": "online", "capabilities": ["代码审查", "安全审计", "性能分析"], "source": "builtin"},
 ]
 
 
@@ -67,10 +67,9 @@ async def create_agent(body: AgentCreate):
         "description": body.description,
         "icon": body.icon,
         "model": body.model,
-        "status": "offline",
         "capabilities": body.capabilities,
-        "source": "custom",
-        "createdAt": int(time.time()),
+        "status": "online",
+        "source": "installed",
     }
     agents.append(agent)
     _save(_AGENTS_FILE, agents)
@@ -84,41 +83,29 @@ async def delete_agent(agent_id: str):
     _save(_AGENTS_FILE, agents)
     return {"ok": True}
 
-
-# ── Knowledge Base ─────────────────────────────────────────────────── #
-
-class KBCreate(BaseModel):
-    title: str
-    type: str = "note"  # document | url | note | code
-    content: str = ""
-    tags: list[str] = []
-
 @router.get("/knowledge")
 async def list_knowledge():
-    """List all knowledge items."""
-    return _load(_KB_FILE)
+    """List all knowledge base entries."""
+    return {"items": _load(_KB_FILE)}
 
 @router.post("/knowledge")
-async def create_knowledge(body: KBCreate):
-    """Add a knowledge item."""
+async def add_knowledge(body: dict):
+    """Add a knowledge base entry."""
     items = _load(_KB_FILE)
     item = {
         "id": str(uuid.uuid4())[:8],
-        "title": body.title,
-        "type": body.type,
-        "content": body.content,
-        "tags": body.tags,
-        "size": f"{len(body.content)}B",
-        "updatedAt": time.strftime("%Y-%m-%d"),
-        "pinned": False,
+        "agent_id": body.get("agent_id", ""),
+        "content": body.get("content", ""),
+        "type": body.get("type", "text"),
+        "createdAt": int(time.time()),
     }
-    items.insert(0, item)
+    items.append(item)
     _save(_KB_FILE, items)
     return item
 
 @router.delete("/knowledge/{item_id}")
 async def delete_knowledge(item_id: str):
-    """Delete a knowledge item."""
+    """Delete a knowledge base entry."""
     items = _load(_KB_FILE)
     items = [i for i in items if i["id"] != item_id]
     _save(_KB_FILE, items)
@@ -126,24 +113,24 @@ async def delete_knowledge(item_id: str):
 
 @router.patch("/knowledge/{item_id}")
 async def update_knowledge(item_id: str, body: dict):
-    """Update a knowledge item (pin/unpin, edit content)."""
+    """Update a knowledge base entry."""
     items = _load(_KB_FILE)
     for item in items:
         if item["id"] == item_id:
-            item.update(body)
+            for key in ("content", "type", "agent_id"):
+                if key in body:
+                    item[key] = body[key]
             _save(_KB_FILE, items)
             return item
     raise HTTPException(404, "Knowledge item not found")
 
 
-# ── Agent Network Orchestration ────────────────────────────────────── #
+# ── Network configuration ──────────────────────────────────────────── #
 
 class NetworkConfig(BaseModel):
     name: str = "Untitled Network"
     nodes: list[dict] = []
     edges: list[dict] = []
-
-_NETWORKS_FILE = _DATA_DIR / "networks.json"
 
 @router.get("/networks")
 async def list_networks():
@@ -165,29 +152,86 @@ async def save_network(body: NetworkConfig):
     _save(_NETWORKS_FILE, networks)
     return net
 
+@router.delete("/networks/{network_id}")
+async def delete_network(network_id: str):
+    """Delete a saved network."""
+    networks = _load(_NETWORKS_FILE)
+    networks = [n for n in networks if n["id"] != network_id]
+    _save(_NETWORKS_FILE, networks)
+    return {"ok": True}
+
 @router.post("/networks/{network_id}/run")
 async def run_network(network_id: str, body: dict = None):
-    """Execute an agent network (stub — returns execution plan)."""
+    """Execute a saved agent network with the real execution engine."""
+    from madcop.agent_network.engine import build_engine
+
     networks = _load(_NETWORKS_FILE)
     net = next((n for n in networks if n["id"] == network_id), None)
     if not net:
         raise HTTPException(404, "Network not found")
-    
-    # Build execution plan from nodes + edges
+
     user_input = (body or {}).get("input", "")
-    plan = []
-    for edge in net.get("edges", []):
-        plan.append({
-            "from": edge.get("from"),
-            "to": edge.get("to"),
-            "label": edge.get("label", "delegate"),
-            "status": "queued",
-        })
-    
+    if not user_input:
+        raise HTTPException(400, "input is required")
+
+    engine = build_engine()
+    result = await engine.run(net, user_input=user_input)
+
     return {
         "network_id": network_id,
-        "status": "planned",
-        "input": user_input,
-        "steps": plan,
-        "message": f"Network '{net['name']}' queued with {len(plan)} steps. Connect agents to backend LLM to execute.",
+        "network_name": result.network_name,
+        "status": result.status,
+        "outputs": result.outputs,
+        "steps": [
+            {
+                "node_id": s.node_id,
+                "agent_id": s.agent_id,
+                "agent_name": s.agent_name,
+                "output": s.output,
+                "status": s.status,
+                "error": s.error,
+                "elapsed_ms": s.elapsed_ms,
+                "upstream": s.upstream,
+            }
+            for s in result.steps
+        ],
+        "elapsed_ms": result.elapsed_ms,
+        "started_at": result.started_at,
+    }
+
+@router.post("/networks/run-adhoc")
+async def run_adhoc_network(body: dict):
+    """Execute an ad-hoc network (not saved) — used by the canvas Run button."""
+    from madcop.agent_network.engine import build_engine
+
+    user_input = body.get("input", "")
+    if not user_input:
+        raise HTTPException(400, "input is required")
+
+    net = {
+        "name": body.get("name", "Ad-hoc"),
+        "nodes": body.get("nodes", []),
+        "edges": body.get("edges", []),
+    }
+
+    engine = build_engine()
+    result = await engine.run(net, user_input=user_input)
+
+    return {
+        "status": result.status,
+        "outputs": result.outputs,
+        "steps": [
+            {
+                "node_id": s.node_id,
+                "agent_id": s.agent_id,
+                "agent_name": s.agent_name,
+                "output": s.output,
+                "status": s.status,
+                "error": s.error,
+                "elapsed_ms": s.elapsed_ms,
+                "upstream": s.upstream,
+            }
+            for s in result.steps
+        ],
+        "elapsed_ms": result.elapsed_ms,
     }
