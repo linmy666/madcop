@@ -2452,6 +2452,10 @@ def create_app() -> FastAPI:
                 import time as _time, uuid as _uuid
                 now_iso = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
                 # Ensure session exists
+                # Keep the session bound to the user's working directory so it
+                # persists under <workDir>/.madcop/ instead of the backend cwd.
+                msg_wd = msg.get("workDir") or msg.get("work_dir") \
+                    or msg.get("projectPath") or msg.get("projectRoot")
                 if session_id not in _SESSIONS:
                     _SESSIONS[session_id] = {
                         "id": session_id,
@@ -2459,12 +2463,19 @@ def create_app() -> FastAPI:
                         "createdAt": now_iso,
                         "modifiedAt": now_iso,
                         "messageCount": 0,
-                        "projectPath": "",
-                        "workDir": None,
-                        "workDirExists": False,
+                        "projectPath": msg_wd or "",
+                        "workDir": msg_wd or None,
+                        "workDirExists": bool(msg_wd and Path(msg_wd).is_dir()),
                     }
                 sess = _SESSIONS[session_id]
                 sess["modifiedAt"] = now_iso
+                # Refresh the working directory if the client supplies one, so
+                # sessions started before a workDir was known get re-homed.
+                if msg_wd:
+                    sess["workDir"] = msg_wd
+                    sess["projectPath"] = msg.get("projectPath") or msg_wd
+                    sess["projectRoot"] = msg.get("projectRoot") or msg_wd
+                    sess["workDirExists"] = Path(msg_wd).is_dir()
                 if not sess.get("title") or sess.get("title") == "New Session":
                     sess["title"] = (messages[-1].content[:40] if messages else "New Session")
                 _MESSAGES.setdefault(session_id, [])

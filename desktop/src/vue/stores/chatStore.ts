@@ -264,7 +264,15 @@ export const useChatStore = defineStore('chat', {
       // workspace directory (<workDir>/.madcop/...) instead of opaque
       // Electron localStorage. Best-effort: ignore network failures.
       try {
-        const payload = JSON.stringify({ messages: s.messages, title: s.title })
+        // Carry the session's working directory so the backend stores the
+        // conversation under <workDir>/.madcop/ instead of its own cwd.
+        let wd = ''
+        try {
+          const ss = useSessionStore(this.$pinia)
+          const sess = ss.sessions.find((x: any) => x.id === sessionId)
+          wd = sess?.workDir || sess?.projectPath || sess?.projectRoot || ''
+        } catch {}
+        const payload = JSON.stringify({ messages: s.messages, title: s.title, workDir: wd })
         fetch(getApiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/messages`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

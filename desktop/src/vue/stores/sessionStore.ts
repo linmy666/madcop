@@ -240,7 +240,18 @@ export const useSessionStore = defineStore('session', {
 
       const id = `session-${Date.now()}`
       const now = new Date().toISOString()
-      const workDir = _workDir || getCurrentWorkspaceDir() || ''
+      // Fall back to the active session's working dir so a "New Chat" opened
+      // while already inside a project inherits that project's directory
+      // (instead of losing the working dir and falling back to the backend).
+      const activeWd = (this.sessions.find((s) => s.id === this.activeSessionId) as
+        SessionListItem | undefined)?.workDir
+      const workDir = _workDir || getCurrentWorkspaceDir() || activeWd || ''
+      // Remember the chosen workspace dir so subsequent sessions (and a fresh
+      // app launch) default to it — this is what makes "store sessions in the
+      // working directory" actually hold.
+      if (workDir) {
+        try { localStorage.setItem(WORKSPACE_DIR_STORAGE_KEY, workDir) } catch {}
+      }
       const session: SessionListItem = {
         id, title: '新对话',
         createdAt: now, modifiedAt: now,

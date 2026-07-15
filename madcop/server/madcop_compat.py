@@ -206,7 +206,7 @@ def _load_from_dir(sessions_file: Path, messages_dir: Path) -> None:
         print(f"[cc-haha-compat] load error: {e}", file=_sys.stderr, flush=True)
 
 
-def _ensure_session(session_id: str) -> dict[str, Any]:
+def _ensure_session(session_id: str, work_dir: str | None = None) -> dict[str, Any]:
     if session_id not in _SESSIONS:
         import time as _t
         now = _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())
@@ -216,9 +216,14 @@ def _ensure_session(session_id: str) -> dict[str, Any]:
             "createdAt": now,
             "modifiedAt": now,
             "model": "minimaxai/minimax-m2.7",
-            "workDir": str(Path.cwd()),
-            "projectPath": str(Path.cwd()),
-            "projectRoot": str(Path.cwd()),
+            # IMPORTANT: never default to the backend process's own cwd.
+            # Sessions must live under the user's working directory
+            # (<workDir>/.madcop/). When no workDir is known we leave it
+            # unset so persistence falls back to the legacy global
+            # ~/.madcop location — NOT the backend's project tree.
+            "workDir": work_dir or None,
+            "projectPath": work_dir or None,
+            "projectRoot": work_dir or None,
             "messages": [],
             "chatState": "idle",
             "permissionMode": "bypassPermissions",
@@ -1047,15 +1052,19 @@ def register(app: FastAPI) -> None:
             sid = uuid.uuid4().hex
         work_dir = body.get("workDir") or body.get("work_dir")
         repo = body.get("repository") or {}
-        session = _ensure_session(sid)
-        if work_dir:
-            session["workDir"] = work_dir
+        session = _ensure_session(sid, work_dir=work_dir)
         if body.get("title"):
             session["title"] = body["title"]
         if repo.get("branch"):
             session["branch"] = repo["branch"]
         if body.get("permissionMode"):
             session["permissionMode"] = body["permissionMode"]
+        # Persist the index to the workspace store immediately so a crash
+        # before the next background flush doesn't lose the session.
+        try:
+            _persist_session_to_disk(session)
+        except Exception:
+            pass
         return {"sessionId": sid, "workDir": session.get("workDir"),
                 "title": session.get("title")}
 
@@ -1161,11 +1170,21 @@ def register(app: FastAPI) -> None:
         if not isinstance(msgs, list):
             msgs = []
         _MESSAGES[session_id] = msgs
-        if session_id not in _SESSIONS:
-            _ensure_session(session_id)
+        # Honour the working directory carried by the client so messages land
+        # under <workDir>/.madcop/ rather than the backend's own cwd.
+        wd = None
+        if isinstance(body, dict):
+            wd = (body.get("workDir") or body.get("work_dir")
+                  or body.get("projectPath") or body.get("projectRoot"))
+        sess = _ensure_session(session_id, work_dir=wd)
+        if wd:
+            sess["workDir"] = wd
+            sess["projectPath"] = body.get("projectPath") or wd
+            sess["projectRoot"] = body.get("projectRoot") or wd
         # Persist to the workspace's on-disk store immediately so a crash
         # between saves doesn't lose the user's conversation.
         try:
+            _persist_session_to_disk(sess)
             _persist_messages_to_disk(session_id, msgs)
         except Exception:
             pass
