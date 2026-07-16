@@ -1629,9 +1629,16 @@ def create_app() -> FastAPI:
                         _dag_task = _am_a.create_task(_run_dag())
                         # Yield agent events as they stream; drain until the
                         # run completes (sentinel), then read the result.
+                        # Send a keepalive comment every 15s of silence so
+                        # proxies/browsers don't kill the idle connection
+                        # during a long multi-agent run.
                         _dag_result = None
                         while True:
-                            _item = await _evq.get()
+                            try:
+                                _item = await asyncio.wait_for(_evq.get(), timeout=15.0)
+                            except asyncio.TimeoutError:
+                                yield ": keepalive\n\n"
+                                continue
                             if _item is _sentinel:
                                 break
                             if "_result" in _item:
@@ -1646,14 +1653,30 @@ def create_app() -> FastAPI:
                             yield f"data: {json.dumps(_item, ensure_ascii=False)}\n\n"
                         await _dag_task
 
-                        # After the stream, emit agent_done for each agent from
-                        # the structured result, then the final answer.
+                        # After the stream, emit agent_done for each agent
+                        # from the structured result, then the final answer.
                         if _dag_result:
                             for _ns in _dag_result.steps:
                                 if _ns.node_id in ("input", "output"):
                                     continue
                                 yield f"data: {json.dumps({'type': 'agent_done', 'agent_id': _ns.agent_id or _ns.node_id, 'status': _ns.status, 'elapsed_ms': _ns.elapsed_ms}, ensure_ascii=False)}\n\n"
-                            _answer = _dag_result.outputs.get("output", "")
+                            # The final answer is the SYNTHESIZER's output —
+                            # a single coherent report — NOT the raw merge
+                            # concatenation. If the synthesizer failed or
+                            # produced nothing, fall back to the longest
+                            # specialist output so the user still gets an
+                            # answer instead of a blank.
+                            _answer = (_dag_result.outputs.get("synthesizer") or "").strip()
+                            if not _answer:
+                                _fallback = ""
+                                for _ns in _dag_result.steps:
+                                    if _ns.node_id in ("input", "output", "planner", "synthesizer"):
+                                        continue
+                                    if _ns.status == "error":
+                                        continue
+                                    if len(_ns.output) > len(_fallback):
+                                        _fallback = _ns.output
+                                _answer = _fallback.strip()
                             if _answer:
                                 yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                 except Exception as _am_err:
