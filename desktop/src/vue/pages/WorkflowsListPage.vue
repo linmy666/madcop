@@ -97,7 +97,7 @@ const handleDelete = async (id: string) => {
 
 const handleSave = async (nodes: any[], edges: any[]) => {
   if (!editingId.value) return
-  const r = await fetch(`/api/workflows/${editingId.value}`, {
+  const r = await fetch(getApiUrl(`/api/workflows/${editingId.value}`), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -160,7 +160,7 @@ async function runInvokedWorkflow() {
   invokeResult.value = ''
   try {
     const wf = invokingWorkflow.value
-    const res = await fetch(`/api/workflows/${wf.id}/run`, {
+    const res = await fetch(getApiUrl(`/api/workflows/${wf.id}/run`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ input: { input: invokeInput.value } }),
