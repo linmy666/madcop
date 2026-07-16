@@ -95,10 +95,18 @@ const copied = ref(false)
 
 const hasContent = computed(() => (props.content || '').trim().length > 0)
 
-// Detect error messages pushed by pushChatError ("错误: ...")
+// Detect error messages pushed by pushChatError ("错误: ..."). Only treat
+// as an error when the *whole* content is a short error line — a legitimate
+// answer that happens to start with "Error" (e.g. "Error handling in Go")
+// must NOT be misrendered as an error card.
 const isError = computed(() => {
   const c = (props.content || '').trim()
-  return c.startsWith('错误:') || c.startsWith('Error:') || c.toLowerCase().startsWith('failed')
+  if (c.length > 240) return false                  // long content = a real answer
+  // "错误: ..." / "Error: ..." with a colon right after the keyword
+  if (/^(错误|Error)\s*[:：]/.test(c)) return true
+  // bare "failed ..." only when it's a terse failure, not a sentence
+  if (/^failed\b/i.test(c) && c.split(/\s+/).length < 8) return true
+  return false
 })
 const errorTitle = computed(() => {
   const raw = (props.content || '').trim()
@@ -112,13 +120,19 @@ const errorDetail = computed(() => {
   return stripped || raw
 })
 
-// Detect clarify/choices JSON at the start of content
+// Detect clarify/choices JSON at the start of content. Only when the entire
+// content is a small JSON object with a clarify/choices flag — never for a
+// code block or a long answer that merely begins with '{'.
 const clarifyData = computed<ClarifyPayload | null>(() => {
   const c = (props.content || '').trim()
-  if (!c.startsWith('{')) return null
+  if (!c.startsWith('{') || !c.endsWith('}')) return null
+  if (c.length > 600) return null                    // too big to be a clarify payload
+  if (c.includes('```')) return null                 // a fenced code block, not a payload
   try {
     const parsed = JSON.parse(c) as ClarifyPayload
-    if (parsed.clarify || parsed.choices) return parsed
+    // Require an explicit clarify/choices signal AND that it looks like a
+    // payload (question/options present), not arbitrary JSON data.
+    if ((parsed.clarify || parsed.choices) && (parsed as any).question) return parsed
     return null
   } catch {
     return null
