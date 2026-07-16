@@ -171,6 +171,9 @@ function openInBrowser() {
 .preview-iframe {
   width: 100%;
   height: 100%;
+  min-height: 600px; /* ensure the iframe is tall enough for typical
+                       * preview pages (login forms, dashboards) so
+                       * the bottom isn't clipped off. */
   border: none;
   display: block;
 }

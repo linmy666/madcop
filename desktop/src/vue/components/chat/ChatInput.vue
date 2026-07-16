@@ -1424,7 +1424,7 @@ watch(input, (v) => {
           </div>
 
           <!-- Right side -->
-          <div class="flex min-w-0 items-center gap-2">
+          <div class="flex min-w-0 items-center gap-3">
             <template v-if="!isMemberSession && activeTabId">
               <ContextUsageIndicator
                 :session-id="activeTabId"

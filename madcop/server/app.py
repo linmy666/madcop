@@ -1874,10 +1874,16 @@ def create_app() -> FastAPI:
                                     continue
                                 _status = "failed" if _ns.status == "error" else "completed"
                                 yield f"data: {json.dumps({'type': 'agent_done', 'agent_id': _ns.agent_id or _ns.node_id, 'status': _ns.status, 'elapsed_ms': _ns.elapsed_ms}, ensure_ascii=False)}\n\n"
-                                # Update the matching plan step so the panel
-                                # shows a checkmark / cross for this agent.
+                                # Update the matching plan step in BOTH
+                                # _plan_steps (so the final summary count is
+                                # correct) and the frontend (so the panel
+                                # shows a checkmark / cross for this agent).
                                 _pstep = _node_to_step.get(_ns.node_id)
                                 if _pstep:
+                                    if 1 <= _pstep <= len(_plan_steps):
+                                        _plan_steps[_pstep - 1]["status"] = _status
+                                        if _ns.status == "error" and _ns.error:
+                                            _plan_steps[_pstep - 1]["error"] = _ns.error
                                     _step_obj = {
                                         "step": _pstep,
                                         "action": _ZH_ACTION.get(_ns.node_id, _ns.node_id),
@@ -1891,9 +1897,14 @@ def create_app() -> FastAPI:
                                     }
                                     yield f"data: {json.dumps({'type': 'plan_step', 'step': _step_obj}, ensure_ascii=False)}\n\n"
                             # Mark the whole plan complete so the panel stops.
-                            _completed = sum(1 for s in _plan_steps if s["status"] != "failed")
+                            # Count from _plan_steps which we've now updated
+                            # above — without this the counter was always
+                            # wrong (counting the initial 'pending' state).
+                            _completed = sum(1 for s in _plan_steps if s["status"] == "completed")
                             _failed = sum(1 for s in _plan_steps if s["status"] == "failed")
-                            yield f"data: {json.dumps({'type': 'plan', 'plan': {**_deep_plan, 'status': 'completed', 'completed_steps': _completed, 'failed_steps': _failed}}, ensure_ascii=False)}\n\n"
+                            _deep_plan["completed_steps"] = _completed
+                            _deep_plan["failed_steps"] = _failed
+                            yield f"data: {json.dumps({'type': 'plan', 'plan': {**_deep_plan, 'status': 'completed'}}, ensure_ascii=False)}\n\n"
                             yield f"data: {json.dumps({'type': 'plan_done'}, ensure_ascii=False)}\n\n"
                             # The final answer is the SYNTHESIZER's output —
                             # a single coherent report — NOT the raw merge

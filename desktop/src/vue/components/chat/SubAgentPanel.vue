@@ -6,7 +6,10 @@
 //
 // Reads `agents` (a reactive map agent_id → { name, color, text, status })
 // from the session state maintained by chatStore's agent_* SSE handlers.
-import { computed } from 'vue'
+//
+// Collapses to a single header line once all agents finish so the panel
+// doesn't dominate the chat view and block the final answer.
+import { computed, ref, watch } from 'vue'
 import MascotAvatar from '../common/MascotAvatar.vue'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
 
@@ -25,22 +28,41 @@ const props = defineProps<{ agents: Record<string, AgentStream> }>()
 // string keys, so Object.values is stable here.
 const agentList = computed(() => Object.values(props.agents))
 const activeCount = computed(() => agentList.value.filter(a => a.status === 'running').length)
+const allDone = computed(() => activeCount.value === 0 && agentList.value.length > 0)
+// Collapse the panel once everything finishes so the final answer below
+// has room. User can re-expand by clicking the header.
+const collapsed = ref(false)
+watch(allDone, (done) => {
+  if (done) collapsed.value = true
+})
 // Cap how much of each agent's stream we render live, to keep the panel
 // from growing unbounded during a long deep run. The full text is still
 // preserved in store; this only affects the live preview.
-const PREVIEW_CHARS = 600
+const PREVIEW_CHARS = 200
 const previewText = (t: string) => (t.length > PREVIEW_CHARS ? t.slice(-PREVIEW_CHARS) : t)
+
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+}
 </script>
 
 <template>
   <div v-if="agentList.length" class="sub-agent-panel">
-    <div class="sub-agent-panel__head">
+    <button
+      type="button"
+      class="sub-agent-panel__head"
+      :aria-expanded="!collapsed"
+      @click="toggleCollapsed"
+    >
       <span class="material-symbols-outlined text-[15px]">hub</span>
       <span class="sub-agent-panel__title">
         {{ activeCount > 0 ? `${activeCount} 个智能体协作中` : '协作完成' }}
       </span>
-    </div>
-    <div class="sub-agent-panel__grid">
+      <span class="material-symbols-outlined text-[14px] sub-agent-panel__chevron">
+        {{ collapsed ? 'expand_more' : 'expand_less' }}
+      </span>
+    </button>
+    <div v-show="!collapsed" class="sub-agent-panel__grid">
       <div
         v-for="agent in agentList"
         :key="agent.name"
@@ -89,16 +111,23 @@ const previewText = (t: string) => (t.length > PREVIEW_CHARS ? t.slice(-PREVIEW_
 }
 .sub-agent-panel__head {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   background: var(--color-surface-container-low);
   font-size: 12px;
   font-weight: 600;
   color: var(--color-text-secondary);
+  border: none;
   border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  text-align: left;
 }
+.sub-agent-panel__head:hover { background: var(--color-surface-container); }
 .sub-agent-panel__head .material-symbols-outlined { color: var(--color-primary); }
+.sub-agent-panel__title { flex: 1; }
+.sub-agent-panel__chevron { color: var(--color-text-tertiary) !important; }
 .sub-agent-panel__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -140,7 +169,7 @@ const previewText = (t: string) => (t.length > PREVIEW_CHARS ? t.slice(-PREVIEW_
 .sub-agent-card__badge--err { background: var(--color-error); }
 .sub-agent-card__body {
   position: relative;
-  max-height: 240px;
+  max-height: 140px;
   overflow-y: auto;
 }
 /* Markdown content inside a card — shrink the renderer's default sizes
