@@ -1596,6 +1596,46 @@ def create_app() -> FastAPI:
                         # a fixed coder pipeline — a research report shouldn't
                         # spawn a coder. The two specialists run in parallel.
                         _net = build_network_for_task(_task_text)
+                        # Build a PLAN view of the DAG so the right-side task
+                        # panel shows live progress instead of spinning on
+                        # "正在分析任务…" forever. Each executable agent node
+                        # becomes a plan step; passthrough/merge nodes are
+                        # skipped. Steps start 'pending', flip to 'in_progress'
+                        # on agent_start, and 'completed'/'failed' on agent_done.
+                        _plan_steps: list[dict] = []
+                        _ZH_ACTION = {
+                            "planner": "规划任务方案",
+                            "coder": "编写代码实现",
+                            "designer": "设计界面与原型",
+                            "researcher": "调研收集资料",
+                            "reviewer": "审查与质量检查",
+                            "synthesizer": "综合产出最终结果",
+                        }
+                        for _n in _net["nodes"]:
+                            _aid = _n.get("agentId", "")
+                            if not _aid or _n["id"] in ("input", "output"):
+                                continue
+                            _plan_steps.append({
+                                "step": len(_plan_steps) + 1,
+                                "action": _ZH_ACTION.get(_n["id"], _n.get("name", _aid)),
+                                "tool": None,
+                                "input_hint": "",
+                                "expected_result": "",
+                                "status": "pending",
+                                "result": None,
+                                "error": None,
+                                "retry_count": 0,
+                            })
+                        _deep_plan = {
+                            "goal": _task_text[:60],
+                            "steps": _plan_steps,
+                            "current_step": 0,
+                            "total_steps": len(_plan_steps),
+                            "completed_steps": 0,
+                            "failed_steps": 0,
+                            "status": "running",
+                        }
+                        yield f"data: {json.dumps({'type': 'plan', 'plan': _deep_plan}, ensure_ascii=False)}\n\n"
                         # Bridge on_token (called from worker threads) to SSE
                         # yields via a queue. Track which agents have started
                         # so we emit agent_start exactly once per agent.
@@ -1615,6 +1655,31 @@ def create_app() -> FastAPI:
                                     "node_id": node_id,
                                     "color": _agent_colors.get(agent_id, "#7C3AED"),
                                 })
+                                # Flip the matching plan step to in_progress so
+                                # the right panel shows it as the active task.
+                                _pstep_idx = None
+                                _si2 = 0
+                                for _n in _net["nodes"]:
+                                    if _n.get("agentId") and _n["id"] not in ("input", "output"):
+                                        _si2 += 1
+                                        if _n["id"] == node_id:
+                                            _pstep_idx = _si2
+                                            break
+                                if _pstep_idx:
+                                    _evq.put_nowait({
+                                        "type": "plan_step",
+                                        "step": {
+                                            "step": _pstep_idx,
+                                            "action": _ZH_ACTION.get(node_id, agent_name or node_id),
+                                            "tool": None,
+                                            "input_hint": "",
+                                            "expected_result": "",
+                                            "status": "in_progress",
+                                            "result": None,
+                                            "error": None,
+                                            "retry_count": 0,
+                                        },
+                                    })
                             _evq.put_nowait({"type": "agent_token", "agent_id": aid, "text": text})
 
                         async def _run_dag():
@@ -1655,11 +1720,43 @@ def create_app() -> FastAPI:
 
                         # After the stream, emit agent_done for each agent
                         # from the structured result, then the final answer.
+                        # Also update the right-side task panel by emitting
+                        # plan_step events so it reflects each agent's status
+                        # instead of spinning on "正在分析任务…".
                         if _dag_result:
+                            # Map node_id → plan step index for panel updates.
+                            _node_to_step: dict[str, int] = {}
+                            _si = 0
+                            for _n in _net["nodes"]:
+                                if _n.get("agentId") and _n["id"] not in ("input", "output"):
+                                    _si += 1
+                                    _node_to_step[_n["id"]] = _si
                             for _ns in _dag_result.steps:
                                 if _ns.node_id in ("input", "output"):
                                     continue
+                                _status = "failed" if _ns.status == "error" else "completed"
                                 yield f"data: {json.dumps({'type': 'agent_done', 'agent_id': _ns.agent_id or _ns.node_id, 'status': _ns.status, 'elapsed_ms': _ns.elapsed_ms}, ensure_ascii=False)}\n\n"
+                                # Update the matching plan step so the panel
+                                # shows a checkmark / cross for this agent.
+                                _pstep = _node_to_step.get(_ns.node_id)
+                                if _pstep:
+                                    _step_obj = {
+                                        "step": _pstep,
+                                        "action": _ZH_ACTION.get(_ns.node_id, _ns.node_id),
+                                        "tool": None,
+                                        "input_hint": "",
+                                        "expected_result": "",
+                                        "status": _status,
+                                        "result": None,
+                                        "error": _ns.error if _ns.status == "error" else None,
+                                        "retry_count": 0,
+                                    }
+                                    yield f"data: {json.dumps({'type': 'plan_step', 'step': _step_obj}, ensure_ascii=False)}\n\n"
+                            # Mark the whole plan complete so the panel stops.
+                            _completed = sum(1 for s in _plan_steps if s["status"] != "failed")
+                            _failed = sum(1 for s in _plan_steps if s["status"] == "failed")
+                            yield f"data: {json.dumps({'type': 'plan', 'plan': {**_deep_plan, 'status': 'completed', 'completed_steps': _completed, 'failed_steps': _failed}}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'plan_done'}, ensure_ascii=False)}\n\n"
                             # The final answer is the SYNTHESIZER's output —
                             # a single coherent report — NOT the raw merge
                             # concatenation. If the synthesizer failed or
