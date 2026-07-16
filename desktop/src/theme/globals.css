@@ -505,8 +505,10 @@
   --color-sidebar-search-bg: rgba(255, 255, 255, 0.78);
   --color-sidebar-search-border: rgba(218, 193, 186, 0.88);
   --color-sidebar-item-hover: rgba(239, 238, 234, 0.82);
-  --color-sidebar-item-active: rgba(239, 238, 234, 0.94);
-  --color-sidebar-item-active-border: rgba(124, 58, 237, 0.12);
+  /* Active = brand-tinted fill (not just a slightly-opaque hover) so the
+     selected row is unmistakable — Linear/Vercel use a tinted active state. */
+  --color-sidebar-item-active: rgba(124, 58, 237, 0.12);
+  --color-sidebar-item-active-border: rgba(124, 58, 237, 0.32);
   --sidebar-panel-bg-image: none;
 
   /* Border aliases */
@@ -713,8 +715,8 @@
   --color-sidebar-search-bg: rgba(255, 255, 255, 0.9);
   --color-sidebar-search-border: rgba(203, 213, 225, 0.88);
   --color-sidebar-item-hover: rgba(255, 255, 255, 0.78);
-  --color-sidebar-item-active: rgba(255, 255, 255, 0.94);
-  --color-sidebar-item-active-border: rgba(124, 58, 237, 0.16);
+  --color-sidebar-item-active: rgba(124, 58, 237, 0.10);
+  --color-sidebar-item-active-border: rgba(124, 58, 237, 0.30);
   --sidebar-panel-bg-image: none;
 
   --color-border: #DDE3EA;
@@ -899,8 +901,8 @@
   --color-sidebar-search-bg: rgba(255, 255, 255, 0.03);
   --color-sidebar-search-border: rgba(255, 255, 255, 0.06);
   --color-sidebar-item-hover: rgba(255, 255, 255, 0.04);
-  --color-sidebar-item-active: rgba(255, 255, 255, 0.06);
-  --color-sidebar-item-active-border: rgba(167, 139, 250, 0.14);
+  --color-sidebar-item-active: rgba(167, 139, 250, 0.16);
+  --color-sidebar-item-active-border: rgba(167, 139, 250, 0.34);
   --sidebar-panel-bg-image:
     radial-gradient(circle at top left, rgba(167, 139, 250, 0.045), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));

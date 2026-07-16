@@ -119,7 +119,7 @@ onMounted(loadWorkflows)
     >
       <div class="agent-picker__title">
         选择工作流
-        <button @click="loadWorkflows" class="agent-picker__refresh" title="刷新">↻</button>
+        <button @click="loadWorkflows" class="agent-picker__refresh" title="刷新"><span class="material-symbols-outlined text-[15px]">refresh</span></button>
       </div>
 
       <div v-if="loading" class="agent-picker__loading">加载中…</div>
@@ -140,7 +140,7 @@ onMounted(loadWorkflows)
           @click="runWorkflow(wf)"
         >
           <div class="agent-picker__item-name">
-            <span v-if="running === wf.id" class="agent-picker__item-spinner">●</span>
+            <span v-if="running === wf.id" class="material-symbols-outlined text-[14px] animate-spin text-[var(--color-primary)]">progress_activity</span>
             {{ wf.name || '未命名' }}
           </div>
           <div class="agent-picker__item-meta">

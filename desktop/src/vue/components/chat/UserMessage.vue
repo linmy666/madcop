@@ -168,9 +168,10 @@ function retry() {
   justify-content: center;
   flex-shrink: 0;
   margin-top: 2px;
-  background: linear-gradient(135deg, var(--color-primary, #7C3AED), var(--color-primary-container, #A78BFA));
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(124, 58, 237, 0.25);
+  /* Neutral avatar — the user's own messages shouldn't outshine the agent's
+     replies. Reserve the brand gradient for the primary action button. */
+  background: var(--color-surface-container-high);
+  color: var(--color-text-secondary);
 }
 .user-message__avatar .material-symbols-outlined {
   font-size: 18px;

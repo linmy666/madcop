@@ -25,7 +25,8 @@
             :class="opt === '自定义' ? 'clarify-chip--custom' : ''"
             @click.stop="pickOption(opt)"
           >
-            {{ opt === '自定义' ? '✏️ 自定义' : opt }}
+            <span v-if="opt === '自定义'" class="material-symbols-outlined text-[14px]">edit</span>
+            {{ opt === '自定义' ? '自定义' : opt }}
           </button>
         </div>
       </template>
