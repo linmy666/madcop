@@ -14,9 +14,7 @@
 
 import { ref, computed, onMounted } from 'vue'
 import GraphCanvas, { type GraphNodeData, type GraphEdgeData } from '../components/graph/GraphCanvas.vue'
-import { useTabStore } from '../stores/tabs'
-
-const tabStore = useTabStore()
+import { getApiUrl } from '../api/client'
 
 // ─── Topology presets ──────────────────────────────────────────────────
 
@@ -183,26 +181,50 @@ const graphMetrics = computed(() => {
   return { n, e, avgDeg, type: hasCycle ? '有环图' : 'DAG' }
 })
 
-// ─── Run simulation ────────────────────────────────────────────────────
+// ─── Run (real engine) ─────────────────────────────────────────────────
 
 const isRunning = ref(false)
+const runResult = ref<{ status: string; steps: any[]; elapsed_ms: number } | null>(null)
+const runError = ref<string | null>(null)
+const runTaskInput = ref('帮我分析并完成这个任务')
 
 async function simulateRun() {
   if (isRunning.value) return
   isRunning.value = true
-  // Reset all to idle
+  runError.value = null
+  runResult.value = null
   for (const n of nodes.value) n.status = 'idle'
-  // Sequentially activate each node with delay
-  for (const n of nodes.value) {
-    n.status = 'running'
-    await sleep(800)
-    n.status = 'completed'
-  }
-  isRunning.value = false
-}
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  // Mark all nodes as running up-front (the engine runs them concurrently
+  // per wave; without per-step streaming we show a collective "running").
+  for (const n of nodes.value) n.status = 'running'
+
+  try {
+    const res = await fetch(getApiUrl('/api/agents/networks/run-adhoc'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        input: runTaskInput.value || '执行任务',
+        nodes: nodes.value.map(n => ({ id: n.id, name: n.label, agentId: n.id })),
+        edges: edges.value.map(e => ({ from: e.from, to: e.to, label: e.label })),
+      }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    runResult.value = data
+    // Light up nodes according to each step's status.
+    for (const step of (data.steps || [])) {
+      const node = nodes.value.find(n => n.id === step.node_id)
+      if (node) node.status = step.status === 'error' ? 'failed' : 'completed'
+    }
+    // Any node not mentioned by a step defaults to completed.
+    for (const n of nodes.value) if (n.status === 'running') n.status = 'completed'
+  } catch (e: any) {
+    runError.value = e?.message || '执行失败'
+    for (const n of nodes.value) if (n.status === 'running') n.status = 'failed'
+  } finally {
+    isRunning.value = false
+  }
 }
 </script>
 
@@ -362,24 +384,57 @@ function sleep(ms: number) {
       </aside>
     </div>
 
-    <!-- Bottom bar: run button + stats -->
-    <footer class="flex items-center justify-between border-t border-[var(--color-border)] px-6 py-3">
-      <div class="flex items-center gap-4 text-[11px] text-[var(--color-text-tertiary)]">
-        <span>每个节点使用用户在设置中配置的模型</span>
+    <!-- Bottom bar: task input + run button -->
+    <footer class="border-t border-[var(--color-border)] px-6 py-3">
+      <div class="flex items-center gap-3">
+        <input
+          v-model="runTaskInput"
+          :disabled="isRunning"
+          placeholder="输入要让 agent 协作完成的任务…"
+          class="flex-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand)]"
+          @keydown.enter="simulateRun"
+        />
+        <button
+          type="button"
+          :disabled="isRunning"
+          :class="[
+            'rounded-[var(--radius-md)] px-6 py-2 text-[13px] font-medium transition-all',
+            isRunning
+              ? 'cursor-not-allowed bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'
+              : 'bg-[var(--color-brand)] text-[var(--color-on-primary)] hover:opacity-90',
+          ]"
+          @click="simulateRun"
+        >
+          {{ isRunning ? '执行中…' : '执行协作' }}
+        </button>
       </div>
-      <button
-        type="button"
-        :disabled="isRunning"
-        :class="[
-          'rounded-lg px-6 py-2 text-[13px] font-medium transition-all',
-          isRunning
-            ? 'cursor-not-allowed bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'
-            : 'bg-[var(--color-brand)] text-white hover:opacity-90',
-        ]"
-        @click="simulateRun"
-      >
-        {{ isRunning ? '执行中…' : '执行协作' }}
-      </button>
+
+      <!-- Run result -->
+      <div v-if="runResult" class="mt-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] p-3">
+        <div class="mb-2 flex items-center gap-3 text-[11px] text-[var(--color-text-tertiary)]">
+          <span class="font-semibold uppercase tracking-wider">{{ runResult.status }}</span>
+          <span>{{ runResult.elapsed_ms }}ms</span>
+          <span>{{ (runResult.steps || []).length }} 步</span>
+        </div>
+        <div class="flex flex-col gap-2">
+          <div
+            v-for="step in (runResult.steps || []).filter((s: any) => s.node_id !== 'input' && s.node_id !== 'output')"
+            :key="step.node_id"
+            class="rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2"
+          >
+            <div class="mb-1 flex items-center gap-2 text-[12px]">
+              <span class="font-semibold text-[var(--color-text-primary)]">{{ step.agent_name || step.node_id }}</span>
+              <span :style="{ color: step.status === 'error' ? 'var(--color-error)' : 'var(--color-success)' }" class="text-[10px] uppercase">{{ step.status }}</span>
+            </div>
+            <pre class="max-h-[120px] overflow-auto whitespace-pre-wrap break-words font-[var(--font-mono)] text-[11px] text-[var(--color-text-secondary)]">{{ (step.output || '').slice(0, 400) }}</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Run error -->
+      <div v-if="runError" class="mt-3 rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] p-3 text-[12px] text-[var(--color-error)]">
+        执行失败：{{ runError }}
+      </div>
     </footer>
   </div>
 </template>
