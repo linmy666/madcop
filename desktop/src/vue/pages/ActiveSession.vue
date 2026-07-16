@@ -204,7 +204,13 @@ const skillTags = computed<Array<string>>(() => {
 
 // Sidebar visibility: default true. User can disable via localStorage key
 // `madcop_plan_sidebar_enabled` set to '0'.
-const planSidebarEnabled = ref(true)
+const planSidebarEnabled = ref(false) // default off — gives the chat
+                                       // column its full width and
+                                       // prevents the input controls from
+                                       // being squeezed against the
+                                       // 320px plan sidebar. Users tap
+                                       // the task button in the header
+                                       // to open it.
 onMounted(() => {
   try {
     const v = localStorage.getItem('madcop_plan_sidebar_enabled')

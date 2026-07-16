@@ -430,6 +430,10 @@ export const useChatStore = defineStore('chat', {
       // Unified agent mode (quick/standard/deep). 'auto'/unset falls through
       // to the normal chat flow on the backend.
       const _agentMode = _runtimeSel?.agentMode || 'auto'
+      // Bump the preview refresh key so any stale HTML from a previous
+      // task is re-fetched — prevents the user from seeing the last
+      // task's preview while the new one is still streaming.
+      session.previewRefreshKey = (session.previewRefreshKey || 0) + 1
       fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

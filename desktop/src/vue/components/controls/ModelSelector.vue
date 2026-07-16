@@ -314,7 +314,7 @@ watch(() => props.selectedModel, (val) => {
   transition: background 0.1s, color 0.1s, border-color 0.1s;
   /* Constrain width so a long model name doesn't push the agent-mode /
      send buttons off-screen. The label inside truncates with ellipsis. */
-  max-width: 180px;
+  max-width: 150px;
   min-width: 0;
   flex-shrink: 1;
 }
