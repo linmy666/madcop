@@ -172,7 +172,7 @@ onMounted(refreshStats)
       <div class="flex-1">
         <div class="text-[12px] font-medium text-[var(--color-text-primary)]">本地优先 · 数据不离开你的设备</div>
         <div class="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
-          反馈数据存储于 <span style="font-family: ui-monospace, monospace">~/Library/MadCop/training_data/</span>
+          反馈数据存储于 <span style="font-family: var(--font-mono)">~/Library/MadCop/training_data/</span>
         </div>
       </div>
     </div>
@@ -230,7 +230,7 @@ onMounted(refreshStats)
           </div>
           <div
             class="mt-2 flex items-center gap-4 text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]"
-            style="font-family: ui-monospace, 'SF Mono', monospace"
+            style="font-family: var(--font-mono)"
           >
             <span>需要 8GB+ 内存</span>
             <span>每 100 条触发</span>
@@ -246,7 +246,7 @@ onMounted(refreshStats)
         <h3 class="text-[13px] font-semibold text-[var(--color-text-primary)]">数据管理</h3>
         <span
           class="text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >
           local only
         </span>
@@ -255,13 +255,13 @@ onMounted(refreshStats)
       <!-- Stats grid -->
       <div class="mb-4 grid grid-cols-3 gap-3">
         <div class="rounded-lg bg-[var(--color-surface)] p-3 text-center">
-          <div class="text-[20px] font-semibold tabular-nums text-[var(--color-text-primary)]" style="font-family: ui-monospace, monospace">
+          <div class="text-[20px] font-semibold tabular-nums text-[var(--color-text-primary)]" style="font-family: var(--font-mono)">
             {{ stats.total }}
           </div>
           <div class="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]">已收集反馈</div>
         </div>
         <div class="rounded-lg bg-[var(--color-surface)] p-3 text-center">
-          <div class="text-[20px] font-semibold tabular-nums text-[var(--color-text-primary)]" style="font-family: ui-monospace, monospace">
+          <div class="text-[20px] font-semibold tabular-nums text-[var(--color-text-primary)]" style="font-family: var(--font-mono)">
             {{ stats.used }}
           </div>
           <div class="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]">已用于训练</div>
@@ -324,7 +324,7 @@ onMounted(refreshStats)
           'border-[var(--color-border)] text-[var(--color-text-tertiary)]',
         ]"
       >
-        <span style="font-family: ui-monospace, monospace">{{ trainingMessage }}</span>
+        <span style="font-family: var(--font-mono)">{{ trainingMessage }}</span>
       </div>
     </div>
 
@@ -345,7 +345,7 @@ onMounted(refreshStats)
         </div>
         <div
           class="flex items-center gap-4 text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >
           <span>{{ record.samples }} samples</span>
           <span>{{ record.duration }}</span>

@@ -1437,7 +1437,7 @@ const projectMenuData = computed(() => {
         <span
           v-if="expanded && activeSessionCount > 0"
           class="ml-auto text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
-          style="fontFamily: ui-monospace, 'SF Mono', monospace"
+          style="fontFamily: var(--font-mono)"
         >{{ activeSessionCount }}</span>
       </button>
 
@@ -1484,7 +1484,7 @@ const projectMenuData = computed(() => {
         type="button"
         @click="navMoreOpen = !navMoreOpen"
         class="group flex h-7 items-center gap-1.5 px-2 text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors"
-        style="fontFamily: ui-monospace, 'SF Mono', monospace"
+        style="fontFamily: var(--font-mono)"
         :aria-expanded="navMoreOpen"
         :aria-label="t(navMoreOpen ? 'sidebar.less' : 'sidebar.more')"
       >

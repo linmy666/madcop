@@ -151,7 +151,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   max-width: 360px;
   max-height: 300px;
   overflow-y: auto;
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
 }

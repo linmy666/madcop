@@ -164,7 +164,7 @@ function copyText(text: string) {
       <!-- Model chips -->
       <div class="mt-3 flex flex-wrap items-center gap-2">
         <span class="text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]"
-              style="font-family: ui-monospace, 'SF Mono', monospace">models</span>
+              style="font-family: var(--font-mono)">models</span>
         <button
           v-for="m in availableModels"
           :key="m.model"
@@ -201,7 +201,7 @@ function copyText(text: string) {
       class="border-b border-[var(--color-border-separator)] bg-[var(--color-surface-container-low)] px-6 py-2"
     >
       <div class="flex items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]"
-           style="font-family: ui-monospace, 'SF Mono', monospace">
+           style="font-family: var(--font-mono)">
         <span class="rounded bg-[var(--color-success)]/10 px-1.5 py-0.5 text-[var(--color-success)]">memory injected</span>
         <span>系统提示词 {{ sysPromptSize }} 字符 · 所有模型共享同一份</span>
       </div>
@@ -212,7 +212,7 @@ function copyText(text: string) {
       <div v-if="results.length === 0" class="flex h-full flex-col items-center justify-center">
         <div class="text-[12px] text-[var(--color-text-tertiary)]">输入问题并选择模型，点击"运行"</div>
         <div class="mt-1 text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)] opacity-50"
-             style="font-family: ui-monospace, 'SF Mono', monospace">multi-llm · parallel</div>
+             style="font-family: var(--font-mono)">multi-llm · parallel</div>
       </div>
 
       <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -233,7 +233,7 @@ function copyText(text: string) {
               <span
                 v-if="r.ok"
                 class="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
-                style="font-family: ui-monospace, 'SF Mono', monospace"
+                style="font-family: var(--font-mono)"
               >
                 {{ r.elapsed_sec }}s
               </span>
@@ -262,7 +262,7 @@ function copyText(text: string) {
           <!-- Footer: rating -->
           <div v-if="r.ok" class="flex items-center gap-3 border-t border-[var(--color-border-separator)] px-4 py-2.5">
             <span class="text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]"
-                  style="font-family: ui-monospace, 'SF Mono', monospace">rate</span>
+                  style="font-family: var(--font-mono)">rate</span>
             <button
               v-for="n in 5"
               :key="n"

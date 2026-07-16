@@ -136,7 +136,7 @@ function openInBrowser() {
 
 .preview-url {
   font-size: 10px;
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   color: var(--color-text-tertiary, #999);
   white-space: nowrap;
   overflow: hidden;

@@ -351,7 +351,7 @@ onMounted(loadAll)
       <div class="mb-2 text-[12px] font-semibold text-[var(--color-text-primary)]">资源消耗预估</div>
       <div
         class="grid grid-cols-3 gap-3 text-[11px]"
-        style="font-family: ui-monospace, 'SF Mono', monospace"
+        style="font-family: var(--font-mono)"
       >
         <div class="rounded-lg bg-[var(--color-surface-container)] p-2 text-center">
           <div class="text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]">训练时间</div>
@@ -385,7 +385,7 @@ onMounted(loadAll)
         {{ l.label }}
         <span
           class="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[10px] tabular-nums"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >
           {{ l.count() }}
         </span>
@@ -427,18 +427,18 @@ onMounted(loadAll)
         <span
           v-if="p.source === 'manual'"
           class="shrink-0 rounded bg-[var(--color-success)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-success)]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >手动</span>
         <span
           v-else
           class="shrink-0 rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-tertiary)]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >{{ Math.round(p.confidence * 100) }}%</span>
         <div class="flex-1 min-w-0">
           <p class="text-[13px] text-[var(--color-text-primary)]">{{ p.content }}</p>
           <div
             class="mt-1 flex items-center gap-3 text-[10px] text-[var(--color-text-tertiary)]"
-            style="font-family: ui-monospace, 'SF Mono', monospace"
+            style="font-family: var(--font-mono)"
           >
             <span>{{ formatRelative(p.createdAt) }}</span>
             <span v-if="p.usedCount > 0">· 已用 {{ p.usedCount }} 次</span>
@@ -465,7 +465,7 @@ onMounted(loadAll)
       >
         <div
           class="mb-1.5 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >
           <span>{{ LAYER_LABEL[layer] }}</span>
           <span class="h-px flex-1 bg-[var(--color-border-separator)]"></span>
@@ -480,7 +480,7 @@ onMounted(loadAll)
             <span
               class="shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums"
               :class="layer === 'insight' ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'"
-              style="font-family: ui-monospace, 'SF Mono', monospace"
+              style="font-family: var(--font-mono)"
             >
               {{ Math.round(r.relevance * 100) }}%
             </span>
@@ -488,7 +488,7 @@ onMounted(loadAll)
               <p class="text-[13px] text-[var(--color-text-primary)]">{{ r.content }}</p>
               <p
                 class="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]"
-                style="font-family: ui-monospace, 'SF Mono', monospace"
+                style="font-family: var(--font-mono)"
               >{{ formatRelative(r.createdAt) }}</p>
             </div>
             <button
@@ -518,13 +518,13 @@ onMounted(loadAll)
             'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider',
             p.kind === 'likes' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-text-tertiary)]/10 text-[var(--color-text-tertiary)]',
           ]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >{{ p.kind === 'likes' ? '喜欢' : '不喜欢' }}</span>
         <div class="flex-1 min-w-0">
           <p class="text-[13px] text-[var(--color-text-primary)]">{{ p.text }}</p>
           <div
             class="mt-1 flex items-center gap-3 text-[10px] text-[var(--color-text-tertiary)]"
-            style="font-family: ui-monospace, 'SF Mono', monospace"
+            style="font-family: var(--font-mono)"
           >
             <span>强度 {{ Math.round(p.strength * 100) }}%</span>
             <span>·</span>
@@ -556,14 +556,14 @@ onMounted(loadAll)
             'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium',
             s.source === 'auto-distilled' ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'bg-[var(--color-surface-container)] text-[var(--color-text-secondary)]',
           ]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >{{ s.source === 'auto-distilled' ? '自动提炼' : '手动创建' }}</span>
         <div class="flex-1 min-w-0">
           <p class="text-[13px] font-medium text-[var(--color-text-primary)]">{{ s.name }}</p>
           <p class="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">{{ s.description }}</p>
           <p
             class="mt-1 text-[10px] text-[var(--color-text-tertiary)]"
-            style="font-family: ui-monospace, 'SF Mono', monospace"
+            style="font-family: var(--font-mono)"
           >已用 {{ s.triggered }} 次</p>
         </div>
         <button
@@ -603,7 +603,7 @@ onMounted(loadAll)
       <div class="flex items-center gap-3 text-[11px] text-[var(--color-text-tertiary)]">
         <span
           class="rounded bg-[var(--color-success)]/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-success)]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >local only</span>
         <span>所有数据存储于本地。永远不会离开你的 Mac。</span>
       </div>

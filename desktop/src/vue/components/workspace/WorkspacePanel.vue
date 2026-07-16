@@ -352,7 +352,7 @@ onUnmounted(() => {
   background: transparent;
   color: var(--color-text-primary);
   font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   transition: background 0.08s, border-color 0.08s;
   cursor: pointer;
   outline: none;

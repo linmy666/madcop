@@ -411,7 +411,7 @@ function fmtContext(n: number | null | undefined) {
           </div>
         </div>
         <div class="provider-card__details">
-          <span class="provider-card__detail" style="font-family: ui-monospace, monospace;">{{ p.base_url }}</span>
+          <span class="provider-card__detail" style="font-family: var(--font-mono);">{{ p.base_url }}</span>
           <span class="provider-card__detail" v-if="p.has_key">Key: {{ maskKey(p.api_key_masked) }}</span>
           <span class="provider-card__detail provider-card__detail--warn" v-else>未配置 API Key</span>
           <span class="provider-card__detail">{{ authLabel(p.auth_strategy) }}</span>
@@ -683,7 +683,7 @@ function fmtContext(n: number | null | undefined) {
   font-size: 11px;
   color: var(--color-text-tertiary);
   margin-top: 2px;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 .provider-card__actions {
   display: flex;

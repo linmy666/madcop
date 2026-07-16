@@ -898,7 +898,7 @@ export default { methods: { getModelLabel, getNodeDescription, getNodeConfig, ha
 }
 .workflow-template-card__meta {
   font-size: 9px; color: var(--color-text-tertiary);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .workflow-node-chip {
@@ -952,7 +952,7 @@ export default { methods: { getModelLabel, getNodeDescription, getNodeConfig, ha
   outline: none; border-color: var(--color-brand);
 }
 .workflow-textarea {
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px; resize: vertical;
 }
 </style>

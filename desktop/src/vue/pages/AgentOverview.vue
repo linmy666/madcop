@@ -239,7 +239,7 @@ async function simulateRun() {
       <!-- Graph theory metrics, engineer style -->
       <div
         class="flex items-center gap-5 text-[11px] tabular-nums text-[var(--color-text-tertiary)]"
-        style="font-family: ui-monospace, 'SF Mono', monospace"
+        style="font-family: var(--font-mono)"
       >
         <span>{{ graphMetrics.n }} nodes</span>
         <span>{{ graphMetrics.e }} edges</span>
@@ -257,7 +257,7 @@ async function simulateRun() {
     <div class="flex items-center gap-1 border-b border-[var(--color-border-separator)] px-6 py-2.5">
       <span
         class="mr-3 text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]"
-        style="font-family: ui-monospace, 'SF Mono', monospace"
+        style="font-family: var(--font-mono)"
       >
         拓扑
       </span>
@@ -306,7 +306,7 @@ async function simulateRun() {
         <div class="mb-4">
           <div
             class="text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]"
-            style="font-family: ui-monospace, 'SF Mono', monospace"
+            style="font-family: var(--font-mono)"
           >
             节点配置
           </div>
@@ -341,7 +341,7 @@ async function simulateRun() {
             >
               <div class="text-[12px] text-[var(--color-text-secondary)]">尚未配置模型</div>
               <div class="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
-                请在 <span style="font-family: ui-monospace, monospace">设置</span> 中添加
+                请在 <span style="font-family: var(--font-mono)">设置</span> 中添加
               </div>
             </div>
           </div>
@@ -350,7 +350,7 @@ async function simulateRun() {
         <!-- Node info in monospace -->
         <div
           class="rounded-lg bg-[var(--color-surface)] p-3 text-[10px] text-[var(--color-text-tertiary)]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >
           <div class="flex justify-between py-0.5">
             <span>id</span>
@@ -376,7 +376,7 @@ async function simulateRun() {
           <div class="text-[12px] text-[var(--color-text-tertiary)]">点击图中的节点进行配置</div>
           <div
             class="mt-2 text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)] opacity-50"
-            style="font-family: ui-monospace, 'SF Mono', monospace"
+            style="font-family: var(--font-mono)"
           >
             select a node ○
           </div>

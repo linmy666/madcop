@@ -504,7 +504,7 @@ function formatRelative(ts: number): string {
 .design-meta {
   font-size: 11px;
   color: var(--color-text-tertiary);
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* ── Buttons ───────────────────────────────────────── */

@@ -51,7 +51,7 @@ onMounted(loadSettings)
       <input
         v-model="shellPath"
         type="text"
-        style="width: 200px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 12px; background: var(--color-surface); color: var(--color-text-primary); font-family: ui-monospace, monospace;"
+        style="width: 200px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 12px; background: var(--color-surface); color: var(--color-text-primary); font-family: var(--font-mono);"
         @change="saveSetting('shellPath', shellPath)"
       />
     </div>

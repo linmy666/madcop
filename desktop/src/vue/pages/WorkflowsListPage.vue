@@ -536,7 +536,7 @@ const handleBack = async () => {
             <div style="font-size: 11px; font-weight: 500; margin-bottom: 6px; color: var(--color-text-tertiary);">
               结果
             </div>
-            <pre style="margin: 0; white-space: pre-wrap; font-size: 12px; font-family: ui-monospace, monospace; max-height: 300px; overflow-y: auto;">{{ invokeResult }}</pre>
+            <pre style="margin: 0; white-space: pre-wrap; font-size: 12px; font-family: var(--font-mono); max-height: 300px; overflow-y: auto;">{{ invokeResult }}</pre>
           </div>
 
           <div v-if="invokeError" style="margin-top: 12px; padding: 8px 10px; background: color-mix(in srgb, var(--color-error) 10%, transparent); border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent); border-radius: 4px; font-size: 12px; color: var(--color-error);">

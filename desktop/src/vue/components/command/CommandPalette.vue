@@ -267,7 +267,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           />
           <kbd
             class="ml-3 shrink-0 rounded border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
-            style="font-family: ui-monospace, 'SF Mono', monospace"
+            style="font-family: var(--font-mono)"
           >
             Esc
           </kbd>
@@ -280,7 +280,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <!-- Group header: monospace uppercase, like a section in a spec doc -->
               <div
                 class="px-4 py-1 text-[10px] uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]"
-                style="font-family: ui-monospace, 'SF Mono', monospace"
+                style="font-family: var(--font-mono)"
               >
                 {{ group.label }}
               </div>
@@ -307,7 +307,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 <span
                   v-if="item.detail"
                   class="mr-3 text-[11px] text-[var(--color-text-tertiary)]"
-                  style="font-family: ui-monospace, 'SF Mono', monospace"
+                  style="font-family: var(--font-mono)"
                 >
                   {{ item.detail }}
                 </span>
@@ -315,7 +315,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 <kbd
                   v-if="item.shortcut"
                   class="shrink-0 text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
-                  style="font-family: ui-monospace, 'SF Mono', monospace"
+                  style="font-family: var(--font-mono)"
                 >
                   {{ item.shortcut }}
                 </kbd>
@@ -328,7 +328,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <div class="text-[13px] text-[var(--color-text-tertiary)]">无匹配结果</div>
             <div
               class="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)] opacity-60"
-              style="font-family: ui-monospace, 'SF Mono', monospace"
+              style="font-family: var(--font-mono)"
             >
               ∅ empty set
             </div>
@@ -338,7 +338,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <!-- Footer — keyboard hints -->
         <div
           class="flex items-center justify-between border-t border-[var(--color-border-separator)] px-4 py-2 text-[10px] text-[var(--color-text-tertiary)]"
-          style="font-family: ui-monospace, 'SF Mono', monospace"
+          style="font-family: var(--font-mono)"
         >
           <div class="flex items-center gap-3">
             <span><kbd class="font-sans">↑↓</kbd> 导航</span>

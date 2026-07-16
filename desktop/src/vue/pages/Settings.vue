@@ -387,7 +387,7 @@ onMounted(loadLearning)
                   'text-[11px]',
                   learningTrainingStatus === 'failed' ? 'training-msg--error' : 'training-msg--ok',
                 ]"
-                style="font-family: ui-monospace, monospace"
+                style="font-family: var(--font-mono)"
               >{{ learningTrainingMessage }}</span>
             </div>
           </div>
@@ -418,7 +418,7 @@ onMounted(loadLearning)
           </div>
 
           <div class="privacy-banner">
-            <span style="font-family: ui-monospace, monospace">local only</span>
+            <span style="font-family: var(--font-mono)">local only</span>
             <span>数据存储于 <code>~/Library/MadCop/training_data/</code></span>
           </div>
         </div>
@@ -694,7 +694,7 @@ export default { components: { Toggle } }
 .learning-history__date { color: var(--color-text-primary); }
 .learning-history__meta {
   color: var(--color-text-tertiary);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   margin-left: auto;
 }
@@ -711,7 +711,7 @@ export default { components: { Toggle } }
   gap: 12px;
 }
 .privacy-banner code {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   padding: 1px 4px;
   background: var(--color-surface);
