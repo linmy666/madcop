@@ -1258,6 +1258,81 @@ def create_app() -> FastAPI:
         except Exception:
             return None
 
+    async def _stream_phase1(client, messages, body, tools, result_holder):
+        """Stream the initial (tool-routing) LLM call AND accumulate tool
+        calls, so the user sees reasoning/text live instead of staring at a
+        spinner during the buffered Phase-1.
+
+        Yields SSE strings (text/reasoning) as tokens arrive. Writes the
+        reconstructed ChatResponse (with .content and .tool_calls) into
+        result_holder['resp'] (or result_holder['error']) so the caller can
+        branch on tool use exactly as the old client.chat() path did. Tool-
+        call arguments arrive as streamed JSON fragments and are accumulated
+        by index, then json-parsed at the end (standard OpenAI streaming)."""
+        import asyncio as _a
+        loop = _a.get_event_loop()
+        q: asyncio.Queue = asyncio.Queue(maxsize=64)
+        sentinel = object()
+
+        def _produce():
+            try:
+                acc_text = []
+                # tool_calls accumulator: index -> {id, name, arguments(str)}
+                tc_acc: dict[int, dict] = {}
+                emitted_model = ""
+                for chunk in client.stream(
+                    messages,
+                    model=body.model,
+                    temperature=body.temperature,
+                    tools=tools,
+                    effort=body.effort,
+                ):
+                    if chunk.reasoning:
+                        q.put_nowait(f"data: {json.dumps({'type': 'reasoning', 'content': chunk.reasoning}, ensure_ascii=False)}\n\n")
+                    if chunk.text:
+                        acc_text.append(chunk.text)
+                        q.put_nowait(f"data: {json.dumps({'type': 'text', 'content': chunk.text}, ensure_ascii=False)}\n\n")
+                    if chunk.model and not emitted_model:
+                        emitted_model = chunk.model
+                    for d in chunk.tool_call_deltas:
+                        idx = d.get("index", 0)
+                        slot = tc_acc.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+                        if d.get("id"):
+                            slot["id"] = d["id"]
+                        if d.get("name"):
+                            slot["name"] = d["name"]
+                        if d.get("arguments"):
+                            slot["arguments"] += d["arguments"]
+                # Reconstruct the ChatResponse.
+                from madcop.llm.client import ChatResponse, ToolCall
+                tool_calls = []
+                for idx in sorted(tc_acc):
+                    slot = tc_acc[idx]
+                    try:
+                        args = json.loads(slot["arguments"]) if slot["arguments"] else {}
+                    except json.JSONDecodeError:
+                        args = {"_raw": slot["arguments"]}
+                    tool_calls.append(ToolCall(id=slot["id"] or f"call_{idx}", name=slot["name"], arguments=args))
+                result_holder["resp"] = ChatResponse(
+                    content="".join(acc_text),
+                    tool_calls=tuple(tool_calls),
+                    model=emitted_model,
+                )
+            except Exception as exc:
+                result_holder["error"] = str(exc)
+                q.put_nowait(f"data: {json.dumps({'type': 'error', 'message': f'LLM 调用失败: {exc}'}, ensure_ascii=False)}\n\n")
+            finally:
+                q.put_nowait(sentinel)
+
+        future = loop.run_in_executor(None, _produce)
+        while True:
+            item = await q.get()
+            if item is sentinel:
+                break
+            yield item
+        await future
+        # resp (or error) is now in result_holder for the caller to read.
+
     async def _stream_chunks(client, messages, body):
         """Yield SSE formatted strings from a streaming LLM call.
 
@@ -1734,16 +1809,17 @@ def create_app() -> FastAPI:
                             yield f"data: {json.dumps({'type': 'trace', 'node': tr.to_dict()}, ensure_ascii=False)}\n\n"
                         return
 
-                resp = await _loop.run_in_executor(
-                    None,
-                    lambda: client.chat(
-                        messages,
-                        model=body.model,
-                        temperature=body.temperature,
-                        tools=tool_schemas,
-                        effort=body.effort,
-                    ),
-                )
+                # Phase 1: stream the tool-routing call so reasoning + text
+                # appear live (previously this was a buffered client.chat()
+                # that left the UI blank until the whole call finished).
+                _p1_holder: dict = {}
+                async for sse in _stream_phase1(client, messages, body, tool_schemas, _p1_holder):
+                    yield sse
+                if "error" in _p1_holder:
+                    return  # error already emitted as SSE
+                resp = _p1_holder.get("resp")
+                if resp is None:
+                    return
 
                 # Mark phase 1 done
                 p1 = trace_store.get(phase1_node.id)
@@ -1751,10 +1827,9 @@ def create_app() -> FastAPI:
                     trace_store.mark_done(phase1_node.id, output=str(len(resp.tool_calls or [])) + " tool calls")
                     yield f"data: {json.dumps({'type': 'trace', 'node': p1.to_dict()}, ensure_ascii=False)}\n\n"
 
-                # No tool calls? Stream the text content normally.
+                # No tool calls? The text was already streamed during Phase 1
+                # (no need to re-stream — the old code re-called the model here).
                 if not resp.tool_calls:
-                    async for sse in _stream_chunks(client, messages, body):
-                        yield sse
                     # -- Memory extraction (async, debounced) ----------- #
                     # Don't block the response — schedule a background
                     # thread that respects the 30s debounce window.
@@ -1767,8 +1842,6 @@ def create_app() -> FastAPI:
                     try:
                         from madcop.agent.skill_forge import get_skill_store, auto_forge_from_conversation
                         user_msg = body.messages[-1].content if body.messages else ""
-                        # Reconstruct assistant text from SSE — easier: we don't have it here.
-                        # We'll just call the heuristic with a partial signal.
                         full_assistant = resp.content or ""
                         if full_assistant:
                             auto_forge_from_conversation(
@@ -1784,6 +1857,9 @@ def create_app() -> FastAPI:
                     if tr:
                         trace_store.mark_done(trace_root.id, output="completed")
                         yield f"data: {json.dumps({'type': 'trace', 'node': tr.to_dict()}, ensure_ascii=False)}\n\n"
+                    # Emit the terminal done event (Phase-1 streams text but
+                    # doesn't emit done itself, so the no-tool path must).
+                    yield f"data: {json.dumps({'type': 'done', 'model': resp.model or body.model or '', 'finish_reason': 'stop'}, ensure_ascii=False)}\n\n"
                     return
 
                 # Has tool calls — execute them, then do a second call.

@@ -80,6 +80,20 @@ class FakeToolClient:
     def stream(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None, effort=None):
         msgs = list(messages)
         self.stream_calls.append(msgs)
+        # First stream call is the Phase-1 tool-routing call: emit the
+        # tool_call as a delta so the streaming Phase-1 path can accumulate it.
+        if len(self.stream_calls) == 1 and tools:
+            yield StreamChunk(
+                model="test-model",
+                tool_call_deltas=({"index": 0, "id": "call_1", "name": "get_weather", "arguments": ""},),
+            )
+            yield StreamChunk(
+                model="test-model",
+                tool_call_deltas=({"index": 0, "arguments": '{"city": "Shanghai"}'},),
+            )
+            yield StreamChunk(finish_reason="tool_calls", model="test-model")
+            return
+        # Second call (final synthesis): stream the text answer.
         text = "The weather in Shanghai is 22°C and partly cloudy."
         yield StreamChunk(text=text, model="test-model")
         yield StreamChunk(finish_reason="stop", model="test-model")
@@ -136,6 +150,14 @@ class FakeMultiToolClient:
 
     def stream(self, messages, *, model=None, temperature=0.0, max_tokens=None, tools=None, effort=None):
         self.stream_calls.append(list(messages))
+        # Phase-1: emit both tool_calls as deltas (different indices).
+        if len(self.stream_calls) == 1 and tools:
+            yield StreamChunk(model="test-model", tool_call_deltas=({"index": 0, "id": "call_1", "name": "get_weather", "arguments": ""},))
+            yield StreamChunk(model="test-model", tool_call_deltas=({"index": 0, "arguments": '{"city": "Tokyo"}'},))
+            yield StreamChunk(model="test-model", tool_call_deltas=({"index": 1, "id": "call_2", "name": "echo", "arguments": ""},))
+            yield StreamChunk(model="test-model", tool_call_deltas=({"index": 1, "arguments": '{"text": "hello"}'},))
+            yield StreamChunk(finish_reason="tool_calls", model="test-model")
+            return
         yield StreamChunk(text="Done with both tools.", model="test-model")
         yield StreamChunk(finish_reason="stop", model="test-model")
 
@@ -285,12 +307,12 @@ def test_chat_endpoint_tool_flow_via_injection(tmp_path: Path, monkeypatch: pyte
     assert len(done_events) == 1
     assert done_events[0]["finish_reason"] == "stop"
 
-    # Verify the fake client was called twice (chat for tools, stream for final)
-    assert len(fake.chat_calls) == 1
-    assert len(fake.stream_calls) == 1
+    # Phase-1 (tool routing) now streams too, so both calls go through
+    # stream(); the Phase-2 (final synthesis) call carries the tool result.
+    assert len(fake.stream_calls) == 2
 
-    # The stream call should have the tool result message
-    stream_msgs = fake.stream_calls[0]
+    # The second stream call (Phase-2) should have the tool result message.
+    stream_msgs = fake.stream_calls[1]
     tool_msgs = [m for m in stream_msgs if m.role == "tool"]
     assert len(tool_msgs) == 1
     assert "Shanghai" in tool_msgs[0].content
@@ -365,7 +387,7 @@ def test_chat_endpoint_multi_tool_flow(tmp_path: Path, monkeypatch: pytest.Monke
     # Two results
     assert len(tool_result_events) == 2
 
-    # The second call should have both tool result messages
-    stream_msgs = fake.stream_calls[0]
+    # Phase-2 (second stream call) should have both tool result messages.
+    stream_msgs = fake.stream_calls[1]
     tool_msgs = [m for m in stream_msgs if m.role == "tool"]
     assert len(tool_msgs) == 2

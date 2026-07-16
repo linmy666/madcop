@@ -75,11 +75,17 @@ class StreamChunk:
     `reasoning` carries reasoning-model thinking tokens (e.g. MiniMax
     M2.7, DeepSeek R1) — optional, separate from final answer text.
     `finish_reason` is non-None on the final chunk.
+    `tool_call_deltas` carries incremental tool-call fragments when the
+    model is emitting a function call mid-stream; each is a dict like
+    {"index": 0, "id": "...", "name": "...", "arguments": "..."} where
+    only the fields present in this delta are set. Consumers accumulate
+    by index.
     """
     text: str = ""
     reasoning: str = ""
     finish_reason: str | None = None
     model: str = ""
+    tool_call_deltas: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -407,11 +413,28 @@ class OpenAICompatClient(ChatClient):
                 emitted_model = model_name
             if finish:
                 saw_finish = True
+            # Capture incremental tool-call fragments (OpenAI streams
+            # tool_calls as deltas: first chunk has id+name+empty args,
+            # subsequent chunks append to arguments). Forward each so the
+            # caller can accumulate by index.
+            tc_deltas: tuple = ()
+            raw_tcs = getattr(delta, "tool_calls", None)
+            if raw_tcs:
+                tc_deltas = tuple(
+                    {
+                        "index": getattr(tc, "index", 0),
+                        "id": getattr(tc, "id", None),
+                        "name": getattr(getattr(tc, "function", None), "name", None),
+                        "arguments": getattr(getattr(tc, "function", None), "arguments", None),
+                    }
+                    for tc in raw_tcs
+                )
             yield StreamChunk(
                 text=text,
                 reasoning=reasoning,
                 finish_reason=finish,
                 model=emitted_model,
+                tool_call_deltas=tc_deltas,
             )
         # Defensive: if the provider forgot to emit a finish_reason,
         # synthesise one so downstream consumers can finalise.
