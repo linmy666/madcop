@@ -2110,6 +2110,32 @@ def create_app() -> FastAPI:
                     if tr:
                         trace_store.mark_done(trace_root.id, output="completed")
                         yield f"data: {json.dumps({'type': 'trace', 'node': tr.to_dict()}, ensure_ascii=False)}\n\n"
+                    # -- Auto-detect HTML in the answer and write it to the
+                    # preview directory so the live preview panel picks it
+                    # up. Many models output a complete HTML page as a code
+                    # block instead of calling write_file — this catch-all
+                    # makes the preview work regardless. Only triggers for
+                    # self-contained HTML (has <html> or <!DOCTYPE>).
+                    try:
+                        import re as _re_html
+                        _full = resp.content or ""
+                        _m = _re_html.search(
+                            r"(<!DOCTYPE html|<html[\s>])",
+                            _full,
+                            _re_html.IGNORECASE,
+                        )
+                        if _m:
+                            # Extract from the match to the last </html>
+                            _start = _m.start()
+                            _end_idx = _full.rfind("</html>")
+                            _html = _full[_start:_end_idx + 7 if _end_idx > _start else None].strip()
+                            if len(_html) > 50:
+                                _preview_path = Path.home() / ".madcop" / "preview" / "index.html"
+                                _preview_path.parent.mkdir(parents=True, exist_ok=True)
+                                _preview_path.write_text(_html, encoding="utf-8")
+                                yield f"data: {json.dumps({'type': 'preview_update', 'path': str(_preview_path)}, ensure_ascii=False)}\n\n"
+                    except Exception:
+                        pass
                     # Emit the terminal done event (Phase-1 streams text but
                     # doesn't emit done itself, so the no-tool path must).
                     yield f"data: {json.dumps({'type': 'done', 'model': resp.model or body.model or '', 'finish_reason': 'stop'}, ensure_ascii=False)}\n\n"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { getApiUrl } from '../../api/client'
 
 const props = defineProps<{
@@ -9,27 +9,22 @@ const props = defineProps<{
 const previewUrl = ref(getApiUrl('/preview/'))
 const loading = ref(true)
 const error = ref<string | null>(null)
-let refreshTimer: ReturnType<typeof setInterval> | null = null
 
-// Auto-refresh: poll the iframe every 2s to check if content changed
+// Reload the iframe with a cache-busting query param. Called on mount,
+// on manual refresh, and when refreshKey changes (driven by the
+// preview_update SSE event — no more 2s polling that caused flicker).
 function reloadPreview() {
   loading.value = true
   error.value = null
-  // Bump a cache-busting param so the iframe doesn't cache
   previewUrl.value = getApiUrl('/preview/') + '?t=' + Date.now()
-  loading.value = false
 }
 
-// Auto-refresh every 2s to pick up agent writes
 onMounted(() => {
-  refreshTimer = setInterval(reloadPreview, 2000)
+  reloadPreview()
 })
 
-onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer)
-})
-
-// Manual refresh trigger
+// Refresh when the backend signals a preview_update (AI wrote a file),
+// or when the user clicks the refresh button.
 watch(() => props.refreshKey, () => {
   reloadPreview()
 })
