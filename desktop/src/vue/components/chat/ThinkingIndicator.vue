@@ -264,7 +264,7 @@ const elapsedText = computed(() => {
 }
 
 .font-hand {
-  font-family: 'Bradley Hand', 'Comic Sans MS', 'Marker Felt', cursive;
+  font-family: var(--font-body);
   font-style: italic;
   letter-spacing: 0.2px;
 }

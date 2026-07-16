@@ -349,7 +349,7 @@ watch(() => props.selectedModel, (val) => {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-dropdown);
   z-index: 100;
   padding: 4px;
 }
