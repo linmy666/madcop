@@ -273,7 +273,7 @@ onUnmounted(() => {
             dy="14"
             class="node-detail"
             :fill="node.status === 'idle' ? 'var(--color-text-tertiary)' : 'rgba(255,255,255,0.7)'"
-            style="font-family: ui-monospace, 'SF Mono', monospace"
+            style="font-family: var(--font-mono)"
           >
             {{ node.detail }}
           </text>
@@ -311,7 +311,7 @@ onUnmounted(() => {
 }
 .edge-label {
   font-size: 9px;
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   pointer-events: none;
   user-select: none;
 }

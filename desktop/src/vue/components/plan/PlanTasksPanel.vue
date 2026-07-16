@@ -187,7 +187,7 @@ function truncate(s: string | null, max = 36): string {
 .tp__count {
   font-size: 10px;
   color: var(--color-text-tertiary, #888);
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   transition: opacity 0.15s;
 }
 .tp__count-slash {

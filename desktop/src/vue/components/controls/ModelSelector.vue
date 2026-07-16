@@ -325,11 +325,11 @@ watch(() => props.selectedModel, (val) => {
 .model-selector--disabled { opacity: 0.5; cursor: not-allowed; }
 .model-selector__label {
   white-space: nowrap;
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 .model-selector__context {
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   padding: 0 4px;
   background: var(--color-surface-container);
@@ -415,12 +415,12 @@ watch(() => props.selectedModel, (val) => {
   background: var(--color-surface-container);
   border-radius: 4px;
   color: var(--color-text-tertiary);
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
 }
 .model-selector__item-id {
   font-size: 10px;
   color: var(--color-text-tertiary);
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   margin-top: 2px;
 }
 
@@ -437,7 +437,7 @@ watch(() => props.selectedModel, (val) => {
   color: var(--color-text-tertiary);
 }
 .model-selector__context-value {
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   color: var(--color-text-primary);
   font-weight: 500;
 }
@@ -472,7 +472,7 @@ watch(() => props.selectedModel, (val) => {
   border-radius: 4px;
   padding: 3px 6px;
   font-size: 11px;
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   color: var(--color-text-primary);
   outline: none;
 }

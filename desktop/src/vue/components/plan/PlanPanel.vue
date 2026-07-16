@@ -156,7 +156,7 @@ function toolBadge(tool: string | null): string {
   font-size: 11px;
   color: var(--color-text-tertiary, #999);
   white-space: nowrap;
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* ── Steps ── */
@@ -223,7 +223,7 @@ function toolBadge(tool: string | null): string {
   flex-wrap: wrap;
 }
 .plan-step__num {
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--color-text-tertiary, #999);
 }
@@ -234,7 +234,7 @@ function toolBadge(tool: string | null): string {
   border-radius: 3px;
   background: var(--color-surface-container, #eee);
   color: var(--color-text-tertiary, #888);
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
 }
 .tool-badge--has-tool {
   background: color-mix(in srgb, var(--color-info) 8%, transparent);

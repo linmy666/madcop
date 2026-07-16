@@ -85,7 +85,7 @@ const dashOffset = computed(() => circumference * (1 - percent.value / 100))
   color: var(--color-text-tertiary);
 }
 .context-indicator__pct {
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }

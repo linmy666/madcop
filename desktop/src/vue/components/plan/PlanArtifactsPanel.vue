@@ -182,7 +182,7 @@ const workingFilesList = computed(() => props.workingFiles || [])
 .ap__count {
   font-size: 10px;
   color: var(--color-text-tertiary, #999);
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .ap__body {
@@ -211,7 +211,7 @@ const workingFilesList = computed(() => props.workingFiles || [])
   padding: 6px 16px;
   font-size: 12px;
   color: var(--color-text-secondary, #555);
-  font-family: ui-monospace, 'SF Mono', monospace;
+  font-family: var(--font-mono);
   transition: background 0.1s;
 }
 .ap__path-row:hover {
