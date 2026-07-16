@@ -183,11 +183,15 @@ function initMermaid(theme: 'light' | 'dark'): { lineColor: string } {
 
   mermaid.initialize({
     startOnLoad: false,
-    theme: 'base',
-    htmlLabels: false,
+    // Use the built-in default/dark theme (not 'base' which renders near-
+    // blank unless every themeVariable is perfect). Override the key colors
+    // below so it still matches the app palette.
+    theme: isDark ? 'dark' : 'default',
+    htmlLabels: true,
     flowchart: {
-      htmlLabels: false,
+      htmlLabels: true,
       arrowMarkerAbsolute: true,
+      curve: 'basis',
     },
     themeVariables: {
       darkMode: isDark,
@@ -215,10 +219,11 @@ function initMermaid(theme: 'light' | 'dark'): { lineColor: string } {
       signalColor: mutedTextColor,
       activationBkgColor: nodeColor,
       activationBorderColor: accentColor,
+      fontFamily: "'Inter', system-ui, sans-serif",
     },
-    securityLevel: 'strict',
+    securityLevel: 'loose',
     suppressErrorRendering: true,
-    fontFamily: 'var(--font-sans)',
+    fontFamily: "'Inter', system-ui, sans-serif",
   })
 
   return { lineColor }

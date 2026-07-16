@@ -563,7 +563,17 @@ export const useChatStore = defineStore('chat', {
                       timestamp: Date.now(),
                       isPending: true,
                     }
-                    session.messages.push(toolMsg)
+                    // Insert BEFORE the assistant text placeholder if it was
+                    // already pushed (Phase-1 now streams text before deciding
+                    // to call tools, so a 'tool' event can arrive after text
+                    // started). This keeps tool cards above the answer.
+                    if (assistantPushed && assistantMsgObj) {
+                      const idx = session.messages.lastIndexOf(assistantMsgObj)
+                      if (idx >= 0) session.messages.splice(idx, 0, toolMsg)
+                      else session.messages.push(toolMsg)
+                    } else {
+                      session.messages.push(toolMsg)
+                    }
                   } else if (event.type === 'tool_result') {
                     // Tool returned — pair it with the matching pending
                     // tool_use and mark it as resolved so the UI shows ✓
@@ -589,6 +599,15 @@ export const useChatStore = defineStore('chat', {
                       session.activeToolName = null
                     }
                     session.activeToolUseId = null
+                    // After tool execution, the next 'text' events belong to
+                    // the Phase-2 synthesis (a fresh answer), so reset the
+                    // assistant placeholder. This starts a NEW assistant
+                    // bubble after the tool cards instead of appending to
+                    // the Phase-1 pre-tool text — keeping the timeline as
+                    // [phase-1 text] → [tool] → [tool_result] → [phase-2 answer].
+                    assistantPushed = false
+                    assistantMsgObj = null
+                    assistantMsg = ''
                   } else if (event.type === 'session_title' && event.title) {
                     // Backend-generated Claude-style title — replace the local
                     // heuristic title with a more meaningful one.
