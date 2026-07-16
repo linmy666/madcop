@@ -220,6 +220,22 @@ function togglePlanSidebar() {
     )
   } catch {}
 }
+
+// Toggle the right-side workbench panel (workspace files + live preview).
+// The panel has no other entry point, so this button is the only way to
+// open it. Auto-opens to browser mode when the AI writes a preview file.
+function toggleWorkbench() {
+  if (!activeTabId.value) return
+  if (workspacePanelStore.isPanelOpen(activeTabId.value)) {
+    workspacePanelStore.closePanel(activeTabId.value)
+  } else {
+    workspacePanelStore.openPanel(activeTabId.value)
+  }
+}
+const workbenchOpen = computed(() =>
+  activeTabId.value ? workspacePanelStore.isPanelOpen(activeTabId.value) : false
+)
+
 function onArtifactOpen(path: string) {
   // Best-effort: reveal in file manager on macOS via Electron desktopRuntime.
   // For now just emit to console + chat composer.
@@ -632,6 +648,24 @@ function openTerminalInTab() {
                 >
                   <span class="material-symbols-outlined text-[18px] leading-none">
                     {{ planSidebarEnabled ? 'task_alt' : 'task' }}
+                  </span>
+                </button>
+                <!-- Workbench / live preview toggle. Opens the right-side
+                     panel with workspace files + browser preview. -->
+                <button
+                  v-if="!isEmpty"
+                  type="button"
+                  :title="workbenchOpen ? '隐藏工作台' : '显示工作台 / 实时预览'"
+                  :class="[
+                    'flex shrink-0 items-center justify-center rounded-md p-1 transition-colors',
+                    workbenchOpen
+                      ? 'text-[var(--color-brand)] bg-[var(--color-brand)]/[0.08] hover:bg-[var(--color-brand)]/15'
+                      : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]'
+                  ]"
+                  @click.stop="toggleWorkbench"
+                >
+                  <span class="material-symbols-outlined text-[18px] leading-none">
+                    {{ workbenchOpen ? 'right_panel_close' : 'right_panel_open' }}
                   </span>
                 </button>
               </div>

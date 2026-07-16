@@ -675,8 +675,16 @@ export const useChatStore = defineStore('chat', {
                     // Plan stays in the session state for display
                   } else if (event.type === 'preview_update') {
                     // The AI wrote a file into ~/.madcop/preview/ — bump the
-                    // refresh key so the PreviewPanel reloads immediately.
+                    // refresh key so the PreviewPanel reloads immediately,
+                    // AND auto-open the right-side workbench in browser mode
+                    // so the user sees the result without manual steps.
                     session.previewRefreshKey = (session.previewRefreshKey || 0) + 1
+                    try {
+                      const { useWorkspacePanelStore } = await import('../stores/workspacePanelStore')
+                      const ws = useWorkspacePanelStore()
+                      ws.openPanel(sessionId)
+                      ws.setMode(sessionId, 'browser')
+                    } catch {}
                   } else if (event.type === 'error' && event.message) {
                     // Backend error (API error, rate limit, etc.)
                     pushChatError(event.message)
