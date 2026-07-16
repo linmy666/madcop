@@ -38,6 +38,8 @@ import ClarificationPanel from '../components/chat/ClarificationPanel.vue'
 import SessionTaskBar from '../components/chat/SessionTaskBar.vue'
 import MadCopLoader from '../components/common/MadCopLoader.vue'
 import WorkbenchPanel from '../components/workbench/WorkbenchPanel.vue'
+import WorkspacePanel from '../components/workspace/WorkspacePanel.vue'
+import PreviewPanel from '../components/design/PreviewPanel.vue'
 import TeamStatusBar from '../components/teams/TeamStatusBar.vue'
 import TerminalSettings from './TerminalSettings.vue'
 import type { ChatPermission } from '~/stores/permissionStore'
@@ -126,6 +128,8 @@ const hasIncompleteTasks = computed(() => cliTaskStore.tasks.some((task: any) =>
 const hasRunningTasks = computed(() => cliTaskStore.tasks.some((task: any) => task.status === 'in_progress'))
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
 const tokenUsage = computed(() => sessionState.value?.tokenUsage ?? { input_tokens: 0, output_tokens: 0 })
+// Bumps whenever the AI writes to the preview dir — drives PreviewPanel refresh.
+const previewRefreshKey = computed(() => sessionState.value?.previewRefreshKey ?? 0)
 const hasRunningBackgroundTasks = computed(() =>
   Object.values(sessionState.value?.backgroundAgentTasks ?? {}).some((task: any) => task.status === 'running')
 )
@@ -821,7 +825,14 @@ function openTerminalInTab() {
           class="flex h-full shrink-0 flex-col border-l border-[var(--color-border)] bg-[var(--color-surface)]"
           :style="{ width: rightPanelWidth, maxWidth: '62%', minWidth: 'min(420px, 54%)' }"
         >
-          <WorkbenchPanel :session-id="activeTabId" />
+          <WorkbenchPanel :session-id="activeTabId">
+            <template #workspace="{ sessionId }">
+              <WorkspacePanel :session-id="sessionId" embedded />
+            </template>
+            <template #browser>
+              <PreviewPanel :refresh-key="previewRefreshKey" />
+            </template>
+          </WorkbenchPanel>
         </aside>
       </template>
     </div>

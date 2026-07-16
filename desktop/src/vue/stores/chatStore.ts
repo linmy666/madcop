@@ -196,6 +196,9 @@ export type PerSessionState = {
   /** Deep-mode sub-agent streams: agent_id → { name, color, text, status }.
    *  Populated by agent_start/agent_token/agent_done SSE events. */
   agentStreams?: Record<string, { name: string; color: string; text: string; status: 'running' | 'done' | 'error'; elapsed_ms?: number }>
+  /** Increments each time the AI writes to the preview directory, so the
+   *  right-side PreviewPanel can refresh immediately instead of polling. */
+  previewRefreshKey?: number
 }
 
 function createDefaultSessionState(): PerSessionState {
@@ -444,8 +447,11 @@ export const useChatStore = defineStore('chat', {
             path: a.path,
             dataUrl: (a as any).previewUrl || (a as any).data,
           })),
-          temperature: 0.7,
-          max_tokens: 8192,
+          // Send null so the backend resolves temperature/max_tokens from
+          // the active provider's persisted config (set in Settings). The
+          // old hardcoded 0.7/8192 ignored whatever the user configured.
+          temperature: null,
+          max_tokens: null,
           conversation_id: sessionId,
           plan_mode: !!session.planModeEnabled,
           effort: _effort === 'auto' ? null : _effort,
@@ -667,6 +673,10 @@ export const useChatStore = defineStore('chat', {
                   } else if (event.type === 'plan_done') {
                     // Plan-and-Execute: all steps complete
                     // Plan stays in the session state for display
+                  } else if (event.type === 'preview_update') {
+                    // The AI wrote a file into ~/.madcop/preview/ — bump the
+                    // refresh key so the PreviewPanel reloads immediately.
+                    session.previewRefreshKey = (session.previewRefreshKey || 0) + 1
                   } else if (event.type === 'error' && event.message) {
                     // Backend error (API error, rate limit, etc.)
                     pushChatError(event.message)

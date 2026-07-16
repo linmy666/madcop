@@ -52,6 +52,19 @@ class ProviderInput(BaseModel):
     model: str = ""
     label: str = ""
     make_active: bool = True
+    # Extended fields — previously dropped by Pydantic at the API boundary,
+    # which is why editing them in the UI never persisted. Now round-tripped.
+    preset_id: str | None = None
+    api_format: str | None = None
+    auth_strategy: str | None = None
+    runtime_kind: str | None = None
+    tool_search_enabled: bool | None = None
+    notes: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    top_p: float | None = None
+    auto_compact_window: int | None = None
+    model_params: dict | None = None
 
 
 class FetchModelsRequest(BaseModel):
@@ -275,6 +288,7 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     model: str | None = None
     temperature: float = 0.7
+    max_tokens: int | None = None  # None = use provider config default
     conversation_id: str | None = None  # optional id for trace persistence
     skip_title_gen: bool = False  # set true to skip Claude-style auto title generation
     attachments: list[ChatAttachment] = []  # file/image attachments from the user
@@ -551,6 +565,17 @@ def _build_memory_system_prompt(
         "(e.g. attachment://att-1234-abc) to load the file's contents from the in-memory attachment store.\n"
         "Do NOT call read_file with a real OS path unless the user explicitly typed one — "
         "their file API path may not be readable on this machine."
+    )
+
+    parts.append(
+        "LIVE PREVIEW: When the user asks you to build a web page, UI, or any "
+        "HTML/CSS/JS that can be rendered, write the complete self-contained "
+        "file to ~/.madcop/preview/index.html using the write_file tool. The "
+        "app has a live preview panel that renders this file in real time — "
+        "the user sees the result instantly as you write. For multi-file "
+        "projects, inline all CSS/JS into a single index.html so the preview "
+        "works without a dev server. Re-write the file each time you make "
+        "changes so the preview refreshes."
     )
 
     return "\n\n".join(parts)
@@ -1167,9 +1192,34 @@ def create_app() -> FastAPI:
             model=body.model,
             label=body.label,
             make_active=body.make_active,
+            preset_id=body.preset_id,
+            api_format=body.api_format,
+            auth_strategy=body.auth_strategy,
+            runtime_kind=body.runtime_kind,
+            tool_search_enabled=body.tool_search_enabled,
+            notes=body.notes,
+            temperature=body.temperature,
+            max_tokens=body.max_tokens,
+            top_p=body.top_p,
+            auto_compact_window=body.auto_compact_window,
+            model_params=body.model_params,
         )
         settings_store.save_settings(s)
         return settings_store.settings_to_public_dict(s)
+
+    @app.get("/api/settings/agent-routing")
+    async def get_agent_routing() -> dict[str, Any]:
+        """Return per-agent model routing overrides for deep mode."""
+        s = settings_store.load_settings()
+        return {"agent_routing": s.agent_routing}
+
+    @app.put("/api/settings/agent-routing")
+    async def put_agent_routing(body: dict) -> dict[str, Any]:
+        """Persist per-agent model routing. Body: { "planner": {"model": "..."}, ... }"""
+        s = settings_store.load_settings()
+        s.agent_routing = body if isinstance(body, dict) else {}
+        settings_store.save_settings(s)
+        return {"agent_routing": s.agent_routing}
 
     @app.post("/api/settings/active")
     async def set_active_provider(body: SetActiveRequest) -> dict[str, Any]:
@@ -1420,6 +1470,48 @@ def create_app() -> FastAPI:
 
         client = _get_client()
         messages = [Message(role=m.role, content=m.content) for m in body.messages]
+
+        # Resolve sampling parameters from the active provider config. The
+        # frontend sends defaults (0.7 / 8192) when the user hasn't set a
+        # per-request override, so here we promote the provider's persisted
+        # temperature/max_tokens/top_p over those defaults. This is what
+        # makes the per-provider sampling settings in the UI actually take
+        # effect instead of being ignored.
+        try:
+            _prov_cfg = settings_store.get_active_client_config(settings_store.load_settings())
+            if _prov_cfg:
+                # Per-model overrides win over provider-level defaults.
+                _model_name = (body.model or _prov_cfg.get("model") or "").lower()
+                _overrides = (_prov_cfg.get("model_params") or {}).get(_model_name, {})
+                if _overrides:
+                    body.temperature = _overrides.get("temperature", body.temperature)
+                    if _overrides.get("max_tokens"):
+                        body.max_tokens = _overrides["max_tokens"]
+                else:
+                    body.temperature = _prov_cfg.get("temperature", body.temperature)
+                    if _prov_cfg.get("max_tokens"):
+                        body.max_tokens = _prov_cfg["max_tokens"]
+        except Exception:
+            pass
+        # Ensure max_tokens is always a concrete int — downstream code
+        # (e.g. context-window budget math) does arithmetic on it and
+        # None would raise TypeError. Fall back to the provider default
+        # or 8192 when nothing was resolved above.
+        if body.max_tokens is None:
+            try:
+                _pc = settings_store.get_active_client_config(settings_store.load_settings())
+                body.max_tokens = (_pc or {}).get("max_tokens") or 8192
+            except Exception:
+                body.max_tokens = 8192
+        # Same guarantee for temperature — the frontend may send null to
+        # mean "use provider default". If no provider default resolved,
+        # fall back to 0.7 (the historical default).
+        if body.temperature is None:
+            try:
+                _pc2 = settings_store.get_active_client_config(settings_store.load_settings())
+                body.temperature = (_pc2 or {}).get("temperature") or 0.7
+            except Exception:
+                body.temperature = 0.7
 
         # Convert text-only messages. Attachments' content is EXTRACTED
         # and appended directly to the user message so the LLM can read
@@ -2056,6 +2148,20 @@ def create_app() -> FastAPI:
                     trace_store.mark_done(tool_node.id, output=result_str[:200])
                     # Emit the tool result as an SSE event
                     yield f"data: {json.dumps({'type': 'tool_result', 'name': call.name, 'result': result_str}, ensure_ascii=False)}\n\n"
+                    # If the agent just wrote a file into the preview
+                    # directory, tell the frontend to refresh the live
+                    # preview immediately (instead of waiting for the
+                    # PreviewPanel's 2s poll).
+                    if call.name in ("write_file", "edit_file"):
+                        try:
+                            import json as _pj
+                            _args = call.arguments if isinstance(call.arguments, dict) else _pj.loads(call.arguments or "{}")
+                            _fp = str(_args.get("file_path") or _args.get("path") or "")
+                            _preview_dir = str(Path.home() / ".madcop" / "preview")
+                            if _fp and _preview_dir in _fp:
+                                yield f"data: {json.dumps({'type': 'preview_update', 'path': _fp}, ensure_ascii=False)}\n\n"
+                        except Exception:
+                            pass
                     # Emit trace update
                     tn = trace_store.get(tool_node.id)
                     if tn:

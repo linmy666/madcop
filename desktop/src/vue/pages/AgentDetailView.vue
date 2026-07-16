@@ -2,8 +2,9 @@
 // v3.0 — AgentDetailView (Vue 3 SFC translation from React Settings.tsx lines 3943-4090)
 // Agent detail page with header, description, detail stats, tools, and system prompt.
 
-import { computed } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useTranslation } from '../i18n'
+import { getApiUrl } from '../../api/client'
 
 // ─── Props ───────────────────────────────────────────────────
 interface Props {
@@ -30,6 +31,45 @@ interface Emits {
 const emit = defineEmits<Emits>()
 
 const t = useTranslation()
+
+// ─── Per-agent model routing ─────────────────────────────────
+// Each agent can override its model in deep mode. The override is stored
+// in settings.agent_routing { agentId: { model } } and read by build_engine.
+const editableModel = ref(props.agent.model || '')
+const modelSaved = ref(false)
+const modelSaving = ref(false)
+
+async function loadRouting() {
+  try {
+    const res = await fetch(getApiUrl('/api/settings/agent-routing'))
+    if (res.ok) {
+      const data = await res.json()
+      const route = (data.agent_routing || {})[props.agent.agentType]
+      if (route?.model) editableModel.value = route.model
+    }
+  } catch {}
+}
+onMounted(loadRouting)
+watch(() => props.agent.agentType, loadRouting)
+
+async function saveModel() {
+  modelSaving.value = true
+  try {
+    // Read current routing, update this agent, PUT back.
+    const getRes = await fetch(getApiUrl('/api/settings/agent-routing'))
+    const routing = getRes.ok ? (await getRes.json()).agent_routing || {} : {}
+    routing[props.agent.agentType] = { ...(routing[props.agent.agentType] || {}), model: editableModel.value }
+    await fetch(getApiUrl('/api/settings/agent-routing'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(routing),
+    })
+    modelSaved.value = true
+    setTimeout(() => { modelSaved.value = false }, 2000)
+  } catch {} finally {
+    modelSaving.value = false
+  }
+}
 
 // ─── Constants (from React lines 3705-3714) ─────────────────
 const AGENT_COLORS: Record<string, string> = {
@@ -175,13 +215,29 @@ const sourceLabel = computed(() => t(`settings.agents.source.${props.agent.sourc
             </div>
             <div class="mt-2 text-base font-semibold text-[var(--color-text-primary)] break-all">{{ sourceLabel }}</div>
           </div>
-          <!-- Model -->
+          <!-- Model — editable so the user can route this agent to a
+               different model in deep mode (e.g. planner→strong model,
+               researcher→cheap model). Saved to agent_routing. -->
           <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
             <div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
               <span class="material-symbols-outlined text-[14px]" style="fontVariationSettings: 'FILL' 1">psychology</span>
               <span>{{ t('settings.agents.summary.model') }}</span>
             </div>
-            <div class="mt-2 text-base font-semibold text-[var(--color-text-primary)] break-all">{{ props.agent.modelDisplay || '—' }}</div>
+            <input
+              v-model="editableModel"
+              type="text"
+              class="mt-2 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-2.5 py-1.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand)] focus:outline-none"
+              :placeholder="props.agent.modelDisplay || '模型名'"
+            />
+            <div class="mt-1.5 flex items-center justify-between">
+              <span class="text-[11px] text-[var(--color-text-tertiary)]">默认: {{ props.agent.modelDisplay || '—' }}</span>
+              <button
+                type="button"
+                @click="saveModel"
+                :disabled="modelSaving"
+                class="rounded-md bg-[var(--color-brand)] px-2.5 py-1 text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >{{ modelSaved ? '✓ 已保存' : modelSaving ? '保存中…' : '保存路由' }}</button>
+            </div>
           </div>
           <!-- Tools -->
           <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">

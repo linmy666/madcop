@@ -263,11 +263,17 @@ class AgentEngine:
             # string) so it doesn't pollute downstream synthesis.
             def _drain_once() -> str:
                 parts: list[str] = []
+                # Use provider-level sampling defaults (set by build_engine)
+                # instead of hardcoded 0.3 / 2048, so the temperature the
+                # user configured actually reaches the model.
+                _ps = getattr(self, "_provider_sampling", {})
+                _temp = _ps.get("temperature", 0.3)
+                _maxt = _ps.get("max_tokens", 2048)
                 for chunk in self.client.stream(
                     messages,
                     model=model or None,
-                    temperature=0.3,
-                    max_tokens=2048,
+                    temperature=_temp,
+                    max_tokens=_maxt,
                 ):
                     if chunk.text:
                         parts.append(chunk.text)
@@ -450,7 +456,15 @@ def build_network_for_task(user_input: str) -> dict:
 # ── Convenience: build engine from settings ────────────────────────── #
 
 def build_engine() -> AgentEngine:
-    """Build an AgentEngine using the active LLM client and built-in agents."""
+    """Build an AgentEngine using the active LLM client and built-in agents.
+
+    Per-agent model routing: if the user configured ``agent_routing`` in
+    settings (e.g. {"planner": {"model": "glm-5.2"}}), those model names
+    override each builtin agent's default ``model`` field. This lets the
+    user pick different models for different roles within the same
+    provider (e.g. strong model for planner, cheap model for researcher).
+    """
+    import copy
     from madcop.config import settings as settings_store
     from madcop.llm.client import OpenAICompatClient
 
@@ -472,6 +486,25 @@ def build_engine() -> AgentEngine:
     # Collect all known agents (builtin + installed)
     from madcop.agent_network.api import BUILTIN_AGENTS, _load, _AGENTS_FILE
     installed = _load(_AGENTS_FILE)
-    all_agents = BUILTIN_AGENTS + installed
+    all_agents = copy.deepcopy(BUILTIN_AGENTS) + installed
 
-    return AgentEngine(client, all_agents)
+    # Apply per-agent model routing overrides from settings. The routing
+    # table maps agent_id → {model, temperature, max_tokens}. Only the
+    # model override is applied here (same provider/client for all agents
+    # in this simplified version).
+    routing = getattr(s, "agent_routing", {}) or {}
+    for agent in all_agents:
+        aid = agent.get("id", "")
+        if aid in routing:
+            r = routing[aid]
+            if r.get("model"):
+                agent["model"] = r["model"]
+
+    engine = AgentEngine(client, all_agents)
+    # Stash provider-level sampling defaults so _execute_node can use the
+    # provider's temperature/max_tokens instead of hardcoded 0.3 / 2048.
+    engine._provider_sampling = {
+        "temperature": cfg.get("temperature", 0.3) if cfg else 0.3,
+        "max_tokens": cfg.get("max_tokens", 2048) if cfg else 2048,
+    }
+    return engine

@@ -29,6 +29,11 @@ interface Provider {
   auto_compact_window?: number
   notes?: string
   is_active?: boolean
+  // Sampling parameters (v2.7) — returned by GET /api/settings, edited in
+  // the form below, and applied by the backend chat handler.
+  temperature?: number
+  max_tokens?: number
+  top_p?: number
 }
 
 interface ProviderPreset {
@@ -90,6 +95,9 @@ const editForm = ref({
   tool_search_enabled: true,
   auto_compact_window: 0 as number,
   notes: '',
+  temperature: 0.7 as number,
+  max_tokens: 8192 as number,
+  top_p: 1.0 as number,
 })
 
 // Delete confirm
@@ -113,6 +121,9 @@ const createForm = ref({
   tool_search_enabled: true,
   auto_compact_window: 0 as number,
   notes: '',
+  temperature: 0.7 as number,
+  max_tokens: 8192 as number,
+  top_p: 1.0 as number,
 })
 
 // Fetched models (cached per base_url+api_key signature)
@@ -220,6 +231,11 @@ function buildPayload(form: typeof createForm.value | typeof editForm.value) {
     model: form.model || '',
     // keep the richer mapping consistent with the flat model
     models: { main: form.model || '', haiku: form.model || '', sonnet: form.model || '', opus: form.model || '' },
+    // Sampling parameters — persisted per provider so different models
+    // can use different temperatures (e.g. R1 at 0.6, code at 0.0).
+    temperature: form.temperature,
+    max_tokens: form.max_tokens,
+    top_p: form.top_p,
   }
   if (form.api_key) base.api_key = form.api_key
   if (form.preset_id) base.preset_id = form.preset_id
@@ -269,6 +285,9 @@ function openEdit(provider: Provider) {
     tool_search_enabled: provider.tool_search_enabled !== false,
     auto_compact_window: provider.auto_compact_window || 0,
     notes: provider.notes || '',
+    temperature: (provider as any).temperature ?? 0.7,
+    max_tokens: (provider as any).max_tokens ?? 8192,
+    top_p: (provider as any).top_p ?? 1.0,
   }
   showEditModal.value = true
 }
@@ -503,6 +522,24 @@ function fmtContext(n: number | null | undefined) {
             </div>
           </div>
 
+          <!-- Sampling parameters — per-provider defaults for the LLM call.
+               These replace the global hardcoded temperature=0.7/max_tokens=8192
+               that ignored whatever the user chose. -->
+          <div class="modal-grid-2">
+            <div class="modal-field">
+              <label class="modal-label">Temperature <span class="modal-hint">{{ createForm.temperature.toFixed(2) }}</span></label>
+              <input v-model.number="createForm.temperature" type="range" min="0" max="2" step="0.05" class="modal-input" />
+            </div>
+            <div class="modal-field">
+              <label class="modal-label">Max Tokens</label>
+              <input v-model.number="createForm.max_tokens" type="number" min="256" step="256" class="modal-input" placeholder="8192" />
+            </div>
+            <div class="modal-field">
+              <label class="modal-label">Top P <span class="modal-hint">{{ createForm.top_p.toFixed(2) }}</span></label>
+              <input v-model.number="createForm.top_p" type="range" min="0.1" max="1" step="0.05" class="modal-input" />
+            </div>
+          </div>
+
           <div class="modal-field" style="display: flex; align-items: center; gap: 8px;">
             <input type="checkbox" v-model="createForm.tool_search_enabled" id="create-toolsearch" />
             <label for="create-toolsearch" class="modal-label" style="margin: 0;">启用工具搜索 (Tool Search)</label>
@@ -594,6 +631,22 @@ function fmtContext(n: number | null | undefined) {
             <div class="modal-field">
               <label class="modal-label">自动压缩窗口 (token)</label>
               <input v-model.number="editForm.auto_compact_window" type="number" min="0" step="1000" class="modal-input" placeholder="0 = 默认" />
+            </div>
+          </div>
+
+          <!-- Sampling parameters (same as create form). -->
+          <div class="modal-grid-2">
+            <div class="modal-field">
+              <label class="modal-label">Temperature <span class="modal-hint">{{ editForm.temperature.toFixed(2) }}</span></label>
+              <input v-model.number="editForm.temperature" type="range" min="0" max="2" step="0.05" class="modal-input" />
+            </div>
+            <div class="modal-field">
+              <label class="modal-label">Max Tokens</label>
+              <input v-model.number="editForm.max_tokens" type="number" min="256" step="256" class="modal-input" placeholder="8192" />
+            </div>
+            <div class="modal-field">
+              <label class="modal-label">Top P <span class="modal-hint">{{ editForm.top_p.toFixed(2) }}</span></label>
+              <input v-model.number="editForm.top_p" type="range" min="0.1" max="1" step="0.05" class="modal-input" />
             </div>
           </div>
 

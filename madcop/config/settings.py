@@ -130,6 +130,17 @@ class ProviderSettings:
     runtime_kind: str = ""     # anthropic_compatible | openai_oauth
     tool_search_enabled: bool = True
     notes: str = ""
+    # Sampling parameters — per-provider defaults. The chat request can
+    # still override these per-call, but without persisted defaults every
+    # request was hardcoded to temperature=0.7 / max_tokens=8192.
+    temperature: float = 0.7
+    max_tokens: int = 8192
+    top_p: float = 1.0
+    auto_compact_window: int = 0   # 0 = disabled
+    # Per-model parameter overrides: { "deepseek-reasoner": {"temperature": 0.6}, ... }
+    # When the active model matches a key here, its values win over the
+    # provider-level defaults above. Lets users tune R1 vs V3 differently.
+    model_params: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -137,6 +148,9 @@ class Settings:
     """Root settings object."""
     active_provider: str = ""  # provider_id of the active entry
     providers: list[ProviderSettings] = field(default_factory=list)
+    # Per-agent model routing for deep mode: { "planner": {"model": "glm-5.2"}, ... }
+    # When empty, each builtin agent uses its own hardcoded model field.
+    agent_routing: dict = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -160,10 +174,16 @@ def _settings_from_dict(raw: dict[str, Any]) -> Settings:
             runtime_kind=p.get("runtime_kind", ""),
             tool_search_enabled=p.get("tool_search_enabled", True),
             notes=p.get("notes", ""),
+            temperature=p.get("temperature", 0.7),
+            max_tokens=p.get("max_tokens", 8192),
+            top_p=p.get("top_p", 1.0),
+            auto_compact_window=p.get("auto_compact_window", 0),
+            model_params=p.get("model_params", {}) or {},
         ))
     return Settings(
         active_provider=raw.get("active_provider", ""),
         providers=providers,
+        agent_routing=raw.get("agent_routing", {}) or {},
     )
 
 
@@ -186,6 +206,7 @@ def save_settings(settings: Settings, path: Path | str | None = None) -> Path:
     data = {
         "active_provider": settings.active_provider,
         "providers": [asdict(p) for p in settings.providers],
+        "agent_routing": settings.agent_routing,
     }
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     try:
@@ -202,7 +223,9 @@ def save_settings(settings: Settings, path: Path | str | None = None) -> Path:
 def settings_to_public_dict(settings: Settings) -> dict[str, Any]:
     """Build the dict returned by GET /api/settings.
 
-    Keys are MASKED — never expose plaintext to the frontend.
+    Keys are MASKED — never expose plaintext to the frontend. All
+    extended fields (sampling params, api_format, etc.) are returned so
+    the settings UI can round-trip them on edit.
     """
     providers_out = []
     for p in settings.providers:
@@ -214,11 +237,24 @@ def settings_to_public_dict(settings: Settings) -> dict[str, Any]:
             "model": p.model,
             "api_key_masked": _mask_key(plaintext_key),
             "has_key": bool(plaintext_key),
+            # Extended fields — needed for the edit form to show current values.
+            "preset_id": p.preset_id,
+            "api_format": p.api_format,
+            "auth_strategy": p.auth_strategy,
+            "runtime_kind": p.runtime_kind,
+            "tool_search_enabled": p.tool_search_enabled,
+            "notes": p.notes,
+            "temperature": p.temperature,
+            "max_tokens": p.max_tokens,
+            "top_p": p.top_p,
+            "auto_compact_window": p.auto_compact_window,
+            "model_params": p.model_params,
         })
     return {
         "active_provider": settings.active_provider,
         "providers": providers_out,
         "presets": PROVIDER_PRESETS,
+        "agent_routing": settings.agent_routing,
     }
 
 
@@ -231,11 +267,24 @@ def upsert_provider(
     model: str,
     label: str = "",
     make_active: bool = True,
+    # Extended fields — all optional, None means "leave unchanged".
+    preset_id: str | None = None,
+    api_format: str | None = None,
+    auth_strategy: str | None = None,
+    runtime_kind: str | None = None,
+    tool_search_enabled: bool | None = None,
+    notes: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    top_p: float | None = None,
+    auto_compact_window: int | None = None,
+    model_params: dict | None = None,
 ) -> Settings:
     """Add or update a provider entry. Returns the mutated Settings.
 
     If api_key is empty, preserves the existing key (so users can
-    update model without re-entering the key).
+    update model without re-entering the key). Extended fields that
+    are None on update are left unchanged.
     """
     existing: ProviderSettings | None = None
     for p in settings.providers:
@@ -243,20 +292,59 @@ def upsert_provider(
             existing = p
             break
 
-    if existing:
-        existing.base_url = base_url or existing.base_url
-        existing.model = model or existing.model
-        existing.label = label or existing.label
+    def _apply(p: ProviderSettings) -> None:
+        """Write all provided fields onto a provider entry."""
+        p.base_url = base_url or p.base_url
+        p.model = model or p.model
+        p.label = label or p.label
         if api_key:
-            existing.api_key = _encrypt(api_key)
+            p.api_key = _encrypt(api_key)
+        # Extended fields — only overwrite when a real value was passed.
+        if preset_id is not None:
+            p.preset_id = preset_id
+        if api_format is not None:
+            p.api_format = api_format
+        if auth_strategy is not None:
+            p.auth_strategy = auth_strategy
+        if runtime_kind is not None:
+            p.runtime_kind = runtime_kind
+        if tool_search_enabled is not None:
+            p.tool_search_enabled = tool_search_enabled
+        if notes is not None:
+            p.notes = notes
+        if temperature is not None:
+            p.temperature = temperature
+        if max_tokens is not None:
+            p.max_tokens = max_tokens
+        if top_p is not None:
+            p.top_p = top_p
+        if auto_compact_window is not None:
+            p.auto_compact_window = auto_compact_window
+        if model_params is not None:
+            p.model_params = model_params
+
+    if existing:
+        _apply(existing)
     else:
-        settings.providers.append(ProviderSettings(
+        new_p = ProviderSettings(
             provider_id=provider_id,
             base_url=base_url,
             api_key=_encrypt(api_key) if api_key else "",
             model=model,
             label=label or provider_id,
-        ))
+            preset_id=preset_id or provider_id,
+            api_format=api_format or "openai_chat",
+            auth_strategy=auth_strategy or "api_key",
+            runtime_kind=runtime_kind or "",
+            tool_search_enabled=tool_search_enabled if tool_search_enabled is not None else True,
+            notes=notes or "",
+            temperature=temperature if temperature is not None else 0.7,
+            max_tokens=max_tokens if max_tokens is not None else 8192,
+            top_p=top_p if top_p is not None else 1.0,
+            auto_compact_window=auto_compact_window if auto_compact_window is not None else 0,
+            model_params=model_params or {},
+        )
+        settings.providers.append(new_p)
 
     if make_active:
         settings.active_provider = provider_id
@@ -264,10 +352,12 @@ def upsert_provider(
     return settings
 
 
-def get_active_client_config(settings: Settings) -> dict[str, str] | None:
-    """Return {api_key, base_url, model} for the active provider.
+def get_active_client_config(settings: Settings) -> dict[str, Any] | None:
+    """Return the active provider's config for building a client.
 
-    Returns None if no active provider or no key configured.
+    Includes sampling defaults (temperature, max_tokens, top_p) and the
+    per-model override table so callers can resolve the right params for
+    the model actually in use. Returns None if no active/key configured.
     """
     if not settings.active_provider:
         return None
@@ -280,6 +370,11 @@ def get_active_client_config(settings: Settings) -> dict[str, str] | None:
                 "api_key": plaintext_key,
                 "base_url": p.base_url,
                 "model": p.model,
+                "temperature": p.temperature,
+                "max_tokens": p.max_tokens,
+                "top_p": p.top_p,
+                "auto_compact_window": p.auto_compact_window,
+                "model_params": p.model_params,
             }
     return None
 
