@@ -1681,7 +1681,7 @@ def create_app() -> FastAPI:
                                 yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                 except Exception as _am_err:
                     yield f"data: {json.dumps({'type': 'error', 'message': f'Agent 模式执行失败: {_am_err}'}, ensure_ascii=False)}\n\n"
-                trace_store.mark_completed(trace_root.id)
+                trace_store.mark_done(trace_root.id, output="deep mode completed")
                 yield f"data: {json.dumps({'type': 'done', 'model': body.model or ''}, ensure_ascii=False)}\n\n"
                 return
 
