@@ -95,11 +95,14 @@ async def add_knowledge(body: dict):
     item = {
         "id": str(uuid.uuid4())[:8],
         "agent_id": body.get("agent_id", ""),
+        "title": body.get("title", ""),
         "content": body.get("content", ""),
         "type": body.get("type", "text"),
+        "tags": body.get("tags", []),
+        "pinned": bool(body.get("pinned", False)),
         "createdAt": int(time.time()),
     }
-    items.append(item)
+    items.insert(0, item)
     _save(_KB_FILE, items)
     return item
 
@@ -117,7 +120,7 @@ async def update_knowledge(item_id: str, body: dict):
     items = _load(_KB_FILE)
     for item in items:
         if item["id"] == item_id:
-            for key in ("content", "type", "agent_id"):
+            for key in ("content", "type", "agent_id", "title", "tags", "pinned"):
                 if key in body:
                     item[key] = body[key]
             _save(_KB_FILE, items)

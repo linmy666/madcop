@@ -1,40 +1,59 @@
 <script setup lang="ts">
-// v3.0 — Knowledge Base: manage documents, context, and memory for agents.
-// Agents can reference this knowledge during conversations.
+// Knowledge Base: manage documents, context, and memory for agents.
+// Wired to the real /api/agents/knowledge backend (JSON-backed CRUD).
 
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { getApiUrl } from '../api/client'
 
 interface KnowledgeItem {
   id: string
   title: string
-  type: 'document' | 'url' | 'note' | 'code'
+  type: string            // 'document' | 'url' | 'note' | 'code' (free-form)
   content: string
   tags: string[]
-  size: string
-  updatedAt: string
   pinned: boolean
+  createdAt?: number
 }
 
-const items = ref<KnowledgeItem[]>([
-  { id: 'k1', title: 'MadCop 架构文档', type: 'document', content: '系统架构概览：Electron + Vue 3 + FastAPI...', tags: ['架构', '文档'], size: '24KB', updatedAt: '2026-07-04', pinned: true },
-  { id: 'k2', title: 'Agent 设计模式', type: 'document', content: '12 种 Google Agent 设计模式的实现...', tags: ['agent', '模式'], size: '16KB', updatedAt: '2026-07-03', pinned: true },
-  { id: 'k3', title: '菜鸟物流 API 文档', type: 'url', content: 'https://open.cainiao.com/docs', tags: ['工作', 'API'], size: '—', updatedAt: '2026-06-28', pinned: false },
-  { id: 'k4', title: 'Vue 3 迁移笔记', type: 'note', content: 'React → Vue 3 翻译规则总结...', tags: ['前端', 'Vue'], size: '8KB', updatedAt: '2026-07-05', pinned: false },
-  { id: 'k5', title: 'Python async 最佳实践', type: 'code', content: 'asyncio + aiohttp 模式...', tags: ['Python', '后端'], size: '12KB', updatedAt: '2026-06-20', pinned: false },
-])
-
+const items = ref<KnowledgeItem[]>([])
+const loading = ref(true)
 const search = ref('')
 const filterType = ref<'all' | 'document' | 'url' | 'note' | 'code'>('all')
 const showAdd = ref(false)
 const newItem = ref({ title: '', type: 'note' as KnowledgeItem['type'], content: '', tags: '' })
 
+async function load() {
+  loading.value = true
+  try {
+    const res = await fetch(getApiUrl('/api/agents/knowledge'))
+    if (res.ok) {
+      const data = await res.json()
+      items.value = (data.items || []).map((i: any) => ({
+        id: i.id,
+        title: i.title || deriveTitle(i.content),
+        type: i.type || 'note',
+        content: i.content || '',
+        tags: Array.isArray(i.tags) ? i.tags : [],
+        pinned: !!i.pinned,
+        createdAt: i.createdAt,
+      }))
+    }
+  } catch { /* keep empty */ } finally { loading.value = false }
+}
+
+function deriveTitle(content: string): string {
+  const firstLine = (content || '').split('\n')[0].trim()
+  return firstLine.slice(0, 40) || '未命名'
+}
+
+onMounted(load)
+
 const filtered = computed(() => {
   let pool = items.value
   if (filterType.value !== 'all') pool = pool.filter(i => i.type === filterType.value)
   const q = search.value.trim().toLowerCase()
-  if (q) pool = pool.filter(i => i.title.toLowerCase().includes(q) || i.tags.some(t => t.includes(q)))
-  // Pinned first
-  return [...pool].sort((a, b) => Number(b.pinned) - Number(a.pinned))
+  if (q) pool = pool.filter(i => i.title.toLowerCase().includes(q) || i.tags.some(t => t.toLowerCase().includes(q)) || i.content.toLowerCase().includes(q))
+  return [...pool].sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.createdAt || 0) - (a.createdAt || 0))
 })
 
 const typeIcons: Record<string, string> = {
@@ -44,27 +63,41 @@ const typeLabels: Record<string, string> = {
   document: '文档', url: '链接', note: '笔记', code: '代码'
 }
 
-function togglePin(id: string) {
-  const item = items.value.find(i => i.id === id)
-  if (item) item.pinned = !item.pinned
+async function togglePin(item: KnowledgeItem) {
+  const next = !item.pinned
+  item.pinned = next
+  try {
+    await fetch(getApiUrl(`/api/agents/knowledge/${item.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned: next }),
+    })
+  } catch { item.pinned = !next }
 }
 
-function deleteItem(id: string) {
+async function deleteItem(id: string) {
   items.value = items.value.filter(i => i.id !== id)
+  try { await fetch(getApiUrl(`/api/agents/knowledge/${id}`), { method: 'DELETE' }) } catch {}
 }
 
-function addItem() {
-  if (!newItem.value.title.trim()) return
-  items.value.unshift({
-    id: 'k' + Date.now(),
-    title: newItem.value.title,
+async function addItem() {
+  if (!newItem.value.title.trim() && !newItem.value.content.trim()) return
+  const payload = {
+    title: newItem.value.title.trim(),
     type: newItem.value.type,
     content: newItem.value.content,
-    tags: newItem.value.tags ? newItem.value.tags.split(',').map(t => t.trim()) : [],
-    size: newItem.value.content.length + 'B',
-    updatedAt: new Date().toISOString().slice(0, 10),
+    tags: newItem.value.tags ? newItem.value.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
     pinned: false,
-  })
+  }
+  try {
+    const res = await fetch(getApiUrl('/api/agents/knowledge'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      items.value.unshift({ ...created, title: created.title || payload.title, tags: payload.tags, pinned: false })
+    }
+  } catch {}
   newItem.value = { title: '', type: 'note', content: '', tags: '' }
   showAdd.value = false
 }
@@ -129,11 +162,11 @@ const totalSize = computed(() => items.value.length)
               <span v-if="item.pinned" class="material-symbols-outlined text-[14px] text-[var(--color-warning)]">push_pin</span>
             </div>
             <div class="kb-item__meta">
-              <span class="kb-item__type">{{ typeLabels[item.type] }}</span>
+              <span class="kb-item__type">{{ typeLabels[item.type] || item.type }}</span>
               <span class="kb-item__sep">·</span>
-              <span class="kb-item__size">{{ item.size }}</span>
+              <span class="kb-item__size">{{ item.content.length }}B</span>
               <span class="kb-item__sep">·</span>
-              <span class="kb-item__date">{{ item.updatedAt }}</span>
+              <span class="kb-item__date">{{ item.createdAt ? new Date(item.createdAt * 1000).toLocaleDateString() : '—' }}</span>
             </div>
             <div class="kb-item__tags">
               <span v-for="tag in item.tags" :key="tag" class="kb-item__tag">{{ tag }}</span>

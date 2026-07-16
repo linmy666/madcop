@@ -1,70 +1,38 @@
 <script setup lang="ts">
-// v3.0 — SkillBuilder: visual builder for creating custom skills.
-// MadCop-exclusive feature (React has no equivalent).
+// SkillBuilder: create/toggle/delete custom skills.
+// Wired to /api/agents/skills (extras/api.py, JSON-backed CRUD + toggle).
 
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { getApiUrl } from '../api/client'
 
 interface Skill {
   id: string
   name: string
   description: string
-  triggers: string[]  // keywords that activate this skill
-  steps: SkillStep[]
+  triggers: string[]
+  steps: any[]
   enabled: boolean
+  createdAt?: number
 }
 
-interface SkillStep {
-  type: 'prompt' | 'tool' | 'http' | 'condition'
-  label: string
-  config: string
-}
-
-const skills = ref<Skill[]>([
-  {
-    id: 's1',
-    name: '代码审查',
-    description: '审查 git diff 并给出改进建议',
-    triggers: ['review', '审查', 'review code', 'check'],
-    steps: [
-      { type: 'prompt', label: '运行 git diff', config: 'git diff HEAD~1' },
-      { type: 'tool', label: '调用审查工具', config: 'code_review.run' },
-      { type: 'prompt', label: '生成审查报告', config: '请分析以上 diff 并提出改进建议' },
-    ],
-    enabled: true,
-  },
-  {
-    id: 's2',
-    name: '自动测试',
-    description: '为新代码生成单元测试',
-    triggers: ['test', 'tests', 'unit test'],
-    steps: [
-      { type: 'tool', label: '读取文件', config: 'fs.read' },
-      { type: 'prompt', label: '生成测试用例', config: '为以上函数生成单元测试' },
-      { type: 'tool', label: '运行测试', config: 'shell.run npm test' },
-    ],
-    enabled: true,
-  },
-  {
-    id: 's3',
-    name: '发布到生产',
-    description: '完整的 CI/CD 发布流程',
-    triggers: ['deploy', 'release', 'publish'],
-    steps: [
-      { type: 'tool', label: '运行测试', config: 'shell.run npm test' },
-      { type: 'condition', label: '测试通过？', config: 'exit_code == 0' },
-      { type: 'tool', label: '构建', config: 'shell.run npm run build' },
-      { type: 'http', label: '部署 webhook', config: 'POST /api/deploy' },
-    ],
-    enabled: false,
-  },
-])
-
+const skills = ref<Skill[]>([])
+const loading = ref(true)
 const search = ref('')
 const showBuilder = ref(false)
+const draftTriggers = ref('')          // comma-separated text (simpler than array v-model)
 const draft = ref<Skill>({
   id: '', name: '', description: '',
   triggers: [], steps: [], enabled: true,
 })
+
+async function load() {
+  loading.value = true
+  try {
+    const res = await fetch(getApiUrl('/api/agents/skills'))
+    if (res.ok) skills.value = await res.json()
+  } catch { /* keep empty */ } finally { loading.value = false }
+}
+onMounted(load)
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -83,21 +51,38 @@ const stepTypeLabels: Record<string, string> = {
   prompt: '提示', tool: '工具', http: 'HTTP', condition: '条件',
 }
 
-function toggleSkill(id: string) {
-  const s = skills.value.find(x => x.id === id)
-  if (s) s.enabled = !s.enabled
+async function toggleSkill(s: Skill) {
+  const next = !s.enabled
+  s.enabled = next
+  try {
+    await fetch(getApiUrl(`/api/agents/skills/${s.id}`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: next }),
+    })
+  } catch { s.enabled = !next }
 }
 
-function createSkill() {
+async function deleteSkill(id: string) {
+  skills.value = skills.value.filter(s => s.id !== id)
+  try { await fetch(getApiUrl(`/api/agents/skills/${id}`), { method: 'DELETE' }) } catch {}
+}
+
+async function createSkill() {
   if (!draft.value.name.trim()) return
-  skills.value.unshift({
-    ...draft.value,
-    id: 's' + Date.now(),
-    triggers: typeof draft.value.triggers === 'string'
-      ? (draft.value.triggers as any).split(',').map((t: string) => t.trim()).filter(Boolean)
-      : draft.value.triggers,
-  })
+  const triggers = draftTriggers.value.split(',').map(t => t.trim()).filter(Boolean)
+  const payload = { name: draft.value.name.trim(), description: draft.value.description, triggers, steps: [], enabled: true }
+  try {
+    const res = await fetch(getApiUrl('/api/agents/skills'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      skills.value.unshift(created)
+    }
+  } catch {}
   draft.value = { id: '', name: '', description: '', triggers: [], steps: [], enabled: true }
+  draftTriggers.value = ''
   showBuilder.value = false
 }
 </script>
@@ -129,7 +114,7 @@ function createSkill() {
           </div>
           <div class="skill-builder__row">
             <label class="skill-builder__label">触发关键词（逗号分隔）</label>
-            <input v-model="draft.triggers" placeholder="review, 审查, check" class="skill-builder__input" />
+            <input v-model="draftTriggers" placeholder="review, 审查, check" class="skill-builder__input" />
           </div>
           <div class="skill-builder__actions">
             <button class="skill-builder__btn" @click="createSkill">保存技能</button>
@@ -157,7 +142,7 @@ function createSkill() {
               <div
                 class="skill-toggle"
                 :class="{ 'skill-toggle--on': skill.enabled }"
-                @click="toggleSkill(skill.id)"
+                @click="toggleSkill(skill)"
               />
             </div>
           </div>

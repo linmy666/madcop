@@ -54,6 +54,20 @@ async def delete_skill(skill_id: str):
     _save(_SKILLS, items)
     return {"ok": True}
 
+@router.patch("/skills/{skill_id}")
+async def update_skill(skill_id: str, body: dict):
+    """Update a skill (name/description/triggers/steps/enabled). Used by
+    the SkillBuilder toggle and inline edits."""
+    items = _load(_SKILLS)
+    for item in items:
+        if item["id"] == skill_id:
+            for key in ("name", "description", "triggers", "steps", "enabled"):
+                if key in body:
+                    item[key] = body[key]
+            _save(_SKILLS, items)
+            return item
+    raise HTTPException(404, "Skill not found")
+
 
 # ── Usage stats (record + query) ─────────────────────────────────── #
 

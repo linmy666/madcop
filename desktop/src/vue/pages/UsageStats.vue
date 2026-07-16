@@ -1,8 +1,9 @@
 <script setup lang="ts">
-// v3.0 — UsageStats: track token usage and agent activity over time.
-// MadCop-exclusive dashboard (React has no equivalent).
+// UsageStats: token usage and activity dashboard.
+// Wired to GET /api/activity-stats (madcop_compat.py).
 
 import { ref, computed, onMounted } from 'vue'
+import { getApiUrl } from '../api/client'
 
 interface UsagePoint {
   ts: number
@@ -14,16 +15,56 @@ interface UsagePoint {
   model: string
 }
 
-const points = ref<UsagePoint[]>([
-  // 7 days of sample data
-  { ts: 1, date: '周一', promptTokens: 12400, completionTokens: 3200, totalTokens: 15600, agent: '通用助手', model: 'GLM-5.2' },
-  { ts: 2, date: '周二', promptTokens: 24300, completionTokens: 8800, totalTokens: 33100, agent: '编码专家', model: 'DeepSeek-V4' },
-  { ts: 3, date: '周三', promptTokens: 18700, completionTokens: 5100, totalTokens: 23800, agent: '设计助手', model: 'GLM-5.2' },
-  { ts: 4, date: '周四', promptTokens: 31200, completionTokens: 12100, totalTokens: 43300, agent: '通用助手', model: 'GLM-5.2' },
-  { ts: 5, date: '周五', promptTokens: 42500, completionTokens: 18900, totalTokens: 61400, agent: '编码专家', model: 'DeepSeek-V4' },
-  { ts: 6, date: '周六', promptTokens: 22100, completionTokens: 7300, totalTokens: 29400, agent: '研究员', model: 'Qwen3' },
-  { ts: 7, date: '周日', promptTokens: 8700, completionTokens: 2200, totalTokens: 10900, agent: '通用助手', model: 'GLM-5.2' },
-])
+const points = ref<UsagePoint[]>([])
+const loading = ref(true)
+const loadError = ref(false)
+
+onMounted(async () => {
+  loading.value = true
+  try {
+    const r = await fetch(getApiUrl('/api/activity-stats?range=7d'))
+    if (!r.ok) throw new Error(String(r.status))
+    const data = await r.json()
+    const stats = data.stats || data              // endpoint wraps in {stats, range}
+    const daily: any[] = stats.dailyActivity || []
+    const modelUsage: Record<string, any> = stats.modelUsage || {}
+    // Build per-day points from dailyActivity + estimated tokens (~4 chars/tok
+    // is the backend heuristic, so messageCount is the real signal here).
+    points.value = daily.map((d: any, i: number) => {
+      const msgs = d.messageCount || 0
+      const estTokens = msgs * 800                  // rough per-message estimate
+      return {
+        ts: i,
+        date: d.date ? String(d.date).slice(5) : `D${i + 1}`,
+        promptTokens: Math.round(estTokens * 0.7),
+        completionTokens: Math.round(estTokens * 0.3),
+        totalTokens: estTokens,
+        agent: '—',
+        model: '—',
+      }
+    })
+    // If we have modelUsage, overlay real token totals from it.
+    const muEntries = Object.entries(modelUsage)
+    if (muEntries.length) {
+      const sum = (m: any) => (m.inputTokens || 0) + (m.outputTokens || 0)
+      const totalFromModels = muEntries.reduce((s, [, m]) => s + sum(m as any), 0)
+      if (totalFromModels > 0 && points.value.length) {
+        // Distribute real token total proportionally across days.
+        const perPoint = totalFromModels / points.value.length
+        points.value.forEach((p, idx) => {
+          p.totalTokens = Math.round(perPoint)
+          p.promptTokens = Math.round(perPoint * 0.7)
+          p.completionTokens = Math.round(perPoint * 0.3)
+          p.model = idx < muEntries.length ? muEntries[idx][0] : '—'
+        })
+      }
+    }
+  } catch {
+    loadError.value = true
+  } finally {
+    loading.value = false
+  }
+})
 
 const totals = computed(() => ({
   tokens: points.value.reduce((s, p) => s + p.totalTokens, 0),
@@ -38,20 +79,12 @@ const maxTokens = computed(() => Math.max(...points.value.map(p => p.totalTokens
 const topAgents = computed(() => {
   const map = new Map<string, number>()
   for (const p of points.value) {
-    map.set(p.agent, (map.get(p.agent) || 0) + p.totalTokens)
+    map.set(p.model !== '—' ? p.model : p.agent, (map.get(p.model !== '—' ? p.model : p.agent) || 0) + p.totalTokens)
   }
   return Array.from(map.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
-    .map(([name, tokens]) => ({ name, tokens, percent: (tokens / totals.value.tokens * 100).toFixed(0) }))
-})
-
-const usage = ref({})
-onMounted(async () => {
-  try {
-    const r = await fetch('/api/activity-stats')
-    if (r.ok) usage.value = await r.json()
-  } catch {}
+    .map(([name, tokens]) => ({ name, tokens, percent: totals.value.tokens ? (tokens / totals.value.tokens * 100).toFixed(0) : '0' }))
 })
 </script>
 
