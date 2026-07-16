@@ -52,6 +52,16 @@ class FakeClient:
         self.chat_calls: list[list[Message]] = []
         self.stream_calls: list[list[Message]] = []
 
+    @property
+    def all_calls(self) -> list[list[Message]]:
+        """All LLM calls regardless of method (chat or stream).
+
+        Phase-1 streaming routes the no-tool path through ``stream()``
+        instead of ``chat()``, so memory tests that just want to inspect
+        the system prompt should use this instead of ``chat_calls``.
+        """
+        return self.chat_calls or self.stream_calls
+
     def chat(self, messages, *, model=None, temperature=0.0,
              max_tokens=None, tools=None, effort=None):
         msgs = list(messages)
@@ -112,7 +122,7 @@ def test_system_prompt_contains_identity(client: TestClient, fake_client):
         "messages": [{"role": "user", "content": "hello"}],
     })
     # The first message sent to the LLM should be a system prompt
-    msgs = fake_client.chat_calls[0]
+    msgs = fake_client.all_calls[0]
     assert msgs[0].role == "system"
     assert "madcop" in msgs[0].content.lower()
 
@@ -133,7 +143,7 @@ def test_system_prompt_includes_retrieved_memory(client: TestClient, fake_client
         "messages": [{"role": "user", "content": "who am I?"}],
     })
 
-    msgs = fake_client.chat_calls[0]
+    msgs = fake_client.all_calls[0]
     sys_content = msgs[0].content
     # The fact should be retrievable via FTS and injected
     assert "Alice" in sys_content
@@ -153,7 +163,7 @@ def test_system_prompt_includes_user_preferences(client: TestClient, fake_client
         "messages": [{"role": "user", "content": "summarize the news"}],
     })
 
-    msgs = fake_client.chat_calls[0]
+    msgs = fake_client.all_calls[0]
     sys_content = msgs[0].content
     assert "preference" in sys_content.lower() or "concise" in sys_content.lower()
 
@@ -163,7 +173,7 @@ def test_no_memory_still_has_identity(client: TestClient, fake_client):
     client.post("/api/chat", json={
         "messages": [{"role": "user", "content": "hello"}],
     })
-    msgs = fake_client.chat_calls[0]
+    msgs = fake_client.all_calls[0]
     assert msgs[0].role == "system"
     assert "madcop" in msgs[0].content.lower()
     # Should NOT have memory context section
@@ -178,7 +188,7 @@ def test_existing_system_prompt_is_replaced(client: TestClient, fake_client):
             {"role": "user", "content": "hello"},
         ],
     })
-    msgs = fake_client.chat_calls[0]
+    msgs = fake_client.all_calls[0]
     # Only one system message, and it should be madcop's, not the pirate
     sys_msgs = [m for m in msgs if m.role == "system"]
     assert len(sys_msgs) == 1
@@ -442,6 +452,6 @@ def test_cross_session_memory_flow(client: TestClient, fake_client):
         "messages": [{"role": "user", "content": "who am I?"}],
     })
 
-    msgs = fake_client.chat_calls[-1]  # last call (session 2)
+    msgs = fake_client.all_calls[-1]  # last call (session 2)
     sys_content = msgs[0].content
     assert "Bob" in sys_content

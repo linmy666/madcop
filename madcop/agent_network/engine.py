@@ -286,6 +286,80 @@ class AgentEngine:
         )
 
 
+# ── Task-typed deep networks ──────────────────────────────────────── #
+# Instead of a single fixed planner→coder→reviewer pipeline for every
+# deep task, classify the task and pick an agent roster that fits.
+# A research report doesn't need a coder; a bug fix doesn't need a
+# designer. Each template lists the agent node ids from the builtin set:
+#   planner / coder / researcher / designer / reviewer / assistant
+
+import re as _re
+
+# Signal patterns → task category. Checked in priority order.
+_TASK_CATEGORIES: list[tuple[str, list, list[str]]] = [
+    # (category, [compiled patterns], [agent node ids])
+    ("coding", [
+        _re.compile(r"代码|code|bug|修复|fix|函数|function|实现|implement|程序|脚本|script|重构|refactor|算法|algorithm|API|接口|类|class|游戏|game|应用|app|网站|web|开发|develop|搭建.*服务|后端|前端|backend|frontend", _re.IGNORECASE),
+    ], ["planner", "coder", "reviewer"]),
+    ("design", [
+        _re.compile(r"设计|design|UI|界面|原型|prototype|样式|CSS|布局|layout|配色|主题|theme|页面", _re.IGNORECASE),
+    ], ["planner", "designer", "reviewer"]),
+    ("research", [
+        _re.compile(r"调研|研究|报告|report|分析|analysis|资料|搜索|查阅|文献|市场|行业|论文|综述|survey|investigat", _re.IGNORECASE),
+    ], ["planner", "researcher", "reviewer"]),
+]
+
+
+def classify_task(user_input: str) -> tuple[str, list[str]]:
+    """Return (category, [agent node ids]) for a deep-mode task.
+
+    Falls back to a general-purpose roster when no category matches.
+    """
+    for category, patterns, agents in _TASK_CATEGORIES:
+        for pat in patterns:
+            if pat.search(user_input):
+                return category, list(agents)
+    # General / writing / unknown — a balanced team without a coder.
+    return "general", ["planner", "researcher", "reviewer"]
+
+
+def build_network_for_task(user_input: str) -> dict:
+    """Build a DAG network tailored to the task category.
+
+    Always: input → planner → (specialist, specialist) → output.
+    The middle two specialists run in PARALLEL (same wave) so the user
+    sees multiple sprites working at once, which is the whole point of
+    deep mode. Roster depends on the task type.
+    """
+    _category, agent_ids = classify_task(user_input)
+
+    nodes: list[dict] = [
+        {"id": "input", "agentId": "", "name": "输入"},
+        {"id": "planner", "agentId": "planner", "name": "规划"},
+    ]
+    # Middle specialists — parallel wave.
+    _ZH_NAME = {
+        "coder": "编码", "designer": "设计",
+        "researcher": "调研", "reviewer": "审查",
+        "assistant": "综合",
+    }
+    for aid in agent_ids:
+        if aid == "planner":
+            continue
+        nodes.append({"id": aid, "agentId": aid, "name": _ZH_NAME.get(aid, aid)})
+    nodes.append({"id": "output", "agentId": "", "name": "输出"})
+
+    edges: list[dict] = [{"from": "input", "to": "planner"}]
+    # planner fans out to each specialist (parallel execution wave).
+    for aid in agent_ids:
+        if aid == "planner":
+            continue
+        edges.append({"from": "planner", "to": aid})
+        edges.append({"from": aid, "to": "output"})
+
+    return {"name": "deep", "nodes": nodes, "edges": edges}
+
+
 # ── Convenience: build engine from settings ────────────────────────── #
 
 def build_engine() -> AgentEngine:

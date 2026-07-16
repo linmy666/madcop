@@ -1588,26 +1588,14 @@ def create_app() -> FastAPI:
                         if _answer:
                             yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                     else:  # deep — multi-agent DAG
-                        from madcop.agent_network.engine import build_engine
+                        from madcop.agent_network.engine import build_engine, build_network_for_task
                         from madcop.agent_network.api import BUILTIN_AGENTS as _BA
                         _dag = build_engine()
                         _agent_colors = {a["id"]: a.get("color", "#7C3AED") for a in _BA}
-                        _net = {
-                            "name": "deep",
-                            "nodes": [
-                                {"id": "input", "agentId": "", "name": "输入"},
-                                {"id": "planner", "agentId": "planner", "name": "规划"},
-                                {"id": "coder", "agentId": "coder", "name": "编码"},
-                                {"id": "reviewer", "agentId": "reviewer", "name": "审查"},
-                                {"id": "output", "agentId": "", "name": "输出"},
-                            ],
-                            "edges": [
-                                {"from": "input", "to": "planner"},
-                                {"from": "planner", "to": "coder"},
-                                {"from": "coder", "to": "reviewer"},
-                                {"from": "reviewer", "to": "output"},
-                            ],
-                        }
+                        # Pick an agent roster that fits THIS task instead of
+                        # a fixed coder pipeline — a research report shouldn't
+                        # spawn a coder. The two specialists run in parallel.
+                        _net = build_network_for_task(_task_text)
                         # Bridge on_token (called from worker threads) to SSE
                         # yields via a queue. Track which agents have started
                         # so we emit agent_start exactly once per agent.

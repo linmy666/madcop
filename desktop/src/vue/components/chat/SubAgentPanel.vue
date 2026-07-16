@@ -8,6 +8,7 @@
 // from the session state maintained by chatStore's agent_* SSE handlers.
 import { computed } from 'vue'
 import MascotAvatar from '../common/MascotAvatar.vue'
+import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
 
 interface AgentStream {
   name: string
@@ -24,6 +25,11 @@ const props = defineProps<{ agents: Record<string, AgentStream> }>()
 // string keys, so Object.values is stable here.
 const agentList = computed(() => Object.values(props.agents))
 const activeCount = computed(() => agentList.value.filter(a => a.status === 'running').length)
+// Cap how much of each agent's stream we render live, to keep the panel
+// from growing unbounded during a long deep run. The full text is still
+// preserved in store; this only affects the live preview.
+const PREVIEW_CHARS = 600
+const previewText = (t: string) => (t.length > PREVIEW_CHARS ? t.slice(-PREVIEW_CHARS) : t)
 </script>
 
 <template>
@@ -52,7 +58,17 @@ const activeCount = computed(() => agentList.value.filter(a => a.status === 'run
           <span v-else class="sub-agent-card__badge">完成</span>
         </div>
         <div class="sub-agent-card__body">
-          <p class="sub-agent-card__text">{{ agent.text || '…' }}</p>
+          <!-- Render markdown (bold, headings, lists) instead of showing raw
+               ** markers. Empty state shows a placeholder so the card doesn't
+               look broken while waiting for the first token. -->
+          <div v-if="agent.text" class="sub-agent-card__text">
+            <MarkdownRenderer
+              :content="previewText(agent.text)"
+              :streaming="agent.status === 'running'"
+              variant="compact"
+            />
+          </div>
+          <span v-else class="sub-agent-card__placeholder">准备中…</span>
           <span
             v-if="agent.status === 'running' && agent.text"
             class="sub-agent-card__caret"
@@ -124,16 +140,43 @@ const activeCount = computed(() => agentList.value.filter(a => a.status === 'run
 .sub-agent-card__badge--err { background: var(--color-error); }
 .sub-agent-card__body {
   position: relative;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
 }
+/* Markdown content inside a card — shrink the renderer's default sizes
+   so it fits a compact panel without the ** markers leaking through. */
 .sub-agent-card__text {
-  margin: 0;
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--color-text-secondary);
-  white-space: pre-wrap;
   word-break: break-word;
+}
+.sub-agent-card__text :deep(p) { margin: 0 0 4px; }
+.sub-agent-card__text :deep(p:last-child) { margin-bottom: 0; }
+.sub-agent-card__text :deep(h1),
+.sub-agent-card__text :deep(h2),
+.sub-agent-card__text :deep(h3),
+.sub-agent-card__text :deep(h4) {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 6px 0 3px;
+  color: var(--color-text-primary);
+}
+.sub-agent-card__text :deep(ul),
+.sub-agent-card__text :deep(ol) { margin: 2px 0 4px; padding-left: 18px; }
+.sub-agent-card__text :deep(li) { margin: 1px 0; }
+.sub-agent-card__text :deep(code) {
+  font-size: 11.5px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--color-surface-container);
+}
+.sub-agent-card__text :deep(pre) { margin: 4px 0; font-size: 11.5px; }
+.sub-agent-card__text :deep(strong) { color: var(--color-text-primary); font-weight: 600; }
+.sub-agent-card__placeholder {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-style: italic;
 }
 .sub-agent-card__caret {
   display: inline-block;
