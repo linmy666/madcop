@@ -287,7 +287,7 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     model: str | None = None
-    temperature: float = 0.7
+    temperature: float | None = None  # None = use provider config default
     max_tokens: int | None = None  # None = use provider config default
     conversation_id: str | None = None  # optional id for trace persistence
     skip_title_gen: bool = False  # set true to skip Claude-style auto title generation
