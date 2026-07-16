@@ -753,6 +753,43 @@ _DESIGN_DEFAULT_SYSTEM_PROMPT = (
 # App factory
 # --------------------------------------------------------------------------- #
 
+
+def _extract_and_emit_html_preview(text: str) -> str | None:
+    """Detect a self-contained HTML document in ``text`` and write it to
+    ~/.madcop/preview/index.html. Returns the SSE ``preview_update`` event
+    payload (str) to emit, or None if no HTML was detected.
+
+    Many models output a complete HTML page as a code block instead of
+    calling write_file. This catch-all makes the live preview work
+    regardless — the user's "make me a webpage" task lands in the preview
+    pane automatically.
+    """
+    if not text or "<html" not in text.lower():
+        return None
+    try:
+        import re as _re_html
+        _m = _re_html.search(r"(<!DOCTYPE html|<html[\s>])", text, _re_html.IGNORECASE)
+        if not _m:
+            return None
+        _start = _m.start()
+        _end_idx = text.rfind("</html>")
+        if _end_idx <= _start:
+            # No closing tag — bail, the doc is incomplete.
+            return None
+        _html = text[_start:_end_idx + 7].strip()
+        if len(_html) < 50:
+            return None
+        _preview_path = Path.home() / ".madcop" / "preview" / "index.html"
+        _preview_path.parent.mkdir(parents=True, exist_ok=True)
+        _preview_path.write_text(_html, encoding="utf-8")
+        return json.dumps(
+            {"type": "preview_update", "path": str(_preview_path)},
+            ensure_ascii=False,
+        )
+    except Exception:
+        return None
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="MadCop Agent", version="2.3.0", docs_url="/docs")
 
@@ -1656,6 +1693,11 @@ def create_app() -> FastAPI:
                             ),
                         )
                         _answer = getattr(_resp, "content", "") or str(_resp)
+                        # Live preview catch-all: if the answer contains a
+                        # self-contained HTML page, write it to preview dir.
+                        _pe = _extract_and_emit_html_preview(_answer)
+                        if _pe:
+                            yield f"data: {_pe}\n\n"
                         yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                     elif _agent_mode == "standard":
                         # ReAct loop. Stream each step as tool/tool_result
@@ -1678,6 +1720,10 @@ def create_app() -> FastAPI:
                                 yield f"data: {json.dumps({'type': 'tool_result', 'name': _st.action, 'result': _st.observation, 'tool_use_id': f'react-{_st.step_num}'}, ensure_ascii=False)}\n\n"
                         _answer = _result.final_answer or ""
                         if _answer:
+                            # Live preview catch-all (works for any answer).
+                            _pe = _extract_and_emit_html_preview(_answer)
+                            if _pe:
+                                yield f"data: {_pe}\n\n"
                             yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                     else:  # deep — multi-agent DAG
                         from madcop.agent_network.engine import build_engine, build_network_for_task
@@ -1867,6 +1913,12 @@ def create_app() -> FastAPI:
                                         _fallback = _ns.output
                                 _answer = _fallback.strip()
                             if _answer:
+                                # Live preview catch-all — the synthesizer's
+                                # output often contains a complete HTML page;
+                                # this routes it to the preview panel.
+                                _pe = _extract_and_emit_html_preview(_answer)
+                                if _pe:
+                                    yield f"data: {_pe}\n\n"
                                 yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                 except Exception as _am_err:
                     yield f"data: {json.dumps({'type': 'error', 'message': f'Agent 模式执行失败: {_am_err}'}, ensure_ascii=False)}\n\n"
@@ -2117,23 +2169,9 @@ def create_app() -> FastAPI:
                     # makes the preview work regardless. Only triggers for
                     # self-contained HTML (has <html> or <!DOCTYPE>).
                     try:
-                        import re as _re_html
-                        _full = resp.content or ""
-                        _m = _re_html.search(
-                            r"(<!DOCTYPE html|<html[\s>])",
-                            _full,
-                            _re_html.IGNORECASE,
-                        )
-                        if _m:
-                            # Extract from the match to the last </html>
-                            _start = _m.start()
-                            _end_idx = _full.rfind("</html>")
-                            _html = _full[_start:_end_idx + 7 if _end_idx > _start else None].strip()
-                            if len(_html) > 50:
-                                _preview_path = Path.home() / ".madcop" / "preview" / "index.html"
-                                _preview_path.parent.mkdir(parents=True, exist_ok=True)
-                                _preview_path.write_text(_html, encoding="utf-8")
-                                yield f"data: {json.dumps({'type': 'preview_update', 'path': str(_preview_path)}, ensure_ascii=False)}\n\n"
+                        _preview_event = _extract_and_emit_html_preview(resp.content or "")
+                        if _preview_event:
+                            yield f"data: {_preview_event}\n\n"
                     except Exception:
                         pass
                     # Emit the terminal done event (Phase-1 streams text but
