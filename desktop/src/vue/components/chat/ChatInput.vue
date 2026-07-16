@@ -1122,12 +1122,12 @@ watch(input, (v) => {
 <template>
   <div
     data-testid="chat-input-shell"
-    class="w-full"
+    class="w-full min-w-0 shrink-0"
     :class="[
       isHeroComposer
         ? `bg-[var(--color-surface)] ${isMobileViewport() ? 'px-4 pb-4' : 'px-8 pb-6'}`
         : compact
-          ? `border-t border-[var(--color-border)]/70 bg-[var(--color-surface)] ${isMobileViewport() ? 'px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2' : 'px-3 py-3'}`
+          ? `border-t border-[var(--color-border)]/70 bg-[var(--color-surface)] overflow-hidden ${isMobileViewport() ? 'px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2' : 'px-3 py-3'}`
           : `bg-[var(--color-surface)] ${isMobileViewport() ? 'px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-2' : 'px-4 py-4'}`,
     ]"
   >
