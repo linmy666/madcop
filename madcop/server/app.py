@@ -582,72 +582,8 @@ def _build_memory_system_prompt(
     # Reference: Linear / Stripe / Vercel / Notion design language.
     # Goal: avoid the default "AI-taste" output (gradient overload, emoji
     # decoration, oversized icon buttons, rainbow chips, big shadows,
-    # rounded-3xl everywhere) and produce pages that feel minimal & high-end.
-    parts.append(
-        "DESIGN PRINCIPLES for any HTML/CSS/JS you generate:\n"
-        "\n"
-        "1. NO DECORATIVE EMOJI. Never use 🚀 ✨ 🎯 ⚡ 🔥 💡 etc. as section "
-        "headers or button labels. Text is enough. If you must use a glyph, "
-        "use a single-character punctuation mark (· / → / —).\n"
-        "\n"
-        "2. NEUTRAL PALETTE + ONE ACCENT. Default to a near-monochrome scale: "
-        "background #ffffff / surface #fafafa / border #e5e5e5 / text-primary "
-        "#0a0a0a / text-secondary #6b7280. Add at most ONE accent color "
-        "(e.g. #2563eb blue or #0a0a0a black-on-white) used sparingly for "
-        "the primary CTA. No purple→pink gradients. No rainbow chip colors.\n"
-        "\n"
-        "3. AVOID HEAVY GRADIENTS. A single linear-gradient on the hero or a "
-        "subtle 4-stop radial is fine. Never rainbow backgrounds, never "
-        "mesh gradients, never animated conic-gradients.\n"
-        "\n"
-        "4. TYPE HIERARCHY = 3 SIZES MAX. Title 24-32px / body 14-15px / "
-        "caption 12-13px. Use font-weight contrast (500 vs 600) instead of "
-        "many sizes. Line-height 1.5 for body, 1.2 for headings. Letter-"
-        "spacing -0.01em on large titles for a tighter, premium feel.\n"
-        "\n"
-        "5. 8PX GRID SPACING. Use 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 — not "
-        "13px, not 17px, not 27px. Padding and gaps should land on the grid.\n"
-        "\n"
-        "6. CORNERS: 4px for inputs/buttons, 8px for cards, 12px for hero "
-        "containers. Never rounded-3xl (24px+) — it screams 'AI default'.\n"
-        "\n"
-        "7. SHADOWS: SUBTLE OR NONE. Prefer a 1px border #e5e5e5 over a drop "
-        "shadow. When shadow is needed, use 0 1px 2px rgba(0,0,0,0.04) — "
-        "the smallest possible elevation. Never colored glows, never "
-        "blurred halos behind cards.\n"
-        "\n"
-        "8. NO REDUNDANT ICONS. An icon next to a label is only needed when "
-        "the action is non-obvious (e.g. trash, settings gear). For 'Submit', "
-        "'Cancel', 'Save', 'Continue' — text alone. Avoid 3+ icons in one row.\n"
-        "\n"
-        "9. GENEROUS WHITESPACE. Section vertical padding ≥ 64px on desktop. "
-        "Card internal padding ≥ 24px. Line-length ≤ 72ch for body text. "
-        "Whitespace is the cheapest way to look premium.\n"
-        "\n"
-        "10. TYPOGRAPHY STACK: Use system fonts: -apple-system, BlinkMacSystemFont, "
-        "'Inter', 'Segoe UI', sans-serif. No Google Fonts <link> tags — they "
-        "add latency and break the system feel. If a serif heading is "
-        "needed, 'Georgia, serif' is fine.\n"
-        "\n"
-        "REFERENCE EXAMPLE — a minimalist button + card (study the structure):\n"
-        "```html\n"
-        "<style>\n"
-        "  .btn { background:#0a0a0a; color:#fff; padding:8px 16px; border-radius:4px; "
-        "border:none; font-size:14px; font-weight:500; cursor:pointer; }\n"
-        "  .btn:hover { background:#1f2937; }\n"
-        "  .card { background:#fff; border:1px solid #e5e5e5; border-radius:8px; "
-        "padding:24px; }\n"
-        "  .muted { color:#6b7280; font-size:13px; }\n"
-        "</style>\n"
-        "<button class=\"btn\">Continue</button>\n"
-        "<div class=\"card\"><h3 style=\"margin:0 0 8px;font-size:18px;font-weight:600;\">Title</h3>"
-        "<p class=\"muted\">Helper text in a calm gray.</p></div>\n"
-        "```\n"
-        "\n"
-        "WHEN IN DOUBT: open https://linear.app or https://stripe.com in your "
-        "mind and match that level of restraint. Restrained, monochrome, "
-        "spacious pages beat colorful busy ones every time."
-    )
+# rounded-3xl everywhere) and produce pages that feel minimal & high-end.
+    parts.append(DESIGN_PRINCIPLES_PROMPT)
 
     return "\n\n".join(parts)
 
@@ -823,6 +759,61 @@ _DESIGN_DEFAULT_SYSTEM_PROMPT = (
 # --------------------------------------------------------------------------- #
 # App factory
 # --------------------------------------------------------------------------- #
+
+
+# Shared HTML/CSS design constraints — injected into BOTH the chat
+# system prompt AND the deep-mode agent system prompts so any agent
+# that writes UI produces minimal high-end output (no emoji, neutral
+# palette, 8px grid, small corners, generous whitespace, system font).
+# Reference: Linear / Stripe / Vercel design language.
+DESIGN_PRINCIPLES_PROMPT = (
+    "DESIGN PRINCIPLES for any HTML/CSS/JS you generate:\n"
+    "\n"
+    "1. NO DECORATIVE EMOJI. Never use 🚀 ✨ 🎯 ⚡ 🔥 💡 🔑 🔐 📦 📱 etc. as section "
+    "headers, button labels, or list bullets. Text alone. If you must use a glyph, "
+    "use a single-character punctuation mark (· / → / —).\n"
+    "\n"
+    "2. NEUTRAL PALETTE + ONE ACCENT. Default to monochrome: #ffffff background, "
+    "#fafafa surface, #e5e5e5 border, #0a0a0a text-primary, #6b7280 text-secondary. "
+    "Add at most ONE accent (#2563eb blue or #0a0a0a) used sparingly for the "
+    "primary CTA. No purple→pink gradients. No rainbow chip colors.\n"
+    "\n"
+    "3. AVOID HEAVY GRADIENTS. At most one subtle linear-gradient on the hero. "
+    "Never rainbow backgrounds, never mesh gradients.\n"
+    "\n"
+    "4. TYPE HIERARCHY ≤ 3 SIZES. Title 24-32px / body 14-15px / caption 12-13px. "
+    "Use font-weight contrast (500 vs 600). letter-spacing: -0.01em on large titles.\n"
+    "\n"
+    "5. 8PX GRID SPACING. Use 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64.\n"
+    "\n"
+    "6. CORNERS: 4px buttons / 8px cards / 12px heroes. Never 24px+ (rounded-3xl).\n"
+    "\n"
+    "7. SHADOWS: SUBTLE OR NONE. Prefer 1px solid #e5e5e5 border. When shadow is "
+    "needed, use 0 1px 2px rgba(0,0,0,0.04). No colored glows.\n"
+    "\n"
+    "8. NO REDUNDANT ICONS. Icons only for non-obvious actions. Plain text buttons "
+    "('Submit', 'Save') need no icon.\n"
+    "\n"
+    "9. GENEROUS WHITESPACE. Section padding ≥ 64px on desktop. Card padding ≥ 24px. "
+    "Line-length ≤ 72ch for body.\n"
+    "\n"
+    "10. SYSTEM FONTS ONLY. font-family: -apple-system, BlinkMacSystemFont, 'Inter', "
+    "'Segoe UI', sans-serif. No Google Fonts <link> tags.\n"
+    "\n"
+    "REFERENCE EXAMPLE (study the structure):\n"
+    "```html\n"
+    "<style>\n"
+    "  .btn { background:#0a0a0a; color:#fff; padding:8px 16px; border-radius:4px; "
+    "border:none; font-size:14px; font-weight:500; cursor:pointer; }\n"
+    "  .card { background:#fff; border:1px solid #e5e5e5; border-radius:8px; "
+    "padding:24px; }\n"
+    "</style>\n"
+    "<button class=\"btn\">Continue</button>\n"
+    "<div class=\"card\"><h3 style=\"margin:0 0 8px;font-size:18px;font-weight:600;\">Title</h3></div>\n"
+    "```\n"
+    "\n"
+    "WHEN IN DOUBT: visualize Linear.app or Stripe.com — match that restraint."
+)
 
 
 def _extract_and_emit_html_preview(text: str) -> str | None:

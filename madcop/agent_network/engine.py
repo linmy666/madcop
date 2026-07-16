@@ -235,6 +235,11 @@ class AgentEngine:
                 f"请根据上游 agent 的输出和用户请求，完成你负责的部分。\n"
                 f"只输出你的工作结果，不要重复上游的内容。"
             )
+        # Always append the shared design constraints so every deep-mode agent
+# has them in context — UI-writing agents need them to produce
+# minimal output; reviewer uses them as the quality bar.
+        if node_id not in ("input", "output"):
+            system_prompt = system_prompt + "\n\n" + _DESIGN_PRINCIPLES
 
         # Build user message
         if upstream_context:
@@ -379,6 +384,59 @@ _SYNTH_PROMPT = (
     "- 用清晰的标题、列表、段落组织内容，使用 Markdown 格式。\n"
     "- 如果上游专家之间存在矛盾，给出你的综合判断并说明理由。\n"
     "- 不要添加上游没有的事实信息；可以重新组织表达，但不可杜撰。"
+)
+
+# HTML/CSS design constraints shared across the whole app. Injected
+# into UI-producing agents (coder / designer / synthesizer) so any agent
+# that writes UI produces minimal high-end output. Reference: Linear /
+# Stripe / Vercel design language.
+_DESIGN_PRINCIPLES = (
+    "DESIGN PRINCIPLES for any HTML/CSS/JS you generate:\n"
+    "\n"
+    "1. NO DECORATIVE EMOJI. Never use 🚀 ✨ 🎯 ⚡ 🔥 💡 🔑 🔐 📦 📱 etc. as section "
+    "headers, button labels, or list bullets. Text alone. If you must use a glyph, "
+    "use a single-character punctuation mark (· / → / —).\n"
+    "\n"
+    "2. NEUTRAL PALETTE + ONE ACCENT. Default to monochrome: #ffffff background, "
+    "#fafafa surface, #e5e5e5 border, #0a0a0a text-primary, #6b7280 text-secondary. "
+    "Add at most ONE accent (#2563eb blue or #0a0a0a) used sparingly for the "
+    "primary CTA. No purple→pink gradients. No rainbow chip colors.\n"
+    "\n"
+    "3. AVOID HEAVY GRADIENTS. At most one subtle linear-gradient on the hero. "
+    "Never rainbow backgrounds, never mesh gradients.\n"
+    "\n"
+    "4. TYPE HIERARCHY ≤ 3 SIZES. Title 24-32px / body 14-15px / caption 12-13px. "
+    "Use font-weight contrast (500 vs 600). letter-spacing: -0.01em on large titles.\n"
+    "\n"
+    "5. 8PX GRID SPACING. Use 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64.\n"
+    "\n"
+    "6. CORNERS: 4px buttons / 8px cards / 12px heroes. Never 24px+ (rounded-3xl).\n"
+    "\n"
+    "7. SHADOWS: SUBTLE OR NONE. Prefer 1px solid #e5e5e5 border. When shadow is "
+    "needed, use 0 1px 2px rgba(0,0,0,0.04). No colored glows.\n"
+    "\n"
+    "8. NO REDUNDANT ICONS. Icons only for non-obvious actions. Plain text buttons "
+    "('Submit', 'Save') need no icon.\n"
+    "\n"
+    "9. GENEROUS WHITESPACE. Section padding ≥ 64px on desktop. Card padding ≥ 24px. "
+    "Line-length ≤ 72ch for body.\n"
+    "\n"
+    "10. SYSTEM FONTS ONLY. font-family: -apple-system, BlinkMacSystemFont, 'Inter', "
+    "'Segoe UI', sans-serif. No Google Fonts <link> tags.\n"
+    "\n"
+    "REFERENCE EXAMPLE (study the structure):\n"
+    "```html\n"
+    "<style>\n"
+    "  .btn { background:#0a0a0a; color:#fff; padding:8px 16px; border-radius:4px; "
+    "border:none; font-size:14px; font-weight:500; cursor:pointer; }\n"
+    "  .card { background:#fff; border:1px solid #e5e5e5; border-radius:8px; "
+    "padding:24px; }\n"
+    "</style>\n"
+    "<button class=\"btn\">Continue</button>\n"
+    "<div class=\"card\"><h3 style=\"margin:0 0 8px;font-size:18px;font-weight:600;\">Title</h3></div>\n"
+    "```\n"
+    "\n"
+    "WHEN IN DOUBT: visualize Linear.app or Stripe.com — match that restraint."
 )
 
 # Signal patterns → task category. Checked in priority order.

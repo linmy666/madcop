@@ -312,6 +312,11 @@ watch(() => props.selectedModel, (val) => {
   font-family: inherit;
   cursor: pointer;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
+  /* Constrain width so a long model name doesn't push the agent-mode /
+     send buttons off-screen. The label inside truncates with ellipsis. */
+  max-width: 180px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 .model-selector:hover {
   background: var(--color-surface-container);
@@ -325,8 +330,12 @@ watch(() => props.selectedModel, (val) => {
 .model-selector--disabled { opacity: 0.5; cursor: not-allowed; }
 .model-selector__label {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: var(--font-mono);
   font-size: 11px;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 .model-selector__context {
   font-family: var(--font-mono);
