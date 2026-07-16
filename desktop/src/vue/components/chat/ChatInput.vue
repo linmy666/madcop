@@ -29,7 +29,6 @@ import { useWorkspaceChatContextStore } from '../../stores/workspaceChatContextS
 import { useTranslation } from '../../i18n'
 import { detectAmbiguity } from '../../lib/clarify'
 import AttachmentGallery from './AttachmentGallery.vue'
-import ModeSelector from './ModeSelector.vue'
 import ClarifyHints from './ClarifyHints.vue'
 import PermissionModeSelector from '../controls/PermissionModeSelector.vue'
 import RepositoryLaunchControls from '../shared/RepositoryLaunchControls.vue'
@@ -159,7 +158,6 @@ const atFilter = ref('')
 const atCursorPos = ref(-1)
 const plusMenuOpen = ref(false)
 const localSlashPanel = ref<LocalSlashCommandName | null>(null)
-const selectedMode = ref('react')
 const selectedModel = ref('sensenova-6.7-flash-lite')
 const composingRef = ref(false)
 const previousActiveTabIdRef = ref<string | null>(null)
@@ -1450,11 +1448,6 @@ watch(input, (v) => {
                 :selection-key="activeTabId || DRAFT_RUNTIME_SELECTION_KEY"
                 :compact="useCompactControls"
                 :disabled="isSubmitting"
-              />
-              <ModeSelector
-                :current-mode="selectedMode"
-                @mode-change="(m: string) => { selectedMode = m }"
-                :compact="useCompactControls"
               />
             </template>
 

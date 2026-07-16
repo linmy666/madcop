@@ -4,7 +4,7 @@
  *
  * Replaces: AgentHub.vue + AgentNetwork.vue + Arena (concept) into one cohesive page.
  * Layout:
- *   Top: 8 graph-theory topology presets (single → chain → parallel → debate → ensemble…)
+ *   Top: 5 graph-theory topology presets (single → chain → parallel → debate → ensemble)
  *   Center: GraphCanvas (SVG, drag nodes, select to configure)
  *   Right: Node config panel (model, role, tools)
  *   Bottom: Run / Save / Stats

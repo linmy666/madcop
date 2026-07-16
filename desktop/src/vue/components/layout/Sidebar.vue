@@ -1186,7 +1186,7 @@ const HeaderMenuItem = defineComponent({
       role: 'menuitem',
       onClick: (e: MouseEvent) => emit('click', e),
       onMouseEnter: (e: MouseEvent) => emit('mouseenter', e),
-      class: 'flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outlinenone focus-visible:bg-[var(--color-surface-hover)]',
+      class: 'flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-none focus-visible:bg-[var(--color-surface-hover)]',
     }, [
       h('span', { class: 'flex h-5 w-5 shrink-0 items-center justify-center text-[var(--color-text-secondary)]' }, [props.icon]),
       h('span', { class: 'min-w-0 flex-1 truncate' }, props.children),
@@ -1669,7 +1669,7 @@ const projectMenuData = computed(() => {
           <!-- Empty -->
           <div
             v-else-if="filteredSessions.length === 0"
-            class="px-3 py-4 text-center text-xs text![var(--color-text-tertiary)]"
+            class="px-3 py-4 text-center text-xs text-[var(--color-text-tertiary)]"
           >
             {{ t('sidebar.noSessions') }}
           </div>
@@ -1700,7 +1700,7 @@ const projectMenuData = computed(() => {
               <!-- Drop indicator before -->
               <div
                 v-if="projectDropTarget?.key === project.key && projectDropTarget.position === 'before'"
-                class="pointer-events None absolute -top-1 left-1 right-1 z-10 h-0.5 rounded-full bg-[var(--color-brand)]"
+                class="pointer-events-none absolute -top-1 left-1 right-1 z-10 h-0.5 rounded-full bg-[var(--color-brand)]"
               />
 
               <!-- Project header row -->
