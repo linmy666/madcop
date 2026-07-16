@@ -204,7 +204,7 @@ function truncate(s: string | null, max = 36): string {
 }
 .tp__progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, rgb(99, 91, 255), rgb(139, 134, 255));
+  background: linear-gradient(90deg, var(--color-brand), var(--color-primary-container));
   border-radius: 999px;
   transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   position: relative;
@@ -298,11 +298,11 @@ function truncate(s: string | null, max = 36): string {
   flex-shrink: 0;
 }
 .tp__check--done {
-  background: rgb(34, 197, 94);
+  background: var(--color-success);
   color: #fff;
 }
 .tp__check--fail {
-  background: rgb(220, 38, 38);
+  background: var(--color-error);
   color: #fff;
 }
 .tp__check--active {
@@ -340,7 +340,7 @@ function truncate(s: string | null, max = 36): string {
   color: var(--color-text-primary, #1a1a1f);
 }
 .tp__row--active .tp__action {
-  color: rgb(99, 91, 255);
+  color: var(--color-brand);
   font-weight: 500;
 }
 
@@ -349,7 +349,7 @@ function truncate(s: string | null, max = 36): string {
   width: 10px;
   height: 10px;
   border: 2px solid rgba(99, 91, 255, 0.25);
-  border-top-color: rgb(99, 91, 255);
+  border-top-color: var(--color-brand);
   border-radius: 50%;
   animation: tp-spin 0.5s cubic-bezier(0.4, 0.0, 0.6, 1) infinite;
 }
@@ -413,7 +413,7 @@ function truncate(s: string | null, max = 36): string {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: rgb(99, 91, 255);
+  background: var(--color-brand);
   animation: tp-dot-bounce 1.2s ease-in-out infinite;
 }
 @keyframes tp-dot-bounce {

@@ -205,9 +205,9 @@ function toolBadge(tool: string | null): string {
   margin-top: 1px;
 }
 .plan-step--idle .plan-step__icon { color: var(--color-text-tertiary, #999); }
-.plan-step--active .plan-step__icon { color: var(--color-brand, #333); }
-.plan-step--ok .plan-step__icon { color: #16a34a; background: rgba(22, 163, 74, 0.08); }
-.plan-step--fail .plan-step__icon { color: #dc2626; }
+.plan-step--active .plan-step__icon { color: var(--color-brand); }
+.plan-step--ok .plan-step__icon { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 8%, transparent); }
+.plan-step--fail .plan-step__icon { color: var(--color-error); }
 
 .plan-step__body {
   flex: 1;
@@ -237,8 +237,8 @@ function toolBadge(tool: string | null): string {
   font-family: ui-monospace, 'SF Mono', monospace;
 }
 .tool-badge--has-tool {
-  background: rgba(37, 99, 235, 0.08);
-  color: #2563eb;
+  background: color-mix(in srgb, var(--color-info) 8%, transparent);
+  color: var(--color-info);
 }
 
 .plan-step__hint,
@@ -252,7 +252,7 @@ function toolBadge(tool: string | null): string {
 }
 .plan-step__error {
   font-size: 12px;
-  color: #dc2626;
+  color: var(--color-error);
   margin-top: 2px;
 }
 
