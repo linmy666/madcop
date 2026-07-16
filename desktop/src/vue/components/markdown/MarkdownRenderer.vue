@@ -5,7 +5,7 @@
   KaTeX math, and Mermaid diagrams.
 -->
 <script setup lang="ts">
-import { computed, h, defineComponent } from 'vue'
+import { computed, h, defineComponent, ref, watch, onBeforeUnmount } from 'vue'
 import DOMPurify from 'dompurify'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
@@ -520,8 +520,37 @@ const MermaidStreamingPlaceholder = defineComponent({
 })
 
 // ── Computed state ────────────────────────────────────────────────────────────
+// While streaming, throttle content updates to one re-parse per animation
+// frame. Tokens arrive faster than the screen refreshes; without this every
+// token triggers a full marked re-parse + re-render, which flickers code
+// blocks and tables. The frame-aligned ref coalesces a burst of tokens into
+// a single render. When not streaming, render the final content immediately.
+const frameContent = ref(props.content)
+let rafId: number | null = null
+function scheduleFrame() {
+  if (rafId !== null || !props.streaming) return
+  rafId = requestAnimationFrame(() => {
+    rafId = null
+    frameContent.value = props.content
+  })
+}
+watch(() => props.content, () => {
+  if (props.streaming) {
+    scheduleFrame()
+  } else {
+    // Non-streaming (final): update immediately so the finished render is exact.
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+    frameContent.value = props.content
+  }
+})
+watch(() => props.streaming, (s) => {
+  if (!s) { if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }; frameContent.value = props.content }
+})
+onBeforeUnmount(() => { if (rafId !== null) cancelAnimationFrame(rafId) })
+
+const parseTarget = computed(() => props.streaming ? frameContent.value : props.content)
 const parsed = computed(() =>
-  props.cache ? getCachedMarkdownParse(props.content, props.streaming) : parseMarkdown(props.content),
+  props.cache ? getCachedMarkdownParse(parseTarget.value, props.streaming) : parseMarkdown(parseTarget.value),
 )
 
 const proseClasses = computed(() => getProseClasses(props.variant, props.class))

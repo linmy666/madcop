@@ -32,6 +32,27 @@
 
       <!-- Regular markdown content -->
       <template v-else>
+        <!-- Reasoning / thinking block (Codex-style): live while streaming,
+             collapsible. Distinct visual treatment from the final answer. -->
+        <div v-if="hasReasoning" class="reasoning-block">
+          <button
+            type="button"
+            class="reasoning-block__toggle"
+            @click.stop="toggleReasoning"
+          >
+            <span class="material-symbols-outlined text-[14px] reasoning-block__icon">
+              {{ reasoningExpanded ? 'expand_less' : 'psychology' }}
+            </span>
+            <span class="reasoning-block__label">
+              {{ isStreaming && !cleanContent ? '思考中…' : '思考过程' }}
+            </span>
+            <span v-if="!reasoningExpanded" class="reasoning-block__hint">点击展开</span>
+          </button>
+          <div v-if="reasoningExpanded" class="reasoning-block__body">
+            <p class="reasoning-block__text">{{ reasoningContent }}</p>
+          </div>
+        </div>
+
         <MarkdownRenderer
           :content="cleanContent"
           :streaming="isStreaming"
@@ -66,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useChatStore } from '../../stores/chatStore'
 import { useTabStore } from '../../stores/tabs'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
@@ -83,15 +104,37 @@ const props = withDefaults(defineProps<{
   content: string
   isStreaming?: boolean
   sessionId?: string
+  reasoningContent?: string | null
 }>(), {
   isStreaming: false,
   sessionId: '',
+  reasoningContent: null,
 })
 
 const chatStore = useChatStore()
 const tabStore = useTabStore()
 
 const copied = ref(false)
+
+// Reasoning (thinking) block — Codex-style: auto-expand while streaming,
+// auto-collapse when the final answer begins arriving. User can still
+// toggle manually either way.
+const reasoningExpanded = ref(true)
+const hasReasoning = computed(() => !!(props.reasoningContent || '').trim())
+watch(() => props.isStreaming, (streaming) => {
+  // When streaming ends, collapse the reasoning block.
+  if (!streaming) reasoningExpanded.value = false
+})
+watch(() => props.content, (c) => {
+  // Once the real answer starts flowing in, collapse reasoning to keep
+  // focus on the answer (Codex behaviour).
+  if ((c || '').trim().length > 0 && reasoningExpanded.value) {
+    reasoningExpanded.value = false
+  }
+})
+function toggleReasoning() {
+  reasoningExpanded.value = !reasoningExpanded.value
+}
 
 const hasContent = computed(() => (props.content || '').trim().length > 0)
 
@@ -202,6 +245,46 @@ function regenerate() {
 <style scoped>
 .assistant-message {
   display: block;
+}
+
+/* Reasoning / thinking block — Codex-style live collapsible. */
+.reasoning-block {
+  margin-bottom: 10px;
+  border-left: 2px solid var(--color-border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--color-surface-container-lowest);
+  overflow: hidden;
+}
+.reasoning-block__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+}
+.reasoning-block__toggle:hover { color: var(--color-text-secondary); }
+.reasoning-block__icon { font-size: 14px; }
+.reasoning-block__label { font-style: italic; }
+.reasoning-block__hint { margin-left: auto; opacity: 0.7; font-size: 11px; }
+.reasoning-block__body {
+  padding: 2px 12px 10px 10px;
+}
+.reasoning-block__text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  font-style: italic;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
 }
 .assistant-message__body {
   position: relative;
