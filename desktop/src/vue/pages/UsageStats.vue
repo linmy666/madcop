@@ -66,15 +66,15 @@ onMounted(async () => {
       <!-- Top stats -->
       <div class="usage-stats">
         <div class="usage-stat">
-          <div class="usage-stat__value">{(totals.tokens / 1000).toFixed(1)}K</div>
+          <div class="usage-stat__value">{{ (totals.tokens / 1000).toFixed(1) }}K</div>
           <div class="usage-stat__label">总 Token</div>
         </div>
         <div class="usage-stat">
-          <div class="usage-stat__value">{(totals.prompt / 1000).toFixed(1)}K</div>
+          <div class="usage-stat__value">{{ (totals.prompt / 1000).toFixed(1) }}K</div>
           <div class="usage-stat__label">提示 Token</div>
         </div>
         <div class="usage-stat">
-          <div class="usage-stat__value">{(totals.completion / 1000).toFixed(1)}K</div>
+          <div class="usage-stat__value">{{ (totals.completion / 1000).toFixed(1) }}K</div>
           <div class="usage-stat__label">生成 Token</div>
         </div>
         <div class="usage-stat">

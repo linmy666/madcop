@@ -999,7 +999,7 @@ function renderItemContent(item: RenderItem) {
       </div>
 
       <!-- Messages list -->
-      <div v-else ref="scrollContentRef" class="mx-auto max-w-[820px] space-y-3">
+      <div v-else ref="scrollContentRef" class="mx-auto max-w-[860px] space-y-3">
         <template
           v-for="(renderedItem, index) in virtualTranscriptWindow.items"
           :key="itemKeys[renderedItem.index]"
@@ -1033,7 +1033,8 @@ function renderItemContent(item: RenderItem) {
         <!-- Streaming text (live assistant text being typed out) -->
         <AssistantMessage
           v-if="streamingText.trim()"
-          :message="{ type: 'assistant_text', content: streamingText, id: 'streaming' }"
+          :content="streamingText"
+          :is-streaming="true"
           :compact="compact"
         />
 
@@ -1084,17 +1085,6 @@ function renderItemContent(item: RenderItem) {
         arrow_downward
       </span>
       <span>{{ t('chat.jumpToLatest') }}</span>
-    </button>
-
-    <!-- Scroll to bottom button -->
-    <button
-      v-if="!showJumpToLatest && messages.length > 0"
-      @click="scrollToBottom"
-      class="fixed bottom-20 right-4 p-2 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-lg hover:opacity-90 transition-opacity z-50"
-    >
-      <span class="material-symbols-outlined" style="fontVariationSettings: 'FILL' 1">
-        arrow_downward
-      </span>
     </button>
   </div>
 </template>

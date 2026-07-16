@@ -204,7 +204,7 @@ onMounted(loadSettings)
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-switch-thumb);
   position: absolute;
   top: 2px;
   left: 2px;

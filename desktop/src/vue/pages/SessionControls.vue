@@ -309,7 +309,7 @@ const toggleModelConfig = () => { showModelConfig.value  = !showModelConfig.valu
             v-if="showPermissions"
             class="w-80 rounded-xl border border-[var(--color-border)] overflow-hidden flex flex-col"
             :style="{
-              background: 'rgba(255, 255, 255, 0.85)',
+              background: 'var(--color-surface-glass)',
               backdropFilter: 'blur(20px)',
               boxShadow:
                 '0 4px 20px rgba(27, 28, 26, 0.04), 0 12px 40px rgba(27, 28, 26, 0.08)',
@@ -372,7 +372,7 @@ const toggleModelConfig = () => { showModelConfig.value  = !showModelConfig.valu
             v-if="showModelConfig"
             class="w-64 rounded-xl border border-[var(--color-border)] overflow-hidden flex flex-col"
             :style="{
-              background: 'rgba(255, 255, 255, 0.85)',
+              background: 'var(--color-surface-glass)',
               backdropFilter: 'blur(20px)',
               boxShadow:
                 '0 4px 20px rgba(27, 28, 26, 0.04), 0 12px 40px rgba(27, 28, 26, 0.08)',

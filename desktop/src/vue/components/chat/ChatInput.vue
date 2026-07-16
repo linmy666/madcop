@@ -229,7 +229,13 @@ const runtimeModelLabel = computed(() =>
 )
 
 const isStreaming = computed(() => chatState.value === 'busy')
-const isActive = computed(() => false) // Always let handleSubmit run
+// Active while the model is generating/streaming/running tools, so the
+// submit button can morph into a Stop button.
+const isActive = computed(() =>
+  chatState.value === 'busy' || chatState.value === 'streaming' || chatState.value === 'tool_executing',
+)
+// Disable the composer controls while a request is in flight.
+const isSubmitting = computed(() => isActive.value)
 
 const messageCount = computed(() => {
   const loaded = sessionState.value?.messages?.length ?? 0

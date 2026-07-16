@@ -14,7 +14,6 @@ const TerminalSettings = defineAsyncComponent(() => import('../../pages/Terminal
 const TraceList = defineAsyncComponent(() => import('../../pages/TraceList.vue'))
 const TraceSession = defineAsyncComponent(() => import('../../pages/TraceSession.vue'))
 const WorkflowsListPage = defineAsyncComponent(() => import('../../pages/WorkflowsListPage.vue'))
-const AgentHub = defineAsyncComponent(() => import('../../pages/AgentHub.vue'))
 const KnowledgeBase = defineAsyncComponent(() => import('../../pages/KnowledgeBase.vue'))
 const ArenaPage = defineAsyncComponent(() => import('../../pages/ArenaPage.vue'))
 const AgentOverview = defineAsyncComponent(() => import('../../pages/AgentOverview.vue'))

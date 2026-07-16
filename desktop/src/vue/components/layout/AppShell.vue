@@ -11,14 +11,17 @@ import ContentRouter from './ContentRouter.vue'
 import StartupErrorView from './StartupErrorView.vue'
 import CommandPalette from '../command/CommandPalette.vue'
 import TabStrip from './TabStrip.vue'
+import Toast from '../shared/Toast.vue'
 import { useSessionStore } from '../../stores/sessionStore'
 import { useTabStore } from '../../stores/tabs'
 import { useChatStore } from '../../stores/chatStore'
+import { useUIStore } from '../../stores/uiStore'
 import { useTranslation } from '../../i18n'
 import { watch } from 'vue'
 
 const ready = ref(false)
 const paletteOpen = ref(false)
+const uiStore = useUIStore()
 
 // Listen for ⌘K toggle event from CommandPalette
 onMounted(() => {
@@ -121,5 +124,8 @@ function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 
     <!-- ⌘K Command Palette -->
     <CommandPalette :open="paletteOpen" @close="paletteOpen = false" />
+
+    <!-- Toast notifications (mounted once globally so showToast() is visible) -->
+    <Toast :toasts="uiStore.toasts" @remove="uiStore.removeToast" />
   </div>
 </template>

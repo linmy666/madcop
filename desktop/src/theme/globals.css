@@ -546,6 +546,7 @@
   /* Glass / overlays */
   --color-overlay-scrim: rgba(27, 28, 26, 0.48);
   --color-surface-glass: rgba(255, 255, 255, 0.84);
+  --color-switch-thumb: #FFFFFF;
   --color-surface-glass-border: rgba(218, 193, 186, 0.22);
 
   /* Code + diff */
@@ -742,6 +743,7 @@
   --color-overlay-scrim: rgba(15, 23, 42, 0.42);
   --color-surface-glass: rgba(255, 255, 255, 0.94);
   --color-surface-glass-border: rgba(203, 213, 225, 0.72);
+  --color-switch-thumb: #FFFFFF;
 
   --color-code-bg: #FAFBFC;
   --color-code-fg: #1F2937;
@@ -929,6 +931,7 @@
   --color-overlay-scrim: rgba(6, 6, 6, 0.56);
   --color-surface-glass: rgba(32, 31, 31, 0.8);
   --color-surface-glass-border: rgba(90, 65, 56, 0.18);
+  --color-switch-thumb: #E5E2E1;
 
   --color-code-bg: #0E0E0E;
   --color-code-fg: #E5E2E1;

@@ -718,7 +718,7 @@ function openTerminalInTab() {
           <!-- Message list -->
           <template v-else>
             <div class="flex-1 min-h-0 w-full overflow-y-auto pt-6">
-              <div class="mx-auto max-w-[820px] px-5">
+              <div class="mx-auto max-w-[860px] px-5">
                 <MessageList :compact="showRightPanel" />
               </div>
             </div>

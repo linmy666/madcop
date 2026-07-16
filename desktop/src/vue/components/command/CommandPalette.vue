@@ -85,7 +85,7 @@ const baseItems = computed<PaletteItem[]>(() => {
       label: '打开 Arena 竞技场',
       detail: '多 LLM 并行对比',
       action: () => {
-        tabStore.openTab('__arena__', 'Arena', 'agents' as any)
+        tabStore.openTab('__arena__', 'Arena', 'arena' as any)
       },
     },
     {

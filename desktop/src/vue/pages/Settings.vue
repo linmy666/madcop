@@ -612,7 +612,7 @@ export default { components: { Toggle } }
 :deep(.madcop-toggle--on) { background: var(--color-primary); }
 :deep(.madcop-toggle)::after {
   content: ''; display: block; width: 18px; height: 18px;
-  background: #fff; transition: transform 140ms;
+  background: var(--color-switch-thumb); transition: transform 140ms;
 }
 :deep(.madcop-toggle--on)::after { transform: translateX(18px); }
 </style>
