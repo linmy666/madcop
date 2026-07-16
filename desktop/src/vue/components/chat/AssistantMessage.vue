@@ -217,7 +217,7 @@ function regenerate() {
   justify-content: center;
   width: 30px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: 4px;
   color: var(--color-text-secondary);
   background: transparent;
   border: 1px solid transparent;
@@ -257,7 +257,7 @@ function regenerate() {
   padding: 6px 14px;
   background: var(--color-surface);
   border: 1.5px solid var(--color-border);
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   font-size: 13px;
   color: var(--color-text-primary);
   cursor: pointer;
@@ -294,7 +294,7 @@ function regenerate() {
   align-items: flex-start;
   gap: 10px;
   padding: 12px 16px;
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--color-error-container, rgba(220, 38, 38, 0.07));
   border: 1px solid var(--color-error, rgba(220, 38, 38, 0.18));
   color: var(--color-on-error-container, #991b1b);

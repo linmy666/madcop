@@ -652,7 +652,7 @@ export default { components: { Toggle } }
 }
 .training-trigger-btn {
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-brand);
   color: white;
   font-size: 12px;
@@ -679,7 +679,7 @@ export default { components: { Toggle } }
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--color-surface);
   font-size: 12px;
 }
@@ -701,7 +701,7 @@ export default { components: { Toggle } }
 .privacy-banner {
   margin-top: 16px;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--color-success) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);
   color: var(--color-text-secondary);
@@ -715,7 +715,7 @@ export default { components: { Toggle } }
   font-size: 10px;
   padding: 1px 4px;
   background: var(--color-surface);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 .settings-row--stack {
   flex-direction: column;
@@ -724,7 +724,7 @@ export default { components: { Toggle } }
 }
 .settings-btn {
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-secondary);

@@ -104,7 +104,7 @@ function retry() {
   max-width: 100%;
   background: var(--color-surface-container-low, #efefef);
   padding: 10px 16px;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--color-border-separator, rgba(0,0,0,0.08));
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
@@ -119,7 +119,7 @@ function retry() {
   justify-content: center;
   width: 30px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: 4px;
   color: var(--color-text-secondary);
   background: transparent;
   border: 1px solid transparent;
@@ -142,7 +142,7 @@ function retry() {
   background-size: cover;
   background-position: center;
   background-color: var(--color-surface);
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--color-border);
   cursor: pointer;
   background-repeat: no-repeat;
@@ -155,7 +155,7 @@ function retry() {
   padding: 4px 8px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--color-text-secondary);
 }
 

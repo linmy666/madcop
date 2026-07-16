@@ -333,7 +333,7 @@ watch(() => props.selectedModel, (val) => {
   font-size: 10px;
   padding: 0 4px;
   background: var(--color-surface-container);
-  border-radius: 3px;
+  border-radius: 4px;
   color: var(--color-text-tertiary);
 }
 .model-selector__chevron { opacity: 0.5; }
@@ -348,7 +348,7 @@ watch(() => props.selectedModel, (val) => {
   overflow-y: auto;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   z-index: 100;
   padding: 4px;
@@ -368,7 +368,7 @@ watch(() => props.selectedModel, (val) => {
   background: var(--color-brand);
   color: #fff;
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
   font-size: 12px;
   cursor: pointer;
 }
@@ -413,7 +413,7 @@ watch(() => props.selectedModel, (val) => {
   font-size: 10px;
   padding: 1px 5px;
   background: var(--color-surface-container);
-  border-radius: 3px;
+  border-radius: 4px;
   color: var(--color-text-tertiary);
   font-family: ui-monospace, 'SF Mono', monospace;
 }
@@ -445,7 +445,7 @@ watch(() => props.selectedModel, (val) => {
   margin-left: auto;
   background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: 3px;
+  border-radius: 4px;
   padding: 2px 8px;
   font-size: 10px;
   color: var(--color-text-secondary);
@@ -469,7 +469,7 @@ watch(() => props.selectedModel, (val) => {
   flex: 1;
   background: var(--color-surface-container);
   border: 1px solid var(--color-border);
-  border-radius: 3px;
+  border-radius: 4px;
   padding: 3px 6px;
   font-size: 11px;
   font-family: ui-monospace, 'SF Mono', monospace;
@@ -482,7 +482,7 @@ watch(() => props.selectedModel, (val) => {
 .model-selector__context-apply {
   background: var(--color-brand);
   border: none;
-  border-radius: 3px;
+  border-radius: 4px;
   padding: 3px 10px;
   font-size: 11px;
   color: white;
