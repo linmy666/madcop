@@ -193,6 +193,9 @@ export type PerSessionState = {
   composerDraft?: ComposerDraftState | null
   queuedUserMessages?: QueuedUserMessage[]
   reasoningContent?: string | null
+  /** Deep-mode sub-agent streams: agent_id → { name, color, text, status }.
+   *  Populated by agent_start/agent_token/agent_done SSE events. */
+  agentStreams?: Record<string, { name: string; color: string; text: string; status: 'running' | 'done' | 'error'; elapsed_ms?: number }>
 }
 
 function createDefaultSessionState(): PerSessionState {
@@ -234,6 +237,7 @@ function createDefaultSessionState(): PerSessionState {
     composerDraft: null,
     queuedUserMessages: [],
     reasoningContent: null,
+    agentStreams: {},
   }
 }
 
@@ -486,6 +490,7 @@ export const useChatStore = defineStore('chat', {
             return
           }
           session.reasoningContent = null
+          session.agentStreams = {}
           const decoder = new TextDecoder()
           let buffer = ''
           let assistantMsg = ''
@@ -549,6 +554,34 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'reasoning' && event.content) {
                     session.reasoningContent = (session.reasoningContent || '') + event.content
+                  } else if (event.type === 'agent_start') {
+                    // Deep mode: a sub-agent begins. Register it in the
+                    // session's agentStreams so SubAgentPanel renders it.
+                    if (!session.agentStreams) session.agentStreams = {}
+                    const aid = event.agent_id
+                    if (!session.agentStreams[aid]) {
+                      session.agentStreams[aid] = {
+                        name: event.agent_name || aid,
+                        color: event.color || '#7C3AED',
+                        text: '',
+                        status: 'running',
+                      }
+                    } else {
+                      session.agentStreams[aid].status = 'running'
+                    }
+                  } else if (event.type === 'agent_token' && event.agent_id) {
+                    // Append the token to the matching sub-agent's stream.
+                    if (!session.agentStreams) session.agentStreams = {}
+                    const aid = event.agent_id
+                    if (!session.agentStreams[aid]) {
+                      session.agentStreams[aid] = { name: aid, color: '#7C3AED', text: '', status: 'running' }
+                    }
+                    session.agentStreams[aid].text += (event.text || '')
+                  } else if (event.type === 'agent_done' && event.agent_id) {
+                    if (session.agentStreams && session.agentStreams[event.agent_id]) {
+                      session.agentStreams[event.agent_id].status = event.status === 'error' ? 'error' : 'done'
+                      session.agentStreams[event.agent_id].elapsed_ms = event.elapsed_ms
+                    }
                   } else if (event.type === 'tool' && event.name) {
                     // AI is calling a tool — show it transparently under the
                     // thinking indicator so the user can see what's happening.

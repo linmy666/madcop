@@ -33,12 +33,12 @@ def _save(path: Path, data: list[dict]):
 # ── Builtin agents ─────────────────────────────────────────────────── #
 
 BUILTIN_AGENTS = [
-    {"id": "assistant", "name": "通用助手", "description": "全能型对话 agent，适合日常问题、代码编写和一般任务。", "icon": "smart_toy", "model": "glm-5.2", "status": "online", "capabilities": ["对话", "代码", "工具调用", "文件读写"], "source": "builtin"},
-    {"id": "coder", "name": "编码专家", "description": "专注于代码生成、审查和调试。多文件编辑能力强。", "icon": "code", "model": "deepseek-v4-flash", "status": "online", "capabilities": ["代码生成", "代码审查", "调试", "重构"], "source": "builtin"},
-    {"id": "designer", "name": "设计助手", "description": "生成 UI 原型和设计稿。集成 DesignCanvas。", "icon": "palette", "model": "glm-5.2", "status": "online", "capabilities": ["UI 设计", "原型生成", "CSS 编写"], "source": "builtin"},
-    {"id": "researcher", "name": "研究员", "description": "联网搜索、资料整理、报告生成。", "icon": "travel_explore", "model": "qwen3-80b", "status": "online", "capabilities": ["网页搜索", "信息提取", "报告生成"], "source": "builtin"},
-    {"id": "planner", "name": "规划师", "description": "将复杂任务分解为多步骤计划，协调其他 agent。", "icon": "account_tree", "model": "glm-5.2", "status": "online", "capabilities": ["任务分解", "协调", "调度"], "source": "builtin"},
-    {"id": "reviewer", "name": "审查员", "description": "代码审查、安全审计、质量检查。", "icon": "rate_review", "model": "deepseek-v4-flash", "status": "online", "capabilities": ["代码审查", "安全审计", "性能分析"], "source": "builtin"},
+    {"id": "assistant", "name": "通用助手", "description": "全能型对话 agent，适合日常问题、代码编写和一般任务。", "icon": "smart_toy", "model": "glm-5.2", "status": "online", "capabilities": ["对话", "代码", "工具调用", "文件读写"], "source": "builtin", "color": "#06B6D4"},
+    {"id": "coder", "name": "编码专家", "description": "专注于代码生成、审查和调试。多文件编辑能力强。", "icon": "code", "model": "deepseek-v4-flash", "status": "online", "capabilities": ["代码生成", "代码审查", "调试", "重构"], "source": "builtin", "color": "#3B82F6"},
+    {"id": "designer", "name": "设计助手", "description": "生成 UI 原型和设计稿。集成 DesignCanvas。", "icon": "palette", "model": "glm-5.2", "status": "online", "capabilities": ["UI 设计", "原型生成", "CSS 编写"], "source": "builtin", "color": "#EC4899"},
+    {"id": "researcher", "name": "研究员", "description": "联网搜索、资料整理、报告生成。", "icon": "travel_explore", "model": "qwen3-80b", "status": "online", "capabilities": ["网页搜索", "信息提取", "报告生成"], "source": "builtin", "color": "#10B981"},
+    {"id": "planner", "name": "规划师", "description": "将复杂任务分解为多步骤计划，协调其他 agent。", "icon": "account_tree", "model": "glm-5.2", "status": "online", "capabilities": ["任务分解", "协调", "调度"], "source": "builtin", "color": "#7C3AED"},
+    {"id": "reviewer", "name": "审查员", "description": "代码审查、安全审计、质量检查。", "icon": "rate_review", "model": "deepseek-v4-flash", "status": "online", "capabilities": ["代码审查", "安全审计", "性能分析"], "source": "builtin", "color": "#F59E0B"},
 ]
 
 

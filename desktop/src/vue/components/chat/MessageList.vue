@@ -96,6 +96,7 @@ import { clearWindowSelection, useSelectionPopoverDismiss } from '../../hooks/us
 // ─── Child components ─────────────────────────────────────────
 import UserMessage from './UserMessage.vue'
 import AssistantMessage from './AssistantMessage.vue'
+import SubAgentPanel from './SubAgentPanel.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
 import ToolCallBlock from './ToolCallBlock.vue'
 import ToolCallGroup from './ToolCallGroup.vue'
@@ -155,6 +156,7 @@ const isAIThinking = computed(() => {
 })
 const streamingText = computed(() => sessionState.value?.streamingText ?? '')
 const reasoningContent = computed(() => sessionState.value?.reasoningContent ?? null)
+const agentStreams = computed(() => sessionState.value?.agentStreams ?? {})
 // Live "what is the AI doing right now" context for the thinking indicator.
 const liveToolName = computed(() => sessionState.value?.activeToolName ?? null)
 const planStep = computed(() => {
@@ -1029,6 +1031,13 @@ function renderItemContent(item: RenderItem) {
             state="compacting"
           />
         </template>
+
+        <!-- Deep-mode sub-agent streams (multiple colored sprites working
+             in parallel, each with its own live text area). -->
+        <SubAgentPanel
+          v-if="Object.keys(agentStreams).length > 0"
+          :agents="agentStreams"
+        />
 
         <!-- Streaming text (live assistant text being typed out) -->
         <AssistantMessage

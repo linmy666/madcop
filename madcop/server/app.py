@@ -1589,7 +1589,9 @@ def create_app() -> FastAPI:
                             yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                     else:  # deep — multi-agent DAG
                         from madcop.agent_network.engine import build_engine
+                        from madcop.agent_network.api import BUILTIN_AGENTS as _BA
                         _dag = build_engine()
+                        _agent_colors = {a["id"]: a.get("color", "#7C3AED") for a in _BA}
                         _net = {
                             "name": "deep",
                             "nodes": [
@@ -1606,15 +1608,66 @@ def create_app() -> FastAPI:
                                 {"from": "reviewer", "to": "output"},
                             ],
                         }
-                        _res = await _dag.run(_net, user_input=_task_text)
-                        for _ns in _res.steps:
-                            if _ns.node_id in ("input", "output"):
+                        # Bridge on_token (called from worker threads) to SSE
+                        # yields via a queue. Track which agents have started
+                        # so we emit agent_start exactly once per agent.
+                        import asyncio as _am_a
+                        _evq: asyncio.Queue = asyncio.Queue()
+                        _sentinel = object()
+                        _started_agents: set[str] = set()
+
+                        def _on_token(node_id, agent_name, agent_id, text):
+                            aid = agent_id or node_id
+                            if aid not in _started_agents:
+                                _started_agents.add(aid)
+                                _evq.put_nowait({
+                                    "type": "agent_start",
+                                    "agent_id": aid,
+                                    "agent_name": agent_name or node_id,
+                                    "node_id": node_id,
+                                    "color": _agent_colors.get(agent_id, "#7C3AED"),
+                                })
+                            _evq.put_nowait({"type": "agent_token", "agent_id": aid, "text": text})
+
+                        async def _run_dag():
+                            try:
+                                res = await _dag.run(_net, user_input=_task_text, on_token=_on_token)
+                                _evq.put_nowait({"_result": res})
+                            except Exception as exc:
+                                _evq.put_nowait({"_error": str(exc)})
+                            finally:
+                                _evq.put_nowait(_sentinel)
+
+                        _dag_task = _am_a.create_task(_run_dag())
+                        # Yield agent events as they stream; drain until the
+                        # run completes (sentinel), then read the result.
+                        _dag_result = None
+                        while True:
+                            _item = await _evq.get()
+                            if _item is _sentinel:
+                                break
+                            if "_result" in _item:
+                                _dag_result = _item["_result"]
                                 continue
-                            yield f"data: {json.dumps({'type': 'tool', 'name': _ns.agent_name or _ns.node_id, 'args': {'node': _ns.node_id}, 'tool_use_id': f'dag-{_ns.node_id}'}, ensure_ascii=False)}\n\n"
-                            yield f"data: {json.dumps({'type': 'tool_result', 'name': _ns.agent_name or _ns.node_id, 'result': _ns.output, 'tool_use_id': f'dag-{_ns.node_id}'}, ensure_ascii=False)}\n\n"
-                        _answer = _res.outputs.get("output", "")
-                        if _answer:
-                            yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
+                            if "_error" in _item:
+                                _err_msg = f"DAG 执行失败: {_item['_error']}"
+                                yield f"data: {json.dumps({'type': 'error', 'message': _err_msg}, ensure_ascii=False)}\n\n"
+                                continue
+                            # Emit agent_done for any started agents that didn't
+                            # get a final event yet (best-effort, from result).
+                            yield f"data: {json.dumps(_item, ensure_ascii=False)}\n\n"
+                        await _dag_task
+
+                        # After the stream, emit agent_done for each agent from
+                        # the structured result, then the final answer.
+                        if _dag_result:
+                            for _ns in _dag_result.steps:
+                                if _ns.node_id in ("input", "output"):
+                                    continue
+                                yield f"data: {json.dumps({'type': 'agent_done', 'agent_id': _ns.agent_id or _ns.node_id, 'status': _ns.status, 'elapsed_ms': _ns.elapsed_ms}, ensure_ascii=False)}\n\n"
+                            _answer = _dag_result.outputs.get("output", "")
+                            if _answer:
+                                yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                 except Exception as _am_err:
                     yield f"data: {json.dumps({'type': 'error', 'message': f'Agent 模式执行失败: {_am_err}'}, ensure_ascii=False)}\n\n"
                 trace_store.mark_completed(trace_root.id)

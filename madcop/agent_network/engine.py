@@ -80,6 +80,7 @@ class AgentEngine:
         self,
         network: dict[str, Any],
         user_input: str = "",
+        on_token: Any = None,
     ) -> ExecutionResult:
         """Execute a network and return all node outputs."""
         nodes: list[dict] = network.get("nodes", [])
@@ -116,7 +117,7 @@ class AgentEngine:
         for wave in waves:
             tasks = [
                 self._execute_node(nid, nodes, upstream_map,
-                                   results, outputs, user_input)
+                                   results, outputs, user_input, on_token)
                 for nid in wave
             ]
             await asyncio.gather(*tasks, return_exceptions=False)
@@ -168,6 +169,7 @@ class AgentEngine:
         results: dict[str, NodeResult],
         outputs: dict[str, str],
         user_input: str,
+        on_token: Any = None,
     ) -> None:
         """Execute a single node and store its result."""
         node = next((n for n in nodes if n["id"] == node_id), {"id": node_id})
@@ -241,14 +243,29 @@ class AgentEngine:
         ]
 
         try:
-            # Run blocking chat() in a thread to not block the event loop
-            resp = await asyncio.to_thread(
-                self.client.chat, messages,
-                model=model or None,
-                temperature=0.3,
-                max_tokens=2048,
-            )
-            output = getattr(resp, "content", "") or str(resp)
+            # Stream the agent's output token-by-token. stream() is a sync
+            # generator; run it in a thread and accumulate, invoking on_token
+            # for each text chunk so the caller (e.g. the SSE handler) can
+            # forward it live. Multiple nodes in the same wave run their own
+            # threads concurrently, so their tokens interleave on the wire.
+            def _drain() -> str:
+                parts: list[str] = []
+                for chunk in self.client.stream(
+                    messages,
+                    model=model or None,
+                    temperature=0.3,
+                    max_tokens=2048,
+                ):
+                    if chunk.text:
+                        parts.append(chunk.text)
+                        if on_token:
+                            try:
+                                on_token(node_id, agent_name, agent_id, chunk.text)
+                            except Exception:
+                                pass
+                return "".join(parts)
+
+            output = await asyncio.to_thread(_drain)
         except Exception as e:
             output = f"[Agent {agent_name} 执行失败: {e}]"
             results[node_id] = NodeResult(

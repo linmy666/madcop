@@ -43,6 +43,9 @@ _DEEP_PATTERNS = [
     r"搭建", r"scaffold", r"脚手架",
     r"前端.*后端", r"frontend.*backend",
     r"评审", r"评估.*方案",
+    # Parallelism signals — tasks that benefit from multiple agents at once.
+    r"同时", r"并行", r"分别", r"多个", r"两边",
+    r"对比.*方案", r"多.*方案", r"协同",
 ]
 
 _DEEP_RE = [re.compile(p, re.IGNORECASE) for p in _DEEP_PATTERNS]
