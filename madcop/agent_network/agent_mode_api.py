@@ -258,39 +258,33 @@ async def _run_react(req: RunRequest, config: dict) -> dict:
 
 
 async def _run_multi_agent(req: RunRequest, config: dict) -> dict:
-    """Deep mode — multi-agent DAG (plan → code → review)."""
-    from .engine import build_engine
+    """Deep mode — classified multi-agent DAG with role-scoped tools."""
+    from .engine import build_engine, build_network_for_task, classify_task_detail
 
     started = time.time()
-    engine = build_engine()
+    engine = build_engine(work_dir=req.work_dir)
+    network = build_network_for_task(req.input)
+    classification = classify_task_detail(req.input)
 
-    # Build the chain topology: planner → coder → reviewer
-    network = {
-        "name": "Plan-Code-Review Chain",
-        "nodes": [
-            {"id": "input", "agentId": "input", "name": "用户输入"},
-            {"id": "planner", "agentId": "planner", "name": "规划师"},
-            {"id": "coder", "agentId": "coder", "name": "编码专家"},
-            {"id": "reviewer", "agentId": "reviewer", "name": "审查员"},
-            {"id": "output", "agentId": "output", "name": "最终结果"},
-        ],
-        "edges": [
-            {"from": "input", "to": "planner"},
-            {"from": "planner", "to": "coder"},
-            {"from": "coder", "to": "reviewer"},
-            {"from": "reviewer", "to": "output"},
-        ],
-    }
+    result = await engine.run(
+        network,
+        user_input=req.input,
+        work_dir=req.work_dir,
+    )
 
-    result = await engine.run(network, user_input=req.input)
-
-    # The output node has the final combined result
-    final = result.outputs.get("output", result.outputs.get("reviewer", ""))
+    # Prefer synthesizer / output as final answer
+    final = (
+        result.outputs.get("output")
+        or result.outputs.get("synthesizer")
+        or result.outputs.get("reviewer")
+        or ""
+    )
 
     return {
         "answer": final,
         "status": result.status,
         "workflow": "multi_agent",
+        "classification": classification.to_dict(),
         "steps": [
             {
                 "node_id": s.node_id,

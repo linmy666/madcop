@@ -61,14 +61,22 @@ class AgentEngine:
     Usage:
         engine = AgentEngine(client, agents_registry)
         result = await engine.run(network_config, user_input="write a snake game")
+
+    Deep specialists may run a short mini-ReAct with role-scoped tools
+    (see specialist_runtime). Single-LLM setups share one model; tools
+    and prompts still differ by role — no customer configuration needed.
     """
 
     def __init__(
         self,
         client: ChatClient,
         agents: list[dict[str, Any]] | None = None,
+        work_dir: str | None = None,
+        enable_specialist_tools: bool = True,
     ) -> None:
         self.client = client
+        self.work_dir = work_dir
+        self.enable_specialist_tools = enable_specialist_tools
         # Build agent lookup: id -> agent dict
         self.agents: dict[str, dict[str, Any]] = {}
         for a in (agents or []):
@@ -81,6 +89,7 @@ class AgentEngine:
         network: dict[str, Any],
         user_input: str = "",
         on_token: Any = None,
+        work_dir: str | None = None,
     ) -> ExecutionResult:
         """Execute a network and return all node outputs."""
         nodes: list[dict] = network.get("nodes", [])
@@ -114,10 +123,16 @@ class AgentEngine:
         # (nodes at the same topological level run concurrently)
         waves = self._build_waves(order, upstream_map)
 
+        # Per-run workspace (chat session work_dir overrides constructor).
+        run_work_dir = work_dir if work_dir is not None else self.work_dir
+
         for wave in waves:
             tasks = [
-                self._execute_node(nid, nodes, upstream_map,
-                                   results, outputs, user_input, on_token)
+                self._execute_node(
+                    nid, nodes, upstream_map,
+                    results, outputs, user_input, on_token,
+                    work_dir=run_work_dir,
+                )
                 for nid in wave
             ]
             await asyncio.gather(*tasks, return_exceptions=False)
@@ -170,6 +185,7 @@ class AgentEngine:
         outputs: dict[str, str],
         user_input: str,
         on_token: Any = None,
+        work_dir: str | None = None,
     ) -> None:
         """Execute a single node and store its result."""
         node = next((n for n in nodes if n["id"] == node_id), {"id": node_id})
@@ -236,8 +252,8 @@ class AgentEngine:
                 f"只输出你的工作结果，不要重复上游的内容。"
             )
         # Always append the shared design constraints so every deep-mode agent
-# has them in context — UI-writing agents need them to produce
-# minimal output; reviewer uses them as the quality bar.
+        # has them in context — UI-writing agents need them to produce
+        # minimal output; reviewer uses them as the quality bar.
         if node_id not in ("input", "output"):
             system_prompt = system_prompt + "\n\n" + _DESIGN_PRINCIPLES
 
@@ -250,30 +266,74 @@ class AgentEngine:
         else:
             user_msg = user_input
 
-        messages = [
-            Message(role="system", content=system_prompt),
-            Message(role="user", content=user_msg),
-        ]
-
         try:
+            # Provider defaults + optional per-agent override from routing.
+            _ps = getattr(self, "_provider_sampling", {})
+            _temp = agent.get("temperature", _ps.get("temperature", 0.3))
+            _maxt = agent.get("max_tokens", _ps.get("max_tokens", 2048))
+            _client_fn = getattr(self, "_client_for_agent", None)
+            llm = _client_fn(agent_id) if callable(_client_fn) else self.client
+
+            # ── Transparent mini-ReAct for specialists with tools ──
+            # Synthesizer / pure roles stay on streaming completion.
+            # Failures fall open to pure stream so one bad tool path
+            # never breaks the whole deep run.
+            use_tools = (
+                self.enable_specialist_tools
+                and node_id != SYNTHESIZER_NODE_ID
+            )
+            if use_tools:
+                try:
+                    from madcop.agent_network.specialist_runtime import (
+                        build_role_tool_schemas,
+                        role_should_use_tools,
+                    )
+                    role_key = agent_id if agent_id in (
+                        "planner", "coder", "designer", "researcher",
+                        "reviewer", "assistant",
+                    ) else node_id
+                    if role_should_use_tools(role_key, node_id=node_id):
+                        schemas = build_role_tool_schemas(role_key, work_dir)
+                        if schemas:
+                            output = await asyncio.to_thread(
+                                self._run_specialist_react,
+                                llm=llm,
+                                model=model or None,
+                                role=role_key,
+                                agent_name=agent_name,
+                                description=desc,
+                                schemas=schemas,
+                                user_msg=user_msg,
+                                work_dir=work_dir,
+                                on_token=on_token,
+                                node_id=node_id,
+                                agent_id=agent_id,
+                            )
+                            if output is not None:
+                                outputs[node_id] = output
+                                results[node_id] = NodeResult(
+                                    node_id=node_id, agent_id=agent_id,
+                                    agent_name=agent_name,
+                                    output=output, status="done",
+                                    elapsed_ms=round((time.time() - started) * 1000, 1),
+                                    upstream=ups,
+                                )
+                                return
+                except Exception:
+                    # Fall through to pure completion
+                    pass
+
+            messages = [
+                Message(role="system", content=system_prompt),
+                Message(role="user", content=user_msg),
+            ]
+
             # Stream the agent's output token-by-token. stream() is a sync
             # generator; run it in a thread and accumulate, invoking on_token
             # for each text chunk so the caller (e.g. the SSE handler) can
-            # forward it live. Multiple nodes in the same wave run their own
-            # threads concurrently, so their tokens interleave on the wire.
-            #
-            # Retry transient failures (connection drops, timeouts, 5xx).
-            # Auth/param errors (4xx) are not retried — they'll fail every
-            # time. A failed agent stores an EMPTY output (not an error
-            # string) so it doesn't pollute downstream synthesis.
+            # forward it live.
             def _drain_once() -> str:
                 parts: list[str] = []
-                # Provider defaults + optional per-agent override from routing.
-                _ps = getattr(self, "_provider_sampling", {})
-                _temp = agent.get("temperature", _ps.get("temperature", 0.3))
-                _maxt = agent.get("max_tokens", _ps.get("max_tokens", 2048))
-                _client_fn = getattr(self, "_client_for_agent", None)
-                llm = _client_fn(agent_id) if callable(_client_fn) else self.client
                 for chunk in llm.stream(
                     messages,
                     model=model or None,
@@ -299,7 +359,6 @@ class AgentEngine:
                     "rate_limit", "temporar",
                 )):
                     return True
-                # openai.APIStatusError with 5xx — check attribute
                 status = getattr(exc, "status_code", None)
                 if isinstance(status, int) and status >= 500:
                     return True
@@ -315,15 +374,11 @@ class AgentEngine:
                 except Exception as e:
                     last_err = e
                     if _attempt < 2 and _is_retryable(e):
-                        # Exponential backoff: 1s, 2s before 2nd/3rd try.
                         await asyncio.sleep(2 ** _attempt)
                         continue
                     break
 
             if last_err is not None:
-                # Error isolation: store EMPTY output, not an error string,
-                # so downstream agents (esp. synthesizer) don't ingest
-                # "[Agent X failed...]" as if it were real content.
                 outputs[node_id] = ""
                 results[node_id] = NodeResult(
                     node_id=node_id, agent_id=agent_id, agent_name=agent_name,
@@ -333,7 +388,6 @@ class AgentEngine:
                 )
                 return
         except Exception as e:
-            # Defensive: any unexpected error outside the retry loop.
             outputs[node_id] = ""
             results[node_id] = NodeResult(
                 node_id=node_id, agent_id=agent_id, agent_name=agent_name,
@@ -350,6 +404,81 @@ class AgentEngine:
             elapsed_ms=round((time.time() - started) * 1000, 1),
             upstream=ups,
         )
+
+    def _run_specialist_react(
+        self,
+        *,
+        llm: Any,
+        model: str | None,
+        role: str,
+        agent_name: str,
+        description: str,
+        schemas: list[dict],
+        user_msg: str,
+        work_dir: str | None,
+        on_token: Any,
+        node_id: str,
+        agent_id: str,
+    ) -> str | None:
+        """Run a short role-scoped ReAct loop. Returns answer or None to fall back."""
+        from madcop.agent_network.react_engine import ReActEngine
+        from madcop.agent_network.specialist_runtime import (
+            max_steps_for_role,
+            system_prefix_for_role,
+        )
+
+        # Mark agent as started in the UI immediately.
+        if on_token:
+            try:
+                on_token(node_id, agent_name, agent_id, "")
+            except Exception:
+                pass
+
+        prefix = system_prefix_for_role(role, agent_name, description)
+        engine = ReActEngine(
+            client=llm,
+            tools=schemas,
+            max_steps=max_steps_for_role(role),
+            model=model,
+            system_prefix=prefix,
+        )
+        result = engine.run(user_msg, work_dir=work_dir)
+        answer = (result.final_answer or "").strip()
+        if not answer:
+            # If tools ran but no FINAL_ANSWER, stitch last observations.
+            bits = []
+            for st in result.steps:
+                if st.action and st.action.upper() != "FINAL_ANSWER":
+                    bits.append(f"[{st.action}] {st.observation[:400]}")
+                if st.thought:
+                    bits.append(st.thought[:400])
+            answer = "\n".join(bits).strip()
+        if not answer:
+            return None
+
+        # Surface tool use briefly in the sub-agent stream (no config UI).
+        if on_token and result.tool_calls:
+            try:
+                used = sorted({
+                    s.action for s in result.steps
+                    if s.action and s.action.upper() != "FINAL_ANSWER"
+                })
+                if used:
+                    on_token(
+                        node_id, agent_name, agent_id,
+                        f"（已使用工具: {', '.join(used)}）\n",
+                    )
+            except Exception:
+                pass
+        if on_token:
+            try:
+                # Chunk for smoother UI without true token streaming.
+                chunk_size = 80
+                for i in range(0, len(answer), chunk_size):
+                    on_token(node_id, agent_name, agent_id, answer[i:i + chunk_size])
+            except Exception:
+                pass
+        return answer
 
 
 # ── Task-typed deep networks ──────────────────────────────────────── #
@@ -700,14 +829,18 @@ def build_network_for_task(user_input: str) -> dict:
 
 # ── Convenience: build engine from settings ────────────────────────── #
 
-def build_engine() -> AgentEngine:
+def build_engine(work_dir: str | None = None) -> AgentEngine:
     """Build an AgentEngine using the active LLM client and built-in agents.
 
     Per-agent model routing: if the user configured ``agent_routing`` in
     settings (e.g. {"planner": {"model": "glm-5.2"}}), those model names
-    override each builtin agent's default ``model`` field. This lets the
-    user pick different models for different roles within the same
-    provider (e.g. strong model for planner, cheap model for researcher).
+    override each builtin agent's default ``model`` field.
+
+    **Single-LLM customers (default):** when routing has no override for a
+    role, every agent uses the **active provider model** — no multi-model
+    setup required. Specialists still differ by tools + prompts.
+
+    ``work_dir`` is the session workspace so file tools write/read there.
     """
     import copy
     from madcop.config import settings as settings_store
@@ -716,6 +849,7 @@ def build_engine() -> AgentEngine:
     s = settings_store.load_settings()
     cfg = settings_store.get_active_client_config(s)
     routing = getattr(s, "agent_routing", {}) or {}
+    active_model = (cfg or {}).get("model") or ""
 
     client = build_client_from_config(
         cfg,
@@ -730,23 +864,32 @@ def build_engine() -> AgentEngine:
 
     # Apply per-agent model / sampling overrides from settings.
     # Table maps agent_id → {model, temperature, max_tokens, ...}.
+    # Without an override, pin to the active provider model so builtin
+    # hard-coded model ids (glm-5.2, deepseek-…) don't 404 on a single LLM.
     for agent in all_agents:
         aid = agent.get("id", "")
-        if aid in routing:
-            r = routing[aid] if isinstance(routing[aid], dict) else {}
-            if r.get("model"):
-                agent["model"] = r["model"]
-            if r.get("temperature") is not None:
-                agent["temperature"] = r["temperature"]
-            if r.get("max_tokens") is not None:
-                agent["max_tokens"] = r["max_tokens"]
+        r = routing.get(aid) if isinstance(routing.get(aid), dict) else {}
+        if r.get("model"):
+            agent["model"] = r["model"]
+        elif active_model:
+            agent["model"] = active_model
+        if r.get("temperature") is not None:
+            agent["temperature"] = r["temperature"]
+        if r.get("max_tokens") is not None:
+            agent["max_tokens"] = r["max_tokens"]
 
-    engine = AgentEngine(client, all_agents)
+    engine = AgentEngine(
+        client,
+        all_agents,
+        work_dir=work_dir,
+        enable_specialist_tools=True,
+    )
     engine._provider_sampling = {
         "temperature": cfg.get("temperature", 0.3) if cfg else 0.3,
         "max_tokens": cfg.get("max_tokens", 2048) if cfg else 2048,
     }
-    # Per-agent client factory (same provider by default; model from routing).
+    # Per-agent client factory (same provider by default; model from routing
+    # or active model via merge_agent_routing).
     engine._base_cfg = cfg
     engine._agent_routing = routing
     engine._client_for_agent = lambda agent_id: build_client_from_config(

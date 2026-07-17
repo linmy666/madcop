@@ -1799,7 +1799,10 @@ def create_app() -> FastAPI:
                             classify_task_detail,
                         )
                         from madcop.agent_network.api import BUILTIN_AGENTS as _BA
-                        _dag = build_engine()
+                        # Pass session workspace so specialist tools (read/write)
+                        # operate on the user's project without extra settings.
+                        _ws = _ws_state[0] if _ws_state else None
+                        _dag = build_engine(work_dir=_ws)
                         _agent_colors = {a["id"]: a.get("color", "#7C3AED") for a in _BA}
                         # Pick an agent roster that fits THIS task instead of
                         # a fixed coder pipeline — a research report shouldn't
@@ -1919,7 +1922,12 @@ def create_app() -> FastAPI:
 
                         async def _run_dag():
                             try:
-                                res = await _dag.run(_net, user_input=_task_text, on_token=_on_token)
+                                res = await _dag.run(
+                                    _net,
+                                    user_input=_task_text,
+                                    on_token=_on_token,
+                                    work_dir=_ws,
+                                )
                                 _evq.put_nowait({"_result": res})
                             except Exception as exc:
                                 _evq.put_nowait({"_error": str(exc)})

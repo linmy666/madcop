@@ -134,12 +134,15 @@ class ReActEngine:
         tool_executor: Callable[..., Any] | None = None,
         max_steps: int = 10,
         model: str | None = None,
+        system_prefix: str = "",
     ) -> None:
         self.client = client
         self.tools = tools or []
         self.tool_executor = tool_executor
         self.max_steps = max_steps
         self.model = model
+        # Optional role framing (deep-mode specialists) prepended to REACT prompt.
+        self.system_prefix = (system_prefix or "").strip()
         # Build tools description for system prompt
         self._tools_desc = self._format_tools_desc()
 
@@ -330,6 +333,8 @@ class ReActEngine:
     def _build_initial_messages(self, task: str, context: str) -> list[Message]:
         """Build the starting message list with system prompt + user task."""
         sys = REACT_SYSTEM_PROMPT.format(tools_desc=self._tools_desc)
+        if self.system_prefix:
+            sys = f"{self.system_prefix}\n\n{sys}"
         user = task
         if context:
             user = f"{task}\n\n--- 上下文 ---\n{context}"
