@@ -281,9 +281,13 @@ def _build_memory_system_prompt(
     user_query: str,
     *,
     model_label: str = "",
-    profile_budget: int = 800,
-    relevant_budget: int = 800,
-    preferences_budget: int = 400,
+    profile_budget: int | None = None,
+    relevant_budget: int | None = None,
+    preferences_budget: int | None = None,
+    skills_budget: int | None = None,
+    inject_skills: bool | None = None,
+    max_skills: int | None = None,
+    system_addendum: str | None = None,
 ) -> str:
     """Build a system prompt enriched with relevant memories + user prefs.
 
@@ -304,7 +308,32 @@ def _build_memory_system_prompt(
         model_label: Human-readable name of the currently selected model
                      (e.g. "SenseNova 6.7 Flash Lite"). Injected into the
                      system prompt so the agent reports the correct identity.
+
+    Budgets / skill injection default from the active Meta-Harness task harness
+    (``~/.madcop/meta_harness/active.json``) when not explicitly passed.
     """
+    # Resolve knobs from Meta-Harness active task harness (Phase 0 landing).
+    try:
+        from madcop.meta_harness import load_active_harness
+        _h = load_active_harness()
+    except Exception:
+        from madcop.meta_harness.task_harness import ChatTaskHarness
+        _h = ChatTaskHarness()
+    if profile_budget is None:
+        profile_budget = _h.profile_budget
+    if relevant_budget is None:
+        relevant_budget = _h.relevant_budget
+    if preferences_budget is None:
+        preferences_budget = _h.preferences_budget
+    if skills_budget is None:
+        skills_budget = _h.skills_budget
+    if inject_skills is None:
+        inject_skills = _h.inject_skills
+    if max_skills is None:
+        max_skills = _h.max_skills
+    if system_addendum is None:
+        system_addendum = _h.system_addendum
+
     store = get_memory_store()
     retriever = Retriever(
         episodic=EpisodicMemory(store),
@@ -458,20 +487,24 @@ def _build_memory_system_prompt(
             parts.append("\n".join(kept))
 
     # --- Available skills (so LLM can reference them) ----------------- #
-    try:
-        from madcop.memory.skill_distill import list_user_skills
-        skills = list_user_skills()
-        if skills:
-            skill_lines = ["# Available SKILLs (auto-distilled or user-created)"]
-            for s in skills[:10]:  # cap to 10 to save tokens
-                skill_lines.append(
-                    f"- **{s['name']}**: {s.get('description', '')[:80]}"
-                )
-            kept = _truncate_to_budget(skill_lines, 300)
-            if kept:
-                parts.append("\n".join(kept))
-    except Exception as e:
-        logger.debug("swallowed: %s", e)
+    if inject_skills and (max_skills or 0) > 0:
+        try:
+            from madcop.memory.skill_distill import list_user_skills
+            skills = list_user_skills()
+            if skills:
+                skill_lines = ["# Available SKILLs (auto-distilled or user-created)"]
+                for s in skills[: int(max_skills)]:
+                    skill_lines.append(
+                        f"- **{s['name']}**: {s.get('description', '')[:80]}"
+                    )
+                kept = _truncate_to_budget(skill_lines, int(skills_budget or 300))
+                if kept:
+                    parts.append("\n".join(kept))
+        except Exception as e:
+            logger.debug("swallowed: %s", e)
+
+    if system_addendum and str(system_addendum).strip():
+        parts.append(str(system_addendum).strip())
 
     # --- File attachment instructions (so LLM knows how to handle them) ---
     _mdl = model_label or "the current model"

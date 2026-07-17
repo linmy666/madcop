@@ -70,6 +70,25 @@ msg = user_message_with_images(
 )
 ```
 
+## Task harness vs provider harness
+
+| Layer | Module | Meaning |
+|---|---|---|
+| **Provider harness** | `madcop/llm/harness.py` | API field differences across vendors |
+| **Task harness (Meta-Harness)** | `madcop/meta_harness/` | What chat injects: memory budgets, skills, addendum |
+
+Active task harness: `~/.madcop/meta_harness/active.json` (used by
+`_build_memory_system_prompt`). Search archive: `~/.madcop/meta_harness/archive/`.
+
+```bash
+python -m madcop.meta_harness status
+python -m madcop.meta_harness run --iterations 5 --promote
+python -m madcop.meta_harness axes
+```
+
+See paper: Meta-Harness (arXiv:2603.28052). Phase 0 = knob search + filesystem
+archive; Phase 1+ = coding-agent proposer over full traces.
+
 ## Capabilities cache
 
 `detect_capabilities(model=..., base_url=..., api_format=...)` writes
