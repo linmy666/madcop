@@ -632,6 +632,9 @@ _TASK_SIGNAL_DEFS: list[tuple[str, list[str], list[str]]] = [
         r"页面设计|视觉|视觉稿|设计稿|交互稿|线框|wireframe|Figma|组件库|design.?system",
         r"着陆页|落地页|landing|图标|icon|动效|动画|响应式|responsive",
         r"好看|美观|精致|高端|简约.*界面|界面.*设计",
+        # Common UI page requests — "做个登录页/注册页/导航栏" etc.
+        r"登录页|注册页|做个.*页|做一个.*页|写一个.*页|设计.*页|页面",
+        r"导航栏|侧边栏|表单|按钮.*样式|卡片|弹窗|modal|对话框|dialog",
     ], ["designer", "reviewer"]),
     ("research", [
         r"调研|研究|报告|report|分析|analysis|资料|搜索|查阅|文献|市场|行业",
