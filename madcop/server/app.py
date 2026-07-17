@@ -1599,10 +1599,31 @@ def create_app() -> FastAPI:
                             logger.debug("chat: inline attachment register failed: %s", e)
                     # Extract attachment content directly (real file or dataUrl)
                     content = _read_attachment_direct(att)
-                    if content:
-                        extra_parts.append(f"\n--- ATTACHMENT: {att.name} (ID: {att.id}) ---\n{content}\n--- END ---")
+                    _nchars = len(content or "")
+                    logger.info(
+                        "chat: attachment name=%s path=%s has_dataUrl=%s chars=%s head=%r",
+                        att.name,
+                        bool(att.path),
+                        bool(att.dataUrl),
+                        _nchars,
+                        (content or "")[:80].replace("\n", " "),
+                    )
+                    if content and not content.startswith("[") and "no readable" not in content[:40]:
+                        extra_parts.append(
+                            f"\n--- ATTACHMENT: {att.name} (ID: {att.id}) ---\n{content}\n--- END ---"
+                        )
+                    elif content:
+                        # Parse/IO error string from extractor — still inject so
+                        # the model knows a file was attached and why it failed.
+                        extra_parts.append(
+                            f"\n--- ATTACHMENT: {att.name} (ID: {att.id}) ---\n"
+                            f"(unreadable: {content})\n--- END ---"
+                        )
                     else:
-                        extra_parts.append(f"\n--- ATTACHMENT: {att.name} (ID: {att.id}) ---\n(no readable content)\n--- END ---")
+                        extra_parts.append(
+                            f"\n--- ATTACHMENT: {att.name} (ID: {att.id}) ---\n"
+                            f"(no readable content — missing dataUrl/path or empty file)\n--- END ---"
+                        )
                 messages.append(Message(role=m.role, content="\n".join(extra_parts)))
             else:
                 messages.append(Message(role=m.role, content=m.content or ""))
@@ -1667,8 +1688,48 @@ def create_app() -> FastAPI:
         except Exception as e:
             logger.warning("chat: context compaction failed: %s", e)
 
-        registry = default_registry(store=get_memory_store(), workspace_dir=_ws_state[0])
+        # Prefer per-request session work_dir (frontend) over process-global
+        # workspace state so file tools always match the open project.
+        _effective_wd: str | None = None
+        try:
+            _req_wd = getattr(body, "work_dir", None) or None
+            if _req_wd:
+                _p_wd = Path(str(_req_wd)).expanduser()
+                if _p_wd.is_dir():
+                    _effective_wd = str(_p_wd.resolve())
+        except Exception:
+            _effective_wd = None
+        if not _effective_wd:
+            _effective_wd = _ws_state[0] if _ws_state else None
+        if _effective_wd and _ws_state is not None:
+            # Keep global state in sync so other routes see the same root.
+            try:
+                _ws_state[0] = _effective_wd
+            except Exception:
+                pass
+
+        registry = default_registry(store=get_memory_store(), workspace_dir=_effective_wd)
         tool_schemas = registry.openai_schemas()
+        # Nudge the model toward the real workspace path on writes.
+        if _effective_wd:
+            for _ts in tool_schemas:
+                _fn = _ts.get("function") if isinstance(_ts, dict) else None
+                _name = (_ts.get("name") if isinstance(_ts, dict) else None) or (
+                    (_fn or {}).get("name") if isinstance(_fn, dict) else None
+                )
+                if _name in ("write_file", "edit_file", "write_xlsx"):
+                    _desc_key = "description"
+                    if isinstance(_fn, dict) and "description" in _fn:
+                        _fn["description"] = (
+                            f"{_fn.get('description', '')} "
+                            f"Active workspace: {_effective_wd}. "
+                            f"Use absolute paths under this folder, or relative names."
+                        ).strip()
+                    elif isinstance(_ts, dict) and _desc_key in _ts:
+                        _ts[_desc_key] = (
+                            f"{_ts.get(_desc_key, '')} "
+                            f"Active workspace: {_effective_wd}."
+                        ).strip()
         try:
             from madcop.meta_harness import load_active_harness as _load_mh
             tool_schemas = _load_mh().filter_tool_schemas(tool_schemas)
@@ -1735,7 +1796,24 @@ def create_app() -> FastAPI:
                 pass
             if _agent_mode in ("quick", "standard", "deep"):
                 from madcop.agent_network.task_router import route_task, get_mode_config
-                _task_text = body.messages[-1].content if body.messages else ""
+                # CRITICAL: use attachment-injected `messages`, not body.messages.
+                # body.messages only has the short user text (e.g. "帮忙分析下");
+                # attachment text is appended into `messages` above. Deep/standard
+                # previously ignored files entirely for this reason.
+                _task_text = ""
+                for _m in reversed(messages):
+                    if getattr(_m, "role", None) == "user" and (getattr(_m, "content", None) or "").strip():
+                        _task_text = _m.content
+                        break
+                if not _task_text and body.messages:
+                    _task_text = body.messages[-1].content or ""
+                logger.info(
+                    "chat: agent_mode=%s task_chars=%s has_attachment_block=%s work_dir=%s",
+                    _agent_mode,
+                    len(_task_text or ""),
+                    "ATTACHMENT:" in (_task_text or ""),
+                    _effective_wd,
+                )
                 try:
                     _cfg = get_mode_config(_agent_mode)
                 except Exception as e:
@@ -1748,7 +1826,7 @@ def create_app() -> FastAPI:
                 _am_model = body.model or None
                 try:
                     if _agent_mode == "quick":
-                        # Direct single-shot LLM call.
+                        # Direct single-shot LLM call (full messages incl. attachments).
                         _resp = await _loop.run_in_executor(
                             None,
                             lambda: _am_client.chat(
@@ -1772,12 +1850,12 @@ def create_app() -> FastAPI:
                         from madcop.agent_network.react_engine import ReActEngine
                         _eng = ReActEngine(
                             client=_am_client,
-                            tools=default_registry(workspace_dir=_ws_state[0]).openai_schemas(),
+                            tools=default_registry(workspace_dir=_effective_wd).openai_schemas(),
                             max_steps=10,
                             model=_am_model,
                         )
                         _result = await _loop.run_in_executor(
-                            None, lambda: _eng.run(_task_text, work_dir=_ws_state[0])
+                            None, lambda: _eng.run(_task_text, work_dir=_effective_wd)
                         )
                         for _st in _result.steps:
                             if _st.thought:
@@ -1801,7 +1879,7 @@ def create_app() -> FastAPI:
                         from madcop.agent_network.api import BUILTIN_AGENTS as _BA
                         # Pass session workspace so specialist tools (read/write)
                         # operate on the user's project without extra settings.
-                        _ws = _ws_state[0] if _ws_state else None
+                        _ws = _effective_wd
                         _dag = build_engine(work_dir=_ws)
                         _agent_colors = {a["id"]: a.get("color", "#7C3AED") for a in _BA}
                         # Pick an agent roster that fits THIS task instead of

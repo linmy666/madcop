@@ -485,11 +485,13 @@ export const useChatStore = defineStore('chat', {
           model: _options?.model || '',
           messages: requestMessages,
           attachments: _attachments?.map((a) => ({
-            id: a.id,
+            id: (a as any).id || `att-${Date.now()}`,
             name: a.name,
             type: a.type,
             path: a.path,
-            dataUrl: (a as any).previewUrl || (a as any).data,
+            // Backend ChatAttachment.dataUrl — required for docx/pdf extract
+            // when the Electron path is missing or unreadable by the sidecar.
+            dataUrl: (a as any).previewUrl || (a as any).data || (a as any).dataUrl,
           })),
           // Send null so the backend resolves temperature/max_tokens from
           // the active provider's persisted config (set in Settings). The
@@ -500,6 +502,22 @@ export const useChatStore = defineStore('chat', {
           plan_mode: !!session.planModeEnabled,
           effort: _effort === 'auto' ? null : _effort,
           agent_mode: _agentMode === 'auto' ? null : _agentMode,
+          // Session project folder → file-tool allowlist (write/read).
+          work_dir: (() => {
+            try {
+              const ss = useSessionStore(this.$pinia)
+              const s = ss.sessions?.find((x: any) => x.id === sessionId)
+              return s?.workDir || s?.projectRoot || s?.projectPath
+                || localStorage.getItem('madcop_workspace_dir')
+                || null
+            } catch {
+              try {
+                return localStorage.getItem('madcop_workspace_dir') || null
+              } catch {
+                return null
+              }
+            }
+          })(),
         }),
       })
         .then(async (res) => {

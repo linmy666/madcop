@@ -37,11 +37,23 @@ def _resolve_in_allowlist(
 ) -> Path:
     """Resolve ``path`` and verify it's inside one of ``allowed_dirs``.
 
+    Relative paths are resolved against the **first** allowed dir (the
+    active workspace), so models can write ``out.md`` instead of a full
+    absolute path and still land in the user's project.
+
     Raises ``PermissionError`` if outside. Denied attempts are logged so
     a bypass attempt is auditable even when the caller only returns
     ``{"error": ...}`` to the model.
     """
-    p = Path(path).expanduser().resolve()
+    raw = Path(path).expanduser()
+    if not raw.is_absolute():
+        if allowed_dirs:
+            base = Path(allowed_dirs[0]).expanduser().resolve()
+            p = (base / raw).resolve()
+        else:
+            p = raw.resolve()
+    else:
+        p = raw.resolve()
     for allowed in allowed_dirs:
         a = Path(allowed).expanduser().resolve()
         if p == a or a in p.parents:
@@ -326,7 +338,9 @@ class WriteFileTool(Tool):
     name = "write_file"
     description = (
         "Write text content to a file. Creates parent directories. "
-        "Overwrites existing content. Path must be in allowed dirs."
+        "Overwrites existing content. Path must be in allowed dirs. "
+        "Prefer a path under the active workspace; relative paths "
+        "(e.g. analysis.md) resolve into the workspace root."
     )
 
     def __init__(self, allowed_dirs: Sequence[str | Path] | None = None) -> None:

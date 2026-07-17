@@ -34,10 +34,14 @@ export type ClientMessage =
     }
 
 export type AttachmentRef = {
+  id?: string
   type: 'file' | 'image'
   name?: string
   path?: string
   data?: string
+  /** Base64 data URL sent to backend as ChatAttachment.dataUrl */
+  previewUrl?: string
+  dataUrl?: string
   mimeType?: string
   isDirectory?: boolean
   lineStart?: number

@@ -430,13 +430,18 @@ const handleSubmit = async () => {
     setActiveView('code')
     useTabStore().openTab(sessionId, t('sidebar.newSession'))
     connectToSession(sessionId)
-    const attachmentPayload: AttachmentRef[] = attachments.value.map((a) => ({
-      type: a.type,
-      name: a.name,
-      path: a.path,
-      data: a.data,
-      mimeType: a.mimeType,
-    }))
+    const attachmentPayload: AttachmentRef[] = attachments.value.map((a) => {
+      const dataUrl = (a as any).previewUrl || a.data
+      return {
+        id: (a as any).id || `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        type: a.type,
+        name: a.name,
+        path: a.path,
+        data: dataUrl,
+        previewUrl: dataUrl,
+        mimeType: a.mimeType,
+      }
+    })
     if (text || attachmentPayload.length > 0) {
       sendMessage(sessionId, text, attachmentPayload)
     }

@@ -483,8 +483,8 @@ function filesToComposerAttachments(files: FileList | File[]): Promise<ComposerA
       const nativePath = (file as File & { path?: unknown }).path
       const absPath =
         typeof nativePath === 'string' && nativePath.length > 0 ? nativePath : undefined
-      // Also inline the file content (capped) so the backend can parse it from
-      // the request payload even if the path isn't usable there.
+      // Always inline content when possible so backend can parse docx/pdf
+      // without relying on Electron absolute paths (sidecar may not share FS views).
       const shouldInline = isImage || file.size <= MAX_INLINE_BYTES
       const data = shouldInline
         ? await new Promise<string>((resolve, reject) => {
@@ -500,7 +500,8 @@ function filesToComposerAttachments(files: FileList | File[]): Promise<ComposerA
         type: isImage ? 'image' : 'file',
         mimeType: file.type || undefined,
         path: absPath,
-        previewUrl: isImage ? data : undefined,
+        // Keep bytes on both fields for chatStore → dataUrl mapping
+        previewUrl: data,
         data,
       }
     }),
@@ -668,13 +669,30 @@ const handleSubmit = async () => {
 
   const contentForModel = [workspaceReferencePrompt, text].filter(Boolean).join('\n\n')
 
-  const uploadAttachmentPayload: AttachmentRef[] = attachments.value.map((a) => ({
-    id: a.id,
-    name: a.name,
-    type: a.type,
-    path: a.path,
-    previewUrl: (a as any).previewUrl || (a as any).data,
-  }))
+  // Always ship id + dataUrl (or path) so the backend can extract text.
+  // Non-image files keep bytes on `data` / `previewUrl` from FileReader.
+  const uploadAttachmentPayload: AttachmentRef[] = attachments.value.map((a) => {
+    const dataUrl = (a as any).previewUrl || (a as any).data || undefined
+    return {
+      id: a.id || `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: a.name,
+      type: a.type,
+      path: a.path,
+      data: dataUrl,
+      previewUrl: dataUrl,
+      mimeType: (a as any).mimeType,
+    }
+  })
+  const missingBytes = uploadAttachmentPayload.filter((a) => !a.path && !(a as any).data && !(a as any).previewUrl)
+  if (missingBytes.length > 0) {
+    try {
+      useUIStore().addToast({
+        type: 'error',
+        message: `附件未加载完成: ${missingBytes.map((a) => a.name).join(', ')}`,
+      })
+    } catch { /* toast optional */ }
+    return
+  }
 
   const workspaceAttachmentPayload: AttachmentRef[] = workspaceReferences.value
     .filter((r: any) => r.kind !== 'chat-selection')

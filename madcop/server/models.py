@@ -72,6 +72,8 @@ class ChatRequest(BaseModel):
     plan_mode: bool = False  # enable Plan-and-Execute mode
     effort: str | None = None  # reasoning intensity: auto|low|medium|high|max (per session)
     agent_mode: str | None = None  # unified mode: auto|quick|standard|deep (overrides workflow)
+    # Session project folder — file tools read/write here. Prefer over global workspace state.
+    work_dir: str | None = None
 
 class SetActiveRequest(BaseModel):
     provider_id: str
