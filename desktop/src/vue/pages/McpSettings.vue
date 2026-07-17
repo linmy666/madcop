@@ -1136,6 +1136,19 @@ const editServer = computed<McpServerRecord | undefined>(() => {
         <span class="material-symbols-outlined text-[40px] text-[var(--color-text-tertiary)] mb-3 block">dns</span>
         <p class="text-sm text-[var(--color-text-secondary)] mb-1">{{ t('settings.mcp.empty') }}</p>
         <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.mcp.emptyHint') }}</p>
+        <div class="mt-4 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-4 py-3 text-left text-xs leading-relaxed text-[var(--color-text-secondary)]">
+          <div class="mb-1 font-semibold text-[var(--color-text-primary)]">
+            {{ t('settings.mcp.importGuideTitle') || '如何添加 MCP 服务' }}
+          </div>
+          <ol class="list-decimal space-y-1 pl-4">
+            <li>{{ t('settings.mcp.importGuide1') || '点击上方「添加服务」，选择 STDIO / HTTP / SSE 传输方式' }}</li>
+            <li>{{ t('settings.mcp.importGuide2') || 'STDIO：填写 command（如 npx）与 args；HTTP/SSE：填写 URL' }}</li>
+            <li>{{ t('settings.mcp.importGuide3') || '保存后点「重连」；工具会注入全局 registry 供对话调用' }}</li>
+          </ol>
+          <p class="mt-2 text-[var(--color-text-tertiary)]">
+            {{ t('settings.mcp.importGuideExample') || '示例：npx -y @modelcontextprotocol/server-filesystem /tmp' }}
+          </p>
+        </div>
       </div>
 
       <!-- Server groups -->

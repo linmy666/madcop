@@ -5,7 +5,7 @@ import {
   hasExplicitDefaultBaseUrl,
   setAuthToken,
   setBaseUrl,
-} from '../../api/client'
+} from '../api/client'
 import { getDesktopHost } from './desktopHost'
 
 export const H5_SERVER_URL_STORAGE_KEY = 'madcop-agent-h5-server-url'

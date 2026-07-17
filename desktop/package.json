@@ -95,7 +95,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "lint": "node ./node_modules/typescript/bin/tsc --noEmit"
+    "lint": "node ./node_modules/typescript/bin/tsc --noEmit",
+    "check:vue-client": "bun run ./scripts/check-vue-client-imports.ts"
   },
   "dependencies": {
     "@dagrejs/dagre": "1.1.4",

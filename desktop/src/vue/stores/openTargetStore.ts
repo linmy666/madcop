@@ -1,7 +1,7 @@
 // v3.0 — Pinia openTargetStore (mirrors React zustand useOpenTargetStore)
 // Minimal: only ensureTargets() and openTarget() needed by Sidebar.
 import { defineStore } from 'pinia'
-import { openTargetsApi, type OpenTarget } from '../../api/openTargets'
+import { openTargetsApi, type OpenTarget } from '../api/openTargets'
 
 const CLIENT_CACHE_TTL_MS = 60_000
 

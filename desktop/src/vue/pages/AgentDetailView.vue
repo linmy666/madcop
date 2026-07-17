@@ -4,7 +4,7 @@
 
 import { computed, ref, onMounted, watch } from 'vue'
 import { useTranslation } from '../i18n'
-import { getApiUrl } from '../../api/client'
+import { getApiUrl } from '../api/client'
 
 // ─── Props ───────────────────────────────────────────────────
 interface Props {

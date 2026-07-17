@@ -3,7 +3,7 @@
  * Used by both React and Vue MessageList components.
  */
 import type { UIMessage } from '../../stores/chatStore'
-import type { SessionTurnCheckpoint } from '../../../api/sessions'
+import type { SessionTurnCheckpoint } from '../../api/sessions'
 
 // ─── Type Aliases ────────────────────────────────────────────
 

@@ -8,7 +8,7 @@
  * createPortal → <Teleport to="body">.
  */
 import { ref, onMounted, onUnmounted, watch, computed, useId } from 'vue'
-import { sessionsApi, type RepositoryBranchInfo, type RepositoryContextResult } from '../../../api/sessions'
+import { sessionsApi, type RepositoryBranchInfo, type RepositoryContextResult } from '../../api/sessions'
 import { useTranslation } from '../../i18n'
 import DirectoryPicker from './DirectoryPicker.vue'
 import MobileBottomSheet from './MobileBottomSheet.vue'

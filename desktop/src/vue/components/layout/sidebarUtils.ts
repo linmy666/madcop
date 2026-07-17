@@ -4,7 +4,7 @@
  */
 import type { SessionListItem } from '../../../types/session'
 import type { TranslationKey } from '../../i18n'
-import type { SidebarProjectPreferences } from '../../../api/desktopUiPreferences'
+import type { SidebarProjectPreferences } from '../../api/desktopUiPreferences'
 
 export type SidebarProjectOrganization = 'project' | 'recentProject' | 'time'
 export type SidebarProjectSortBy = 'createdAt' | 'updatedAt'

@@ -1,4 +1,4 @@
-import { doctorApi, type DoctorReportRepairResponse } from '../../api/doctor'
+import { doctorApi, type DoctorReportRepairResponse } from '../api/doctor'
 import { APP_ZOOM_STORAGE_KEY, LEGACY_UI_ZOOM_STORAGE_KEY } from './appZoom'
 import { DESKTOP_PERSISTENCE_VERSION_KEY } from './persistenceMigrations'
 

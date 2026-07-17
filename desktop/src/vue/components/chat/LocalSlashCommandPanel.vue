@@ -18,14 +18,14 @@ import {
 } from 'vue'
 
 // ─── API ──────────────────────────────────────────────────────
-import { skillsApi } from '../../../api/skills'
-import { mcpApi } from                    '../../../api/mcp'
+import { skillsApi } from '../../api/skills'
+import { mcpApi } from                    '../../api/mcp'
 import {
   sessionsApi,
   type SessionContextSnapshot,
   type SessionInspectionResponse,
   type SessionUsageSnapshot,
-} from                    '../../../api/sessions'
+} from                    '../../api/sessions'
 
 // ─── i18n ─────────────────────────────────────────────────────
 import { useTranslation, type TranslationKey } from '../../i18n'

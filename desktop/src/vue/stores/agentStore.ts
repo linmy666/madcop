@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { agentsApi, type AgentDefinition } from '../../api/agents'
+import { agentsApi, type AgentDefinition } from '../api/agents'
 
 export type AgentSource =
   | 'built-in'

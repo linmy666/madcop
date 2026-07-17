@@ -1,6 +1,6 @@
 import type { Terminal as XTermTerminal, IDisposable } from '@xterm/xterm'
 import type { FitAddon as XTermFitAddon } from '@xterm/addon-fit'
-import { terminalApi } from '../../api/terminal'
+import { terminalApi } from '../api/terminal'
 
 export type TerminalStatus = 'idle' | 'starting' | 'running' | 'exited' | 'error' | 'unavailable'
 

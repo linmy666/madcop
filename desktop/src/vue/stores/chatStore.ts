@@ -409,7 +409,12 @@ export const useChatStore = defineStore('chat', {
       // the backend never received the prior messages.
       const history = (session.messages || [])
         .filter((m: any) => m && (m.type === 'user_text' || m.type === 'assistant_text'))
-        .map((m: any) => ({ role: m.role || (m.type === 'user_text' ? 'user' : 'assistant'), content: m.content || '' }))
+        .map((m: any) => ({
+          role: m.role || (m.type === 'user_text' ? 'user' : 'assistant'),
+          content: m.content || '',
+          // Stable id for backend persist / branch cut points
+          id: m.transcriptMessageId || m.id || undefined,
+        }))
         // Cap at the last 20 messages to keep the request small
         .slice(-20)
       // NOTE: The system prompt is owned by the backend (madcop/server/app.py

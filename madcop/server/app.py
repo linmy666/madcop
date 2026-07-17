@@ -24,17 +24,21 @@ import time
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
 # Per-message content cap for chat requests (DoS / memory protection).
 _MAX_CHAT_CONTENT_CHARS = 500_000
 _MAX_CHAT_MESSAGES = 200
+# Inline attachment dataUrl hard cap (~2 MB base64 ≈ 1.5 MB binary).
+_MAX_ATTACHMENT_DATAURL_CHARS = 2_500_000
 
 from madcop.config import settings as settings_store
 from madcop.llm import Message, MockClient, OpenAICompatClient
@@ -89,6 +93,9 @@ class FetchModelsRequest(BaseModel):
 class ChatMessage(BaseModel):
     role: str = "user"
     content: str = Field(default="", max_length=_MAX_CHAT_CONTENT_CHARS)
+    # Optional client-side id — when set, backend persists with the same id
+    # so branch/rewind can match frontend transcriptMessageId.
+    id: str | None = None
 
 
 class ChatAttachment(BaseModel):
@@ -96,7 +103,16 @@ class ChatAttachment(BaseModel):
     name: str
     type: str = "file"
     path: str | None = None
-    dataUrl: str | None = None  # base64 data URL for inline previews
+    dataUrl: str | None = Field(default=None, max_length=_MAX_ATTACHMENT_DATAURL_CHARS)
+
+    @field_validator("dataUrl")
+    @classmethod
+    def _reject_huge_dataurl(cls, v: str | None) -> str | None:
+        if v is not None and len(v) > _MAX_ATTACHMENT_DATAURL_CHARS:
+            raise ValueError(
+                f"attachment dataUrl too large ({len(v)} > {_MAX_ATTACHMENT_DATAURL_CHARS})"
+            )
+        return v
 
 
 def _xlsx_bytes_to_text(raw: bytes) -> str:
@@ -861,7 +877,41 @@ def _extract_and_emit_html_preview(text: str) -> str | None:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="MadCop Agent", version="2.3.0", docs_url="/docs")
+    import asyncio as _aio
+
+    @asynccontextmanager
+    async def _lifespan(app: FastAPI):
+        # Background session persistence (every 3s, dirty-fingerprint skip).
+        from madcop.server.madcop_compat import _persist_sessions
+
+        async def _persist_loop() -> None:
+            while True:
+                try:
+                    await _aio.sleep(3.0)
+                    await _aio.to_thread(_persist_sessions)
+                except _aio.CancelledError:
+                    return
+                except Exception as e:
+                    logger.warning("persist-loop error: %s", e)
+
+        app.state.persist_task = _aio.create_task(_persist_loop())
+        try:
+            yield
+        finally:
+            task = getattr(app.state, "persist_task", None)
+            if task:
+                task.cancel()
+            try:
+                await _aio.to_thread(_persist_sessions)
+            except Exception as e:
+                logger.warning("shutdown persist failed: %s", e)
+
+    app = FastAPI(
+        title="MadCop Agent",
+        version="2.3.0",
+        docs_url="/docs",
+        lifespan=_lifespan,
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -919,46 +969,18 @@ def create_app() -> FastAPI:
                 try:
                     default_registry().register(t)
                     registered += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("mcp: register tool failed: %s", e)
             _mcp_manager = mgr
             print(f"[mcp] Loaded {registered} tools from {len(servers)} servers")
         except Exception as e:
+            logger.warning("mcp: Failed to load: %s", e)
             print(f"[mcp] Failed to load: {e}")
 
     atexit.register(lambda: _mcp_manager.close_all() if _mcp_manager else None)
     _load_mcp_into_global_registry()
 
-    # ------------------------------------------------------------------- #
-    # Session persistence (background task)
-    # ------------------------------------------------------------------- #
-    import asyncio as _aio
-    from madcop.server.madcop_compat import _persist_sessions
-
-    @app.on_event("startup")
-    async def _start_persist_task() -> None:
-        async def _loop() -> None:
-            while True:
-                try:
-                    await _aio.sleep(3.0)  # persist every 3s
-                    await _aio.to_thread(_persist_sessions)
-                except _aio.CancelledError:
-                    return
-                except Exception as e:
-                    import sys as _sys
-                    print(f"[persist-loop] error: {e}", file=_sys.stderr, flush=True)
-        app.state.persist_task = _aio.create_task(_loop())
-
-    @app.on_event("shutdown")
-    async def _stop_persist_task() -> None:
-        task = getattr(app.state, "persist_task", None)
-        if task:
-            task.cancel()
-        # One final persist before exit
-        try:
-            await _aio.to_thread(_persist_sessions)
-        except Exception:
-            pass
+    # Session persistence runs via lifespan (see create_app).
 
     # ------------------------------------------------------------------- #
     # Health
@@ -1628,16 +1650,18 @@ def create_app() -> FastAPI:
         client = _get_client()
         messages = [Message(role=m.role, content=m.content) for m in body.messages]
 
-        # Resolve sampling parameters from the active provider config. The
-        # frontend sends defaults (0.7 / 8192) when the user hasn't set a
-        # per-request override, so here we promote the provider's persisted
-        # temperature/max_tokens/top_p over those defaults. This is what
-        # makes the per-provider sampling settings in the UI actually take
-        # effect instead of being ignored.
+        # Load settings once per request — previously chat re-read disk 3–7×.
         try:
-            _prov_cfg = settings_store.get_active_client_config(settings_store.load_settings())
+            _settings_once = settings_store.load_settings()
+            _prov_cfg = settings_store.get_active_client_config(_settings_once) or {}
+        except Exception as e:
+            logger.warning("chat: failed to load settings: %s", e)
+            _settings_once = None
+            _prov_cfg = {}
+
+        # Resolve sampling parameters from the active provider config.
+        try:
             if _prov_cfg:
-                # Per-model overrides win over provider-level defaults.
                 _model_name = (body.model or _prov_cfg.get("model") or "").lower()
                 _overrides = (_prov_cfg.get("model_params") or {}).get(_model_name, {})
                 if _overrides:
@@ -1650,27 +1674,10 @@ def create_app() -> FastAPI:
                         body.max_tokens = _prov_cfg["max_tokens"]
         except Exception as e:
             logger.warning("chat: failed to resolve provider sampling params: %s", e)
-        # Ensure max_tokens is always a concrete int — downstream code
-        # (e.g. context-window budget math) does arithmetic on it and
-        # None would raise TypeError. Fall back to the provider default
-        # or 8192 when nothing was resolved above.
         if body.max_tokens is None:
-            try:
-                _pc = settings_store.get_active_client_config(settings_store.load_settings())
-                body.max_tokens = (_pc or {}).get("max_tokens") or 8192
-            except Exception as e:
-                logger.warning("chat: max_tokens fallback failed: %s", e)
-                body.max_tokens = 8192
-        # Same guarantee for temperature — the frontend may send null to
-        # mean "use provider default". If no provider default resolved,
-        # fall back to 0.7 (the historical default).
+            body.max_tokens = (_prov_cfg or {}).get("max_tokens") or 8192
         if body.temperature is None:
-            try:
-                _pc2 = settings_store.get_active_client_config(settings_store.load_settings())
-                body.temperature = (_pc2 or {}).get("temperature") or 0.7
-            except Exception as e:
-                logger.warning("chat: temperature fallback failed: %s", e)
-                body.temperature = 0.7
+            body.temperature = (_prov_cfg or {}).get("temperature") or 0.7
 
         # Convert text-only messages. Attachments' content is EXTRACTED
         # and appended directly to the user message so the LLM can read
@@ -1709,8 +1716,10 @@ def create_app() -> FastAPI:
         # Resolve the actual model label for dynamic system-prompt injection.
         _active_label = ""
         try:
-            _s = settings_store.load_settings()
-            _pub = settings_store.settings_to_public_dict(_s)
+            if _settings_once is not None:
+                _pub = settings_store.settings_to_public_dict(_settings_once)
+            else:
+                _pub = settings_store.settings_to_public_dict(settings_store.load_settings())
             _aid = _pub.get("active_provider")
             _ap = next((p for p in _pub.get("providers", []) if p.get("provider_id") == _aid), None)
             if _ap:
@@ -1782,73 +1791,31 @@ def create_app() -> FastAPI:
             trace_store.mark_running(trace_root.id)
             yield f"data: {json.dumps({'type': 'trace', 'node': trace_root.to_dict()}, ensure_ascii=False)}\n\n"
 
-            # -- Persist user message to session history ----------------- #
-            # The SSE chat path was NOT writing to _MESSAGES (only the
-            # WebSocket path did), so on restart every session lost its
-            # history except the title. Save the user turn up-front and
-            # the assistant turn when the stream finishes below.
-            import time as _sse_t, uuid as _sse_u
-            from madcop.server.madcop_compat import _MESSAGES as _SSE_MSGS, _SESSIONS as _SSE_SESS, _PERSIST_LOCK as _SSE_LOCK
+            # -- Persist user/assistant turns (stable client message ids) -- #
+            from madcop.server.session_persist import (
+                append_assistant as _sse_append_asst,
+                append_user_and_ensure as _sse_append_user,
+            )
             _sse_sid = body.conversation_id or conv_id
+            _last_msg = body.messages[-1] if body.messages else None
+            _client_user_id = getattr(_last_msg, "id", None) if _last_msg else None
 
-            def _sse_save_assistant(content: str, model: str = "") -> None:
-                """Persist the assistant's final answer so it survives restart."""
+            def _sse_save_assistant(content: str, model: str = "", msg_id: str | None = None) -> None:
                 try:
-                    from madcop.server.madcop_compat import (
-                        _MAX_SESSION_MESSAGES as _SSE_MAX_MSGS,
-                        _MAX_MESSAGE_CONTENT_CHARS as _SSE_MAX_CHARS,
+                    _sse_append_asst(
+                        _sse_sid, content, msg_id=msg_id, model=model or "",
                     )
-                    _now = _sse_t.strftime("%Y-%m-%dT%H:%M:%SZ", _sse_t.gmtime())
-                    _capped = (content or "")[:_SSE_MAX_CHARS]
-                    with _SSE_LOCK:
-                        _SSE_MSGS.setdefault(_sse_sid, []).append({
-                            "id": _sse_u.uuid4().hex,
-                            "type": "assistant",
-                            "content": _capped,
-                            "timestamp": _now,
-                            "model": model,
-                        })
-                        # Bound in-memory history so a long session can't OOM.
-                        if len(_SSE_MSGS[_sse_sid]) > _SSE_MAX_MSGS:
-                            _SSE_MSGS[_sse_sid] = _SSE_MSGS[_sse_sid][-_SSE_MAX_MSGS:]
-                        if _sse_sid in _SSE_SESS:
-                            _SSE_SESS[_sse_sid]["messageCount"] = len(_SSE_MSGS[_sse_sid])
-                            _SSE_SESS[_sse_sid]["modifiedAt"] = _now
                 except Exception as e:
                     logger.warning("SSE: persist assistant message failed: %s", e)
 
             try:
-                from madcop.server.madcop_compat import (
-                    _MAX_SESSION_MESSAGES as _SSE_MAX_MSGS2,
-                    _MAX_MESSAGE_CONTENT_CHARS as _SSE_MAX_CHARS2,
+                _sse_append_user(
+                    _sse_sid,
+                    (_last_msg.content if _last_msg else "") or "",
+                    msg_id=_client_user_id,
+                    title_hint=(_last_msg.content[:40] if _last_msg and _last_msg.content else "New Session"),
+                    work_dir=_ws_state[0] if _ws_state else None,
                 )
-                _sse_now = _sse_t.strftime("%Y-%m-%dT%H:%M:%SZ", _sse_t.gmtime())
-                _user_content = (body.messages[-1].content if body.messages else "")[:_SSE_MAX_CHARS2]
-                with _SSE_LOCK:
-                    if _sse_sid not in _SSE_SESS:
-                        _SSE_SESS[_sse_sid] = {
-                            "id": _sse_sid,
-                            "title": (body.messages[-1].content[:40] if body.messages else "New Session"),
-                            "createdAt": _sse_now,
-                            "modifiedAt": _sse_now,
-                            "messageCount": 0,
-                            "projectPath": _ws_state[0] if _ws_state else "",
-                            "workDir": _ws_state[0] if _ws_state else None,
-                        }
-                    _sse_sess = _SSE_SESS[_sse_sid]
-                    _sse_sess["modifiedAt"] = _sse_now
-                    if not _sse_sess.get("title") or _sse_sess.get("title") == "New Session":
-                        _sse_sess["title"] = body.messages[-1].content[:40] if body.messages else "New Session"
-                    _SSE_MSGS.setdefault(_sse_sid, [])
-                    _SSE_MSGS[_sse_sid].append({
-                        "id": _sse_u.uuid4().hex,
-                        "type": "user",
-                        "content": _user_content,
-                        "timestamp": _sse_now,
-                    })
-                    if len(_SSE_MSGS[_sse_sid]) > _SSE_MAX_MSGS2:
-                        _SSE_MSGS[_sse_sid] = _SSE_MSGS[_sse_sid][-_SSE_MAX_MSGS2:]
-                    _sse_sess["messageCount"] = len(_SSE_MSGS[_sse_sid])
             except Exception as e:
                 logger.warning("SSE: persist user message failed: %s", e)
 
@@ -1865,7 +1832,8 @@ def create_app() -> FastAPI:
                 _task_text = body.messages[-1].content if body.messages else ""
                 try:
                     _cfg = get_mode_config(_agent_mode)
-                except Exception:
+                except Exception as e:
+                    logger.warning("chat: get_mode_config failed: %s", e)
                     _cfg = {"workflow": "react", "effort": "medium"}
                 _eff = _cfg.get("effort")
                 # Resolve the active client + model (same helper the rest
@@ -3202,48 +3170,43 @@ def create_app() -> FastAPI:
                     # Unknown message type — ignore gracefully.
                     continue
 
-                # ---- Save user message to session history (cc-haha compat) ---- #
-                # Persist into madcop_compat._MESSAGES[session_id] so the
-                # Electron UI can re-fetch it via /api/sessions/{id}/messages.
-                import time as _time, uuid as _uuid
-                now_iso = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
-                # Ensure session exists
-                # Keep the session bound to the user's working directory so it
-                # persists under <workDir>/.madcop/ instead of the backend cwd.
+                # ---- Save user message (stable client id when provided) ---- #
+                from madcop.server.session_persist import (
+                    append_user_and_ensure as _ws_append_user,
+                    append_assistant as _ws_append_asst,
+                    ensure_session as _ws_ensure,
+                )
                 msg_wd = msg.get("workDir") or msg.get("work_dir") \
                     or msg.get("projectPath") or msg.get("projectRoot")
-                if session_id not in _SESSIONS:
-                    _SESSIONS[session_id] = {
-                        "id": session_id,
-                        "title": (messages[-1].content[:40] if messages else "New Session"),
-                        "createdAt": now_iso,
-                        "modifiedAt": now_iso,
-                        "messageCount": 0,
-                        "projectPath": msg_wd or "",
-                        "workDir": msg_wd or None,
-                        "workDirExists": bool(msg_wd and Path(msg_wd).is_dir()),
-                    }
-                sess = _SESSIONS[session_id]
-                sess["modifiedAt"] = now_iso
-                # Refresh the working directory if the client supplies one, so
-                # sessions started before a workDir was known get re-homed.
+                _raw_tail = None
+                if mtype in ("chat", ""):
+                    _rm = msg.get("messages") or []
+                    if _rm and isinstance(_rm[-1], dict):
+                        _raw_tail = _rm[-1]
+                _client_msg_id = (
+                    msg.get("messageId") or msg.get("id")
+                    or (_raw_tail.get("id") if _raw_tail else None)
+                )
+                _ws_title = (messages[-1].content[:40] if messages else "New Session")
+                sess = _ws_ensure(
+                    session_id, title=_ws_title, work_dir=msg_wd,
+                    project_path=msg.get("projectPath") or msg_wd,
+                )
                 if msg_wd:
                     sess["workDir"] = msg_wd
                     sess["projectPath"] = msg.get("projectPath") or msg_wd
                     sess["projectRoot"] = msg.get("projectRoot") or msg_wd
-                    sess["workDirExists"] = Path(msg_wd).is_dir()
-                if not sess.get("title") or sess.get("title") == "New Session":
-                    sess["title"] = (messages[-1].content[:40] if messages else "New Session")
-                _MESSAGES.setdefault(session_id, [])
-                # Append user message
-                user_entry = {
-                    "id": _uuid.uuid4().hex,
-                    "type": "user",
-                    "content": messages[-1].content,
-                    "timestamp": now_iso,
-                }
-                _MESSAGES[session_id].append(user_entry)
-                sess["messageCount"] = len(_MESSAGES[session_id])
+                    try:
+                        sess["workDirExists"] = Path(msg_wd).is_dir()
+                    except Exception:
+                        sess["workDirExists"] = False
+                user_entry = _ws_append_user(
+                    session_id,
+                    messages[-1].content,
+                    msg_id=_client_msg_id,
+                    title_hint=_ws_title,
+                    work_dir=msg_wd,
+                )
 
                 # ---- Auto-extract facts from user message into L1 Semantic --- #
                 try:
@@ -3582,15 +3545,12 @@ def create_app() -> FastAPI:
                         step_name="llm_final",
                     )
                     ws_step(HOOK_PLAN_END, step_name="turn_end")
-                    asst_entry = {
-                        "id": _uuid.uuid4().hex,
-                        "type": "assistant",
-                        "content": content,
-                        "timestamp": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
-                        "model": resp.model,
-                    }
-                    _MESSAGES[session_id].append(asst_entry)
-                    sess["messageCount"] = len(_MESSAGES[session_id])
+                    asst_entry = _ws_append_asst(
+                        session_id,
+                        content or "",
+                        msg_id=msg.get("assistantMessageId"),
+                        model=getattr(resp, "model", "") or "",
+                    )
                     # ---- Auto-distill SKILL from teach-me exchanges ---- #
                     try:
                         from madcop.memory.skill_distill import (
