@@ -71,9 +71,11 @@ Action Input: <工具参数，JSON格式；如果是 FINAL_ANSWER 则直接输�
 规则:
 1. 每次只执行一个 Action
 2. 如果信息足够回答问题，Action 设为 FINAL_ANSWER
-3. Action Input 必须是合法的 JSON（FINAL_ANSWER 除外）
+3. Action Input：调用工具时用合法 JSON；FINAL_ANSWER 时直接写 Markdown 纯文本，
+   不要包成 {"message":"..."} JSON，不要用 \\n 转义换行
 4. 不要编造观察结果，只能基于真实的 Observation
 5. 如果连续 3 次工具调用都失败，直接用已有信息给出 FINAL_ANSWER
+6. 禁止无意义地反复调用 echo；需要展示内容时写在 FINAL_ANSWER 里
 """
 
 
@@ -111,6 +113,51 @@ def parse_react_response(text: str) -> tuple[str, str, str]:
         action_input = text.strip()
 
     return thought, action, action_input
+
+
+def normalize_final_answer(text: str) -> str:
+    """Unwrap models that put the user-facing reply in JSON.
+
+    Some providers emit FINAL_ANSWER as::
+
+        {"message": "markdown\\nwith\\nescapes"}
+
+    or a double-encoded string. Return clean markdown for the UI.
+    """
+    if not text:
+        return text
+    s = text.strip()
+    # Strip common code fences
+    if s.startswith("```"):
+        lines = s.split("\n")
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        s = "\n".join(lines).strip()
+    for _ in range(3):
+        if not (s.startswith("{") and s.endswith("}")) and not (s.startswith('"') and s.endswith('"')):
+            break
+        try:
+            parsed = json.loads(s)
+        except Exception:
+            break
+        if isinstance(parsed, dict):
+            for key in ("message", "answer", "content", "text", "final_answer", "result"):
+                if key in parsed and isinstance(parsed[key], str) and parsed[key].strip():
+                    s = parsed[key].strip()
+                    break
+            else:
+                # No known field — pretty-print remaining dict only if tiny
+                break
+        elif isinstance(parsed, str):
+            s = parsed.strip()
+        else:
+            break
+    # Literal \n sequences left by partial escaping
+    if "\\n" in s and s.count("\n") < s.count("\\n"):
+        s = s.replace("\\n", "\n").replace("\\t", "\t")
+    return s
 
 
 # ── Engine ─────────────────────────────────────────────────────────── #
@@ -208,10 +255,10 @@ class ReActEngine:
 
             # Check for final answer
             if action.upper() == "FINAL_ANSWER":
-                final_answer = action_input
+                final_answer = normalize_final_answer(action_input)
                 steps.append(ReActStep(
                     step_num=step_num, thought=thought,
-                    action="FINAL_ANSWER", action_input=action_input,
+                    action="FINAL_ANSWER", action_input=final_answer,
                     elapsed_ms=round((time.time() - step_start) * 1000, 1),
                 ))
                 break

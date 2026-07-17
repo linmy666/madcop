@@ -632,7 +632,26 @@ export const useChatStore = defineStore('chat', {
                     // messages have already been pushed) so the timeline is
                     // tool → assistant instead of assistant → tool.
                     ensureAssistantPushed()
-                    assistantMsg += event.content
+                    // Some models wrap FINAL_ANSWER as {"message":"a\\nb"} —
+                    // unwrap so markdown renders instead of raw JSON.
+                    let chunk = event.content as string
+                    const trimmed = chunk.trim()
+                    if (
+                      (trimmed.startsWith('{') && trimmed.includes('"message"'))
+                      || (trimmed.startsWith('{') && trimmed.includes('"answer"'))
+                    ) {
+                      try {
+                        const parsed = JSON.parse(trimmed)
+                        if (parsed && typeof parsed === 'object') {
+                          const inner = parsed.message || parsed.answer || parsed.content || parsed.text
+                          if (typeof inner === 'string' && inner.trim()) chunk = inner
+                        }
+                      } catch { /* keep raw */ }
+                    }
+                    if (chunk.includes('\\n') && (chunk.match(/\n/g) || []).length < (chunk.match(/\\n/g) || []).length) {
+                      chunk = chunk.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+                    }
+                    assistantMsg += chunk
                     // Update the placeholder message via the cached reference
                     // (avoids an O(n) Array.find on every streamed token).
                     // Throttled via requestAnimationFrame so we don't trigger
