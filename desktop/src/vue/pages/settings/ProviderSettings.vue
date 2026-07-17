@@ -38,6 +38,7 @@ interface Provider {
 
 interface ProviderPreset {
   id: string
+  provider_id?: string // backend returns this instead of 'id'
   label: string
   base_url: string
   default_model: string
@@ -167,11 +168,16 @@ const currentFetched = computed(() => {
 })
 
 // ── Load data ──────────────────────────────────────────────────────────
+const loadError = ref<string | null>(null)
+
 async function loadData() {
   loading.value = true
+  loadError.value = null
   try {
     const res = await fetch(getApiUrl('/api/settings'))
-    if (res.ok) {
+    if (!res.ok) {
+      loadError.value = `加载失败：后端返回 ${res.status}`
+    } else {
       const data = await res.json()
       activeProviderId.value = data.active_provider || null
       providers.value = (data.providers || []).filter((p: Provider) => p.model || p.label)
@@ -179,10 +185,14 @@ async function loadData() {
     const res2 = await fetch(getApiUrl('/api/settings/providers/presets'))
     if (res2.ok) {
       const data2 = await res2.json()
-      presets.value = data2.presets || []
+      // Backend returns 'provider_id' but the UI expects 'id' — normalize.
+      presets.value = (data2.presets || []).map((p: any) => ({
+        ...p,
+        id: p.id || p.provider_id,
+      }))
     }
-  } catch {
-    // ignore
+  } catch (e: any) {
+    loadError.value = `加载失败：${e?.message || '网络错误'}`
   } finally {
     loading.value = false
   }
@@ -386,13 +396,27 @@ function fmtContext(n: number | null | undefined) {
         <h2 class="text-[16px] font-semibold text-[var(--color-text-primary)]">模型供应商</h2>
         <p class="text-[13px] text-[var(--color-text-tertiary)] mt-0.5">管理你的 LLM API 提供方</p>
       </div>
-      <button
-        @click="showCreateModal = true"
-        style="padding: 8px 16px; background: var(--color-brand); color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px;"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        添加供应商
-      </button>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button
+          @click="loadData"
+          title="刷新"
+          style="padding: 8px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px; cursor: pointer; color: var(--color-text-secondary); display: flex; align-items: center;"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        </button>
+        <button
+          @click="showCreateModal = true"
+          style="padding: 8px 16px; background: var(--color-brand); color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px;"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          添加供应商
+        </button>
+      </div>
+    </div>
+
+    <!-- Error banner (shows when fetch fails so the user knows why the list is empty) -->
+    <div v-if="loadError" style="padding: 12px 16px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; color: #dc2626; font-size: 13px; margin-bottom: 12px;">
+      {{ loadError }}
     </div>
 
     <!-- Loading -->
@@ -436,6 +460,11 @@ function fmtContext(n: number | null | undefined) {
           <span class="provider-card__detail">{{ authLabel(p.auth_strategy) }}</span>
           <span class="provider-card__detail">{{ formatLabel(p.api_format) }}</span>
           <span class="provider-card__detail" v-if="p.tool_search_enabled">工具搜索</span>
+          <!-- Sampling params summary (v2.7) — shows the persisted temp /
+               max_tokens so the user can see what's configured at a glance. -->
+          <span class="provider-card__detail" v-if="p.temperature != null">temp {{ Number(p.temperature).toFixed(2) }}</span>
+          <span class="provider-card__detail" v-if="p.max_tokens">{{ p.max_tokens }} tokens</span>
+          <span class="provider-card__detail" v-if="p.top_p != null && p.top_p < 1">top_p {{ Number(p.top_p).toFixed(2) }}</span>
         </div>
         <div v-if="testResults[p.provider_id]?.result" :class="['provider-card__test', testResults[p.provider_id]?.result?.connectivity?.success ? 'provider-card__test--ok' : 'provider-card__test--fail']">
           <template v-if="testResults[p.provider_id]?.result?.connectivity">
