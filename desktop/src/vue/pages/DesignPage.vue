@@ -68,6 +68,7 @@ const error = ref<string | null>(null)
 const statusMsg = ref<string | null>(null)
 const newProjectName = ref('')
 const newProjectNameInput = ref<HTMLInputElement | null>(null)
+const previewOpen = ref(true)
 
 watch(projects, (val) => saveProjects(val), { deep: true })
 
@@ -454,23 +455,37 @@ function onCanvasSave(data: DesignData) {
     <header class="dp-editor__topbar">
       <button type="button" class="dp-editor__back" @click="activeProject = null">
         <span class="material-symbols-outlined" style="font-size: 18px">arrow_back</span>
-        返回
+        项目
       </button>
-      <div class="dp-editor__title">{{ activeProject.name }}</div>
+      <div class="dp-editor__title-wrap">
+        <div class="dp-editor__title">{{ activeProject.name }}</div>
+        <div class="dp-editor__subtitle">
+          {{ activeProject.pages.length }} 页 · 本地保存
+        </div>
+      </div>
       <div class="dp-editor__spacer" />
       <span v-if="loading" class="dp-status">生成中…</span>
       <span v-else-if="statusMsg" class="dp-status">{{ statusMsg }}</span>
-      <button type="button" class="dp-btn" @click="saveProject">保存</button>
-      <button type="button" class="dp-btn dp-btn--danger" @click="deleteCurrentProject">删除项目</button>
+      <button
+        type="button"
+        class="dp-btn"
+        :class="{ 'dp-btn--on': previewOpen }"
+        @click="previewOpen = !previewOpen"
+      >
+        {{ previewOpen ? '收起预览' : '预览' }}
+      </button>
+      <button type="button" class="dp-btn dp-btn--primary" @click="saveProject">保存项目</button>
+      <button type="button" class="dp-btn dp-btn--danger" @click="deleteCurrentProject">删除</button>
     </header>
 
     <!-- AI generate bar -->
     <div class="dp-ai-bar">
+      <span class="material-symbols-outlined dp-ai-bar__icon">auto_awesome</span>
       <input
         v-model="prompt"
         type="text"
         class="dp-input dp-ai-bar__input"
-        placeholder="描述要生成的页面，例如：带搜索栏的商品列表…"
+        placeholder="描述一页 UI，例如：带搜索栏的商品列表，卡片网格…"
         :disabled="loading"
         @keydown.enter="handleGenerate"
       />
@@ -480,34 +495,25 @@ function onCanvasSave(data: DesignData) {
         :disabled="loading || !prompt.trim()"
         @click="handleGenerate"
       >
-        {{ loading ? '生成中…' : 'AI 生成页面' }}
+        {{ loading ? '生成中…' : 'AI 生成' }}
       </button>
-      <button
-        type="button"
-        class="dp-btn"
-        :disabled="loading"
-        @click="addPage()"
-      >
-        + 空白页
+      <button type="button" class="dp-btn" :disabled="loading" @click="addPage()">
+        空白页
       </button>
     </div>
     <p v-if="error" class="dp-error dp-error--bar">{{ error }}</p>
 
-    <div class="dp-editor__body">
+    <div class="dp-editor__main">
       <div class="dp-editor__pages">
         <div class="dp-section__head">
           <h3 class="dp-section__title">页面</h3>
-          <button type="button" class="dp-btn dp-btn--sm" @click="addPage()">+ 新页面</button>
+          <button type="button" class="dp-btn dp-btn--sm" @click="addPage()">+</button>
         </div>
         <div v-if="activeProject.pages.length === 0" class="dp-props-empty">
-          <p>还没有页面。用上方 AI 生成，或点「空白页」。</p>
+          <p>还没有页面。上方用 AI 生成，或点空白页手动画。</p>
         </div>
         <div class="dp-page-list">
-          <div
-            v-for="p in activeProject.pages"
-            :key="p.id"
-            class="dp-page-row"
-          >
+          <div v-for="(p, i) in activeProject.pages" :key="p.id" class="dp-page-row">
             <button
               type="button"
               :class="[
@@ -516,7 +522,8 @@ function onCanvasSave(data: DesignData) {
               ]"
               @click="selectPage(p.id)"
             >
-              {{ p.name || '未命名' }}
+              <span class="dp-page-tab__idx">{{ i + 1 }}</span>
+              <span class="dp-page-tab__name">{{ p.name || '未命名' }}</span>
             </button>
             <button
               type="button"
@@ -530,21 +537,22 @@ function onCanvasSave(data: DesignData) {
         </div>
       </div>
 
-      <div class="dp-editor__canvas">
-        <DesignCanvas
-          v-if="activePage"
-          :key="activePage.id"
-          :initial-data="activePage.data"
-          @save="onCanvasSave"
-        />
-        <div v-else class="dp-canvas-empty">
-          <p>选择或生成一个页面以开始编辑</p>
-          <p class="dp-meta">画布左侧可拖入组件；点「保存」写回项目</p>
+      <div class="dp-editor__workspace">
+        <div class="dp-editor__canvas">
+          <DesignCanvas
+            v-if="activePage"
+            :key="activePage.id"
+            :initial-data="activePage.data"
+            @save="onCanvasSave"
+          />
+          <div v-else class="dp-canvas-empty">
+            <p>选择或生成一个页面以开始编辑</p>
+            <p class="dp-meta">画布左侧添加组件；点保存写回项目</p>
+          </div>
         </div>
+        <DesignPreview v-if="activePage && previewOpen" :data="activePage.data" />
       </div>
     </div>
-
-    <DesignPreview v-if="activePage" :data="activePage.data" />
   </div>
 </template>
 
@@ -670,6 +678,7 @@ function onCanvasSave(data: DesignData) {
 .dp-editor__topbar {
   display: flex; align-items: center; gap: 10px; padding: 10px 14px;
   border-bottom: 1px solid var(--color-border); flex-shrink: 0;
+  background: var(--color-surface-container-lowest, var(--color-surface));
 }
 .dp-editor__back {
   display: inline-flex; align-items: center; gap: 4px; border: none; background: transparent;
@@ -677,39 +686,70 @@ function onCanvasSave(data: DesignData) {
   border-radius: 8px;
 }
 .dp-editor__back:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
-.dp-editor__title { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
+.dp-editor__title-wrap { min-width: 0; }
+.dp-editor__title {
+  font-size: 14px; font-weight: 600; color: var(--color-text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
+}
+.dp-editor__subtitle { font-size: 11px; color: var(--color-text-tertiary); margin-top: 1px; }
 .dp-editor__spacer { flex: 1; }
+.dp-btn--on {
+  border-color: color-mix(in srgb, var(--color-brand) 35%, var(--color-border));
+  color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 8%, transparent);
+}
 
 .dp-ai-bar {
   display: flex; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--color-border);
   flex-shrink: 0; align-items: center;
+  background: color-mix(in srgb, var(--color-brand) 4%, var(--color-surface));
 }
+.dp-ai-bar__icon { font-size: 18px; color: var(--color-brand); flex-shrink: 0; }
 .dp-ai-bar__input { flex: 1; }
 
-.dp-editor__body {
+.dp-editor__main {
   flex: 1; min-height: 0; display: flex; overflow: hidden;
 }
 .dp-editor__pages {
-  width: 200px; flex-shrink: 0; border-right: 1px solid var(--color-border);
-  padding: 12px; overflow-y: auto;
+  width: 168px; flex-shrink: 0; border-right: 1px solid var(--color-border);
+  padding: 12px 10px; overflow-y: auto;
+  background: var(--color-surface-container-lowest, var(--color-surface));
 }
-.dp-page-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.dp-page-row { display: flex; align-items: center; gap: 4px; }
+.dp-page-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.dp-page-row { display: flex; align-items: center; gap: 2px; }
 .dp-page-tab {
-  flex: 1; text-align: left; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent;
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  text-align: left; padding: 8px 8px; border-radius: 8px; border: 1px solid transparent;
   background: transparent; cursor: pointer; font-size: 12px; color: var(--color-text-secondary);
+  min-width: 0;
 }
 .dp-page-tab:hover { background: var(--color-surface-hover); }
 .dp-page-tab--active {
   background: color-mix(in srgb, var(--color-brand) 10%, transparent);
-  color: var(--color-brand); font-weight: 600; border-color: color-mix(in srgb, var(--color-brand) 20%, transparent);
+  color: var(--color-brand); font-weight: 600;
+  border-color: color-mix(in srgb, var(--color-brand) 20%, transparent);
+}
+.dp-page-tab__idx {
+  width: 18px; height: 18px; border-radius: 6px; font-size: 10px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-surface-container-low, #f3f4f6); color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+.dp-page-tab--active .dp-page-tab__idx {
+  background: color-mix(in srgb, var(--color-brand) 18%, transparent); color: var(--color-brand);
+}
+.dp-page-tab__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dp-page-del {
   border: none; background: transparent; cursor: pointer; color: var(--color-text-tertiary);
-  width: 24px; height: 24px; border-radius: 6px; font-size: 14px;
+  width: 24px; height: 24px; border-radius: 6px; font-size: 14px; flex-shrink: 0;
 }
 .dp-page-del:hover { color: var(--color-error); background: var(--color-surface-hover); }
 
+.dp-editor__workspace {
+  flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+}
 .dp-editor__canvas { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .dp-canvas-empty {
   height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;

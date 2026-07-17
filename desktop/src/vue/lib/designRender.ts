@@ -23,10 +23,22 @@ function renderItem(item: DesignItem): string {
     case 'Paragraph':
       return `<p style="margin:0 0 12px;font-size:${p.fontSize || 14}px;line-height:1.6;color:${p.color || '#4B5563'};text-align:${p.textAlign || 'left'}">${esc(p.text || '段落文字')}</p>`
     case 'Button': {
-      const bg = p.variant === 'primary' ? (p.color || '#7C3AED') : '#F3F4F6'
-      const fg = p.variant === 'primary' ? '#FFFFFF' : '#374151'
+      const v = p.variant || 'primary'
+      const brand = p.color || '#7C3AED'
+      let bg = brand
+      let fg = '#FFFFFF'
+      let border = 'none'
+      if (v === 'secondary') {
+        bg = '#F3F4F6'
+        fg = '#374151'
+      } else if (v === 'ghost') {
+        bg = 'transparent'
+        fg = brand
+        border = `1px solid ${brand}`
+      }
       const w = p.width ? `width:${p.width}px;` : ''
-      return `<button style="${w}padding:10px 24px;border-radius:8px;border:none;cursor:pointer;font-weight:600;font-size:14px;background:${bg};color:${fg}">${esc(p.text || '按钮')}</button>`
+      const r = p.radius ?? 10
+      return `<button style="${w}padding:11px 22px;border-radius:${r}px;border:${border};cursor:pointer;font-weight:600;font-size:14px;background:${bg};color:${fg}">${esc(p.text || '按钮')}</button>`
     }
     case 'Image': {
       const w = p.width || 300
