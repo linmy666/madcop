@@ -269,9 +269,20 @@ class OpenAICompatClient(ChatClient):
         model: str | None = None,
         timeout: float = 30.0,
         effort: str | None = None,
+        *,
+        api_format: str | None = None,
+        auth_strategy: str | None = None,
+        runtime_kind: str | None = None,
+        preset_id: str | None = None,
+        top_p: float | None = None,
+        default_temperature: float | None = None,
+        default_max_tokens: int | None = None,
+        harness: Any | None = None,
     ):
         # Late import so the package isn't a hard dependency for mock users
         from openai import OpenAI
+        from madcop.llm.harness import resolve_harness
+
         self._OpenAI = OpenAI  # for test mocking
         self.api_key = api_key or os.environ.get("MADCOP_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
         self.base_url = base_url or os.environ.get(
@@ -282,20 +293,42 @@ class OpenAICompatClient(ChatClient):
         self.timeout = timeout
         # Per-client default reasoning intensity; can be overridden per call.
         self.effort = effort
+        self.api_format = api_format or "openai_chat"
+        self.auth_strategy = auth_strategy or "api_key"
+        self.runtime_kind = runtime_kind or ""
+        self.preset_id = preset_id or ""
+        self.top_p = top_p
+        self.default_temperature = default_temperature
+        self.default_max_tokens = default_max_tokens
+        self.harness = harness or resolve_harness(
+            model=self.model,
+            api_format=self.api_format,
+            runtime_kind=self.runtime_kind,
+            base_url=self.base_url,
+            preset_id=self.preset_id,
+        )
         if not self.api_key:
             raise ValueError(
                 "OpenAICompatClient requires an API key. "
                 "Set MADCOP_OPENAI_API_KEY or pass api_key=. "
                 "Or use MockClient for offline / testing."
             )
+        default_headers = dict(self.harness.extra_headers)
+        # auth_token strategy: some gateways want empty api_key header style
+        # still use Bearer via SDK; dual strategies pass the same token.
         self._client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=timeout,
+            default_headers=default_headers or None,
         )
 
     def _reasoning_effort_extra_body(self, effort: str | None, model: str | None) -> dict | None:
         """Return ``extra_body`` with reasoning_effort, or None if N/A."""
+        # Prefer harness profile; fall back to legacy o-series check.
+        h = self.harness
+        if h and h.reasoning_mode != "none":
+            return h._reasoning_extra_body(effort if effort is not None else self.effort, model or self.model)
         eff = effort if effort is not None else self.effort
         if not eff or eff == "auto":
             return None
@@ -304,6 +337,43 @@ class OpenAICompatClient(ChatClient):
             return None
         level = self._REASONING_EFFORT_MAP.get(eff, "medium")
         return {"reasoning_effort": level}
+
+    def _build_kwargs(
+        self,
+        messages: Iterable[Message],
+        *,
+        model: str | None,
+        temperature: float | None,
+        max_tokens: int | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | None,
+        effort: str | None,
+        stream: bool,
+    ) -> dict[str, Any]:
+        payload = [m.to_dict() for m in messages]
+        mid = model or self.model
+        # Re-resolve harness if model override changes family mid-call.
+        from madcop.llm.harness import resolve_harness
+        harness = resolve_harness(
+            model=mid,
+            api_format=self.api_format,
+            runtime_kind=self.runtime_kind,
+            base_url=self.base_url,
+            preset_id=self.preset_id,
+        )
+        t = temperature if temperature is not None else self.default_temperature
+        mt = max_tokens if max_tokens is not None else self.default_max_tokens
+        return harness.build_chat_kwargs(
+            model=mid,
+            messages=payload,
+            temperature=t,
+            max_tokens=mt,
+            tools=tools,
+            tool_choice=tool_choice,
+            top_p=self.top_p,
+            effort=effort if effort is not None else self.effort,
+            stream=stream,
+        )
 
     def chat(
         self,
@@ -316,21 +386,18 @@ class OpenAICompatClient(ChatClient):
         tool_choice: str | None = None,
         effort: str | None = None,
     ) -> ChatResponse:
-        payload = [m.to_dict() for m in messages]
-        kwargs: dict[str, Any] = {
-            "model": model or self.model,
-            "messages": payload,
-            "temperature": temperature,
-        }
-        if max_tokens is not None:
-            kwargs["max_tokens"] = max_tokens
-        if tools:
-            kwargs["tools"] = tools
-            if tool_choice:
-                kwargs["tool_choice"] = tool_choice
-        extra = self._reasoning_effort_extra_body(effort, model or self.model)
-        if extra:
-            kwargs["extra_body"] = extra
+        kwargs = self._build_kwargs(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice=tool_choice,
+            effort=effort,
+            stream=False,
+        )
+        # stream=False must not be passed as stream keyword to non-stream path
+        kwargs.pop("stream", None)
         resp = self._client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         msg = choice.message
@@ -377,20 +444,16 @@ class OpenAICompatClient(ChatClient):
         chunk carries `finish_reason='stop'` from the last delta
         (or 'length' if the model hit max_tokens).
         """
-        payload = [m.to_dict() for m in messages]
-        kwargs: dict[str, Any] = {
-            "model": model or self.model,
-            "messages": payload,
-            "temperature": temperature,
-            "stream": True,
-        }
-        if max_tokens is not None:
-            kwargs["max_tokens"] = max_tokens
-        if tools:
-            kwargs["tools"] = tools
-        extra = self._reasoning_effort_extra_body(effort, model or self.model)
-        if extra:
-            kwargs["extra_body"] = extra
+        kwargs = self._build_kwargs(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice=None,
+            effort=effort,
+            stream=True,
+        )
         # `stream=True` makes the SDK return a Stream iterator rather
         # than a single ChatCompletion.
         stream_obj = self._client.chat.completions.create(**kwargs)

@@ -1261,6 +1261,13 @@ def create_app() -> FastAPI:
                     base_url=cfg["base_url"],
                     model=cfg["model"],
                     timeout=120.0,
+                    api_format=cfg.get("api_format"),
+                    auth_strategy=cfg.get("auth_strategy"),
+                    runtime_kind=cfg.get("runtime_kind"),
+                    preset_id=cfg.get("preset_id"),
+                    top_p=cfg.get("top_p"),
+                    default_temperature=cfg.get("temperature"),
+                    default_max_tokens=cfg.get("max_tokens"),
                 )
                 _client_cache[_cache_key] = client
                 # Cap cache size — evict oldest if too many entries

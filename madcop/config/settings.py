@@ -428,6 +428,13 @@ def get_active_client_config(settings: Settings) -> dict[str, Any] | None:
                 "top_p": p.top_p,
                 "auto_compact_window": p.auto_compact_window,
                 "model_params": p.model_params,
+                # Harness metadata — lets the LLM client adapt per vendor
+                "api_format": p.api_format,
+                "auth_strategy": p.auth_strategy,
+                "runtime_kind": p.runtime_kind,
+                "preset_id": p.preset_id,
+                "provider_id": p.provider_id,
+                "label": p.label,
             }
     return None
 
