@@ -245,6 +245,7 @@ function createDefaultSessionState(): PerSessionState {
     deepRoute: null,
     pendingPermission: null,
     pendingComputerUsePermission: null,
+    clarificationPending: null,
     pendingClarification: null,
     tokenUsage: { input_tokens: 0, output_tokens: 0 },
     compactCount: 0,
@@ -703,6 +704,27 @@ export const useChatStore = defineStore('chat', {
                     } else {
                       session.messages.push(toolMsg)
                     }
+                  } else if (event.type === 'clarification_request') {
+                    // Agent asked the user a clarifying question (ask_user tool).
+                    const q = event.question || '需要你补充信息'
+                    const opts = Array.isArray(event.options) ? event.options : []
+                    session.clarificationPending = { question: q, options: opts }
+                    // Ensure a visible assistant message even if no text event follows
+                    if (!assistantPushed) {
+                      const clarifyBody = opts.length
+                        ? `${q}\n\n${opts.map((o: string) => `- ${o}`).join('\n')}`
+                        : q
+                      assistantMsg = clarifyBody
+                      assistantMsgObj = {
+                        type: 'assistant_text',
+                        content: clarifyBody,
+                        id: nextId(),
+                        timestamp: Date.now(),
+                        isStreaming: false,
+                      } as any
+                      session.messages.push(assistantMsgObj)
+                      assistantPushed = true
+                    }
                   } else if (event.type === 'tool_result') {
                     // Tool returned — pair it with the matching pending
                     // tool_use and mark it as resolved so the UI shows ✓
@@ -722,6 +744,28 @@ export const useChatStore = defineStore('chat', {
                         id: nextId(),
                         timestamp: Date.now(),
                       })
+                    }
+                    // If ask_user returned a clarify marker but SSE event was missed,
+                    // still surface the panel from the tool result payload.
+                    const tname = (event.name || prev?.toolName || '').toLowerCase()
+                    if ((tname === 'ask_user' || tname === 'clarify') && !session.clarificationPending) {
+                      try {
+                        let raw: any = event.result
+                        if (typeof raw === 'string') {
+                          try { raw = JSON.parse(raw) } catch { raw = null }
+                        }
+                        if (raw && typeof raw === 'object') {
+                          if (typeof raw.output === 'string' && raw.output.includes('__clarify')) {
+                            try { raw = { ...raw, ...JSON.parse(raw.output) } } catch {}
+                          }
+                          if (raw.question || raw.__clarify_pending__) {
+                            session.clarificationPending = {
+                              question: String(raw.question || '需要你补充信息'),
+                              options: Array.isArray(raw.options) ? raw.options.map(String) : [],
+                            }
+                          }
+                        }
+                      } catch { /* ignore parse errors */ }
                     }
                     // Clear the live "calling tool" status line.
                     if (session.activeToolName && (!prev || prev.toolName === session.activeToolName)) {

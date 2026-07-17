@@ -1857,19 +1857,65 @@ def create_app() -> FastAPI:
                         _result = await _loop.run_in_executor(
                             None, lambda: _eng.run(_task_text, work_dir=_effective_wd)
                         )
+                        _clarify_emitted = False
                         for _st in _result.steps:
                             if _st.thought:
                                 yield f"data: {json.dumps({'type': 'reasoning', 'content': _st.thought}, ensure_ascii=False)}\n\n"
                             if _st.action and _st.action != "FINAL_ANSWER":
-                                yield f"data: {json.dumps({'type': 'tool', 'name': _st.action, 'args': _st.action_input, 'tool_use_id': f'react-{_st.step_num}'}, ensure_ascii=False)}\n\n"
-                                yield f"data: {json.dumps({'type': 'tool_result', 'name': _st.action, 'result': _st.observation, 'tool_use_id': f'react-{_st.step_num}'}, ensure_ascii=False)}\n\n"
+                                _tid = f"react-{_st.step_num}"
+                                # Parse action input for tool args (string or JSON)
+                                _args_obj: Any = _st.action_input
+                                try:
+                                    if isinstance(_st.action_input, str) and _st.action_input.strip().startswith("{"):
+                                        _args_obj = json.loads(_st.action_input)
+                                except Exception:
+                                    _args_obj = {"raw": _st.action_input}
+                                yield f"data: {json.dumps({'type': 'tool', 'name': _st.action, 'args': _args_obj, 'tool_use_id': _tid}, ensure_ascii=False)}\n\n"
+                                yield f"data: {json.dumps({'type': 'tool_result', 'name': _st.action, 'result': _st.observation, 'tool_use_id': _tid}, ensure_ascii=False)}\n\n"
+                                # ask_user / clarify must surface a UI card — ReAct cannot
+                                # pause HTTP SSE, so emit clarification_request + text.
+                                _aname = (_st.action or "").lower()
+                                if _aname in ("ask_user", "clarify") and not _clarify_emitted:
+                                    _q, _opts = "", []
+                                    if isinstance(_args_obj, dict):
+                                        _q = str(_args_obj.get("question") or "")
+                                        _opts = _args_obj.get("options") or []
+                                    if not _q and _st.observation:
+                                        try:
+                                            _obs = json.loads(_st.observation) if isinstance(_st.observation, str) else _st.observation
+                                            if isinstance(_obs, dict):
+                                                _q = _q or str(_obs.get("question") or "")
+                                                _opts = _opts or (_obs.get("options") or [])
+                                                # Nested output from ToolResult
+                                                _inner = _obs.get("output")
+                                                if isinstance(_inner, str) and "__clarify" in _inner:
+                                                    _inner_j = json.loads(_inner)
+                                                    _q = _q or str(_inner_j.get("question") or "")
+                                                    _opts = _opts or (_inner_j.get("options") or [])
+                                        except Exception:
+                                            pass
+                                    if not _q:
+                                        _q = "需要你补充一下信息才能继续"
+                                    if not isinstance(_opts, list):
+                                        _opts = []
+                                    _opts = [str(o) for o in _opts][:6]
+                                    yield f"data: {json.dumps({'type': 'clarification_request', 'question': _q, 'options': _opts, 'allowFreeText': True, 'tool_use_id': _tid}, ensure_ascii=False)}\n\n"
+                                    # Always also stream a visible assistant bubble
+                                    _clarify_text = _q
+                                    if _opts:
+                                        _clarify_text += "\n\n" + "\n".join(f"- {o}" for o in _opts)
+                                    yield f"data: {json.dumps({'type': 'text', 'content': _clarify_text}, ensure_ascii=False)}\n\n"
+                                    _clarify_emitted = True
                         _answer = _result.final_answer or ""
-                        if _answer:
-                            # Live preview catch-all (works for any answer).
+                        # Don't re-stream empty FINAL_ANSWER after clarify (already texted).
+                        if _answer and not _clarify_emitted:
                             _pe = _extract_and_emit_html_preview(_answer)
                             if _pe:
                                 yield f"data: {_pe}\n\n"
                             yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
+                        elif not _answer and not _clarify_emitted:
+                            # Model finished with no text and no clarify — avoid blank UI
+                            yield f"data: {json.dumps({'type': 'text', 'content': '（本轮未产生可见回复。请再描述一下你的需求，或换用「自动」模式重试。）'}, ensure_ascii=False)}\n\n"
                     else:  # deep — multi-agent DAG
                         from madcop.agent_network.engine import (
                             build_engine,
@@ -2150,7 +2196,15 @@ def create_app() -> FastAPI:
                 if _plan_ok:
                     from madcop.workflow.planner import generate_plan, verify_step, StepStatus
                     from madcop.workflow.planner import execute_step as _exec_step
-                    _task = body.messages[-1].content if body.messages else ""
+                    # Prefer attachment-injected user text (same as deep/standard).
+                    _task = ""
+                    for _m in reversed(messages):
+                        if getattr(_m, "role", None) == "user" and (getattr(_m, "content", None) or "").strip():
+                            _task = _m.content
+                            break
+                    if not _task:
+                        _task = body.messages[-1].content if body.messages else ""
+                    _plan_clarify_queue: list[dict] = []
                     if _task:
                         def _plan_llm(msgs, _tools=None, force_tool=None):
                             def _call_with_tools(m):
@@ -2164,6 +2218,13 @@ def create_app() -> FastAPI:
                                 _results = []
                                 for _tc in resp.tool_calls:
                                     try:
+                                        # Capture ask_user for SSE (closed over list)
+                                        if (_tc.name or "").lower() in ("ask_user", "clarify"):
+                                            _args = _tc.arguments or {}
+                                            _plan_clarify_queue.append({
+                                                "question": str(_args.get("question") or "需要你补充信息"),
+                                                "options": list(_args.get("options") or [])[:6],
+                                            })
                                         _tool = registry.get(_tc.name)
                                         if _tool:
                                             _out = _tool(**_tc.arguments)
@@ -2256,6 +2317,15 @@ def create_app() -> FastAPI:
                             _plan.status = "completed_with_errors"
                         yield f"data: {json.dumps({'type': 'plan', 'plan': _plan.to_dict()}, ensure_ascii=False)}\n\n"
                         yield f"data: {json.dumps({'type': 'plan_done'}, ensure_ascii=False)}\n\n"
+                        # Surface ask_user / clarify from plan tool auto-exec
+                        for _cq in _plan_clarify_queue:
+                            _q = _cq.get("question") or "需要你补充信息"
+                            _opts = _cq.get("options") or []
+                            yield f"data: {json.dumps({'type': 'clarification_request', 'question': _q, 'options': _opts, 'allowFreeText': True}, ensure_ascii=False)}\n\n"
+                            _txt = _q
+                            if _opts:
+                                _txt += "\n\n" + "\n".join(f"- {o}" for o in _opts)
+                            yield f"data: {json.dumps({'type': 'text', 'content': _txt}, ensure_ascii=False)}\n\n"
 
                 # -- Phase 1: initial call with tools ------------------ #
                 # Create a child LLM-call node under the root
