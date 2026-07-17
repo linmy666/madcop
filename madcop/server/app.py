@@ -106,7 +106,35 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
     _CSV_SAMPLE_ROWS = 200   # max data rows to keep from a CSV
     name = att.name or "file"
     lower = name.lower()
-    mime_hint = (att.dataUrl or "")[:100]
+    mime_hint = (att.dataUrl or "")[:120].lower()
+
+    def _looks_docx(raw_bytes: bytes | None) -> bool:
+        """True if name/mime/magic say Office Open XML Word."""
+        if lower.endswith(".docx") or "wordprocessingml" in mime_hint or "officedocument.word" in mime_hint:
+            return True
+        # Display names like "姚振炀简历 Word" may lose the extension
+        if "word" in lower and not lower.endswith((".doc", ".pdf", ".xlsx", ".xls", ".txt", ".md")):
+            return True
+        if raw_bytes and len(raw_bytes) > 4 and raw_bytes[:2] == b"PK":
+            # OOXML is a zip; [Content_Types].xml + word/ is a strong signal
+            try:
+                import zipfile, io as _io
+                with zipfile.ZipFile(_io.BytesIO(raw_bytes)) as zf:
+                    names = zf.namelist()
+                    if any(n.startswith("word/") for n in names) or "[Content_Types].xml" in names:
+                        return True
+            except Exception:
+                pass
+        return False
+
+    def _extract_docx(raw_bytes: bytes) -> str | None:
+        try:
+            from madcop.tools.files import _extract_docx_text
+            text = _extract_docx_text(raw_bytes)
+            return text[:_CAP_DOCX] if text else None
+        except Exception as e:
+            logger.debug("docx extract: %s", e)
+            return None
 
     # Case A: real OS file path on the backend server
     if att.path:
@@ -131,16 +159,12 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                         return t[:_CAP_PDF]
                 except Exception as e:
                     logger.debug("swallowed: %s", e)
-            # Word .docx
-            if lower.endswith(".docx") or "wordprocessingml" in mime_hint:
-                if raw is not None:
-                    try:
-                        from madcop.tools.files import _extract_docx_text
-                        text = _extract_docx_text(raw)
-                        if text:
-                            return text[:_CAP_DOCX]
-                    except Exception as e:
-                        logger.debug("swallowed: %s", e)
+            # Word .docx (extension, mime, or zip magic)
+            if raw is not None and _looks_docx(raw):
+                text = _extract_docx(raw)
+                if text:
+                    return text
+                return f"[docx returned no text: {name}]"
             # Excel
             if lower.endswith((".xlsx", ".xls")):
                 if raw is not None:
@@ -192,16 +216,12 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
             except Exception as e:
                 return f"[PDF parse error: {e}]"
 
-        # Word .docx via python-docx
-        if lower.endswith(".docx") or "wordprocessingml" in mime_hint:
-            try:
-                from madcop.tools.files import _extract_docx_text
-                text = _extract_docx_text(raw)
-                if text:
-                    return text[:_CAP_DOCX]
-                return "[docx returned no text (image-only or corrupted?)]"
-            except Exception as e:
-                return f"[docx parse error: {e}]"
+        # Word .docx via python-docx (also when UI dropped the .docx suffix)
+        if _looks_docx(raw):
+            text = _extract_docx(raw)
+            if text:
+                return text
+            return "[docx returned no text (image-only or corrupted?)]"
 
         # CSV — smart sample
         if lower.endswith(".csv"):
@@ -509,18 +529,17 @@ def _build_memory_system_prompt(
     # --- File attachment instructions (so LLM knows how to handle them) ---
     _mdl = model_label or "the current model"
     parts.append(
-        "FILE ATTACHMENTS: When the user attaches files, you can:\n"
-        "- For text-y files (.txt, .md, .json, .csv, source code): the file content is loaded into the conversation. You can read it directly.\n"
-        "- For PDFs: text is extracted via pypdf and loaded into the conversation. You can read it directly.\n"
-        "- For Word documents (.docx): text is extracted via python-docx and loaded into the conversation. You can read it directly.\n"
-        "- For Excel files (.xlsx): cell values are extracted and loaded into the conversation as a markdown table. You can read it directly.\n"
-        f"- For images (png, jpg, etc.): the current chat model ({_mdl}) does NOT support vision — you cannot see images. "
-        "If the user asks you to analyze an image, respond honestly: 'I'm a text-only model and cannot view images. "
-        "Please describe what's in the image, or enable a multimodal model like Qwen-VL or GPT-4o.'\n"
-        "- For any file: the LLM can use the read_file tool with the path 'attachment://<id>' "
-        "(e.g. attachment://att-1234-abc) to load the file's contents from the in-memory attachment store.\n"
-        "Do NOT call read_file with a real OS path unless the user explicitly typed one — "
-        "their file API path may not be readable on this machine."
+        "FILE ATTACHMENTS:\n"
+        "- When a user message contains blocks like "
+        "\"--- ATTACHMENT: filename --- ... --- END ---\", that text IS the file content. "
+        "You already have it — analyze it directly.\n"
+        "- Do NOT call ask_user / clarify just to ask what the file is, if an attachment block is present.\n"
+        "- Do NOT call read_file on the attachment name as a disk path. "
+        "If you must re-load, use path 'attachment://<id>' from the ATTACHMENT header.\n"
+        "- Short messages like 「看看」「分析一下」together with an attachment mean: "
+        "summarize / review that file now.\n"
+        f"- Images: the current model ({_mdl}) may not support vision; say so if needed.\n"
+        "- Prefer write_file into the active workspace when the user asks to save results."
     )
 
     parts.append(
@@ -1624,6 +1643,15 @@ def create_app() -> FastAPI:
                             f"\n--- ATTACHMENT: {att.name} (ID: {att.id}) ---\n"
                             f"(no readable content — missing dataUrl/path or empty file)\n--- END ---"
                         )
+                # Steer short prompts + files away from useless clarify loops
+                if body.attachments and (m.content or "").strip() in (
+                    "", "看看", "看一下", "分析", "分析一下", "帮忙分析下", "帮我看看", "帮我分析",
+                ):
+                    extra_parts.append(
+                        "\n[系统提示] 用户已上传附件且请求查看/分析。"
+                        "请直接基于上方 ATTACHMENT 正文给出结构化分析，"
+                        "不要调用 ask_user 询问「想看什么」。"
+                    )
                 messages.append(Message(role=m.role, content="\n".join(extra_parts)))
             else:
                 messages.append(Message(role=m.role, content=m.content or ""))
@@ -1794,6 +1822,15 @@ def create_app() -> FastAPI:
                     _agent_mode = "standard"
             except Exception:
                 pass
+            # With real attachment text already in the prompt, skip plan-and-execute
+            # (it often invents a useless "ask the user" step and never answers).
+            _has_att_body = any(
+                getattr(m, "role", None) == "user"
+                and "--- ATTACHMENT:" in (getattr(m, "content", None) or "")
+                and "--- END ---" in (getattr(m, "content", None) or "")
+                for m in messages
+            )
+
             if _agent_mode in ("quick", "standard", "deep"):
                 from madcop.agent_network.task_router import route_task, get_mode_config
                 # CRITICAL: use attachment-injected `messages`, not body.messages.
@@ -2193,6 +2230,10 @@ def create_app() -> FastAPI:
                         _plan_ok = False
                 except Exception:
                     pass
+                # Skip plan loop when the user already attached file text —
+                # planning "clarify" first is what empties the chat UI.
+                if _has_att_body:
+                    _plan_ok = False
                 if _plan_ok:
                     from madcop.workflow.planner import generate_plan, verify_step, StepStatus
                     from madcop.workflow.planner import execute_step as _exec_step

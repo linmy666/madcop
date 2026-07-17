@@ -970,10 +970,19 @@ function renderItemContent(item: RenderItem) {
     return h(ThinkingBlock, { message: msg })
   }
   if (msg.type === 'tool_use') {
+    // result is attached on the same tool_use message when SSE tool_result pairs
+    const rawResult = (msg as any).result
+    const resultProp =
+      rawResult == null
+        ? null
+        : typeof rawResult === 'object' && rawResult !== null && 'content' in (rawResult as object)
+          ? (rawResult as { content: unknown; isError?: boolean })
+          : { content: rawResult, isError: !!(msg as any).isError }
     return h(ToolCallBlock, {
       toolName: msg.toolName,
       input: msg.input,
       isPending: msg.isPending,
+      result: resultProp,
       partialInput: msg.partialInput,
       compact: props.compact,
     })
