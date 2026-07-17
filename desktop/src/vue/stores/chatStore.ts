@@ -468,9 +468,10 @@ export const useChatStore = defineStore('chat', {
       // selection. 'auto' (or unset) means: let the backend/model decide.
       const _runtimeSel = useSessionRuntimeStore(this.$pinia).selections[sessionId]
       const _effort = _runtimeSel?.effortLevel || 'auto'
-      // Unified agent mode (quick/standard/deep). 'auto'/unset falls through
-      // to the normal chat flow on the backend.
-      const _agentMode = _runtimeSel?.agentMode || 'auto'
+      // Unified agent mode (quick/standard/deep). Must match AgentModeSelector
+      // default (standard). Using 'auto' here when unset made the UI show「标准」
+      // while the backend ran plan_mode + clarify with no visible reply.
+      const _agentMode = _runtimeSel?.agentMode || 'standard'
       // Bump the preview refresh key so any stale HTML from a previous
       // task is re-fetched — prevents the user from seeing the last
       // task's preview while the new one is still streaming.
@@ -500,7 +501,9 @@ export const useChatStore = defineStore('chat', {
           temperature: null,
           max_tokens: null,
           conversation_id: sessionId,
-          plan_mode: !!session.planModeEnabled,
+          // Attachments: never open plan-and-execute (it invents clarify steps
+          // and leaves the chat blank). Matches AgentModeSelector default standard.
+          plan_mode: !!session.planModeEnabled && !(_attachments && _attachments.length > 0),
           effort: _effort === 'auto' ? null : _effort,
           agent_mode: _agentMode === 'auto' ? null : _agentMode,
           // Session project folder → file-tool allowlist (write/read).
