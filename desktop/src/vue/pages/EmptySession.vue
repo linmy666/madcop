@@ -688,8 +688,8 @@ const insertSlashCommand = () => {
          Centered intro (MadCopLoader + title + subtitle)
          ═══════════════════════════════════════════════════════════════ -->
     <div
-      class="flex flex-1 flex-col items-center justify-center"
-      :class="isMobileComposer ? 'px-6 pb-[230px] pt-10' : 'p-8 pb-44'"
+      class="flex flex-1 flex-col items-center justify-center overflow-y-auto"
+      :class="isMobileComposer ? 'px-6 pb-[260px] pt-10' : 'p-8 pb-64'"
     >
       <!-- Soft radial brand glow behind the mascot -->
       <div
@@ -720,13 +720,13 @@ const insertSlashCommand = () => {
           {{ t('empty.subtitle') }}
         </p>
 
-        <!-- Example prompt chips -->
-        <div class="mt-7 flex flex-wrap justify-center gap-2">
+        <!-- Example prompt chips — keep clear of absolute bottom composer -->
+        <div class="mt-7 mb-2 flex max-w-lg flex-wrap justify-center gap-2">
           <button
             v-for="s in suggestions"
             :key="s"
             type="button"
-            class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-3.5 py-1.5 text-[12.5px] text-[var(--color-text-secondary)] transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)] hover:text-[var(--color-text-primary)] hover:shadow-sm"
+            class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-3.5 py-1.5 text-[12.5px] leading-snug text-[var(--color-text-secondary)] transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)] hover:text-[var(--color-text-primary)] hover:shadow-sm"
             @click="useSuggestion(s)"
           >
             {{ s }}

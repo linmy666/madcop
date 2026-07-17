@@ -43,6 +43,8 @@ export const jp: Record<TranslationKey, string> = {
   'search.global.loading': '検索中…',
   'search.global.error': '検索に失敗しました',
   'search.global.close': '閉じる',
+  'sidebar.more': 'もっと見る',
+  'sidebar.less': '閉じる',
   'sidebar.projects': 'プロジェクト',
   'sidebar.projectMenu': 'プロジェクトメニュー',
   'sidebar.newProject': '新しいプロジェクト',

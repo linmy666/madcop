@@ -1249,14 +1249,13 @@ const projectMenuData = computed(() => {
         v-if="expanded"
         type="button"
         @click="navMoreOpen = !navMoreOpen"
-        class="group flex h-7 items-center gap-1.5 px-2 text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors"
-        style="fontFamily: var(--font-mono)"
+        class="group flex h-7 items-center gap-1.5 px-2 text-[11px] tracking-normal text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors"
         :aria-expanded="navMoreOpen"
         :aria-label="t(navMoreOpen ? 'sidebar.less' : 'sidebar.more')"
       >
         <span class="inline-block w-3 text-center text-[9px]">{{ navMoreOpen ? '−' : '+' }}</span>
         <span>{{ navMoreOpen ? t('sidebar.less') : t('sidebar.more') }}</span>
-        <span class="ml-1 text-[var(--color-text-tertiary)] opacity-50">4</span>
+        <span class="ml-1 tabular-nums text-[var(--color-text-tertiary)] opacity-50">4</span>
       </button>
 
       <!-- Tiny status dot when collapsed: a hint that there's more -->

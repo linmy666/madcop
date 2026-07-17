@@ -43,6 +43,8 @@ export const zh: Record<TranslationKey, string> = {
   'search.global.loading': '搜索中…',
   'search.global.error': '搜索失败',
   'search.global.close': '关闭',
+  'sidebar.more': '更多',
+  'sidebar.less': '收起',
   'sidebar.projects': '工作空间',
   'sidebar.projectMenu': '项目菜单',
   'sidebar.newProject': '新建项目',

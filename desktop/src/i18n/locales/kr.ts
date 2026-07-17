@@ -43,6 +43,8 @@ export const kr: Record<TranslationKey, string> = {
   'search.global.loading': '검색 중…',
   'search.global.error': '검색 실패',
   'search.global.close': '닫기',
+  'sidebar.more': '더보기',
+  'sidebar.less': '접기',
   'sidebar.projects': '프로젝트',
   'sidebar.projectMenu': '프로젝트 메뉴',
   'sidebar.newProject': '새 프로젝트',

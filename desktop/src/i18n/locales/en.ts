@@ -41,6 +41,8 @@ export const en = {
   'search.global.loading': 'Searching…',
   'search.global.error': 'Search failed',
   'search.global.close': 'Close',
+  'sidebar.more': 'More',
+  'sidebar.less': 'Less',
   'sidebar.projects': 'Projects',
   'sidebar.projectMenu': 'Project menu',
   'sidebar.newProject': 'New project',
