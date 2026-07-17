@@ -174,21 +174,15 @@ async def run_stream(req: RunRequest):
 async def _run_direct(req: RunRequest, config: dict) -> dict:
     """Quick mode — single LLM call, no loop."""
     from madcop.config import settings as settings_store
-    from madcop.llm import Message, MockClient
-    from madcop.llm.client import OpenAICompatClient
+    from madcop.llm import Message
+    from madcop.llm.factory import build_client_from_config
 
     started = time.time()
     s = settings_store.load_settings()
     cfg = settings_store.get_active_client_config(s)
-
-    if cfg and cfg.get("api_key"):
-        client = OpenAICompatClient(
-            api_key=cfg["api_key"],
-            base_url=cfg["base_url"],
-            model=req.model or cfg["model"],
-        )
-    else:
-        client = MockClient()
+    if cfg and req.model:
+        cfg = {**cfg, "model": req.model}
+    client = build_client_from_config(cfg, timeout=120.0)
 
     messages = [
         Message(role="system", content="You are a helpful coding assistant. Answer concisely."),

@@ -398,7 +398,11 @@ class OpenAICompatClient(ChatClient):
         )
         # stream=False must not be passed as stream keyword to non-stream path
         kwargs.pop("stream", None)
-        resp = self._client.chat.completions.create(**kwargs)
+        from madcop.llm.retry import with_retry
+        resp = with_retry(
+            lambda: self._client.chat.completions.create(**kwargs),
+            label="openai_chat",
+        )
         choice = resp.choices[0]
         msg = choice.message
         tool_calls: list[ToolCall] = []

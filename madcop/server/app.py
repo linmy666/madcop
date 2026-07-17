@@ -1245,37 +1245,27 @@ def create_app() -> FastAPI:
     def _get_client():
         """Build an LLM client from stored settings, fall back to Mock.
 
-        Cached per (provider_id, key, base_url, model) so HTTP keep-alive
-        connections survive across requests instead of being recreated.
+        Uses ``build_client_from_config`` (OpenAI-compat or native Anthropic).
+        Cached per provider fingerprint so HTTP keep-alive survives.
         """
+        from madcop.llm.factory import build_client_from_config
+
         s = settings_store.load_settings()
         cfg = settings_store.get_active_client_config(s)
         if cfg and cfg.get("api_key"):
-            _cache_key = f"{s.active_provider}|{cfg['api_key'][:8]}|{cfg['base_url']}|{cfg['model']}"
+            _cache_key = (
+                f"{s.active_provider}|{cfg['api_key'][:8]}|{cfg.get('base_url')}|"
+                f"{cfg.get('model')}|{cfg.get('api_format')}|{cfg.get('runtime_kind')}"
+            )
             with _client_cache_lock:
                 cached = _client_cache.get(_cache_key)
                 if cached is not None:
                     return cached
-                client = OpenAICompatClient(
-                    api_key=cfg["api_key"],
-                    base_url=cfg["base_url"],
-                    model=cfg["model"],
-                    timeout=120.0,
-                    api_format=cfg.get("api_format"),
-                    auth_strategy=cfg.get("auth_strategy"),
-                    runtime_kind=cfg.get("runtime_kind"),
-                    preset_id=cfg.get("preset_id"),
-                    top_p=cfg.get("top_p"),
-                    default_temperature=cfg.get("temperature"),
-                    default_max_tokens=cfg.get("max_tokens"),
-                )
+                client = build_client_from_config(cfg, timeout=120.0)
                 _client_cache[_cache_key] = client
-                # Cap cache size — evict oldest if too many entries
-                # (happens when user switches providers often).
                 if len(_client_cache) > 8:
                     _client_cache.pop(next(iter(_client_cache)), None)
                 return client
-        # No key configured — use mock so the UI still works for demo
         return MockClient(
             default_response="⚠️ No API key configured. Open Settings (⚙️) to add one."
         )

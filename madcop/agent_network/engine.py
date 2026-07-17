@@ -268,13 +268,13 @@ class AgentEngine:
             # string) so it doesn't pollute downstream synthesis.
             def _drain_once() -> str:
                 parts: list[str] = []
-                # Use provider-level sampling defaults (set by build_engine)
-                # instead of hardcoded 0.3 / 2048, so the temperature the
-                # user configured actually reaches the model.
+                # Provider defaults + optional per-agent override from routing.
                 _ps = getattr(self, "_provider_sampling", {})
-                _temp = _ps.get("temperature", 0.3)
-                _maxt = _ps.get("max_tokens", 2048)
-                for chunk in self.client.stream(
+                _temp = agent.get("temperature", _ps.get("temperature", 0.3))
+                _maxt = agent.get("max_tokens", _ps.get("max_tokens", 2048))
+                _client_fn = getattr(self, "_client_for_agent", None)
+                llm = _client_fn(agent_id) if callable(_client_fn) else self.client
+                for chunk in llm.stream(
                     messages,
                     model=model or None,
                     temperature=_temp,
@@ -524,45 +524,47 @@ def build_engine() -> AgentEngine:
     """
     import copy
     from madcop.config import settings as settings_store
-    from madcop.llm.client import OpenAICompatClient
+    from madcop.llm.factory import build_client_from_config, merge_agent_routing
 
     s = settings_store.load_settings()
     cfg = settings_store.get_active_client_config(s)
+    routing = getattr(s, "agent_routing", {}) or {}
 
-    if cfg and cfg.get("api_key"):
-        client = OpenAICompatClient(
-            api_key=cfg["api_key"],
-            base_url=cfg["base_url"],
-            model=cfg["model"],
-            timeout=120.0,
-        )
-    else:
-        client = MockClient(
-            default_response="[No API key configured — agent execution skipped]"
-        )
+    client = build_client_from_config(
+        cfg,
+        timeout=120.0,
+        mock_message="[No API key configured — agent execution skipped]",
+    )
 
     # Collect all known agents (builtin + installed)
     from madcop.agent_network.api import BUILTIN_AGENTS, _load, _AGENTS_FILE
     installed = _load(_AGENTS_FILE)
     all_agents = copy.deepcopy(BUILTIN_AGENTS) + installed
 
-    # Apply per-agent model routing overrides from settings. The routing
-    # table maps agent_id → {model, temperature, max_tokens}. Only the
-    # model override is applied here (same provider/client for all agents
-    # in this simplified version).
-    routing = getattr(s, "agent_routing", {}) or {}
+    # Apply per-agent model / sampling overrides from settings.
+    # Table maps agent_id → {model, temperature, max_tokens, ...}.
     for agent in all_agents:
         aid = agent.get("id", "")
         if aid in routing:
-            r = routing[aid]
+            r = routing[aid] if isinstance(routing[aid], dict) else {}
             if r.get("model"):
                 agent["model"] = r["model"]
+            if r.get("temperature") is not None:
+                agent["temperature"] = r["temperature"]
+            if r.get("max_tokens") is not None:
+                agent["max_tokens"] = r["max_tokens"]
 
     engine = AgentEngine(client, all_agents)
-    # Stash provider-level sampling defaults so _execute_node can use the
-    # provider's temperature/max_tokens instead of hardcoded 0.3 / 2048.
     engine._provider_sampling = {
         "temperature": cfg.get("temperature", 0.3) if cfg else 0.3,
         "max_tokens": cfg.get("max_tokens", 2048) if cfg else 2048,
     }
+    # Per-agent client factory (same provider by default; model from routing).
+    engine._base_cfg = cfg
+    engine._agent_routing = routing
+    engine._client_for_agent = lambda agent_id: build_client_from_config(
+        merge_agent_routing(cfg, routing, agent_id),
+        timeout=120.0,
+        mock_message="[No API key configured — agent execution skipped]",
+    )
     return engine

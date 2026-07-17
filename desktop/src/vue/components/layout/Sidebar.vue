@@ -15,10 +15,10 @@ import type { SessionListItem } from '../../../types/session'
 import { desktopUiPreferencesApi, type SidebarProjectPreferences } from '../../api/desktopUiPreferences'
 import { getDesktopHost } from '../../../lib/desktopHost'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
-import AnimationPlayer from '../animations/AnimationPlayer.vue'
 import MascotAvatar from '../common/MascotAvatar.vue'
 import WorkspacePanel from '../workspace/WorkspacePanel.vue'
 import GlobalSearchModal from '../search/GlobalSearchModal.vue'
+import SessionRow from './SessionRow.vue'
 import {
   type SidebarProjectOrganization,
   type SidebarProjectSortBy,
@@ -1006,47 +1006,6 @@ const HeaderMenuItem = defineComponent({
   },
 })
 
-// SessionRowMeta
-const SessionRowMeta = defineComponent({
-  props: {
-    isRunning: Boolean,
-    isWorktree: Boolean,
-    modifiedAt: String,
-  },
-  setup(props) {
-    return () => {
-      const relativeTime = formatRelativeTime(props.modifiedAt, t)
-      const updatedLabel = t('session.lastUpdated', { time: relativeTime })
-      return h('span', {
-        class: 'ml-auto flex h-5 min-w-[78px] flex-shrink-0 items-center justify-end gap-1.5 text-[10px] font-medium tabular-nums text-[var(--color-text-tertiary)]',
-        title: updatedLabel,
-      }, [
-        props.isRunning
-          ? h('span', {
-              class: 'inline-flex h-4 w-4 flex-shrink-0 items-center justify-center text-[var(--color-success)]',
-              'aria-label': t('sidebar.sessionRunning'),
-              title: t('sidebar.sessionRunning'),
-            }, [
-              h(AnimationPlayer, { name: 'spinner', class: 'h-4 w-4' }),
-            ])
-          : null,
-        props.isWorktree
-          ? h('span', {
-              class: 'inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-[5px] text-[var(--color-text-tertiary)]',
-              title: t('sidebar.worktree'),
-            }, [
-              h('span', { class: 'material-symbols-outlined text-[14px]' }, 'call_split'),
-              h('span', { class: 'sr-only' }, t('sidebar.worktree')),
-            ])
-          : null,
-        h('span', { class: 'inline-flex min-w-[42px] flex-shrink-0 items-center justify-end' }, [
-          h('span', {}, relativeTime),
-        ]),
-      ])
-    }
-  },
-})
-
 // ProjectHeaderActions
 const ProjectHeaderActions = defineComponent({
   props: {
@@ -1611,75 +1570,32 @@ const projectMenuData = computed(() => {
                   :data-testid="`sidebar-project-session-list-${domSafeProjectKey(project.key)}`"
                 >
                   <!-- Render visible sessions -->
-                  <div
+                  <SessionRow
                     v-for="session in (collapsedProjectKeys.has(project.key)
                       ? []
                       : getVisibleProjectSessions(project.sessions, expandedProjectKeys.has(project.key), activeTabId))"
                     :key="session.id"
-                    class="sidebar-session-row relative mb-0.5 last:mb-0"
-                  >
-                    <!-- Rename input -->
-                    <input
-                      v-if="renamingId === session.id"
-                      ref="renameInput"
-                      v-model="renameValue"
-                      @blur="handleFinishRename"
-                      @keydown.enter="handleFinishRename"
-                      @keydown.escape="() => { renamingId = null; renameValue = '' }"
-                      class="w-full rounded-[var(--radius-md)] border border-[var(--color-border-focus)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none"
-                      autofocus
-                    />
-                    <!-- Session button -->
-                    <button
-                      v-else
-                      @click="(e) => {
-                        if (sessionStore.isBatchMode) { handleBatchSessionClick(e, session.id); return }
-                        tabStore.openTab(session.id, session.title)
-                        chatStore.connectToSession(session.id)
-                        closeMobileDrawer()
-                      }"
-                      @contextmenu="(e) => handleContextMenu(e, session.id)"
-                      :class="`group/session w-full rounded-lg px-2.5 ${isMobileComputed ? 'py-3' : 'py-1.5'} text-left text-[13px] transition-[background,filter,color] duration-200 ${
-                        sessionStore.selectedSessionIds.includes(session.id)
-                          ? 'sidebar-session-row--selected bg-[var(--color-sidebar-item-active)] text-[var(--color-text-primary)]'
-                          : session.id === activeTabId
-                          ? 'sidebar-session-row--active bg-[var(--color-sidebar-item-active)] text-[var(--color-text-primary)]'
-                          : 'sidebar-session-row--idle text-[var(--color-text-secondary)] hover:bg-[var(--color-sidebar-item-hover)] hover:text-[var(--color-text-primary)]'
-                      }`"
-                      :aria-pressed="sessionStore.isBatchMode ? sessionStore.selectedSessionIds.includes(session.id) : undefined"
-                    >
-                      <span class="flex min-w-0 items-center gap-2">
-                        <!-- Batch mode checkbox -->
-                        <span
-                          v-if="sessionStore.isBatchMode"
-                          :class="`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-[5px] border transition-colors ${
-                            sessionStore.selectedSessionIds.includes(session.id)
-                              ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-white'
-                              : 'border-[var(--color-border)] bg-[var(--color-surface)]'
-                          }`"
-                          aria-hidden="true"
-                        >
-                          <span v-if="sessionStore.selectedSessionIds.includes(session.id)" class="material-symbols-outlined text-[12px]">check</span>
-                        </span>
-                        <!-- Session title -->
-                        <span class="min-w-0 flex-1 truncate font-medium tracking-normal">{{ session.title || 'Untitled' }}</span>
-                        <!-- Missing dir warning -->
-                        <span
-                          v-if="!session.workDirExists"
-                          class="flex-shrink-0 text-[10px] text-[var(--color-warning)]"
-                          :title="session.workDir ?? ''"
-                        >
-                          {{ t('sidebar.missingDir') }}
-                        </span>
-                        <!-- Session metadata -->
-                        <SessionRowMeta
-                          :is-running="runningSessionIds.has(session.id)"
-                          :is-worktree="isWorktreeSession(session)"
-                          :modified-at="session.modifiedAt"
-                        />
-                      </span>
-                    </button>
-                  </div>
+                    :session="session"
+                    :active="session.id === activeTabId"
+                    :batch-mode="sessionStore.isBatchMode"
+                    :selected="sessionStore.selectedSessionIds.includes(session.id)"
+                    :is-running="runningSessionIds.has(session.id)"
+                    :is-worktree="isWorktreeSession(session)"
+                    :renaming="renamingId === session.id"
+                    :rename-value="renameValue"
+                    :missing-dir-label="t('sidebar.missingDir')"
+                    :relative-time="formatRelativeTime(session.modifiedAt, t)"
+                    @click="(e) => {
+                      if (sessionStore.isBatchMode) { handleBatchSessionClick(e, session.id); return }
+                      tabStore.openTab(session.id, session.title)
+                      chatStore.connectToSession(session.id)
+                      closeMobileDrawer()
+                    }"
+                    @contextmenu="(e) => handleContextMenu(e, session.id)"
+                    @finish-rename="handleFinishRename"
+                    @cancel-rename="() => { renamingId = null; renameValue = '' }"
+                    @update:rename-value="(v) => { renameValue = v }"
+                  />
                 </div>
 
                 <!-- Show more/less button -->

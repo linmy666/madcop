@@ -393,26 +393,23 @@ def build_react_engine(
 ) -> ReActEngine:
     """Build a ReActEngine using the active LLM client + default tools."""
     from madcop.config import settings as settings_store
-    from madcop.llm.client import OpenAICompatClient
+    from madcop.llm.factory import build_client_from_config
 
     s = settings_store.load_settings()
     cfg = settings_store.get_active_client_config(s)
+    if cfg and model:
+        cfg = {**cfg, "model": model}
 
-    if cfg and cfg.get("api_key"):
-        client = OpenAICompatClient(
-            api_key=cfg["api_key"],
-            base_url=cfg["base_url"],
-            model=cfg["model"],
-            timeout=120.0,
-        )
-        active_model = model or cfg.get("model", "")
-    else:
-        client = MockClient(
-            default_response="Thought: I cannot proceed without API configuration.\n"
-                             "Action: FINAL_ANSWER\n"
-                             "Action Input: [No API key configured — ReAct engine disabled]"
-        )
-        active_model = model
+    client = build_client_from_config(
+        cfg,
+        timeout=120.0,
+        mock_message=(
+            "Thought: I cannot proceed without API configuration.\n"
+            "Action: FINAL_ANSWER\n"
+            "Action Input: [No API key configured — ReAct engine disabled]"
+        ),
+    )
+    active_model = model or ((cfg or {}).get("model") if cfg else model)
 
     # Collect available tools from the registry
     try:

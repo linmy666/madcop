@@ -11,6 +11,8 @@ from .client import (
     make_client,
 )
 from .harness import ProviderHarness, infer_context_window, resolve_harness
+from .factory import build_client_from_config, merge_agent_routing
+from .retry import is_retryable_error, with_retry
 from . import prompts
 
 __all__ = [
@@ -25,5 +27,9 @@ __all__ = [
     "ProviderHarness",
     "resolve_harness",
     "infer_context_window",
+    "build_client_from_config",
+    "merge_agent_routing",
+    "is_retryable_error",
+    "with_retry",
     "prompts",
 ]
