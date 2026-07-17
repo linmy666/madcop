@@ -138,3 +138,63 @@ def image_content_block(
 
 def text_content_block(text: str, api_format: str = "openai_chat") -> dict[str, Any]:
     return {"type": "text", "text": text}
+
+
+def probe_live(
+    *,
+    api_key: str,
+    model: str = "",
+    base_url: str = "",
+    api_format: str = "openai_chat",
+    timeout: float = 12.0,
+) -> CapabilityReport:
+    """Optional live probe: tiny chat call to confirm tools/streaming-ish health.
+
+    Falls back to heuristic report on any failure. Does not burn many tokens
+    (max_tokens=1, single "ping" user message).
+    """
+    report = detect_capabilities(
+        model=model,
+        base_url=base_url,
+        api_format=api_format,
+        force_refresh=True,
+    )
+    if not api_key:
+        report.source = "heuristic"
+        return report
+
+    try:
+        from madcop.llm.factory import build_client_from_config
+        from madcop.llm.client import Message
+
+        client = build_client_from_config({
+            "api_key": api_key,
+            "base_url": base_url,
+            "model": model,
+            "api_format": api_format,
+            "max_tokens": 8,
+        }, timeout=timeout)
+        # Minimal non-stream chat
+        resp = client.chat(
+            [Message(role="user", content="Reply with exactly: ok")],
+            max_tokens=8,
+            temperature=0,
+        )
+        text_out = (getattr(resp, "content", None) or getattr(resp, "text", None) or "")
+        if isinstance(text_out, list):
+            text_out = ""
+        report.supports_streaming = True  # assume if chat works
+        report.source = "live"
+        report.probed_at = time.time()
+        # refresh cache
+        key = _cache_key(base_url, model, api_format)
+        cache = _load_cache()
+        cache[key] = asdict(report)
+        _save_cache(cache)
+        logger.info("live capability probe ok model=%s snippet=%r", model, str(text_out)[:40])
+        return report
+    except Exception as e:
+        logger.debug("live capability probe failed: %s", e)
+        report.source = "heuristic"
+        return report
+

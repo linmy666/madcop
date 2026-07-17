@@ -73,7 +73,16 @@ msg = user_message_with_images(
 ## Capabilities cache
 
 `detect_capabilities(model=..., base_url=..., api_format=...)` writes
-`~/.madcop/provider_capabilities.json` (1 week TTL). Heuristic only (no token burn).
+`~/.madcop/provider_capabilities.json` (1 week TTL). Heuristic by default.
+
+Live probe (uses a few tokens):
+
+```python
+from madcop.llm.capabilities import probe_live
+report = probe_live(api_key=..., model=..., base_url=..., api_format=...)
+```
+
+HTTP: `GET /api/providers/capabilities?live=true`
 
 ## Adding a vendor
 

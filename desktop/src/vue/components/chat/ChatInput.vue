@@ -567,12 +567,42 @@ const cancelQueuedMessageEdit = () => {
 
 // ─── Replace empty session ─────────────────────────────────────
 
-const replaceEmptySession = async (workDir: string, repository?: { branch?: string | null; worktree?: boolean }) => {
+const replaceEmptySession = async (workDir: string, _repository?: { branch?: string | null; worktree?: boolean }) => {
   if (!activeTabId.value) return null
   const oldId = activeTabId.value
-  // Create new session and replace tab — simplified for Vue
-  // TODO: Implement proper session replacement logic
-  return oldId // stub
+  const oldSession = sessionStore.sessions.find((s) => s.id === oldId)
+  const isEmpty =
+    !oldSession ||
+    (oldSession.messageCount === 0 &&
+      (!oldSession.title || oldSession.title === '新对话' || oldSession.title === 'Untitled'))
+
+  // Prefer reusing empty session; always bind chosen workDir.
+  let sessionId = await sessionStore.createSession(workDir)
+  const bindWorkDir = (id: string) => {
+    const s = sessionStore.sessions.find((x) => x.id === id)
+    if (s && workDir) {
+      s.workDir = workDir
+      s.projectRoot = workDir
+      s.projectPath = workDir
+      s.workDirExists = true
+    }
+    try {
+      localStorage.setItem('madcop_workspace_dir', workDir)
+    } catch { /* ignore */ }
+  }
+  bindWorkDir(sessionId)
+
+  // If we are still on the same id, just update cwd on the existing empty chat.
+  tabStore.openTab(sessionId, '新对话')
+  chatStore.connectToSession(sessionId)
+
+  if (isEmpty && oldId && oldId !== sessionId) {
+    try {
+      await sessionStore.deleteSession(oldId)
+      tabStore.closeTab(oldId)
+    } catch { /* ignore */ }
+  }
+  return sessionId
 }
 
 // ─── Launch workdir change ─────────────────────────────────────

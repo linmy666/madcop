@@ -109,6 +109,21 @@ const isDeleting = ref(false)
 // Test results
 const testResults = ref<Record<string, { loading: boolean; result?: any }>>({})
 
+// Capability report for active provider
+const capsLoading = ref(false)
+const capsLiveLoading = ref(false)
+const capsReport = ref<{
+  supports_tools?: boolean
+  supports_streaming?: boolean
+  supports_vision?: boolean
+  supports_temperature?: boolean
+  max_tokens_field?: string
+  reasoning_mode?: string
+  context_window?: number
+  source?: string
+} | null>(null)
+const capsMeta = ref<{ model?: string; base_url?: string }>({})
+
 // Create modal
 const showCreateModal = ref(false)
 const createForm = ref({
@@ -197,6 +212,7 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+  void loadCapabilities(false)
 }
 
 onMounted(loadData)
@@ -353,6 +369,24 @@ async function activateProvider(providerId: string) {
   }
 }
 
+async function loadCapabilities(live = false) {
+  if (live) capsLiveLoading.value = true
+  else capsLoading.value = true
+  try {
+    const q = live ? '?live=true&force=true' : '?force=true'
+    const res = await fetch(getApiUrl(`/api/providers/capabilities${q}`))
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    capsReport.value = data.capabilities || null
+    capsMeta.value = { model: data.model, base_url: data.base_url }
+  } catch {
+    if (!live) capsReport.value = null
+  } finally {
+    capsLoading.value = false
+    capsLiveLoading.value = false
+  }
+}
+
 // ── Test provider ─────────────────────────────────────────────────────
 async function testProvider(providerId: string) {
   testResults.value = { ...testResults.value, [providerId]: { loading: true } }
@@ -392,6 +426,62 @@ function fmtContext(n: number | null | undefined) {
 
 <template>
   <div style="max-width: 720px;">
+    <div
+      v-if="activeProviderId"
+      class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-4 py-3"
+    >
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <div class="text-[13px] font-semibold text-[var(--color-text-primary)]">当前供应商能力</div>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+            :disabled="capsLoading"
+            @click="loadCapabilities(false)"
+          >
+            {{ capsLoading ? '刷新中…' : '刷新' }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md border border-[var(--color-brand)]/40 bg-[var(--color-brand)]/10 px-2 py-1 text-[11px] text-[var(--color-brand)]"
+            :disabled="capsLiveLoading"
+            @click="loadCapabilities(true)"
+          >
+            {{ capsLiveLoading ? '探测中…' : '在线探测' }}
+          </button>
+        </div>
+      </div>
+      <p class="mb-2 text-[11px] text-[var(--color-text-tertiary)]">
+        {{ capsMeta.model || '未指定模型' }} · 来源 {{ capsReport?.source || '—' }}
+        <span v-if="capsReport?.context_window"> · 上下文 {{ fmtContext(capsReport.context_window) }}</span>
+      </p>
+      <div v-if="capsReport" class="flex flex-wrap gap-1.5">
+        <span class="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">
+          工具 {{ capsReport.supports_tools ? '✓' : '—' }}
+        </span>
+        <span class="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">
+          流式 {{ capsReport.supports_streaming ? '✓' : '—' }}
+        </span>
+        <span class="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">
+          视觉 {{ capsReport.supports_vision ? '✓' : '—' }}
+        </span>
+        <span class="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">
+          温度 {{ capsReport.supports_temperature ? '✓' : '—' }}
+        </span>
+        <span class="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]">
+          tokens 字段 {{ capsReport.max_tokens_field || 'max_tokens' }}
+        </span>
+        <span
+          v-if="capsReport.reasoning_mode && capsReport.reasoning_mode !== 'none'"
+          class="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] text-[var(--color-text-secondary)]"
+        >
+          推理 {{ capsReport.reasoning_mode }}
+        </span>
+      </div>
+      <p v-else class="text-[12px] text-[var(--color-text-tertiary)]">
+        {{ capsLoading ? '加载能力信息…' : '暂无能力数据，点刷新或在线探测' }}
+      </p>
+    </div>
     <div class="flex items-center justify-between mb-4">
       <div>
         <h2 class="text-[16px] font-semibold text-[var(--color-text-primary)]">模型供应商</h2>

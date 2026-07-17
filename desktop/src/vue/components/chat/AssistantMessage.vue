@@ -83,6 +83,19 @@
           <span class="material-symbols-outlined text-[16px]">refresh</span>
         </button>
         <button
+          v-if="!isStreaming && !isError && cleanContent"
+          type="button"
+          class="msg-action"
+          :title="distillTitle"
+          :aria-label="distillTitle"
+          :disabled="distilling"
+          @click.stop="distillAsSkill"
+        >
+          <span class="material-symbols-outlined text-[16px]">
+            {{ distilling ? 'progress_activity' : distilled ? 'check' : 'auto_awesome' }}
+          </span>
+        </button>
+        <button
           v-if="canBranch && !isStreaming"
           type="button"
           class="msg-action"
@@ -104,6 +117,8 @@
 import { ref, computed, watch } from 'vue'
 import { useChatStore } from '../../stores/chatStore'
 import { useTabStore } from '../../stores/tabs'
+import { useSkillStore } from '../../stores/skillStore'
+import { useUIStore } from '../../stores/uiStore'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
 import MascotAvatar from '../common/MascotAvatar.vue'
 
@@ -135,8 +150,15 @@ const emit = defineEmits<{ (e: 'branch'): void }>()
 
 const chatStore = useChatStore()
 const tabStore = useTabStore()
+const skillStore = useSkillStore()
+const uiStore = useUIStore()
 
 const copied = ref(false)
+const distilling = ref(false)
+const distilled = ref(false)
+const distillTitle = computed(() =>
+  distilled.value ? '已保存为技能' : distilling.value ? '蒸馏中…' : '蒸馏为技能',
+)
 
 // Reasoning (thinking) block — Codex-style: auto-expand while streaming,
 // auto-collapse when the final answer begins arriving. User can still
@@ -245,22 +267,53 @@ async function copy() {
   }
 }
 
-function regenerate() {
-  if (!props.sessionId || props.isStreaming) return
+function lastUserQuery(): string {
+  if (!props.sessionId) return ''
   const session = chatStore.sessions[props.sessionId]
-  if (!session) return
-  // Find the most recent user prompt that produced this assistant turn
-  let lastUserIdx = -1
+  if (!session) return ''
   for (let i = session.messages.length - 1; i >= 0; i--) {
-    if (session.messages[i].type === 'user_text') {
-      lastUserIdx = i
-      break
+    const m = session.messages[i] as { type?: string; content?: string }
+    if (m.type === 'user_text' || m.type === 'user') {
+      return (m.content || '').trim()
     }
   }
-  if (lastUserIdx === -1) return
-  const query = session.messages[lastUserIdx].content || ''
-  if (!query.trim()) return
+  return ''
+}
+
+function regenerate() {
+  if (!props.sessionId || props.isStreaming) return
+  const query = lastUserQuery()
+  if (!query) return
   chatStore.sendMessage(props.sessionId, query)
+}
+
+async function distillAsSkill() {
+  if (props.isStreaming || distilling.value || isError.value) return
+  const assistant = cleanContent.value.trim()
+  if (!assistant) return
+  const userQuery = lastUserQuery() || assistant.slice(0, 80)
+  distilling.value = true
+  try {
+    const name = await skillStore.distillFromExchange({
+      topic: userQuery.slice(0, 60),
+      userQuery,
+      assistantResponse: assistant,
+    })
+    if (name) {
+      distilled.value = true
+      uiStore.addToast({
+        type: 'success',
+        message: `已蒸馏为技能：${name}`,
+      })
+    } else {
+      uiStore.addToast({
+        type: 'error',
+        message: skillStore.error || '蒸馏失败',
+      })
+    }
+  } finally {
+    distilling.value = false
+  }
 }
 </script>
 
