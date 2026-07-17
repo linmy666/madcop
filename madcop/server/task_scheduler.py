@@ -123,9 +123,15 @@ def is_due(task: dict[str, Any], now: float | None = None) -> bool:
                 last_ts = datetime.fromisoformat(last.replace("Z", "+00:00")).timestamp()
         except Exception:
             last_ts = None
-    # Fire if next occurrence after last run is <= now
-    base = last_ts if last_ts is not None else (now - 60)
-    nxt = next_run_ts(cron, base)
+    # Fire if next occurrence after last run is <= now.
+    # Special case: a task that has never run is "due now" regardless of
+    # the cron's next schedule slot (otherwise `* * * * *` would wait up
+    # to a full minute for a freshly created task). Also avoids a
+    # croniter 6.x edge where the next minute boundary is strictly after
+    # `now`.
+    if last_ts is None:
+        return True
+    nxt = next_run_ts(cron, last_ts)
     if nxt is None:
         return False
     # Also require we haven't run in the last 45s (avoid double-fire)
