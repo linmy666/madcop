@@ -26,8 +26,27 @@ function makeReferenceId(reference: Omit<WorkspaceChatReference, 'id'>): string 
   return `${reference.kind}:${reference.path}:${linePart}:${notePart}`
 }
 
-export function formatWorkspaceReferencePrompt(_references: WorkspaceChatReference[]): string {
-  return ''
+export function formatWorkspaceReferencePrompt(references: WorkspaceChatReference[]): string {
+  if (!references?.length) return ''
+  const lines: string[] = [
+    'The user attached the following workspace context. Use it when answering:',
+  ]
+  for (const ref of references) {
+    const loc =
+      ref.lineStart != null
+        ? `:${ref.lineStart}${ref.lineEnd != null && ref.lineEnd !== ref.lineStart ? `-${ref.lineEnd}` : ''}`
+        : ''
+    const kind = ref.isDirectory ? 'dir' : ref.kind || 'file'
+    lines.push(`- [${kind}] ${ref.path || ref.name}${loc}`)
+    if (ref.note?.trim()) lines.push(`  note: ${ref.note.trim().slice(0, 400)}`)
+    if (ref.quote?.trim()) {
+      const q = ref.quote.trim().slice(0, 1200)
+      lines.push('  ```')
+      lines.push(`  ${q.split('\n').join('\n  ')}`)
+      lines.push('  ```')
+    }
+  }
+  return lines.join('\n')
 }
 
 export const useWorkspaceChatContextStore = defineStore('workspaceChatContext', {
@@ -56,8 +75,8 @@ export const useWorkspaceChatContextStore = defineStore('workspaceChatContext', 
     clearSession(sessionId: string) {
       delete this.referencesBySession[sessionId]
     },
-    formatWorkspaceReferencePrompt(_references: any[]): string {
-      return ''
+    formatWorkspaceReferencePrompt(references: WorkspaceChatReference[]): string {
+      return formatWorkspaceReferencePrompt(references)
     },
   },
 })

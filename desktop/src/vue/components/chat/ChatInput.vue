@@ -25,6 +25,7 @@ import { useTabStore, SETTINGS_TAB_ID } from '../../stores/tabs'
 import { useSessionStore } from '../../stores/sessionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useUIStore } from '../../stores/uiStore'
+import { sessionsApi } from '../../api/sessions'
 import { useSessionRuntimeStore, DRAFT_RUNTIME_SELECTION_KEY } from '../../stores/sessionRuntimeStore'
 import { useWorkspaceChatContextStore } from '../../stores/workspaceChatContextStore'
 import { useTranslation } from '../../i18n'
@@ -994,18 +995,29 @@ watch(composerInsertion, (insertion) => {
 
 // ─── Git info refresh (stub) ───────────────────────────────────
 
-function refreshGitInfo() {
+async function refreshGitInfo() {
   if (!activeTabId.value || isMemberSession.value) {
     gitInfo.value = null
     return
   }
-  // Stub: would call sessionsApi.getGitInfo(activeTabId.value)
-  // For now, try to infer from workDir
-  if (activeSession.value?.workDir) {
+  const sid = activeTabId.value
+  try {
+    const info = await sessionsApi.getGitInfo(sid)
     gitInfo.value = {
-      workDir: activeSession.value.workDir,
-      branch: null,
-      repoName: null,
+      workDir: info?.workDir || activeSession.value?.workDir || null,
+      branch: info?.branch ?? null,
+      repoName: info?.repoName ?? null,
+      changedFiles: (info as any)?.changedFiles ?? 0,
+    } as any
+  } catch {
+    if (activeSession.value?.workDir) {
+      gitInfo.value = {
+        workDir: activeSession.value.workDir,
+        branch: null,
+        repoName: null,
+      } as any
+    } else {
+      gitInfo.value = null
     }
   }
 }
@@ -1022,14 +1034,22 @@ watch([() => activeTabId.value, () => isMemberSession.value, () => messageCount.
 
 // ─── Agent slash commands (stub) ───────────────────────────────
 
-watch([() => isMemberSession.value, () => resolvedWorkDir.value], () => {
-  if (isMemberSession.value) {
+watch([() => isMemberSession.value, () => resolvedWorkDir.value, () => activeTabId.value], async () => {
+  if (isMemberSession.value || !activeTabId.value) {
     agentSlashCommands.value = []
     return
   }
-  // Stub: would call agentsApi.list(resolvedWorkDir)
-  // For now, no agent commands
-  agentSlashCommands.value = []
+  try {
+    const data = await sessionsApi.getSlashCommands(activeTabId.value)
+    const cmds = Array.isArray((data as any)?.commands) ? (data as any).commands : []
+    agentSlashCommands.value = cmds.map((c: any) => ({
+      name: c.name || c.command || '',
+      description: c.description || '',
+      argumentHint: c.argumentHint,
+    })).filter((c: any) => c.name)
+  } catch {
+    agentSlashCommands.value = []
+  }
 })
 
 // ─── Launch workdir sync ───────────────────────────────────────

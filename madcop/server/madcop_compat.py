@@ -2277,8 +2277,57 @@ def register(app: FastAPI) -> None:
 
     # ---- Scheduled tasks (basic cron-like) ---------------------- #
 
-    _SCHEDULED_TASKS: dict[str, dict[str, Any]] = {}
-    _SCHEDULED_RUNS: list[dict[str, Any]] = []
+    _SCHED_FILE = Path.home() / ".madcop" / "scheduled_tasks.json"
+    _SCHED_RUNS_FILE = Path.home() / ".madcop" / "scheduled_task_runs.json"
+
+    def _load_scheduled_tasks() -> dict[str, dict[str, Any]]:
+        try:
+            if _SCHED_FILE.exists():
+                import json as _j
+                data = _j.loads(_SCHED_FILE.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    return {t["id"]: t for t in data if isinstance(t, dict) and t.get("id")}
+                if isinstance(data, dict):
+                    return {k: v for k, v in data.items() if isinstance(v, dict)}
+        except Exception as e:
+            logger.debug("load scheduled tasks: %s", e)
+        return {}
+
+    def _save_scheduled_tasks(tasks: dict[str, dict[str, Any]]) -> None:
+        try:
+            import json as _j
+            _SCHED_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _SCHED_FILE.write_text(
+                _j.dumps(list(tasks.values()), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            logger.debug("save scheduled tasks: %s", e)
+
+    def _load_scheduled_runs() -> list[dict[str, Any]]:
+        try:
+            if _SCHED_RUNS_FILE.exists():
+                import json as _j
+                data = _j.loads(_SCHED_RUNS_FILE.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    return data[-200:]
+        except Exception as e:
+            logger.debug("load scheduled runs: %s", e)
+        return []
+
+    def _save_scheduled_runs(runs: list[dict[str, Any]]) -> None:
+        try:
+            import json as _j
+            _SCHED_RUNS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _SCHED_RUNS_FILE.write_text(
+                _j.dumps(runs[-200:], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            logger.debug("save scheduled runs: %s", e)
+
+    _SCHEDULED_TASKS: dict[str, dict[str, Any]] = _load_scheduled_tasks()
+    _SCHEDULED_RUNS: list[dict[str, Any]] = _load_scheduled_runs()
 
     @app.get("/api/scheduled-tasks", include_in_schema=False)
     async def cc_sched_list() -> dict[str, Any]:
@@ -2301,6 +2350,7 @@ def register(app: FastAPI) -> None:
             "createdAt": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()),
         }
         _SCHEDULED_TASKS[tid] = task
+        _save_scheduled_tasks(_SCHEDULED_TASKS)
         return {"ok": True, "task": task}
 
     @app.put("/api/scheduled-tasks/{task_id}", include_in_schema=False)
@@ -2312,12 +2362,14 @@ def register(app: FastAPI) -> None:
         if task_id not in _SCHEDULED_TASKS:
             return {"ok": False, "error": "not found"}
         _SCHEDULED_TASKS[task_id].update(body)
+        _save_scheduled_tasks(_SCHEDULED_TASKS)
         return {"ok": True, "task": _SCHEDULED_TASKS[task_id]}
 
     @app.delete("/api/scheduled-tasks/{task_id}", include_in_schema=False)
     async def cc_sched_delete(task_id: str) -> dict[str, Any]:
         if _SCHEDULED_TASKS.pop(task_id, None) is None:
             return {"ok": False, "error": "not found"}
+        _save_scheduled_tasks(_SCHEDULED_TASKS)
         return {"ok": True, "deleted": task_id}
 
     @app.post("/api/scheduled-tasks/{task_id}/run", include_in_schema=False)
@@ -2335,6 +2387,7 @@ def register(app: FastAPI) -> None:
             "output": f"[stub] Ran task '{task['name']}' with prompt: {task['prompt'][:80]}",
         }
         _SCHEDULED_RUNS.append(run)
+        _save_scheduled_runs(_SCHEDULED_RUNS)
         return {"ok": True, "run": run}
 
     @app.get("/api/scheduled-tasks/runs", include_in_schema=False)
@@ -3517,10 +3570,51 @@ def register(app: FastAPI) -> None:
 
     @app.get("/api/sessions/{session_id}/inspection", include_in_schema=False)
     async def cc_sess_inspection(session_id: str) -> dict[str, Any]:
+        msgs = list(_MESSAGES.get(session_id, []) or [])
+        sess = _SESSIONS.get(session_id, {}) or {}
+        # Summarize without shipping multi-MB histories to the client.
+        total_chars = 0
+        by_role: dict[str, int] = {}
+        for m in msgs:
+            role = str(m.get("role") or m.get("type") or "unknown")
+            by_role[role] = by_role.get(role, 0) + 1
+            c = m.get("content") or ""
+            if isinstance(c, str):
+                total_chars += len(c)
+            elif isinstance(c, list):
+                total_chars += sum(len(str(x)) for x in c)
+        est_tokens = max(1, total_chars // 4) if total_chars else 0
+        # Keep last N message previews for the inspector UI
+        preview = []
+        for m in msgs[-30:]:
+            content = m.get("content") or ""
+            if not isinstance(content, str):
+                content = str(content)[:200]
+            preview.append({
+                "id": m.get("id"),
+                "role": m.get("role") or m.get("type"),
+                "preview": content[:160],
+                "timestamp": m.get("timestamp") or m.get("createdAt"),
+            })
         return {
-            "messages": _MESSAGES.get(session_id, []),
-            "trace": [], "files": [],
             "sessionId": session_id,
+            "messages": preview,
+            "trace": [],
+            "files": [],
+            "status": {
+                "messageCount": len(msgs),
+                "byRole": by_role,
+                "totalChars": total_chars,
+                "estimatedTokens": est_tokens,
+                "title": sess.get("title"),
+                "workDir": sess.get("workDir"),
+                "model": sess.get("model"),
+            },
+            "context": {
+                "estimatedTokens": est_tokens,
+                "messageCount": len(msgs),
+                "workDir": sess.get("workDir"),
+            },
         }
 
     @app.get("/api/sessions/{session_id}/turn-checkpoints", include_in_schema=False)
