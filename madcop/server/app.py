@@ -34,12 +34,6 @@ from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
-# Per-message content cap for chat requests (DoS / memory protection).
-_MAX_CHAT_CONTENT_CHARS = 500_000
-_MAX_CHAT_MESSAGES = 200
-# Inline attachment dataUrl hard cap (~2 MB base64 ≈ 1.5 MB binary).
-_MAX_ATTACHMENT_DATAURL_CHARS = 2_500_000
-
 from madcop.config import settings as settings_store
 from madcop.llm import Message, MockClient, OpenAICompatClient
 from madcop.memory import (
@@ -52,69 +46,17 @@ from madcop.memory import (
 from madcop.memory.retriever import RetrievalConfig
 from madcop.tools import default_registry
 from madcop.agent_network.agent_mode_api import router as agent_mode_router
+from madcop.server.models import (
+    ProviderInput, FetchModelsRequest, ChatMessage, ChatAttachment,
+    ChatRequest, SetActiveRequest, MemoryCreateRequest,
+    _MAX_CHAT_CONTENT_CHARS, _MAX_CHAT_MESSAGES, _MAX_ATTACHMENT_DATAURL_CHARS,
+)
+from madcop.server.deps import get_memory_store, reset_memory_store
+from madcop.server.routes import include_all_routers
 
 # --------------------------------------------------------------------------- #
-# Pydantic models
+# Attachment helpers (models live in madcop.server.models)
 # --------------------------------------------------------------------------- #
-
-class ProviderInput(BaseModel):
-    provider_id: str
-    base_url: str = ""
-    api_key: str = ""
-    model: str = ""
-    label: str = ""
-    make_active: bool = True
-    # Extended fields — previously dropped by Pydantic at the API boundary,
-    # which is why editing them in the UI never persisted. Now round-tripped.
-    preset_id: str | None = None
-    api_format: str | None = None
-    auth_strategy: str | None = None
-    runtime_kind: str | None = None
-    tool_search_enabled: bool | None = None
-    notes: str | None = None
-    temperature: float | None = None
-    max_tokens: int | None = None
-    top_p: float | None = None
-    auto_compact_window: int | None = None
-    model_params: dict | None = None
-
-
-class FetchModelsRequest(BaseModel):
-    """Fetch the live model list from a provider's /v1/models endpoint.
-
-    The caller passes the base_url + api_key they are *currently* typing
-    into the settings form (not a saved provider), so the UI can populate
-    the model dropdown before the provider is persisted.
-    """
-    base_url: str = ""
-    api_key: str = ""
-
-
-class ChatMessage(BaseModel):
-    role: str = "user"
-    content: str = Field(default="", max_length=_MAX_CHAT_CONTENT_CHARS)
-    # Optional client-side id — when set, backend persists with the same id
-    # so branch/rewind can match frontend transcriptMessageId.
-    id: str | None = None
-
-
-class ChatAttachment(BaseModel):
-    id: str
-    name: str
-    type: str = "file"
-    path: str | None = None
-    dataUrl: str | None = Field(default=None, max_length=_MAX_ATTACHMENT_DATAURL_CHARS)
-
-    @field_validator("dataUrl")
-    @classmethod
-    def _reject_huge_dataurl(cls, v: str | None) -> str | None:
-        if v is not None and len(v) > _MAX_ATTACHMENT_DATAURL_CHARS:
-            raise ValueError(
-                f"attachment dataUrl too large ({len(v)} > {_MAX_ATTACHMENT_DATAURL_CHARS})"
-            )
-        return v
-
-
 def _xlsx_bytes_to_text(raw: bytes) -> str:
     """Convert an .xlsx/.xls workbook's bytes into a markdown-ish text dump."""
     try:
@@ -308,52 +250,9 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
     return f"[no readable content for {name}]"
 
 
-class ChatRequest(BaseModel):
-    messages: list[ChatMessage] = Field(default_factory=list, max_length=_MAX_CHAT_MESSAGES)
-    model: str | None = None
-    temperature: float | None = None  # None = use provider config default
-    max_tokens: int | None = None  # None = use provider config default
-    conversation_id: str | None = None  # optional id for trace persistence
-    skip_title_gen: bool = False  # set true to skip Claude-style auto title generation
-    attachments: list[ChatAttachment] = []  # file/image attachments from the user
-    plan_mode: bool = False  # enable Plan-and-Execute mode
-    effort: str | None = None  # reasoning intensity: auto|low|medium|high|max (per session)
-    agent_mode: str | None = None  # unified mode: auto|quick|standard|deep (overrides workflow)
-
-
-class SetActiveRequest(BaseModel):
-    provider_id: str
-
-
-class MemoryCreateRequest(BaseModel):
-    """Manual memory creation via API."""
-    kind: str = "semantic"          # "episodic" | "semantic" | "reflective"
-    title: str
-    content: str = ""
-    tags: list[str] = []
-
-
 # --------------------------------------------------------------------------- #
 # Memory helpers
 # --------------------------------------------------------------------------- #
-
-# Module-level singleton — lazily initialised so tests can swap it.
-_memory_store: MemoryStore | None = None
-
-
-def get_memory_store() -> MemoryStore:
-    """Return (and lazily create) the global MemoryStore singleton."""
-    global _memory_store
-    if _memory_store is None:
-        _memory_store = MemoryStore()
-    return _memory_store
-
-
-def reset_memory_store(store: MemoryStore) -> None:
-    """Replace the global store — used by tests for isolation."""
-    global _memory_store
-    _memory_store = store
-
 
 def _estimate_tokens(text: str) -> int:
     """Rough token count: 1 token ~ 4 chars (English) or 1.5 chars (CJK)."""
@@ -920,6 +819,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    include_all_routers(app)
 
     # ------------------------------------------------------------------- #
     # Load MCP servers from user config and register their tools globally
@@ -1329,73 +1229,7 @@ def create_app() -> FastAPI:
             "language": "zh",
         }
 
-    # ------------------------------------------------------------------- #
-    # Settings
-    # ------------------------------------------------------------------- #
-
-    @app.get("/api/settings")
-    async def get_settings() -> dict[str, Any]:
-        s = settings_store.load_settings()
-        return settings_store.settings_to_public_dict(s)
-
-    @app.post("/api/settings")
-    async def post_settings(body: ProviderInput) -> dict[str, Any]:
-        s = settings_store.load_settings()
-        s = settings_store.upsert_provider(
-            s,
-            provider_id=body.provider_id,
-            base_url=body.base_url,
-            api_key=body.api_key,
-            model=body.model,
-            label=body.label,
-            make_active=body.make_active,
-            preset_id=body.preset_id,
-            api_format=body.api_format,
-            auth_strategy=body.auth_strategy,
-            runtime_kind=body.runtime_kind,
-            tool_search_enabled=body.tool_search_enabled,
-            notes=body.notes,
-            temperature=body.temperature,
-            max_tokens=body.max_tokens,
-            top_p=body.top_p,
-            auto_compact_window=body.auto_compact_window,
-            model_params=body.model_params,
-        )
-        settings_store.save_settings(s)
-        return settings_store.settings_to_public_dict(s)
-
-    @app.get("/api/settings/agent-routing")
-    async def get_agent_routing() -> dict[str, Any]:
-        """Return per-agent model routing overrides for deep mode."""
-        s = settings_store.load_settings()
-        return {"agent_routing": s.agent_routing}
-
-    @app.put("/api/settings/agent-routing")
-    async def put_agent_routing(body: dict) -> dict[str, Any]:
-        """Persist per-agent model routing. Body: { "planner": {"model": "..."}, ... }"""
-        s = settings_store.load_settings()
-        s.agent_routing = body if isinstance(body, dict) else {}
-        settings_store.save_settings(s)
-        return {"agent_routing": s.agent_routing}
-
-    @app.post("/api/settings/active")
-    async def set_active_provider(body: SetActiveRequest) -> dict[str, Any]:
-        s = settings_store.load_settings()
-        ids = [p.provider_id for p in s.providers]
-        if body.provider_id not in ids:
-            raise HTTPException(404, f"provider '{body.provider_id}' not found")
-        s.active_provider = body.provider_id
-        settings_store.save_settings(s)
-        return settings_store.settings_to_public_dict(s)
-
-    @app.delete("/api/settings/{provider_id}")
-    async def delete_provider(provider_id: str) -> dict[str, Any]:
-        s = settings_store.load_settings()
-        s.providers = [p for p in s.providers if p.provider_id != provider_id]
-        if s.active_provider == provider_id:
-            s.active_provider = s.providers[0].provider_id if s.providers else ""
-        settings_store.save_settings(s)
-        return settings_store.settings_to_public_dict(s)
+    # Settings routes → madcop.server.routes.settings_routes
 
     # ------------------------------------------------------------------- #
     # Chat (SSE streaming)
@@ -1650,34 +1484,24 @@ def create_app() -> FastAPI:
         client = _get_client()
         messages = [Message(role=m.role, content=m.content) for m in body.messages]
 
-        # Load settings once per request — previously chat re-read disk 3–7×.
+        # Shared chat runtime: one settings load + sampling resolve.
+        from madcop.server.chat_runtime import (
+            load_chat_context, apply_sampling_defaults, active_provider_label,
+        )
+        _settings_once, _prov_cfg = load_chat_context()
         try:
-            _settings_once = settings_store.load_settings()
-            _prov_cfg = settings_store.get_active_client_config(_settings_once) or {}
+            body.temperature, body.max_tokens = apply_sampling_defaults(
+                temperature=body.temperature,
+                max_tokens=body.max_tokens,
+                model=body.model,
+                prov_cfg=_prov_cfg or {},
+            )
         except Exception as e:
-            logger.warning("chat: failed to load settings: %s", e)
-            _settings_once = None
-            _prov_cfg = {}
-
-        # Resolve sampling parameters from the active provider config.
-        try:
-            if _prov_cfg:
-                _model_name = (body.model or _prov_cfg.get("model") or "").lower()
-                _overrides = (_prov_cfg.get("model_params") or {}).get(_model_name, {})
-                if _overrides:
-                    body.temperature = _overrides.get("temperature", body.temperature)
-                    if _overrides.get("max_tokens"):
-                        body.max_tokens = _overrides["max_tokens"]
-                else:
-                    body.temperature = _prov_cfg.get("temperature", body.temperature)
-                    if _prov_cfg.get("max_tokens"):
-                        body.max_tokens = _prov_cfg["max_tokens"]
-        except Exception as e:
-            logger.warning("chat: failed to resolve provider sampling params: %s", e)
-        if body.max_tokens is None:
-            body.max_tokens = (_prov_cfg or {}).get("max_tokens") or 8192
-        if body.temperature is None:
-            body.temperature = (_prov_cfg or {}).get("temperature") or 0.7
+            logger.warning("chat: sampling resolve failed: %s", e)
+            if body.max_tokens is None:
+                body.max_tokens = 8192
+            if body.temperature is None:
+                body.temperature = 0.7
 
         # Convert text-only messages. Attachments' content is EXTRACTED
         # and appended directly to the user message so the LLM can read
@@ -1713,19 +1537,7 @@ def create_app() -> FastAPI:
                 messages.append(Message(role=m.role, content=m.content or ""))
 
         # ---- Memory injection (before LLM call) ---------------------- #
-        # Resolve the actual model label for dynamic system-prompt injection.
-        _active_label = ""
-        try:
-            if _settings_once is not None:
-                _pub = settings_store.settings_to_public_dict(_settings_once)
-            else:
-                _pub = settings_store.settings_to_public_dict(settings_store.load_settings())
-            _aid = _pub.get("active_provider")
-            _ap = next((p for p in _pub.get("providers", []) if p.get("provider_id") == _aid), None)
-            if _ap:
-                _active_label = _ap.get("label") or _ap.get("model") or ""
-        except Exception as e:
-            logger.warning("chat: failed to resolve active provider label: %s", e)
+        _active_label = active_provider_label(_settings_once)
 
         # Find the latest user message and use it as the retrieval query.
         latest_user_msg = ""
@@ -2545,144 +2357,7 @@ def create_app() -> FastAPI:
             },
         )
 
-    # ------------------------------------------------------------------- #
-    # Memory CRUD API
-    # ------------------------------------------------------------------- #
-
-    @app.get("/api/memory")
-    async def list_memory() -> dict[str, Any]:
-        """List all memories, grouped by kind — now 5 tiers (TencentDB shape).
-
-        L0 episodic, L1 semantic, L2 reflective, L3 scenario,
-        L4 persona traits, L5 insight. (madcop's 5-tier is
-        inspired by TencentDB Agent Memory's 4-tier pyramid plus the
-        cross-session Insight layer.)
-        """
-        from madcop.memory import (
-            MemoryStore, MemoryKind,
-            EpisodicMemory, SemanticMemory, ReflectiveMemory,
-            ScenarioMemory, PersonaMemory, InsightMemory,
-        )
-        store = get_memory_store()
-        result: dict[str, Any] = {
-            "episodic": [],
-            "semantic": [],
-            "reflective": [],
-            "scenario": [],
-            "persona": [],
-            "insight": [],
-        }
-        # L0/L1/L2 — from the legacy unified store
-        for kind_label, mk in [
-            ("episodic", MemoryKind.EPISODIC),
-            ("semantic", MemoryKind.SEMANTIC),
-            ("reflective", MemoryKind.REFLECTIVE),
-        ]:
-            for r in store.list_by_kind(mk, limit=200):
-                result[kind_label].append({
-                    "id": r.id,
-                    "kind": r.kind.value,
-                    "title": r.title,
-                    "content": r.content,
-                    "tags": list(r.tags),
-                    "created_at": r.created_at,
-                    "updated_at": r.updated_at,
-                })
-        # L3 scenario + L4 persona + L5 insight — from the new layer stores
-        try:
-            scm = ScenarioMemory(store)
-            for sc in scm.list_recent(limit=50):
-                result["scenario"].append(scm.to_public_dict(sc))
-        except Exception as e:
-            logger.debug("swallowed: %s", e)
-        try:
-            pm = PersonaMemory(store)
-            for t in pm.traits():
-                result["persona"].append({
-                    "key": t.key,
-                    "value": t.value,
-                    "confidence": t.confidence,
-                })
-        except Exception as e:
-            logger.debug("swallowed: %s", e)
-        try:
-            im = InsightMemory(store)
-            for ins in im.list(limit=50):
-                result["insight"].append({
-                    "id": ins.id,
-                    "title": ins.title,
-                    "description": ins.description,
-                    "confidence": ins.confidence,
-                    "occurrences": ins.occurrences,
-                    "tags": ins.tags,
-                })
-        except Exception as e:
-            logger.debug("swallowed: %s", e)
-        # v3.0: total count for clients that want a quick summary
-        result["total"] = sum(len(v) for v in result.values() if isinstance(v, list))
-        return result
-
-    @app.post("/api/memory")
-    async def add_memory(body: MemoryCreateRequest) -> dict[str, Any]:
-        """Manually add a memory record."""
-        from madcop.memory import MemoryKind
-        kind_map = {
-            "episodic": MemoryKind.EPISODIC,
-            "semantic": MemoryKind.SEMANTIC,
-            "reflective": MemoryKind.REFLECTIVE,
-        }
-        mk = kind_map.get(body.kind)
-        if mk is None:
-            raise HTTPException(400, f"Invalid kind '{body.kind}'. "
-                                     f"Must be one of: {list(kind_map)}")
-        store = get_memory_store()
-        rec = store.insert(
-            kind=mk,
-            title=body.title,
-            content=body.content,
-            tags=tuple(body.tags),
-        )
-        return {
-            "id": rec.id,
-            "kind": rec.kind.value,
-            "title": rec.title,
-            "content": rec.content,
-            "tags": list(rec.tags),
-            "created_at": rec.created_at,
-        }
-
-    @app.delete("/api/memory/{memory_id}")
-    async def delete_memory(memory_id: str) -> dict[str, Any]:
-        """Delete a memory by ID."""
-        store = get_memory_store()
-        deleted = store.delete(memory_id)
-        if not deleted:
-            raise HTTPException(404, f"Memory '{memory_id}' not found")
-        return {"deleted": True, "id": memory_id}
-
-    @app.get("/api/memory/search")
-    async def search_memory(q: str = Query(..., description="Search query")) -> dict[str, Any]:
-        """Full-text search across all memory layers."""
-        from madcop.memory import MemoryKind
-        store = get_memory_store()
-        # Quote the query to avoid FTS5 syntax errors with special chars
-        safe_q = q.replace('"', '""')
-        records = store.search_fts(f'"{safe_q}"', limit=50)
-        return {
-            "query": q,
-            "count": len(records),
-            "results": [
-                {
-                    "id": r.id,
-                    "kind": r.kind.value,
-                    "title": r.title,
-                    "content": r.content,
-                    "tags": list(r.tags),
-                    "created_at": r.created_at,
-                }
-                for r in records
-            ],
-        }
+    # Memory routes → madcop.server.routes.memory_routes
 
     # ------------------------------------------------------------------- #
     # Trace API (Flowtrace)
@@ -2719,176 +2394,7 @@ def create_app() -> FastAPI:
             "count": len(superseded),
         }
 
-    # ------------------------------------------------------------------- #
-    # Skills API (auto-distill + LLM-callable)
-    # Returns SkillMeta shape: {name, displayName?, description, source,
-    #   userInvocable, version?, contentLength, hasDirectory, pluginName?}
-    # ------------------------------------------------------------------- #
-
-    @app.get("/api/skills")
-    async def list_skills(
-        q: str = Query(default=""),
-        source: str = Query(default=""),
-        cwd: str = Query(default=""),
-    ) -> dict[str, Any]:
-        """List all skills (auto-distilled user skills + bundled + project)."""
-        from madcop.memory.skill_distill import list_user_skills
-        from madcop.agent.skill_forge import get_skill_store
-        skills: list[dict[str, Any]] = []
-        # User skills (auto-distilled) — primary path
-        if not source or source == "user":
-            for s in list_user_skills():
-                if q and q.lower() not in (s["name"] + s.get("description", "")).lower():
-                    continue
-                s["source"] = "user"
-                skills.append(s)
-        # Legacy skill_forge store
-        try:
-            forge = get_skill_store()
-            for s in forge.list_skills():
-                # Convert forge format to SkillMeta
-                if isinstance(s, dict):
-                    name = s.get("name", "")
-                    skills.append({
-                        "name": name,
-                        "displayName": s.get("displayName", name),
-                        "description": s.get("description", ""),
-                        "source": "user",
-                        "userInvocable": True,
-                        "version": s.get("version", "1.0"),
-                        "contentLength": len(s.get("body", "")),
-                        "hasDirectory": False,
-                    })
-        except Exception as e:
-            logger.debug("swallowed: %s", e)
-        # Bundled skills
-        if not source or source == "bundled":
-            bundled = Path(__file__).resolve().parent.parent.parent / "skills"
-            if bundled.exists():
-                for f in bundled.glob("*.md"):
-                    content = f.read_text(errors="ignore")
-                    title = f.stem
-                    if content.startswith("# "):
-                        title = content.split("\n", 1)[0][2:].strip()
-                    if q and q.lower() not in (title + content).lower():
-                        continue
-                    skills.append({
-                        "name": f.stem,
-                        "displayName": title,
-                        "description": content[:200],
-                        "source": "bundled",
-                        "userInvocable": True,
-                        "contentLength": len(content),
-                        "hasDirectory": False,
-                        "path": str(f),
-                    })
-        return {"skills": skills, "total": len(skills)}
-
-    @app.get("/api/skills/detail")
-    async def get_skill_detail(
-        name: str = Query(...),
-        source: str = Query(default="user"),
-        cwd: str = Query(default=""),
-    ) -> dict[str, Any]:
-        """Get a skill's full content. Returns {detail: SkillDetail}.
-
-        Must be registered BEFORE the /api/skills/{name} catch-all below,
-        otherwise FastAPI matches the literal "detail" as the {name}.
-        """
-        from madcop.memory.skill_distill import read_skill_detail
-        detail = read_skill_detail(name, source)
-        if detail:
-            return {"detail": detail}
-        raise HTTPException(404, f"Skill '{name}' not found")
-
-    @app.get("/api/skills/search")
-    async def search_skills(q: str = "") -> dict[str, Any]:
-        """Search user+bundled skills by name/description.
-
-        Registered BEFORE `/api/skills/{name}` so the literal path
-        `/api/skills/search` is not shadowed by the `{name}` parameter.
-        """
-        from madcop.memory.skill_distill import list_user_skills
-        skills = list_user_skills()
-        if q:
-            skills = [s for s in skills if q.lower() in s["name"].lower()
-                      or q.lower() in s.get("description", "").lower()]
-        return {"results": skills, "total": len(skills)}
-
-    @app.get("/api/skills/{name}")
-    async def get_skill(name: str) -> dict[str, Any]:
-        """Get a single skill by name. Returns SkillDetail shape."""
-        from madcop.memory.skill_distill import read_skill_detail
-        detail = read_skill_detail(name, "user")
-        if detail:
-            return detail
-        # Fallback: skill_forge
-        from madcop.agent.skill_forge import get_skill_store
-        skill = get_skill_store().get_skill(name)
-        if skill:
-            return {
-                "meta": {
-                    "name": name,
-                    "displayName": skill.get("displayName", name),
-                    "description": skill.get("description", ""),
-                    "source": "user",
-                    "userInvocable": True,
-                    "contentLength": len(skill.get("body", "")),
-                    "hasDirectory": False,
-                },
-                "tree": [],
-                "files": [{
-                    "path": str(Path.home() / ".madcop" / "skills" / f"{name}.md"),
-                    "content": skill.get("body", ""),
-                    "language": "markdown",
-                    "isEntry": True,
-                }],
-                "skillRoot": str(Path.home() / ".madcop" / "skills"),
-            }
-        raise HTTPException(404, f"Skill '{name}' not found")
-
-    @app.post("/api/skills")
-    async def create_skill(body: dict[str, Any]) -> dict[str, Any]:
-        """Manually create a skill. Also auto-distills if it looks teachable."""
-        name = body.get("name", "unnamed")
-        description = body.get("description", "")
-        body_md = body.get("body", "")
-        # Use distill module to create the file with proper format
-        from madcop.memory.skill_distill import force_distill_skill
-        topic = body.get("topic", name)
-        skill_name = force_distill_skill(
-            topic, description or topic, body_md)
-        if not skill_name:
-            # Fallback: just write directly
-            target = Path.home() / ".madcop" / "skills" / f"{name}.md"
-            target.parent.mkdir(parents=True, exist_ok=True)
-            content = f"# {name}\n\n{description}\n\n{body_md}\n"
-            target.write_text(content, encoding="utf-8")
-            skill_name = target.stem
-        return {"path": str(Path.home() / ".madcop" / "skills" / f"{skill_name}.md"),
-                "created": True, "name": skill_name}
-
-    @app.post("/api/skills/distill")
-    async def distill_skill_endpoint(body: dict[str, Any]) -> dict[str, Any]:
-        """Manually trigger auto-distill from a (query, response) pair."""
-        from madcop.memory.skill_distill import force_distill_skill
-        topic = body.get("topic", "")
-        user_q = body.get("userQuery", topic)
-        assistant_r = body.get("assistantResponse", "")
-        if not user_q or not assistant_r:
-            return {"ok": False, "error": "userQuery and assistantResponse required"}
-        name = force_distill_skill(topic, user_q, assistant_r)
-        if name:
-            return {"ok": True, "skillName": name}
-        return {"ok": False, "error": "could not distill"}
-
-    @app.delete("/api/skills/{name}")
-    async def delete_skill(name: str) -> dict[str, Any]:
-        target = Path.home() / ".madcop" / "skills" / f"{name}.md"
-        if not target.exists():
-            raise HTTPException(404, f"Skill '{name}' not found")
-        target.unlink()
-        return {"deleted": True, "name": name}
+    # Skills routes → madcop.server.routes.skills_routes
 
     # ------------------------------------------------------------------- #
     # WebUI (static HTML at /)

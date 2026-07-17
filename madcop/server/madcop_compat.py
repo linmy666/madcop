@@ -1995,72 +1995,7 @@ def register(app: FastAPI) -> None:
         return {"targets": []}
 
     # ---- Filesystem browse / file --------------------------------- #
-    # Directories the filesystem endpoints are allowed to serve. Anything
-    # outside this set (credentials, system files, the settings file with
-    # plaintext API keys) is refused. Sensitive sub-paths are also blocked
-    # even when inside an allowed root.
-    #
-    # Entire ~/.madcop is blocked (settings, master.key, session history,
-    # memory DBs). Preview is served via /preview StaticFiles, not here.
-    _FS_SENSITIVE_PATHS = (
-        Path.home() / ".ssh",
-        Path.home() / ".madcop",
-        Path.home() / ".aws",
-        Path.home() / ".gnupg",
-        Path.home() / ".kube",
-        Path.home() / ".docker",
-        Path.home() / ".netrc",
-        Path.home() / ".git-credentials",
-        Path.home() / ".npmrc",
-        Path.home() / ".config" / "gh",
-        Path.home() / ".config" / "gcloud",
-    )
-
-    def _fs_check_allowed(path: Path) -> Path:
-        """Resolve and validate a path for the filesystem endpoints.
-
-        Allowed: user home, current working directory, and /tmp (for
-        agent artifacts). Blocked: anything else, and sensitive
-        credential paths even if inside an allowed root.
-        """
-        p = path.expanduser().resolve()
-        # Deny sensitive credential/config paths first.
-        for sensitive in _FS_SENSITIVE_PATHS:
-            try:
-                s = sensitive.expanduser().resolve()
-            except OSError:
-                continue
-            if p == s:
-                raise HTTPException(403, "access denied: sensitive path")
-            try:
-                p.relative_to(s)
-                raise HTTPException(403, "access denied: sensitive path")
-            except ValueError:
-                pass  # not inside this sensitive path — OK
-        # Allow only under home, cwd, or /tmp.
-        # Resolve /tmp too — on macOS it is a symlink to /private/tmp.
-        _allowed_roots = [
-            Path.home().resolve(),
-            Path.cwd().resolve(),
-            Path("/tmp").resolve(),
-            Path("/private/tmp").resolve() if Path("/private/tmp").exists() else None,
-        ]
-        _allowed_roots = [r for r in _allowed_roots if r is not None]
-        # Deduplicate while preserving order
-        _seen: set[Path] = set()
-        _uniq_roots: list[Path] = []
-        for r in _allowed_roots:
-            if r not in _seen:
-                _seen.add(r)
-                _uniq_roots.append(r)
-        _allowed_roots = _uniq_roots
-        for root in _allowed_roots:
-            try:
-                p.relative_to(root)
-                return p  # inside an allowed root
-            except ValueError:
-                continue
-        raise HTTPException(403, f"access denied: '{p}' is outside allowed directories")
+    from madcop.server.compat.fs_guard import check_path_allowed as _fs_check_allowed
 
     @app.get("/api/filesystem/browse", include_in_schema=False)
     async def cc_fs_browse(

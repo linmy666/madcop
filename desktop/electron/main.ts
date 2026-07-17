@@ -85,13 +85,14 @@ function previewAgentPath() {
 }
 
 function rendererEntry() {
-  // v3.0: prefer dist-vue/ (Vue 3 build) if it exists, fall back to dist/ (React)
+  // Vue 3 only — React dist/ is legacy and no longer a production fallback.
   const vueEntry = path.join(appRoot(), "dist-vue", "index.html")
-  const reactEntry = path.join(appRoot(), "dist", "index.html")
-  try {
-    if (fs.existsSync(vueEntry)) return vueEntry
-  } catch {}
-  return reactEntry
+  if (!fs.existsSync(vueEntry)) {
+    throw new Error(
+      `Vue renderer missing: ${vueEntry}. Run: cd desktop && node ./node_modules/vite/bin/vite.js build`,
+    )
+  }
+  return vueEntry
 }
 
 async function loadRendererEntry(

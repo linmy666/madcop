@@ -14,12 +14,12 @@ from madcop.memory import MemoryStore, MemoryKind
 @pytest.fixture
 def isolated_pipeline(tmp_path: Path, monkeypatch):
     """Isolated memory store and reset pipeline state for each test."""
-    from madcop.server import memory_pipeline, app as app_module
+    from madcop.server import memory_pipeline, deps as deps_module
     # Use a unique key path per test
     db_path = tmp_path / "pipeline.db"
     key_path = tmp_path / "master.key"
     store = MemoryStore(path=db_path)
-    monkeypatch.setattr(app_module, "_memory_store", store)
+    monkeypatch.setattr(deps_module, "_memory_store", store)
     memory_pipeline.reset_for_tests()
     yield store
     store.close()
