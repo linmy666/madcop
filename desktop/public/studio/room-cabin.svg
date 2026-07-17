@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" fill="none">
+  <defs>
+    <linearGradient id="c-wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3d5c3a"/>
+      <stop offset="100%" stop-color="#2d4a2b"/>
+    </linearGradient>
+    <linearGradient id="c-floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8b6914"/>
+      <stop offset="100%" stop-color="#6b4f12"/>
+    </linearGradient>
+    <linearGradient id="c-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="60%" stop-color="#86efac"/>
+      <stop offset="100%" stop-color="#bbf7d0"/>
+    </linearGradient>
+    <radialGradient id="c-fire" cx="50%" cy="70%" r="50%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="40%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#ea580c" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="c-soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <!-- Log wall -->
+  <rect width="1200" height="360" fill="url(#c-wall)"/>
+  <g opacity="0.25">
+    <rect y="0" width="1200" height="28" fill="#1a2e19"/>
+    <rect y="56" width="1200" height="28" fill="#1a2e19"/>
+    <rect y="112" width="1200" height="28" fill="#1a2e19"/>
+    <rect y="168" width="1200" height="28" fill="#1a2e19"/>
+    <rect y="224" width="1200" height="28" fill="#1a2e19"/>
+    <rect y="280" width="1200" height="28" fill="#1a2e19"/>
+    <rect y="336" width="1200" height="24" fill="#1a2e19"/>
+  </g>
+  <!-- Beams -->
+  <rect x="0" y="0" width="1200" height="18" fill="#5c4030"/>
+  <rect x="200" y="0" width="18" height="360" fill="#5c4030" opacity="0.6"/>
+  <rect x="600" y="0" width="18" height="360" fill="#5c4030" opacity="0.5"/>
+  <rect x="980" y="0" width="18" height="360" fill="#5c4030" opacity="0.6"/>
+  <!-- Window left with landscape -->
+  <rect x="80" y="70" width="200" height="160" rx="4" fill="#5c4030" stroke="#3e2723" stroke-width="6"/>
+  <rect x="92" y="82" width="176" height="136" fill="url(#c-sky)"/>
+  <ellipse cx="140" cy="180" rx="50" ry="30" fill="#22c55e"/><ellipse cx="200" cy="190" rx="60" ry="28" fill="#16a34a"/>
+  <circle cx="220" cy="110" r="22" fill="#fde047"/>
+  <!-- Window right -->
+  <rect x="920" y="70" width="200" height="160" rx="4" fill="#5c4030" stroke="#3e2723" stroke-width="6"/>
+  <rect x="932" y="82" width="176" height="136" fill="url(#c-sky)"/>
+  <ellipse cx="980" cy="185" rx="55" ry="28" fill="#4ade80"/><ellipse cx="1040" cy="190" rx="45" ry="24" fill="#22c55e"/>
+  <path d="M950 140 Q1000 90 1050 140" stroke="#86efac" stroke-width="3" fill="none" opacity="0.6"/>
+  <!-- Fireplace center -->
+  <rect x="500" y="140" width="200" height="200" rx="4" fill="#4a3728" stroke="#2c1810" stroke-width="4"/>
+  <rect x="530" y="180" width="140" height="140" rx="4" fill="#1c0f0a"/>
+  <ellipse cx="600" cy="290" rx="50" ry="30" fill="url(#c-fire)"/>
+  <path d="M580 280 Q590 240 600 270 Q610 230 620 280" fill="#fb923c" opacity="0.9"/>
+  <path d="M590 275 Q600 245 610 275" fill="#fef08a"/>
+  <rect x="540" y="320" width="120" height="20" fill="#5c4030"/>
+  <!-- Mantel items -->
+  <rect x="550" y="155" width="30" height="20" fill="#86efac" opacity="0.7"/>
+  <circle cx="640" cy="165" r="10" fill="#fbbf24"/>
+  <!-- Floor boards -->
+  <rect y="360" width="1200" height="340" fill="url(#c-floor)"/>
+  <g stroke="#5c4030" stroke-opacity="0.25" stroke-width="1">
+    <line x1="0" y1="400" x2="1200" y2="400"/><line x1="0" y1="450" x2="1200" y2="450"/>
+    <line x1="0" y1="500" x2="1200" y2="500"/><line x1="0" y1="550" x2="1200" y2="550"/>
+    <line x1="0" y1="600" x2="1200" y2="600"/><line x1="0" y1="650" x2="1200" y2="650"/>
+  </g>
+  <!-- Braided rug -->
+  <ellipse cx="600" cy="560" rx="260" ry="70" fill="#a16207" opacity="0.4"/>
+  <ellipse cx="600" cy="560" rx="220" ry="55" fill="#ca8a04" opacity="0.25" stroke="#854d0e" stroke-width="2"/>
+  <!-- Wooden desks -->
+  <g>
+    <rect x="90" y="405" width="200" height="75" rx="6" fill="#6b4423" stroke="#3e2723" stroke-width="2"/>
+    <rect x="140" y="390" width="60" height="22" rx="3" fill="#292524"/><rect x="148" y="394" width="44" height="12" fill="#86efac" opacity="0.5"/>
+  </g>
+  <g>
+    <rect x="500" y="405" width="200" height="75" rx="6" fill="#6b4423" stroke="#3e2723" stroke-width="2"/>
+    <rect x="555" y="388" width="90" height="24" rx="3" fill="#292524"/><rect x="562" y="392" width="76" height="14" fill="#4ade80" opacity="0.45"/>
+  </g>
+  <g>
+    <rect x="910" y="405" width="180" height="75" rx="6" fill="#6b4423" stroke="#3e2723" stroke-width="2"/>
+    <rect x="950" y="390" width="70" height="22" rx="3" fill="#292524"/>
+  </g>
+  <g>
+    <rect x="90" y="535" width="200" height="75" rx="6" fill="#6b4423" stroke="#3e2723" stroke-width="2"/>
+    <rect x="140" y="520" width="70" height="22" rx="3" fill="#292524"/>
+  </g>
+  <g>
+    <rect x="500" y="535" width="200" height="75" rx="6" fill="#6b4423" stroke="#3e2723" stroke-width="2"/>
+    <rect x="555" y="520" width="80" height="22" rx="3" fill="#292524"/>
+  </g>
+  <g>
+    <rect x="910" y="535" width="180" height="75" rx="6" fill="#6b4423" stroke="#3e2723" stroke-width="2"/>
+    <rect x="950" y="520" width="70" height="22" rx="3" fill="#292524"/>
+  </g>
+  <!-- Plants pots -->
+  <ellipse cx="70" cy="370" rx="22" ry="10" fill="#166534"/><rect x="58" y="340" width="24" height="30" rx="4" fill="#854d0e"/>
+  <ellipse cx="1130" cy="370" rx="22" ry="10" fill="#166534"/><rect x="1118" y="340" width="24" height="30" rx="4" fill="#854d0e"/>
+  <!-- Fire glow ambient -->
+  <ellipse cx="600" cy="320" rx="120" ry="40" fill="#fb923c" opacity="0.15" filter="url(#c-soft)"/>
+</svg>

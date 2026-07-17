@@ -145,15 +145,22 @@ function poseClass(pose: SpriteAgent['pose']): string {
 .si {
   margin: 10px 0 4px;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-surface-container-lowest, #fff);
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse at 10% 0%, color-mix(in srgb, var(--color-brand, #7c3aed) 12%, transparent), transparent 50%),
+    var(--color-surface-container-lowest, #fff);
   overflow: hidden;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
 }
 .si--skin-study {
-  background: linear-gradient(180deg, #faf6ef 0%, var(--color-surface-container-lowest, #fff) 100%);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(180, 83, 9, 0.12), transparent 50%),
+    linear-gradient(180deg, #faf6ef 0%, var(--color-surface-container-lowest, #fff) 100%);
 }
 .si--skin-cabin {
-  background: linear-gradient(180deg, #eef6ea 0%, var(--color-surface-container-lowest, #fff) 100%);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(34, 197, 94, 0.12), transparent 50%),
+    linear-gradient(180deg, #eef6ea 0%, var(--color-surface-container-lowest, #fff) 100%);
 }
 .si__bar {
   display: flex;

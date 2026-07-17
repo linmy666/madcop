@@ -98,9 +98,9 @@ export const STUDIO_SKINS: {
   labelEn: string
   hint: string
 }[] = [
-  { id: 'studio', label: '默认工作室', labelEn: 'Studio', hint: '明亮工位' },
-  { id: 'study', label: '书房', labelEn: 'Study', hint: '暖纸木色' },
-  { id: 'cabin', label: '船舱', labelEn: 'Cabin', hint: '星露谷风' },
+  { id: 'studio', label: '霓虹工作室', labelEn: 'Studio', hint: '紫调夜间办公室 · 城市窗景' },
+  { id: 'study', label: '暖色书房', labelEn: 'Study', hint: '书架 · 台灯光 · 木地板' },
+  { id: 'cabin', label: '林间木屋', labelEn: 'Cabin', hint: '壁炉 · 绿植 · 星露谷气质' },
 ]
 
 export const SKIN_STORAGE_KEY = 'madcop_sprite_studio_skin'

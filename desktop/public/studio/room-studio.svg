@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" fill="none">
+  <defs>
+    <linearGradient id="s-wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e1b2e"/>
+      <stop offset="55%" stop-color="#2a2540"/>
+      <stop offset="100%" stop-color="#35304a"/>
+    </linearGradient>
+    <linearGradient id="s-floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3d3a52"/>
+      <stop offset="100%" stop-color="#2c2940"/>
+    </linearGradient>
+    <linearGradient id="s-window" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="50%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#4c1d95"/>
+    </linearGradient>
+    <linearGradient id="s-glow" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="s-soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <pattern id="s-tile" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M0 40h40M40 0v40" stroke="#ffffff" stroke-opacity="0.03" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <!-- Wall -->
+  <rect width="1200" height="380" fill="url(#s-wall)"/>
+  <!-- Window glow -->
+  <ellipse cx="600" cy="120" rx="280" ry="90" fill="url(#s-glow)" filter="url(#s-soft)"/>
+  <!-- Big window -->
+  <rect x="360" y="48" width="480" height="200" rx="12" fill="#0f0a1a" stroke="#5b4d7a" stroke-width="3"/>
+  <rect x="372" y="60" width="456" height="176" rx="8" fill="url(#s-window)" opacity="0.85"/>
+  <line x1="600" y1="60" x2="600" y2="236" stroke="#2e2640" stroke-width="4" opacity="0.5"/>
+  <line x1="372" y1="148" x2="828" y2="148" stroke="#2e2640" stroke-width="4" opacity="0.5"/>
+  <!-- City silhouette in window -->
+  <g opacity="0.35" fill="#1a1028">
+    <rect x="400" y="140" width="30" height="96"/><rect x="440" y="110" width="40" height="126"/>
+    <rect x="500" y="130" width="28" height="106"/><rect x="560" y="100" width="50" height="136"/>
+    <rect x="640" y="120" width="36" height="116"/><rect x="700" y="90" width="44" height="146"/>
+    <rect x="760" y="135" width="32" height="101"/>
+  </g>
+  <!-- LED strip -->
+  <rect x="80" y="300" width="1040" height="6" rx="3" fill="#7c3aed" opacity="0.7"/>
+  <rect x="80" y="300" width="1040" height="6" rx="3" fill="#c4b5fd" opacity="0.3" filter="url(#s-soft)"/>
+  <!-- Floor -->
+  <rect y="380" width="1200" height="320" fill="url(#s-floor)"/>
+  <rect y="380" width="1200" height="320" fill="url(#s-tile)"/>
+  <!-- Floor perspective lines -->
+  <path d="M0 380 L400 700 M200 380 L500 700 M400 380 L600 700 M600 380 L700 700 M800 380 L900 700 M1000 380 L1100 700" stroke="#fff" stroke-opacity="0.04" stroke-width="1"/>
+  <!-- Whiteboard wall left -->
+  <rect x="48" y="100" width="200" height="160" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="3"/>
+  <rect x="64" y="120" width="100" height="8" rx="2" fill="#7c3aed" opacity="0.5"/>
+  <rect x="64" y="140" width="140" height="6" rx="2" fill="#cbd5e1"/>
+  <rect x="64" y="156" width="120" height="6" rx="2" fill="#cbd5e1"/>
+  <rect x="64" y="172" width="80" height="6" rx="2" fill="#a78bfa"/>
+  <circle cx="200" cy="220" r="12" fill="#fbbf24" opacity="0.8"/>
+  <!-- Plant right -->
+  <ellipse cx="1100" cy="340" rx="28" ry="12" fill="#1a1628" opacity="0.4"/>
+  <rect x="1090" y="300" width="20" height="40" rx="4" fill="#4c3f6e"/>
+  <ellipse cx="1100" cy="280" rx="36" ry="30" fill="#34d399"/>
+  <ellipse cx="1080" cy="295" rx="22" ry="18" fill="#10b981"/>
+  <ellipse cx="1120" cy="290" rx="20" ry="16" fill="#6ee7b7"/>
+  <!-- Coffee bar bottom left -->
+  <rect x="40" y="560" width="160" height="80" rx="10" fill="#252238" stroke="#4c3f6e" stroke-width="2"/>
+  <rect x="50" y="570" width="50" height="35" rx="6" fill="#3b3358"/>
+  <ellipse cx="160" cy="600" rx="18" ry="8" fill="#78350f"/>
+  <path d="M148 590 Q160 570 172 590" stroke="#fbbf24" stroke-width="3" fill="none"/>
+  <text x="55" y="630" fill="#94a3b8" font-size="11" font-family="system-ui">☕ 咖啡角</text>
+  <!-- Tool wall right -->
+  <rect x="1080" y="420" width="80" height="140" rx="8" fill="#252238" stroke="#4c3f6e" stroke-width="2"/>
+  <circle cx="1120" cy="460" r="14" fill="#7c3aed" opacity="0.6"/>
+  <circle cx="1120" cy="500" r="14" fill="#2563eb" opacity="0.6"/>
+  <circle cx="1120" cy="540" r="14" fill="#ec4899" opacity="0.6"/>
+  <!-- Desk islands (furniture silhouettes) - 6 desks in grid -->
+  <!-- row1 -->
+  <g opacity="0.95">
+    <rect x="120" y="400" width="200" height="90" rx="10" fill="#1f1a30" stroke="#5b4d7a" stroke-width="2"/>
+    <rect x="140" y="380" width="70" height="28" rx="4" fill="#111827"/><rect x="145" y="384" width="60" height="16" rx="2" fill="#38bdf8" opacity="0.5"/>
+    <rect x="230" y="380" width="70" height="28" rx="4" fill="#111827"/><rect x="235" y="384" width="60" height="16" rx="2" fill="#a78bfa" opacity="0.5"/>
+  </g>
+  <g opacity="0.95">
+    <rect x="500" y="400" width="200" height="90" rx="10" fill="#1f1a30" stroke="#5b4d7a" stroke-width="2"/>
+    <rect x="540" y="375" width="120" height="32" rx="4" fill="#111827"/><rect x="548" y="380" width="104" height="18" rx="2" fill="#34d399" opacity="0.45"/>
+  </g>
+  <g opacity="0.95">
+    <rect x="880" y="400" width="160" height="90" rx="10" fill="#1f1a30" stroke="#5b4d7a" stroke-width="2"/>
+    <rect x="910" y="380" width="100" height="28" rx="4" fill="#111827"/><rect x="918" y="384" width="84" height="16" rx="2" fill="#f472b6" opacity="0.5"/>
+  </g>
+  <!-- row2 -->
+  <g opacity="0.95">
+    <rect x="120" y="530" width="200" height="90" rx="10" fill="#1f1a30" stroke="#5b4d7a" stroke-width="2"/>
+    <rect x="155" y="510" width="90" height="28" rx="4" fill="#111827"/><rect x="162" y="514" width="76" height="16" rx="2" fill="#22d3ee" opacity="0.45"/>
+  </g>
+  <g opacity="0.95">
+    <rect x="500" y="530" width="200" height="90" rx="10" fill="#1f1a30" stroke="#5b4d7a" stroke-width="2"/>
+    <rect x="540" y="510" width="100" height="28" rx="4" fill="#111827"/><rect x="548" y="514" width="84" height="16" rx="2" fill="#fbbf24" opacity="0.5"/>
+  </g>
+  <g opacity="0.95">
+    <rect x="880" y="530" width="160" height="90" rx="10" fill="#1f1a30" stroke="#5b4d7a" stroke-width="2"/>
+    <rect x="910" y="510" width="100" height="28" rx="4" fill="#111827"/><rect x="918" y="514" width="84" height="16" rx="2" fill="#4ade80" opacity="0.45"/>
+  </g>
+  <!-- Ambient particles -->
+  <circle cx="200" cy="80" r="2" fill="#c4b5fd" opacity="0.6"/>
+  <circle cx="900" cy="100" r="1.5" fill="#c4b5fd" opacity="0.5"/>
+  <circle cx="750" cy="50" r="2" fill="#fff" opacity="0.3"/>
+  <circle cx="450" cy="90" r="1.5" fill="#fff" opacity="0.25"/>
+</svg>

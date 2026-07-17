@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" fill="none">
+  <defs>
+    <linearGradient id="y-wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f5e6c8"/>
+      <stop offset="100%" stop-color="#e8d4a8"/>
+    </linearGradient>
+    <linearGradient id="y-floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c4a574"/>
+      <stop offset="100%" stop-color="#a68b5b"/>
+    </linearGradient>
+    <radialGradient id="y-lamp" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fde68a" stop-opacity="0.9"/>
+      <stop offset="40%" stop-color="#fbbf24" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="y-blur"><feGaussianBlur stdDeviation="12"/></filter>
+    <pattern id="y-wood" width="80" height="12" patternUnits="userSpaceOnUse">
+      <rect width="80" height="12" fill="#b8956a"/>
+      <path d="M0 6h80" stroke="#9a7b52" stroke-width="0.8" opacity="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="360" fill="url(#y-wall)"/>
+  <!-- Wallpaper stripe -->
+  <g opacity="0.08">
+    <rect x="0" y="0" width="40" height="360" fill="#92400e"/>
+    <rect x="80" y="0" width="40" height="360" fill="#92400e"/>
+    <rect x="160" y="0" width="40" height="360" fill="#92400e"/>
+    <rect x="240" y="0" width="40" height="360" fill="#92400e"/>
+    <rect x="320" y="0" width="40" height="360" fill="#92400e"/>
+    <rect x="880" y="0" width="40" height="360" fill="#92400e"/>
+    <rect x="960" y="0" width="40" height="360" fill="#92400e"/>
+    <rect x="1040" y="0" width="40" height="360" fill="#92400e"/>
+    <rect x="1120" y="0" width="40" height="360" fill="#92400e"/>
+  </g>
+  <!-- Bookshelf left -->
+  <rect x="40" y="60" width="220" height="280" rx="4" fill="#6b4423" stroke="#4a2f18" stroke-width="3"/>
+  <g>
+    <rect x="52" y="80" width="28" height="70" fill="#b45309"/><rect x="84" y="80" width="22" height="70" fill="#7c3aed"/>
+    <rect x="110" y="80" width="32" height="70" fill="#2563eb"/><rect x="146" y="80" width="20" height="70" fill="#dc2626"/>
+    <rect x="170" y="80" width="26" height="70" fill="#059669"/><rect x="200" y="80" width="30" height="70" fill="#d97706"/>
+  </g>
+  <rect x="50" y="160" width="200" height="6" fill="#4a2f18"/>
+  <g>
+    <rect x="55" y="180" width="24" height="60" fill="#1d4ed8"/><rect x="85" y="180" width="30" height="60" fill="#be185d"/>
+    <rect x="120" y="180" width="22" height="60" fill="#b45309"/><rect x="148" y="180" width="28" height="60" fill="#0f766e"/>
+    <rect x="182" y="180" width="26" height="60" fill="#7c2d12"/>
+  </g>
+  <rect x="50" y="250" width="200" height="6" fill="#4a2f18"/>
+  <g>
+    <rect x="60" y="270" width="35" height="50" fill="#4c1d95"/><rect x="100" y="270" width="22" height="50" fill="#b91c1c"/>
+    <rect x="128" y="270" width="40" height="50" fill="#a16207"/><rect x="174" y="270" width="28" height="50" fill="#166534"/>
+  </g>
+  <!-- Window center with curtains -->
+  <rect x="420" y="50" width="360" height="220" rx="4" fill="#87ceeb" stroke="#8b6914" stroke-width="8"/>
+  <rect x="435" y="65" width="150" height="190" fill="#bae6fd" opacity="0.6"/>
+  <rect x="615" y="65" width="150" height="190" fill="#7dd3fc" opacity="0.5"/>
+  <!-- Soft sun -->
+  <circle cx="600" cy="120" r="40" fill="#fef08a" opacity="0.7"/>
+  <circle cx="600" cy="120" r="70" fill="#fde68a" opacity="0.25" filter="url(#y-blur)"/>
+  <!-- Curtains -->
+  <path d="M420 50 Q450 160 420 270" stroke="#b45309" stroke-width="28" fill="none" opacity="0.85"/>
+  <path d="M780 50 Q750 160 780 270" stroke="#b45309" stroke-width="28" fill="none" opacity="0.85"/>
+  <!-- Portrait right -->
+  <rect x="920" y="80" width="140" height="160" rx="4" fill="#78350f" stroke="#5c2e0a" stroke-width="6"/>
+  <rect x="935" y="95" width="110" height="110" fill="#fde68a"/>
+  <circle cx="990" cy="145" r="28" fill="#fbbf24"/><ellipse cx="990" cy="195" rx="36" ry="22" fill="#d97706"/>
+  <!-- Floor -->
+  <rect y="360" width="1200" height="340" fill="url(#y-wood)"/>
+  <rect y="360" width="1200" height="340" fill="url(#y-floor)" opacity="0.35"/>
+  <!-- Rug -->
+  <ellipse cx="600" cy="560" rx="320" ry="90" fill="#92400e" opacity="0.35"/>
+  <ellipse cx="600" cy="560" rx="280" ry="70" fill="#b45309" opacity="0.25" stroke="#78350f" stroke-width="2"/>
+  <!-- Desks as wooden tables -->
+  <g>
+    <rect x="100" y="400" width="210" height="80" rx="6" fill="#8b5a2b" stroke="#5c3a1e" stroke-width="2"/>
+    <rect x="150" y="385" width="50" height="20" rx="3" fill="#fef3c7"/><rect x="220" y="380" width="40" height="25" rx="2" fill="#44403c"/>
+  </g>
+  <g>
+    <rect x="495" y="400" width="210" height="80" rx="6" fill="#8b5a2b" stroke="#5c3a1e" stroke-width="2"/>
+    <rect x="540" y="375" width="100" height="30" rx="3" fill="#292524"/><rect x="548" y="380" width="84" height="16" fill="#fbbf24" opacity="0.4"/>
+  </g>
+  <g>
+    <rect x="890" y="400" width="180" height="80" rx="6" fill="#8b5a2b" stroke="#5c3a1e" stroke-width="2"/>
+    <rect x="930" y="385" width="60" height="20" rx="3" fill="#fef3c7"/>
+  </g>
+  <g>
+    <rect x="100" y="530" width="210" height="80" rx="6" fill="#8b5a2b" stroke="#5c3a1e" stroke-width="2"/>
+    <rect x="160" y="510" width="70" height="26" rx="3" fill="#292524"/>
+  </g>
+  <g>
+    <rect x="495" y="530" width="210" height="80" rx="6" fill="#8b5a2b" stroke="#5c3a1e" stroke-width="2"/>
+    <ellipse cx="600" cy="520" rx="40" ry="12" fill="url(#y-lamp)" filter="url(#y-blur)"/>
+    <rect x="592" y="500" width="16" height="40" fill="#78716c"/><ellipse cx="600" cy="498" rx="22" ry="10" fill="#fbbf24"/>
+  </g>
+  <g>
+    <rect x="890" y="530" width="180" height="80" rx="6" fill="#8b5a2b" stroke="#5c3a1e" stroke-width="2"/>
+    <rect x="920" y="515" width="80" height="20" rx="3" fill="#fef3c7"/>
+  </g>
+  <!-- Cat silhouette on rug -->
+  <ellipse cx="320" cy="620" rx="28" ry="14" fill="#78350f" opacity="0.5"/>
+  <circle cx="345" cy="610" r="12" fill="#78350f" opacity="0.5"/>
+</svg>

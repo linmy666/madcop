@@ -15,6 +15,7 @@
 import { ref, computed, onMounted } from 'vue'
 import GraphCanvas, { type GraphNodeData, type GraphEdgeData } from '../components/graph/GraphCanvas.vue'
 import SpriteStudioScene from '../components/studio/SpriteStudioScene.vue'
+import TopologyMiniGraph from '../components/studio/TopologyMiniGraph.vue'
 import { getApiUrl } from '../api/client'
 import { useChatStore } from '../stores/chatStore'
 import { useTabStore } from '../stores/tabs'
@@ -380,28 +381,16 @@ async function saveAsNew() {
         <button
           v-for="p in presets"
           :key="p.id"
+          type="button"
           :class="['ao-preset', { 'ao-preset--active': selectedPreset === p.id }]"
           @click="applyPreset(p)"
         >
+          <TopologyMiniGraph :kind="p.id" />
           <div class="ao-preset__head">
             <span class="ao-preset__name">{{ p.name }}</span>
             <span class="ao-preset__nameEn">{{ p.nameEn }}</span>
           </div>
           <p class="ao-preset__desc">{{ p.desc }}</p>
-          <div class="ao-preset__viz">
-            <svg
-              v-for="(n, i) in p.buildNodes().slice(0, 4)"
-              :key="`${p.id}-n-${i}`"
-              :class="`ao-preset__node ao-preset__node--${i}`"
-            >
-              <span class="material-symbols-outlined">circle</span>
-            </svg>
-            <span
-              v-for="i in Math.min(p.buildNodes().length - 1, 3)"
-              :key="`${p.id}-a-${i}`"
-              class="ao-preset__arrow"
-            >→</span>
-          </div>
         </button>
       </div>
     </section>
@@ -536,8 +525,8 @@ async function saveAsNew() {
   max-width: 1280px;
   margin: 0 auto;
   padding: 0 32px 48px;
-  height: min(720px, calc(100% - 120px));
-  min-height: 480px;
+  height: min(780px, calc(100vh - 160px));
+  min-height: 560px;
 }
 
 /* ── Buttons ────────────────────────────────────────────────────── */
@@ -584,26 +573,31 @@ async function saveAsNew() {
 .ao-presets-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 .ao-preset {
   text-align: left;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 14px;
+  padding: 12px 12px 14px;
   cursor: pointer;
   font-family: inherit;
   color: var(--color-text-primary);
-  transition: border-color 140ms, transform 140ms;
+  transition: border-color 140ms, transform 140ms, box-shadow 140ms;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  min-height: 0;
 }
-.ao-preset:hover { border-color: var(--color-text-tertiary); transform: translateY(-1px); }
+.ao-preset:hover {
+  border-color: color-mix(in srgb, var(--color-brand, #7c3aed) 45%, var(--color-border));
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
 .ao-preset--active {
-  border-color: var(--color-brand, #0a0a0a);
-  background: var(--color-surface-container-lowest);
+  border-color: var(--color-brand, #7c3aed);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand, #7c3aed) 18%, transparent);
 }
 .ao-preset__head {
   display: flex;
@@ -611,32 +605,22 @@ async function saveAsNew() {
   justify-content: space-between;
   gap: 8px;
 }
-.ao-preset__name { font-size: 14px; font-weight: 600; }
+.ao-preset__name {
+  font-size: 14px;
+  font-weight: 700;
+}
 .ao-preset__nameEn {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   color: var(--color-text-tertiary);
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .ao-preset__desc {
   margin: 0;
   font-size: 12px;
+  line-height: 1.45;
   color: var(--color-text-secondary);
-  line-height: 1.5;
-  min-height: 36px;
 }
-.ao-preset__viz {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-wrap: wrap;
-  min-height: 16px;
-  color: var(--color-text-tertiary);
-}
-.ao-preset__node { font-size: 10px !important; color: var(--color-text-tertiary); }
-.ao-preset__arrow { font-size: 10px; opacity: 0.5; }
-
 /* ── Workspace (canvas + side panel) ──────────────────────────── */
 .ao-workspace {
   max-width: 1280px;
