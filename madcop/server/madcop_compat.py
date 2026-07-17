@@ -2613,6 +2613,79 @@ def register(app: FastAPI) -> None:
                 }}
         return {"ok": False, "error": "not found"}
 
+
+    @app.post("/api/mcp/import", include_in_schema=False)
+    async def cc_mcp_import(request: Request) -> dict[str, Any]:
+        """Import MCP servers from Claude Desktop / Cursor / raw mcpServers JSON."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        raw = body.get("config") if isinstance(body.get("config"), dict) else body
+        # Accept {mcpServers: {...}} or {servers: [...]} or flat name->config map
+        mapping: dict[str, Any] = {}
+        if isinstance(raw, dict):
+            if isinstance(raw.get("mcpServers"), dict):
+                mapping = raw["mcpServers"]
+            elif isinstance(raw.get("servers"), list):
+                for s in raw["servers"]:
+                    if isinstance(s, dict) and s.get("name"):
+                        mapping[str(s["name"])] = s
+            else:
+                # flat map of name -> config (skip non-dict values / meta keys)
+                for k, v in raw.items():
+                    if k in ("ok", "scope", "cwd") or not isinstance(v, dict):
+                        continue
+                    if any(x in v for x in ("command", "args", "url", "type", "transport")):
+                        mapping[str(k)] = v
+        if not mapping:
+            return {"ok": False, "error": "no mcpServers found in payload", "imported": []}
+        scope = body.get("scope", "user")
+        servers = _load_mcp_servers()
+        existing = {s.get("name") for s in servers}
+        imported: list[str] = []
+        skipped: list[str] = []
+        for name, cfg in mapping.items():
+            if name in existing:
+                skipped.append(name)
+                continue
+            if not isinstance(cfg, dict):
+                continue
+            transport = cfg.get("type") or cfg.get("transport") or (
+                "http" if cfg.get("url") else "stdio"
+            )
+            config = {
+                "type": transport,
+                "command": cfg.get("command", ""),
+                "args": cfg.get("args", []) or [],
+                "env": cfg.get("env", {}) or {},
+                "url": cfg.get("url", ""),
+                "headers": cfg.get("headers", {}) or {},
+            }
+            new_server = {
+                "name": name,
+                "scope": scope,
+                "transport": transport,
+                "command": config.get("command", ""),
+                "args": config.get("args", []),
+                "env": config.get("env", {}),
+                "config": config,
+                "enabled": True,
+                "status": "disconnected",
+                "summary": f"{transport}: {config.get('command') or config.get('url') or ''}",
+            }
+            servers.append(new_server)
+            existing.add(name)
+            imported.append(name)
+        if imported:
+            _save_mcp_servers(servers)
+        return {
+            "ok": True,
+            "imported": imported,
+            "skipped": skipped,
+            "count": len(imported),
+        }
+
     @app.get("/api/mcp/project-paths", include_in_schema=False)
     async def cc_mcp_project_paths() -> dict[str, Any]:
         return {"projectPaths": list({str(p) for p in _SESSIONS.values()

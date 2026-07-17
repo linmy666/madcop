@@ -39,7 +39,7 @@ import { useSkillStore } from                 '../../stores/skillStore'
 // ─── Types ────────────────────────────────────────────────────
 import type { McpServerRecord } from  '../../../types/mcp'
 import type { SkillMeta } from        '../../../types/skill'
-import type { SlashCommandOption } from '../../../types/slash'
+import type { SlashCommandOption } from './composerUtils'
 
 // ─── Prop Types ───────────────────────────────────────────────
 export type LocalSlashCommandName = 'mcp' | 'skills' | 'help' | 'status' | 'cost' | 'context'

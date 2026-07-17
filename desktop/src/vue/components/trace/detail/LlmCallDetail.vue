@@ -7,13 +7,13 @@ import type { TraceBodySnapshot, TraceCallRecord } from '../../../types/trace'
 import type { TraceSpan } from '../../../lib/traceViewModel'
 import { formatTraceJson } from '../../../lib/traceViewModel'
 import { fetchTraceCallDetail } from '../../../lib/trace/callCache'
-import { parseTraceRequestBody, parseTraceResponseBody } from五级/lib/trace/requestParse'
-import type { NormalizedMessage } from五级/lib/trace/types'
-import { formatBytes } from五级/lib/formatBytes'
+import { parseTraceRequestBody, parseTraceResponseBody } from '../../../lib/trace/requestParse'
+import type { NormalizedMessage } from '../../../lib/trace/types'
+import { formatBytes } from '../../../lib/formatBytes'
 import CodeViewer from '../../chat/CodeViewer.vue'
-import CopyButton from '../shared/CopyButton.vue'
+import CopyButton from '../../shared/CopyButton.vue'
 import Section from './Section.vue'
-import MessageBlocks from './MessageBlocks.vue'
+import MessageBlocks from '../../../trace/detail/MessageBlocks.vue'
 
 const MESSAGE_FOLD_THRESHOLD = 20
 const MESSAGE_HEAD_COUNT = 2

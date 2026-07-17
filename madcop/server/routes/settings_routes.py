@@ -77,3 +77,22 @@ async def delete_provider(provider_id: str) -> dict[str, Any]:
         s.active_provider = s.providers[0].provider_id if s.providers else ""
     settings_store.save_settings(s)
     return settings_store.settings_to_public_dict(s)
+
+
+@router.get("/api/providers/capabilities")
+async def provider_capabilities(force: bool = False) -> dict[str, Any]:
+    """Return heuristic (cached) capability report for the active provider."""
+    from madcop.llm.capabilities import detect_capabilities
+    s = settings_store.load_settings()
+    cfg = settings_store.get_active_client_config(s) or {}
+    report = detect_capabilities(
+        model=str(cfg.get("model") or ""),
+        base_url=str(cfg.get("base_url") or ""),
+        api_format=str(cfg.get("api_format") or "openai_chat"),
+        runtime_kind=str(cfg.get("runtime_kind") or ""),
+        preset_id=str(cfg.get("preset_id") or ""),
+        force_refresh=bool(force),
+    )
+    from dataclasses import asdict
+    return {"capabilities": asdict(report), "model": cfg.get("model"), "base_url": cfg.get("base_url")}
+

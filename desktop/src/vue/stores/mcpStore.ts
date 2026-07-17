@@ -62,6 +62,20 @@ export const useMcpStore = defineStore('mcp', {
       await this.fetchServers(undefined, cwd)
       return res
     },
+    async importFromJson(raw: string, scope: string = 'user', cwd?: string) {
+      let config: Record<string, unknown>
+      try {
+        config = JSON.parse(raw) as Record<string, unknown>
+      } catch {
+        throw new Error('Invalid JSON')
+      }
+      const res = await mcpApi.importConfig(config, scope)
+      if (!res?.ok && res?.error) {
+        throw new Error(res.error)
+      }
+      await this.fetchServers(undefined, cwd)
+      return res
+    },
     getState() {
       return { servers: this.servers, selectedServer: this.selectedServer }
     },

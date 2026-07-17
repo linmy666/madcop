@@ -9,8 +9,8 @@ import {
   ELECTRON_IPC_CHANNELS,
   type ElectronEventChannel,
   type ElectronIpcChannel,
-} from '../../../electron/ipc/channels'
-import { validateElectronIpcPayload } from '../../../electron/ipc/capabilities'
+} from '../../../../electron/ipc/channels'
+import { validateElectronIpcPayload } from '../../../../electron/ipc/capabilities'
 
 export type ElectronHostBridge = {
   invoke<T>(channel: ElectronIpcChannel, payload?: unknown): Promise<T>

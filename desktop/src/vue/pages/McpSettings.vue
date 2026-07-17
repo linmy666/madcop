@@ -315,6 +315,9 @@ const isDeleting = ref(false)
 const busyServerKey = ref<string | null>(null)
 const pendingDeleteServer = ref<McpServerRecord | null>(null)
 const isInitialLoading = ref(true)
+const importJsonText = ref('')
+const importBusy = ref(false)
+const showImportPanel = ref(false)
 
 // Module-level refs (useRef equivalents) — must NOT be declared inside
 // onMounted because re-assignment would lose them on re-render.
@@ -622,6 +625,32 @@ const detailsServer = computed<McpServerRecord | undefined>(() => {
 const editServer = computed<McpServerRecord | undefined>(() => {
   return view.value.type === 'edit' ? (view.value as { type: 'edit'; server: McpServerRecord }).server : undefined
 })
+
+async function handleImportJson() {
+  if (!importJsonText.value.trim()) {
+    props.addToast({ type: 'error', message: t('settings.mcp.importEmpty') || '请粘贴 MCP JSON 配置' })
+    return
+  }
+  importBusy.value = true
+  try {
+    const res = await mcpStore.importFromJson(importJsonText.value, 'user', currentWorkDir.value as string | undefined)
+    const n = res?.count ?? res?.imported?.length ?? 0
+    props.addToast({
+      type: 'success',
+      message: t('settings.mcp.importSuccess', { count: String(n) }) || `已导入 ${n} 个服务`,
+    })
+    importJsonText.value = ''
+    showImportPanel.value = false
+  } catch (error) {
+    props.addToast({
+      type: 'error',
+      message: error instanceof Error ? error.message : (t('settings.mcp.importFailed') || '导入失败'),
+    })
+  } finally {
+    importBusy.value = false
+  }
+}
+
 </script>
 
 <template>
@@ -1148,6 +1177,32 @@ const editServer = computed<McpServerRecord | undefined>(() => {
           <p class="mt-2 text-[var(--color-text-tertiary)]">
             {{ t('settings.mcp.importGuideExample') || '示例：npx -y @modelcontextprotocol/server-filesystem /tmp' }}
           </p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]"
+              @click="showImportPanel = !showImportPanel"
+            >
+              {{ t('settings.mcp.importJsonToggle') || '从 JSON 导入（Claude Desktop / Cursor）' }}
+            </button>
+          </div>
+          <div v-if="showImportPanel" class="mt-3 space-y-2">
+            <textarea
+              v-model="importJsonText"
+              rows="8"
+              class="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 font-mono text-[11px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-border-focus)]"
+              :placeholder='t("settings.mcp.importJsonPh") || "{\n  \"mcpServers\": {\n    \"filesystem\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-filesystem\", \"/tmp\"]\n    }\n  }\n}"'
+            />
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg bg-[var(--color-brand)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              :disabled="importBusy"
+              @click="handleImportJson"
+            >
+              <span class="material-symbols-outlined text-[14px]">upload</span>
+              {{ importBusy ? (t('common.loading') || '导入中…') : (t('settings.mcp.importSubmit') || '导入') }}
+            </button>
+          </div>
         </div>
       </div>
 

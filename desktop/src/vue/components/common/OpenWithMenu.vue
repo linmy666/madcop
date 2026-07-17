@@ -2,7 +2,7 @@
 // v3.0 — OpenWithMenu (Vue 3 SFC)
 // Teleport-based "open with..." menu. Mirrors React createPortal.
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import type { OpenWithItem } from '../../../../lib/openWithItems'
+import type { OpenWithItem } from '../../lib/openWithItems'
 
 type Pos = { top: number; left: number }
 

@@ -8,7 +8,7 @@ import { useTranslation } from '../../../i18n'
 import type { TraceSpan } from '../../../lib/traceViewModel'
 import { formatTraceJson } from '../../../lib/traceViewModel'
 import { formatClockTime, formatDurationMs } from '../../../lib/trace/formatters'
-import CodeViewer from '../../components/chat/CodeViewer.vue'
+import CodeViewer from '../../chat/CodeViewer.vue'
 import Section from './Section.vue'
 
 const props = defineProps<{

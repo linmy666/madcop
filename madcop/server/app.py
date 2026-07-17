@@ -2650,10 +2650,21 @@ def create_app() -> FastAPI:
                 from madcop.llm import Message
                 model = msg.get("model")
                 temperature = msg.get("temperature", 0.7)
+                # Align with SSE ChatRequest limits (content size + message count)
+                from madcop.server.models import (
+                    _MAX_CHAT_CONTENT_CHARS as _WS_MAX_CHARS,
+                    _MAX_CHAT_MESSAGES as _WS_MAX_MSGS,
+                )
                 if mtype == "user_message":
                     content = msg.get("content", "")
                     if not content:
                         await ws.send_json({"type": "status", "state": "idle"})
+                        continue
+                    if len(content) > _WS_MAX_CHARS:
+                        await ws.send_json({
+                            "type": "error",
+                            "error": f"message too large ({len(content)} > {_WS_MAX_CHARS})",
+                        })
                         continue
                     messages = [Message(role="user", content=content)]
                 elif mtype in ("chat", ""):
@@ -2661,11 +2672,19 @@ def create_app() -> FastAPI:
                     if not raw_messages:
                         await ws.send_json({"type": "status", "state": "idle"})
                         continue
+                    if len(raw_messages) > _WS_MAX_MSGS:
+                        await ws.send_json({
+                            "type": "error",
+                            "error": f"too many messages ({len(raw_messages)} > {_WS_MAX_MSGS})",
+                        })
+                        continue
                     try:
-                        messages = [
-                            Message(role=m["role"], content=m["content"])
-                            for m in raw_messages
-                        ]
+                        messages = []
+                        for m in raw_messages:
+                            c = m["content"]
+                            if isinstance(c, str) and len(c) > _WS_MAX_CHARS:
+                                c = c[:_WS_MAX_CHARS]
+                            messages.append(Message(role=m["role"], content=c))
                     except (KeyError, TypeError):
                         await ws.send_json({"type": "status", "state": "idle"})
                         continue

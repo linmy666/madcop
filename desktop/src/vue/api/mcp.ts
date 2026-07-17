@@ -51,4 +51,12 @@ export const mcpApi = {
   reconnect: (name: string, cwd?: string) => {
     return api.post<{ server: McpServerRecord }>(`/api/mcp/${encodeURIComponent(name)}/reconnect`, cwd ? { cwd } : {})
   },
+
+  /** Import from Claude Desktop / Cursor style `{ mcpServers: { name: config } }` JSON. */
+  importConfig: (config: Record<string, unknown>, scope: string = 'user') => {
+    return api.post<{ ok: boolean; imported: string[]; skipped: string[]; count: number; error?: string }>(
+      '/api/mcp/import',
+      { config, scope },
+    )
+  },
 }

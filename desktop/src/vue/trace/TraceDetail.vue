@@ -7,17 +7,17 @@
  * MessageDetail/EventDetail/SessionOverview) based on span.kind.
  */
 import { useTranslation } from '../i18n'
-import type { TraceSpan, TraceViewModel } from '../../../lib/traceViewModel'
-import { formatTraceJson } from '../../../lib/traceViewModel'
-import { formatClockTime, formatDurationMs, formatTokenCount, formatUsageBrief } from '../../../lib/trace/formatters'
-import { formatBytes } from '../../../lib/formatBytes'
-import CodeViewer from '../../components/chat/CodeViewer.vue'
+import type { TraceSpan, TraceViewModel } from '../lib/traceViewModel'
+import { formatTraceJson } from '../lib/traceViewModel'
+import { formatClockTime, formatDurationMs, formatTokenCount, formatUsageBrief } from '../lib/trace/formatters'
+import { formatBytes } from '../lib/formatBytes'
+import CodeViewer from '../components/chat/CodeViewer.vue'
 import { spanDisplayTitle, traceEventPhaseLabel, MetaChip, StatusPill, TypeIcon } from './TraceBadges.vue'
-import Section from '../../components/trace/detail/Section.vue'
-import LlmCallDetail from '../../components/trace/detail/LlmCallDetail.vue'
-import ToolDetail from '../../components/trace/detail/ToolDetail.vue'
-import MessageDetail from '../../components/trace/detail/MessageDetail.vue'
-import SessionOverview from '../../components/trace/detail/SessionOverview.vue'
+import Section from '../components/trace/detail/Section.vue'
+import LlmCallDetail from '../components/trace/detail/LlmCallDetail.vue'
+import ToolDetail from '../components/trace/detail/ToolDetail.vue'
+import MessageDetail from '../components/trace/detail/MessageDetail.vue'
+import SessionOverview from '../components/trace/detail/SessionOverview.vue'
 
 const props = defineProps<{
   span: TraceSpan
@@ -85,16 +85,16 @@ const call = props.span.call ?? null
 import type { Component } from 'vue'
 import { computed } from 'vue'
 import { useTranslation } from '../i18n'
-import type { TraceSpan, TraceViewModel } from '../../../lib/traceViewModel'
-import { formatTraceJson } from '../../../lib/traceViewModel'
-import { formatClockTime, formatDurationMs } from '../../../lib/trace/formatters'
-import CodeViewer from '../../components/chat/CodeViewer.vue'
+import type { TraceSpan, TraceViewModel } from '../lib/traceViewModel'
+import { formatTraceJson } from '../lib/traceViewModel'
+import { formatClockTime, formatDurationMs } from '../lib/trace/formatters'
+import CodeViewer from '../components/chat/CodeViewer.vue'
 import { MetaChip, StatusPill, TypeIcon, spanDisplayTitle, traceEventPhaseLabel } from './TraceBadges.vue'
-import Section from '../../components/trace/detail/Section.vue'
-import LlmCallDetail from '../../components/trace/detail/LlmCallDetail.vue'
-import ToolDetail from '../../components/trace/detail/ToolDetail.vue'
-import MessageDetail from '../../components/trace/detail/MessageDetail.vue'
-import SessionOverview from '../../components/trace/detail/SessionOverview.vue'
+import Section from '../components/trace/detail/Section.vue'
+import LlmCallDetail from '../components/trace/detail/LlmCallDetail.vue'
+import ToolDetail from '../components/trace/detail/ToolDetail.vue'
+import MessageDetail from '../components/trace/detail/MessageDetail.vue'
+import SessionOverview from '../components/trace/detail/SessionOverview.vue'
 
 // HeaderChips — renders the metadata chips in the header
 export const HeaderChips: Component = {

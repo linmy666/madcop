@@ -10,9 +10,9 @@ import type { TraceSpan } from '../../../lib/traceViewModel'
 import { formatTraceJson } from '../../../lib/traceViewModel'
 import type { NormalizedBlock, NormalizedMessage } from '../../../lib/trace/types'
 import { normalizeContentBlock } from '../../../lib/trace/sse'
-import CodeViewer from '../../components/chat/CodeViewer.vue'
+import CodeViewer from '../../chat/CodeViewer.vue'
 import Section from './Section.vue'
-import MessageBlocks from '../../trace/detail/MessageBlocks.vue'
+import MessageBlocks from '../../../trace/detail/MessageBlocks.vue'
 
 const props = defineProps<{
   span: TraceSpan
