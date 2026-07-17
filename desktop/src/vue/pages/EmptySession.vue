@@ -702,19 +702,19 @@ const insertSlashCommand = () => {
       >
         <MadCopLoader
           :state="isSubmitting ? 'working' : 'ready'"
-          :size="isMobileComposer ? 128 : 200"
-          :class="isMobileComposer ? 'mb-4' : 'mb-8'"
+          :size="isMobileComposer ? 96 : 140"
+          :class="isMobileComposer ? 'mb-3' : 'mb-5'"
         />
         <h1
-          class="mb-3 font-extrabold tracking-tight text-[var(--color-text-primary)]"
-          :class="isMobileComposer ? 'text-2xl' : 'text-3xl'"
+          class="mb-2 font-bold tracking-tight text-[var(--color-text-primary)]"
+          :class="isMobileComposer ? 'text-xl' : 'text-[1.65rem]'"
           :style="{ fontFamily: 'var(--font-headline)' }"
         >
           {{ t('empty.title') }}
         </h1>
         <p
-          class="mx-auto text-[var(--color-text-secondary)]"
-          :class="isMobileComposer ? 'max-w-[280px] text-sm leading-6' : 'max-w-xs'"
+          class="mx-auto text-[var(--color-text-secondary)] leading-relaxed"
+          :class="isMobileComposer ? 'max-w-[280px] text-sm' : 'max-w-sm text-[14px]'"
           :style="{ fontFamily: 'var(--font-body)' }"
         >
           {{ t('empty.subtitle') }}

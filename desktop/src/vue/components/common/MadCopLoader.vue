@@ -54,8 +54,8 @@ const displayLabel = computed(() => props.label ?? STAGE_LABELS[props.state])
   object-fit: contain; background: transparent;
 }
 .madcop-loader__label {
-  font-size: 16px; color: var(--color-text-secondary);
-  font-weight: 500; text-align: center;
+  font-size: 13px; color: var(--color-text-tertiary);
+  font-weight: 500; text-align: center; letter-spacing: 0.01em;
 }
 </style>
 

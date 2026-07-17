@@ -102,7 +102,7 @@ onMounted(loadStatus)
   <div class="mh">
     <div class="mh__head">
       <div>
-        <h2>Meta-Harness</h2>
+        <h2 class="text-[18px] font-semibold tracking-tight">任务外壳 (Meta-Harness)</h2>
         <p class="sub">
           优化任务外壳（记忆/技能/工具/deep·plan 开关），不是供应商 API 适配。
           档案目录 <code>~/.madcop/meta_harness/</code>

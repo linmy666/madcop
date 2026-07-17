@@ -152,7 +152,7 @@ const sourceLabel = computed(() => t(`settings.agents.source.${props.agent.sourc
     <section class="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] overflow-hidden">
       <div class="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.9fr)] lg:items-start">
         <div class="min-w-0">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--color-text-tertiary)] mb-2">
+          <div class="text-[11px] font-semibold tracking-wide text-[var(--color-text-tertiary)] mb-2">
             {{ t('settings.agents.entryEyebrow') }}
           </div>
           <div class="flex flex-wrap items-center gap-2 mb-2">
@@ -166,24 +166,24 @@ const sourceLabel = computed(() => t(`settings.agents.source.${props.agent.sourc
               {{ props.agent.agentType }}
             </h3>
             <!-- Source pill -->
-            <span class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+            <span class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold  text-[var(--color-text-tertiary)]">
               {{ sourceLabel }}
             </span>
             <!-- Model pill -->
             <span
               v-if="props.agent.modelDisplay"
-              class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]"
+              class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold  text-[var(--color-text-tertiary)]"
             >
               {{ props.agent.modelDisplay }}
             </span>
             <!-- Status pill -->
-            <span class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+            <span class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold  text-[var(--color-text-tertiary)]">
               {{ props.agent.isActive ? t('settings.agents.status.active') : t('settings.agents.status.available') }}
             </span>
             <!-- OverriddenBy pill -->
             <span
               v-if="props.agent.overriddenBy"
-              class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]"
+              class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold  text-[var(--color-text-tertiary)]"
             >
               {{ t('settings.agents.overriddenByShort', {
                 source: t(`settings.agents.source.${props.agent.overriddenBy}`),
@@ -209,7 +209,7 @@ const sourceLabel = computed(() => t(`settings.agents.source.${props.agent.sourc
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
           <!-- Source -->
           <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
-            <div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
+            <div class="flex items-center gap-2 text-[11px] tracking-wide text-[var(--color-text-tertiary)]">
               <span class="material-symbols-outlined text-[14px]" style="fontVariationSettings: 'FILL' 1">layers</span>
               <span>{{ t('settings.agents.summary.source') }}</span>
             </div>
@@ -219,7 +219,7 @@ const sourceLabel = computed(() => t(`settings.agents.source.${props.agent.sourc
                different model in deep mode (e.g. planner→strong model,
                researcher→cheap model). Saved to agent_routing. -->
           <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
-            <div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
+            <div class="flex items-center gap-2 text-[11px] tracking-wide text-[var(--color-text-tertiary)]">
               <span class="material-symbols-outlined text-[14px]" style="fontVariationSettings: 'FILL' 1">psychology</span>
               <span>{{ t('settings.agents.summary.model') }}</span>
             </div>
@@ -241,7 +241,7 @@ const sourceLabel = computed(() => t(`settings.agents.source.${props.agent.sourc
           </div>
           <!-- Tools -->
           <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
-            <div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
+            <div class="flex items-center gap-2 text-[11px] tracking-wide text-[var(--color-text-tertiary)]">
               <span class="material-symbols-outlined text-[14px]" style="fontVariationSettings: 'FILL' 1">build</span>
               <span>{{ t('settings.agents.summary.tools') }}</span>
             </div>
@@ -249,7 +249,7 @@ const sourceLabel = computed(() => t(`settings.agents.source.${props.agent.sourc
           </div>
           <!-- Status -->
           <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
-            <div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
+            <div class="flex items-center gap-2 text-[11px] tracking-wide text-[var(--color-text-tertiary)]">
               <span class="material-symbols-outlined text-[14px]" style="fontVariationSettings: 'FILL' 1">bolt</span>
               <span>{{ t('settings.agents.summary.status') }}</span>
             </div>
@@ -274,7 +274,7 @@ const sourceLabel = computed(() => t(`settings.agents.source.${props.agent.sourc
         <span
           v-for="tool in props.agent.tools"
           :key="tool"
-          class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]"
+          class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold  text-[var(--color-text-tertiary)]"
         >
           {{ tool }}
         </span>
@@ -297,7 +297,7 @@ const sourceLabel = computed(() => t(`settings.agents.source.${props.agent.sourc
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <span class="rounded-full bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">
+            <span class="rounded-full bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold  text-[var(--color-text-tertiary)] border border-[var(--color-border)]">
               {{ t('settings.agents.systemPrompt') }}
             </span>
           </div>

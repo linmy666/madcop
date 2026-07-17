@@ -174,7 +174,7 @@ function handleAgentBack() {
         <section class="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] overflow-hidden">
           <div class="grid gap-4 px-5 py-5 min-w-0 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)] xl:items-end">
             <div class="min-w-0">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--color-text-tertiary)] mb-2">
+              <div class="text-[11px] font-semibold tracking-wide text-[var(--color-text-tertiary)] mb-2">
                 {{ t('settings.agents.browserEyebrow') }}
               </div>
               <div class="flex items-center gap-3 mb-2">
@@ -191,21 +191,21 @@ function handleAgentBack() {
             <!-- Summary cards -->
             <div class="grid grid-cols-2 gap-3 min-w-0 sm:grid-cols-3">
               <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3 min-w-0">
-                <div class="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)] min-w-0">
+                <div class="flex items-center gap-1.5 text-[11px] text-[var(--color-text-tertiary)] min-w-0">
                   <span class="material-symbols-outlined text-[14px] flex-shrink-0" style="fontVariationSettings: 'FILL' 1">smart_toy</span>
                   <span class="truncate">{{ t('settings.agents.summary.totalAgents') }}</span>
                 </div>
                 <div class="mt-2 text-lg font-semibold text-[var(--color-text-primary)] truncate">{{ String(agentStore.allAgents.length) }}</div>
               </div>
               <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3 min-w-0">
-                <div class="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)] min-w-0">
+                <div class="flex items-center gap-1.5 text-[11px] text-[var(--color-text-tertiary)] min-w-0">
                   <span class="material-symbols-outlined text-[14px] flex-shrink-0" style="fontVariationSettings: 'FILL' 1">bolt</span>
                   <span class="truncate">{{ t('settings.agents.summary.activeAgents') }}</span>
                 </div>
                 <div class="mt-2 text-lg font-semibold text-[var(--color-text-primary)] truncate">{{ String(agentStore.activeAgents.length) }}</div>
               </div>
               <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3 min-w-0 col-span-2 sm:col-span-1">
-                <div class="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)] min-w-0">
+                <div class="flex items-center gap-1.5 text-[11px] text-[var(--color-text-tertiary)] min-w-0">
                   <span class="material-symbols-outlined text-[14px] flex-shrink-0" style="fontVariationSettings: 'FILL' 1">layers</span>
                   <span class="truncate">{{ t('settings.agents.summary.sources') }}</span>
                 </div>
@@ -271,22 +271,27 @@ function handleAgentBack() {
                           <!-- Model pill -->
                           <span
                             v-if="agent.modelDisplay"
-                            class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]"
+                            class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-text-tertiary)]"
                           >
                             {{ agent.modelDisplay }}
                           </span>
                           <!-- Source pill -->
-                          <span class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+                          <span class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-text-tertiary)]">
                             {{ t(`settings.agents.source.${source}`) }}
                           </span>
                           <!-- Status pill -->
-                          <span class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+                          <span
+                            class="rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                            :class="agent.isActive
+                              ? 'border-[var(--color-success)]/30 bg-[var(--color-success)]/10 text-[var(--color-success)]'
+                              : 'border-[var(--color-border)] bg-[var(--color-surface-container-low)] text-[var(--color-text-tertiary)]'"
+                          >
                             {{ agent.isActive ? t('settings.agents.status.active') : t('settings.agents.status.available') }}
                           </span>
                           <!-- OverriddenBy pill -->
                           <span
                             v-if="agent.overriddenBy"
-                            class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]"
+                            class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-text-tertiary)]"
                           >
                             {{ t('settings.agents.overriddenBy', {
                               source: t(`settings.agents.source.${agent.overriddenBy}`),

@@ -482,22 +482,24 @@ function fmtContext(n: number | null | undefined) {
         {{ capsLoading ? '加载能力信息…' : '暂无能力数据，点刷新或在线探测' }}
       </p>
     </div>
-    <div class="flex items-center justify-between mb-4">
+    <div class="mb-5 flex items-center justify-between gap-3">
       <div>
-        <h2 class="text-[16px] font-semibold text-[var(--color-text-primary)]">模型供应商</h2>
-        <p class="text-[13px] text-[var(--color-text-tertiary)] mt-0.5">管理你的 LLM API 提供方</p>
+        <h2 class="text-[18px] font-semibold tracking-tight text-[var(--color-text-primary)]">模型供应商</h2>
+        <p class="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">管理 LLM API 提供方、模型与能力探测</p>
       </div>
-      <div style="display: flex; gap: 8px; align-items: center;">
+      <div class="flex items-center gap-2">
         <button
-          @click="loadData"
+          type="button"
+          class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
           title="刷新"
-          style="padding: 8px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px; cursor: pointer; color: var(--color-text-secondary); display: flex; align-items: center;"
+          @click="loadData"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
         </button>
         <button
+          type="button"
+          class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-brand)] px-3.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
           @click="showCreateModal = true"
-          style="padding: 8px 16px; background: var(--color-brand); color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px;"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           添加供应商
@@ -505,20 +507,23 @@ function fmtContext(n: number | null | undefined) {
       </div>
     </div>
 
-    <!-- Error banner (shows when fetch fails so the user knows why the list is empty) -->
-    <div v-if="loadError" style="padding: 12px 16px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; color: #dc2626; font-size: 13px; margin-bottom: 12px;">
+    <div
+      v-if="loadError"
+      class="mb-3 rounded-xl border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-[13px] text-[var(--color-error)]"
+    >
       {{ loadError }}
     </div>
 
-    <!-- Loading -->
-    <div v-if="loading" style="padding: 40px; text-align: center; color: var(--color-text-tertiary); font-size: 13px;">
+    <div v-if="loading" class="py-12 text-center text-[13px] text-[var(--color-text-tertiary)]">
       加载中…
     </div>
 
-    <!-- Empty state -->
-    <div v-else-if="providers.length === 0" style="padding: 60px 20px; text-align: center; border: 1px dashed var(--color-border); border-radius: 8px;">
-      <div style="font-size: 32px; margin-bottom: 12px; opacity: 0.3;">∅</div>
-      <div style="font-size: 14px; color: var(--color-text-tertiary);">还没有配置模型供应商</div>
+    <div
+      v-else-if="providers.length === 0"
+      class="rounded-xl border border-dashed border-[var(--color-border)] px-5 py-14 text-center"
+    >
+      <div class="mb-2 text-[28px] opacity-30">∅</div>
+      <div class="text-[14px] text-[var(--color-text-tertiary)]">还没有配置模型供应商</div>
       <div style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 4px; opacity: 0.7;">点击"添加供应商"开始配置</div>
     </div>
 

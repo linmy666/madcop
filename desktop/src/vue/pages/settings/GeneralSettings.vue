@@ -6,8 +6,10 @@
 
 import { ref, onMounted, computed } from 'vue'
 import { useAppearance } from '../../composables/useAppearance'
+import { getApiUrl } from '../../api/client'
+import { useTranslation } from '../../i18n'
 
-const t = (key: string) => key
+const t = useTranslation()
 
 // ── State ──────────────────────────────────────────────────────────────
 
@@ -26,7 +28,7 @@ const { appearance, setAppearance } = useAppearance()
 
 async function loadSettings() {
   try {
-    const res = await fetch('/api/settings/user')
+    const res = await fetch(getApiUrl('/api/settings/user'))
     if (res.ok) {
       const data = await res.json()
       if (data.locale) locale.value = data.locale
@@ -49,7 +51,7 @@ async function loadSettings() {
 
 async function saveSetting(key: string, value: any) {
   try {
-    await fetch('/api/settings/user', {
+    await fetch(getApiUrl('/api/settings/user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [key]: value }),

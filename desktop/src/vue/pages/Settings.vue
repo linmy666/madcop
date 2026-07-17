@@ -4,10 +4,15 @@
 // No cc-haha TabButton horizontal strip — uses a proper settings sidebar.
 // Includes new Agent Network + Knowledge Base settings sections.
 
-import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
+import { ref, computed, onMounted, defineAsyncComponent, watch } from 'vue'
 import { useTabStore } from '../stores/tabStore'
 import { useSessionStore } from '../stores/sessionStore'
+import { useUIStore } from '../stores/uiStore'
+import { useTranslation } from '../i18n'
+import { getApiUrl } from '../api/client'
+
 const MemoryPage = defineAsyncComponent(() => import('./MemoryPage.vue'))
+const KnowledgeBase = defineAsyncComponent(() => import('./KnowledgeBase.vue'))
 const ProviderSettings = defineAsyncComponent(() => import('./settings/ProviderSettings.vue'))
 const GeneralSettings = defineAsyncComponent(() => import('./settings/GeneralSettings.vue'))
 const H5AccessSettings = defineAsyncComponent(() => import('./H5AccessSettings.vue'))
@@ -23,18 +28,22 @@ const DiagnosticsSettingsPage = defineAsyncComponent(() => import('./Diagnostics
 const AboutSettingsPage = defineAsyncComponent(() => import('./AboutSettings.vue'))
 const MetaHarnessSettings = defineAsyncComponent(() => import('./settings/MetaHarnessSettings.vue'))
 
+const t = useTranslation()
+const uiStore = useUIStore()
+
 type SettingsTab =
-  | 'providers'    // 模型供应商
-  | 'general'      // 通用
-  | 'agents'       // Agent 网络（新）
-  | 'memory'       // 记忆
-  | 'plugins'      // 插件
-  | 'mcp'          // MCP 工具
-  | 'metaHarness'  // Meta-Harness 任务外壳
-  | 'terminal'     // 终端
-  | 'activity'     // 活动统计
-  | 'diagnostics'  // 诊断
-  | 'about'        // 关于（新）
+  | 'providers'
+  | 'general'
+  | 'agents'
+  | 'memory'
+  | 'plugins'
+  | 'mcp'
+  | 'metaHarness'
+  | 'knowledge'
+  | 'terminal'
+  | 'activity'
+  | 'diagnostics'
+  | 'about'
   | string
 
 const tabStore = useTabStore()
@@ -44,78 +53,68 @@ const activeTab = ref<SettingsTab>('providers')
 // ── Settings nav items — grouped ────────────────────────────────────
 interface NavItem {
   id: SettingsTab
-  label: string
-  icon: string  // material-symbols name
+  labelKey: string
+  icon: string
   group: 'core' | 'ai' | 'system'
   badge?: string
 }
 
 const navItems: NavItem[] = [
-  // Core
-  { id: 'providers',   label: '模型供应商', icon: 'dns',     group: 'core' },
-  { id: 'general',     label: '通用设置',   icon: 'tune',    group: 'core' },
-  // AI Features
-  { id: 'memory',      label: '记忆',       icon: 'psychology', group: 'ai' },
-  { id: 'mcp',         label: 'MCP 工具',   icon: 'build',   group: 'ai' },
-  { id: 'skills',      label: '技能构建',  icon: 'auto_awesome', group: 'ai' },
-  { id: 'metaHarness', label: 'Meta-Harness', icon: 'science', group: 'ai' },
-  { id: 'adapters',    label: '适配器',    icon: 'chat',     group: 'ai' },
-  { id: 'h5Access',    label: 'H5 访问',   icon: 'qr_code_2', group: 'ai' },
-  // System
-  { id: 'terminal',    label: '终端',       icon: 'terminal', group: 'system' },
-  { id: 'computerUse', label: '计算机使用', icon: 'mouse',   group: 'system' },
-  { id: 'activity',    label: '活动统计',   icon: 'monitoring', group: 'system' },
-  { id: 'trace',       label: '追踪',      icon: 'account_tree', group: 'system' },
-  { id: 'diagnostics', label: '环境诊断',   icon: 'monitor_heart', group: 'system' },
-  { id: 'about',       label: '关于',       icon: 'info',    group: 'system' },
+  { id: 'providers',   labelKey: 'settings.nav.providers',   icon: 'dns',            group: 'core' },
+  { id: 'general',     labelKey: 'settings.nav.general',     icon: 'tune',           group: 'core' },
+  { id: 'agents',      labelKey: 'settings.nav.agents',      icon: 'smart_toy',      group: 'ai' },
+  { id: 'memory',      labelKey: 'settings.nav.memory',      icon: 'psychology',     group: 'ai' },
+  { id: 'knowledge',   labelKey: 'sidebar.knowledge',        icon: 'menu_book',      group: 'ai' },
+  { id: 'mcp',         labelKey: 'settings.nav.mcp',         icon: 'build',          group: 'ai' },
+  { id: 'skills',      labelKey: 'settings.nav.skills',      icon: 'auto_awesome',   group: 'ai' },
+  { id: 'metaHarness', labelKey: 'settings.nav.metaHarness', icon: 'science',        group: 'ai' },
+  { id: 'adapters',    labelKey: 'settings.nav.adapters',    icon: 'chat',           group: 'ai' },
+  { id: 'h5Access',    labelKey: 'settings.nav.h5Access',    icon: 'qr_code_2',      group: 'ai' },
+  { id: 'plugins',     labelKey: 'settings.nav.plugins',     icon: 'extension',      group: 'system' },
+  { id: 'terminal',    labelKey: 'settings.nav.terminal',    icon: 'terminal',       group: 'system' },
+  { id: 'computerUse', labelKey: 'settings.nav.computerUse', icon: 'mouse',          group: 'system' },
+  { id: 'activity',    labelKey: 'settings.nav.activity',    icon: 'monitoring',     group: 'system' },
+  { id: 'diagnostics', labelKey: 'settings.nav.diagnostics', icon: 'monitor_heart',  group: 'system' },
+  { id: 'about',       labelKey: 'settings.nav.about',       icon: 'info',           group: 'system' },
 ]
 
-const groupLabels: Record<string, string> = {
-  core: '核心配置',
-  ai: 'AI 能力',
-  system: '系统',
+const groupLabelKeys: Record<string, string> = {
+  core: 'settings.nav.core',
+  ai: 'settings.nav.ai',
+  system: 'settings.nav.system',
 }
 
 const groupedNav = computed(() => {
   const groups: ('core' | 'ai' | 'system')[] = ['core', 'ai', 'system']
   return groups.map(g => ({
-    label: groupLabels[g],
+    label: t(groupLabelKeys[g]),
     items: navItems.filter(n => n.group === g),
   }))
 })
 
+// Honor pending settings tab from slash / deep links
+watch(
+  () => uiStore.pendingSettingsTab,
+  (tab) => {
+    if (tab && navItems.some((n) => n.id === tab)) {
+      activeTab.value = tab
+      uiStore.setPendingSettingsTab(null)
+    }
+  },
+  { immediate: true },
+)
+
 // ── Provider state ───────────────────────────────────────────────────
 const providers = ref<any[]>([])
 const activeProvider = ref('')
-const activeModel = ref('')
 
 onMounted(async () => {
   try {
-    const r = await fetch('/api/settings')
+    const r = await fetch(getApiUrl('/api/settings'))
     const s = await r.json()
     providers.value = Object.values(s.providers || {})
     activeProvider.value = s.active_provider || ''
-  } catch {}
-})
-
-// ── Agent network stats ──────────────────────────────────────────────
-const agentStats = ref({ builtin: 0, installed: 0 })
-const kbCount = ref(0)
-
-onMounted(async () => {
-  try {
-    const r = await fetch('/api/agents')
-    const d = await r.json()
-    agentStats.value = {
-      builtin: d.builtin?.length || 0,
-      installed: d.installed?.length || 0,
-    }
-  } catch {}
-  try {
-    const r2 = await fetch('/api/agents/knowledge')
-    const d2 = await r2.json()
-    kbCount.value = Array.isArray(d2) ? d2.length : 0
-  } catch {}
+  } catch { /* ignore */ }
 })
 
 // ─── Continuous Learning state ───────────────────────────────────────
@@ -128,12 +127,12 @@ const learningTrainingMessage = ref('')
 
 async function loadLearning() {
   try {
-    const r1 = await fetch('/api/training/mode')
+    const r1 = await fetch(getApiUrl('/api/training/mode'))
     if (r1.ok) {
       const d = await r1.json()
       learningMode.value = d.mode || 'none'
     }
-    const r2 = await fetch('/api/training/stats')
+    const r2 = await fetch(getApiUrl('/api/training/stats'))
     if (r2.ok) {
       const d = await r2.json()
       learningStats.value = d.stats ?? { total: 0, used: 0 }
@@ -144,7 +143,7 @@ async function loadLearning() {
 
 async function setLearningMode(mode: 'none' | 'local') {
   learningMode.value = mode
-  await fetch('/api/training/mode', {
+  await fetch(getApiUrl('/api/training/mode'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mode }),
@@ -258,12 +257,10 @@ onMounted(loadLearning)
 <template>
   <div class="settings-page">
     <!-- Back to session button -->
-    <div
-      style="display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--color-border); cursor: pointer;"
-      @click="goBackToSession"
-    >
+    <div class="settings-topbar" @click="goBackToSession">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-      <span style="font-size: 13px; font-weight: 500; color: var(--color-text-primary);">设置</span>
+      <span class="settings-topbar__title">{{ t('settings.title') }}</span>
+      <span class="settings-topbar__hint">{{ t('settings.back') }}</span>
     </div>
     <div class="settings-layout">
       <!-- Left: Settings Nav -->
@@ -272,11 +269,12 @@ onMounted(loadLearning)
           <div class="settings-nav__label">{{ group.label }}</div>
           <button
             v-for="item in group.items" :key="item.id"
+            type="button"
             :class="['settings-nav__item', { 'settings-nav__item--active': activeTab === item.id }]"
             @click="activeTab = item.id"
           >
             <span class="material-symbols-outlined text-[18px]">{{ item.icon }}</span>
-            <span class="settings-nav__text">{{ item.label }}</span>
+            <span class="settings-nav__text">{{ t(item.labelKey) }}</span>
             <span v-if="item.badge" class="settings-nav__badge">{{ item.badge }}</span>
           </button>
         </div>
@@ -294,36 +292,9 @@ onMounted(loadLearning)
           <GeneralSettings />
         </div>
 
-<!-- ═══ Agent Network (now handled by routing above) ═══ -->
-
         <!-- ═══ Knowledge Base ═══ -->
-        <div v-else-if="activeTab === 'knowledge'" class="settings-section">
-          <h2 class="settings-section__title">知识库</h2>
-          <p class="settings-section__desc">管理 Agent 对话中可引用的文档、笔记和代码片段。</p>
-
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-card__value">{{ kbCount }}</div>
-              <div class="stat-card__label">知识条目</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-card__value">4</div>
-              <div class="stat-card__label">支持类型</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-card__value">∞</div>
-              <div class="stat-card__label">容量上限</div>
-            </div>
-          </div>
-
-          <div class="settings-row">
-            <span class="settings-row__label">自动提取知识</span>
-            <Toggle default-on />
-          </div>
-          <div class="settings-row">
-            <span class="settings-row__label">对话中自动引用</span>
-            <Toggle default-on />
-          </div>
+        <div v-else-if="activeTab === 'knowledge'" class="settings-section settings-section--fullbleed">
+          <KnowledgeBase />
         </div>
 
         <!-- ═══ Continuous Learning ═══ -->
@@ -532,40 +503,60 @@ export default { components: { Toggle } }
 </script>
 
 <style scoped>
-.settings-page { width: 100%; height: 100%; overflow: hidden; background: var(--color-surface); }
-.settings-layout { display: flex; height: 100%; }
+.settings-page {
+  width: 100%; height: 100%; overflow: hidden; background: var(--color-surface);
+  display: flex; flex-direction: column;
+}
+.settings-topbar {
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0; padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 120ms;
+}
+.settings-topbar:hover { background: var(--color-surface-hover); }
+.settings-topbar__title {
+  font-size: 14px; font-weight: 600; color: var(--color-text-primary);
+}
+.settings-topbar__hint {
+  margin-left: auto; font-size: 12px; color: var(--color-text-tertiary);
+}
+.settings-layout { display: flex; flex: 1; min-height: 0; }
 
 /* Left nav */
 .settings-nav {
-  width: 220px; flex-shrink: 0;
-  border-right: 1.5px solid var(--color-border);
+  width: 232px; flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
   background: var(--color-surface-container-low);
-  overflow-y: auto; padding: 16px 0;
+  overflow-y: auto; padding: 12px 0 24px;
 }
-.settings-nav__group { margin-bottom: 16px; }
+.settings-nav__group { margin-bottom: 14px; }
 .settings-nav__label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--color-text-tertiary); padding: 0 16px; margin-bottom: 6px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--color-text-tertiary); padding: 4px 16px 8px; margin-bottom: 2px;
 }
 .settings-nav__item {
   display: flex; align-items: center; gap: 10px;
-  width: 100%; padding: 8px 16px;
+  width: calc(100% - 12px); margin: 0 6px; padding: 9px 12px;
   background: transparent; border: none; cursor: pointer;
   color: var(--color-text-secondary); font-size: 13px;
-  transition: background 140ms;
+  border-radius: 10px;
+  transition: background 140ms, color 140ms;
 }
-.settings-nav__item:hover { background: var(--color-surface-hover); }
+.settings-nav__item:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
 .settings-nav__item--active {
-  background: var(--color-primary-fixed); color: var(--color-primary); font-weight: 600;
+  background: var(--color-primary-fixed, color-mix(in srgb, var(--color-brand) 12%, transparent));
+  color: var(--color-brand, var(--color-primary)); font-weight: 600;
 }
 .settings-nav__text { flex: 1; text-align: left; }
 .settings-nav__badge {
-  font-size: 9px; font-weight: 700; padding: 1px 6px;
+  font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
   background: var(--color-primary); color: var(--color-on-primary);
 }
 
 /* Right content */
-.settings-content { flex: 1; overflow-y: auto; padding: 32px 40px; }
+.settings-content { flex: 1; overflow-y: auto; padding: 28px 36px 48px; min-width: 0; }
+.settings-section--fullbleed { margin: -8px 0 0; }
 .settings-section__title { font-size: 20px; font-weight: 700; color: var(--color-text-primary); margin: 0 0 4px; }
 .settings-section__desc { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 24px; line-height: 1.5; }
 
