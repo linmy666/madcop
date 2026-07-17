@@ -97,6 +97,13 @@ import { clearWindowSelection, useSelectionPopoverDismiss } from '../../hooks/us
 import UserMessage from './UserMessage.vue'
 import AssistantMessage from './AssistantMessage.vue'
 import SubAgentPanel from './SubAgentPanel.vue'
+import SpriteIsland from '../studio/SpriteIsland.vue'
+import {
+  buildSpriteRoster,
+  selectSpriteDetail,
+  type SpriteAgent,
+  type SpriteDetail,
+} from '../../lib/spriteStudio'
 import ThinkingBlock from './ThinkingBlock.vue'
 import ToolCallBlock from './ToolCallBlock.vue'
 import ToolCallGroup from './ToolCallGroup.vue'
@@ -159,6 +166,24 @@ const reasoningContent = computed(() => sessionState.value?.reasoningContent ?? 
 const agentStreams = computed(() => sessionState.value?.agentStreams ?? {})
 // Live "what is the AI doing right now" context for the thinking indicator.
 const liveToolName = computed(() => sessionState.value?.activeToolName ?? null)
+
+/** Sprite Studio P0: roster from the same session signals as SubAgentPanel. */
+const spriteRoster = computed<SpriteAgent[]>(() =>
+  buildSpriteRoster({
+    agentStreams: sessionState.value?.agentStreams,
+    deepRoute: sessionState.value?.deepRoute,
+    clarificationPending: sessionState.value?.clarificationPending,
+    activeToolName: sessionState.value?.activeToolName,
+    chatState: sessionState.value?.chatState,
+  }),
+)
+const selectedSpriteId = ref<string | null>(null)
+const selectedSpriteDetail = computed<SpriteDetail | null>(() =>
+  selectSpriteDetail(spriteRoster.value, selectedSpriteId.value),
+)
+function onSpriteSelect(id: string) {
+  selectedSpriteId.value = id
+}
 const planStep = computed(() => {
   const plan = sessionState.value?.plan
   if (!plan || !plan.steps || plan.steps.length === 0) return null
@@ -1090,6 +1115,24 @@ function renderItemContent(item: RenderItem) {
           :agents="agentStreams"
         />
 
+        <!-- P0 Sprite Island: compact mascot dock bound to session roster -->
+        <SpriteIsland
+          :roster="spriteRoster"
+          :selected-id="selectedSpriteId"
+          @select="onSpriteSelect"
+        />
+        <div
+          v-if="selectedSpriteDetail"
+          class="sprite-island-detail"
+        >
+          <div class="sprite-island-detail__head">
+            <strong :style="{ color: selectedSpriteDetail.color }">{{ selectedSpriteDetail.name }}</strong>
+            <button type="button" class="sprite-island-detail__close" @click="selectedSpriteId = null">×</button>
+          </div>
+          <pre v-if="selectedSpriteDetail.text" class="sprite-island-detail__text">{{ selectedSpriteDetail.text }}</pre>
+          <p v-else class="sprite-island-detail__empty">{{ selectedSpriteDetail.bubble || '暂无输出' }}</p>
+        </div>
+
         <!-- Streaming text (live assistant text being typed out) -->
         <AssistantMessage
           v-if="streamingText.trim()"
@@ -1148,3 +1191,44 @@ function renderItemContent(item: RenderItem) {
     </button>
   </div>
 </template>
+
+<style scoped>
+.sprite-island-detail {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-container-lowest, #fff);
+}
+.sprite-island-detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.sprite-island-detail__close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+}
+.sprite-island-detail__text {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--color-text-primary);
+}
+.sprite-island-detail__empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+</style>

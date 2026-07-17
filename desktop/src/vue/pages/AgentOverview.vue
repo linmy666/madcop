@@ -14,7 +14,16 @@
 
 import { ref, computed, onMounted } from 'vue'
 import GraphCanvas, { type GraphNodeData, type GraphEdgeData } from '../components/graph/GraphCanvas.vue'
+import SpriteStudioScene from '../components/studio/SpriteStudioScene.vue'
 import { getApiUrl } from '../api/client'
+import { useChatStore } from '../stores/chatStore'
+import { useTabStore } from '../stores/tabs'
+import {
+  buildSpriteRoster,
+  loadAgentHubView,
+  saveAgentHubView,
+  type SpriteAgent,
+} from '../lib/spriteStudio'
 
 // ─── Topology presets ──────────────────────────────────────────────────
 
@@ -115,6 +124,43 @@ const presets: TopologyPreset[] = [
 ]
 
 // ─── Active state ──────────────────────────────────────────────────────
+
+/** Hub views: classic topology editor vs P1 sprite studio */
+const hubView = ref<'topology' | 'studio'>(loadAgentHubView())
+function setHubView(v: 'topology' | 'studio') {
+  hubView.value = v
+  saveAgentHubView(v)
+}
+
+const chatStore = useChatStore()
+const tabStore = useTabStore()
+const liveSessionId = computed(() => {
+  // Prefer active chat session for live multi-agent roster
+  const id = tabStore.activeTabId
+  if (id && chatStore.sessions[id]) return id
+  // Fall back to any session with agentStreams / deepRoute
+  for (const [sid, s] of Object.entries(chatStore.sessions)) {
+    if (s?.agentStreams && Object.keys(s.agentStreams).length) return sid
+    if (s?.deepRoute?.specialists?.length) return sid
+  }
+  return id || null
+})
+const liveSession = computed(() =>
+  liveSessionId.value ? chatStore.sessions[liveSessionId.value] : null,
+)
+const studioRoster = computed<SpriteAgent[]>(() =>
+  buildSpriteRoster({
+    agentStreams: liveSession.value?.agentStreams,
+    deepRoute: liveSession.value?.deepRoute,
+    clarificationPending: liveSession.value?.clarificationPending,
+    activeToolName: liveSession.value?.activeToolName,
+    chatState: liveSession.value?.chatState,
+  }),
+)
+const studioRouteLabel = computed(
+  () => liveSession.value?.deepRoute?.label_zh || liveSession.value?.deepRoute?.category || null,
+)
+const studioRouteReason = computed(() => liveSession.value?.deepRoute?.reason || null)
 
 const activePresetId = ref('chain')
 const nodes = ref<GraphNodeData[]>([])
@@ -226,6 +272,45 @@ async function simulateRun() {
     isRunning.value = false
   }
 }
+
+// Template-compat aliases (script/template naming drift)
+const running = isRunning
+const runNetwork = simulateRun
+const canRun = computed(() => nodes.value.length > 0 && !isRunning.value)
+const canSave = computed(() => nodes.value.length > 0)
+const selectedPreset = activePresetId
+const models = userConfiguredModels
+const availableRoles = ['规划', '执行', '审查', '研究', '设计', '通用']
+const availableTools = ['read_file', 'write_file', 'web_search', 'web_fetch']
+const uniqueRoles = computed(() => {
+  const set = new Set(nodes.value.map((n: any) => n.role || n.label).filter(Boolean))
+  return [...set]
+})
+function onSelect(id: string | null) {
+  selectedNodeId.value = id
+}
+function onUpdateNodes(next: GraphNodeData[]) {
+  nodes.value = next
+}
+function onUpdateEdges(next: GraphEdgeData[]) {
+  edges.value = next
+}
+async function saveAsNew() {
+  // Persist is optional for ad-hoc graphs; surface toast-level feedback only.
+  try {
+    await fetch(getApiUrl('/api/agents/networks'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `网络 ${new Date().toLocaleString('zh-CN')}`,
+        nodes: nodes.value,
+        edges: edges.value,
+      }),
+    })
+  } catch {
+    /* ignore — save is best-effort */
+  }
+}
 </script>
 
 <template>
@@ -233,10 +318,36 @@ async function simulateRun() {
     <!-- Header -->
     <header class="ao-page__head">
       <div>
-        <h1 class="ao-page__title">Agent 协作拓扑</h1>
-        <p class="ao-page__sub">选择一个预设模板开始，或直接拖拽节点自定义网络</p>
+        <h1 class="ao-page__title">{{ hubView === 'studio' ? '精灵工作室' : 'Agent 协作拓扑' }}</h1>
+        <p class="ao-page__sub">
+          {{
+            hubView === 'studio'
+              ? '把多 Agent 状态投到工位上 — 与会话 agentStreams 同源'
+              : '选择一个预设模板开始，或直接拖拽节点自定义网络'
+          }}
+        </p>
+        <div class="ao-hub-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            :class="['ao-hub-tab', { 'ao-hub-tab--on': hubView === 'topology' }]"
+            :aria-selected="hubView === 'topology'"
+            @click="setHubView('topology')"
+          >
+            拓扑网络
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :class="['ao-hub-tab', { 'ao-hub-tab--on': hubView === 'studio' }]"
+            :aria-selected="hubView === 'studio'"
+            @click="setHubView('studio')"
+          >
+            精灵工作室
+          </button>
+        </div>
       </div>
-      <div class="ao-page__actions">
+      <div v-if="hubView === 'topology'" class="ao-page__actions">
         <button class="ao-btn" @click="saveAsNew" :disabled="!canSave">
           <span class="material-symbols-outlined" style="font-size:18px">bookmark</span>
           另存为网络
@@ -247,6 +358,17 @@ async function simulateRun() {
         </button>
       </div>
     </header>
+
+    <!-- P1 Sprite Studio -->
+    <section v-if="hubView === 'studio'" class="ao-studio-wrap">
+      <SpriteStudioScene
+        :roster="studioRoster"
+        :route-label="studioRouteLabel"
+        :route-reason="studioRouteReason"
+      />
+    </section>
+
+    <template v-if="hubView === 'topology'">
 
     <!-- Topology preset picker -->
     <section class="ao-presets">
@@ -363,6 +485,7 @@ async function simulateRun() {
         </div>
       </aside>
     </section>
+    </template>
   </div>
 </template>
 
@@ -386,6 +509,36 @@ async function simulateRun() {
 }
 .ao-page__sub { margin: 0; font-size: 14px; color: var(--color-text-secondary); }
 .ao-page__actions { display: flex; gap: 8px; flex-shrink: 0; }
+.ao-hub-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 3px;
+  background: var(--color-surface-container-low, #f3f4f6);
+  border-radius: 10px;
+}
+.ao-hub-tab {
+  border: none;
+  background: transparent;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+.ao-hub-tab--on {
+  background: var(--color-surface, #fff);
+  color: var(--color-brand, #7c3aed);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.ao-studio-wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 32px 48px;
+  height: min(720px, calc(100% - 120px));
+  min-height: 480px;
+}
 
 /* ── Buttons ────────────────────────────────────────────────────── */
 .ao-btn {
