@@ -917,6 +917,27 @@ def create_app() -> FastAPI:
         from madcop import __version__
         return {"status": "ok", "version": __version__}
 
+    @app.get("/api/tools")
+    async def list_registered_tools() -> dict[str, Any]:
+        """List tools currently registered in the default registry (incl. MCP)."""
+        try:
+            reg = default_registry()
+            schemas = reg.openai_schemas()
+            tools = []
+            for s in schemas:
+                fn = s.get("function") or s
+                tools.append({
+                    "name": fn.get("name") or s.get("name") or "",
+                    "description": fn.get("description") or s.get("description") or "",
+                    "parameters": fn.get("parameters") or s.get("parameters") or {},
+                    "source": "registry",
+                })
+            return {"tools": tools, "total": len(tools)}
+        except Exception as e:
+            logger.warning("list tools failed: %s", e)
+            return {"tools": [], "total": 0, "error": str(e)[:200]}
+
+
     @app.get("/api/providers")
     async def list_providers_madcop() -> dict[str, Any]:
         """cc-haha React 客户端期望的 providers 列表端点

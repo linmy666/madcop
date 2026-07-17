@@ -1,158 +1,156 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-
 /**
- * ToolInspection — Vue 3 port of pages/ToolInspection.tsx
- * Mock demo page showing a tool inspection/diff view.
- * Self-contained with mock data.
+ * ToolInspection — live tool registry browser (replaces mock page).
  */
+import { ref, computed, onMounted } from 'vue'
+import { getApiUrl } from '../api/client'
 
-const activeDiffTab = ref<'split' | 'unified'>('split')
-
-const mockToolInspection = {
-  toolType: 'WRITE',
-  toolName: 'write_file',
-  description: 'Writes or overwrites content to a file on disk.',
-  filePath: 'src/auth/legacyAuthService.ts',
-  dryRunStatus: 'Pass',
-  linesChanged: { added: 42, removed: 18 },
-  diffLines: [
-    { type: 'removed', lineNo: 12, content: '  const token = await fetchToken(username, password);' },
-    { type: 'added', lineNo: 13, content: '  const token = await oauthClient.getToken({ username, codeVerifier });' },
-    { type: 'removed', lineNo: 15, content: '  if (!token) throw new Error("Auth failed");' },
-    { type: 'added', lineNo: 16, content: '  if (!token.access_token) throw new Error("OAuth2 flow failed: no access token");' },
-    { type: 'added', lineNo: 17, content: '  if (!token.refresh_token) throw new Error("OAuth2 flow failed: no refresh token");' },
-    { type: 'added', lineNo: 20, content: '  return new AuthService(token.access_token, token.refresh_token, token.expires_at);' },
-  ],
+type ToolInfo = {
+  name: string
+  description: string
+  parameters?: Record<string, any>
+  source?: string
 }
+
+const tools = ref<ToolInfo[]>([])
+const loading = ref(true)
+const error = ref<string | null>(null)
+const search = ref('')
+const selected = ref<ToolInfo | null>(null)
+
+async function load() {
+  loading.value = true
+  error.value = null
+  try {
+    const res = await fetch(getApiUrl('/api/tools'))
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    tools.value = Array.isArray(data?.tools) ? data.tools : []
+    if (!selected.value && tools.value[0]) selected.value = tools.value[0]
+  } catch (e: any) {
+    error.value = e?.message || '加载失败'
+    tools.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
+
+const filtered = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return tools.value
+  return tools.value.filter(
+    (t) =>
+      t.name.toLowerCase().includes(q) ||
+      (t.description || '').toLowerCase().includes(q),
+  )
+})
+
+const paramJson = computed(() => {
+  if (!selected.value?.parameters) return '{}'
+  try {
+    return JSON.stringify(selected.value.parameters, null, 2)
+  } catch {
+    return String(selected.value.parameters)
+  }
+})
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col overflow-hidden bg-[var(--color-surface)]">
-    <div class="h-px w-full bg-[var(--color-surface-container)]" />
-    <main class="flex-1 overflow-y-auto p-8 max-w-6xl mx-auto w-full">
-      <div class="flex flex-col gap-6">
-        <!-- Title row -->
-        <div class="flex items-start justify-between">
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 bg-[var(--color-primary-fixed)] text-[var(--color-on-primary)] text-[10px] font-bold rounded uppercase tracking-widest">{{ mockToolInspection.toolType }}</span>
-              <h1 class="font-[var(--font-headline)] font-extrabold text-2xl text-[var(--color-on-surface)] tracking-tight">{{ mockToolInspection.toolName }}</h1>
-            </div>
-            <p class="text-[var(--color-on-surface-variant)] font-medium">{{ mockToolInspection.description }}</p>
-          </div>
-          <div class="flex gap-2">
-            <button class="px-4 py-2 bg-[var(--color-surface-container-high)] rounded-lg text-sm font-semibold hover:bg-[var(--color-surface-variant)] transition-all">Revert Change</button>
-            <button class="px-4 py-2 bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg text-sm font-semibold shadow-sm hover:opacity-90 transition-all">Apply to All</button>
-          </div>
-        </div>
-
-        <!-- Metadata cards -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="bg-[var(--color-surface-container-low)] rounded-xl p-4 flex flex-col gap-1">
-            <span class="text-[10px] font-bold text-[var(--color-outline)] uppercase tracking-wider">Target File</span>
-            <div class="flex items-center gap-2 text-[var(--color-on-surface)]">
-              <span class="material-symbols-outlined text-[18px]">description</span>
-              <span class="font-[var(--font-mono)] text-sm">{{ mockToolInspection.filePath }}</span>
-            </div>
-          </div>
-          <div class="bg-[var(--color-surface-container-low)] rounded-xl p-4 flex flex-col gap-1">
-            <span class="text-[10px] font-bold text-[var(--color-outline)] uppercase tracking-wider">Status</span>
-            <div class="flex items-center gap-2 text-[var(--color-tertiary)]">
-              <span class="material-symbols-outlined text-[18px]" style="fontVariationSettings: 'FILL' 1">check_circle</span>
-              <span class="font-semibold text-sm">{{ mockToolInspection.dryRunStatus }}</span>
-            </div>
-          </div>
-          <div class="bg-[var(--color-surface-container-low)] rounded-xl p-4 flex flex-col gap-1">
-            <span class="text-[10px] font-bold text-[var(--color-outline)] uppercase tracking-wider">Lines Modified</span>
-            <div class="flex items-center gap-2 text-[var(--color-on-surface)]">
-              <span class="material-symbols-outlined text-[18px]">edit_note</span>
-              <span class="font-semibold text-sm">+{{ mockToolInspection.linesChanged.added }} / -{{ mockToolInspection.linesChanged.removed }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Diff Viewer -->
-        <div class="bg-[var(--color-surface-dim)] rounded-xl overflow-hidden border border-[var(--color-outline-variant)]/20 shadow-sm">
-          <div class="px-4 py-2.5 bg-[var(--color-surface-container-high)] flex items-center justify-between border-b border-[var(--color-outline-variant)]/20">
-            <div class="flex items-center gap-3">
-              <div class="flex gap-1.5">
-                <div class="w-2.5 h-2.5 rounded-full bg-[var(--color-error)] opacity-30" />
-                <div class="w-2.5 h-2.5 rounded-full bg-[var(--color-primary-fixed-dim)]" />
-                <div class="w-2.5 h-2.5 rounded-full bg-[var(--color-tertiary-container)] opacity-30" />
-              </div>
-              <span class="font-[var(--font-mono)] text-xs text-[var(--color-outline)] px-2 border-l border-[var(--color-outline-variant)]/30">{{ mockToolInspection.filePath }} — Diff View</span>
-            </div>
-            <div class="flex items-center gap-4">
-              <span class="text-[11px] text-[var(--color-outline)] font-medium">
-                L{{ mockToolInspection.diffLines[0]?.lineNo ?? 1 }} — L{{ mockToolInspection.diffLines[mockToolInspection.diffLines.length - 1]?.lineNo ?? 1 }}
-              </span>
-              <div class="flex bg-[var(--color-surface-container-low)] rounded p-0.5">
-                <button @click="activeDiffTab = 'split'"
-                  :class="['px-2 py-1 text-[10px] font-bold uppercase', activeDiffTab === 'split' ? 'bg-[var(--color-surface)] rounded shadow-sm text-[var(--color-on-surface)]' : 'text-[var(--color-outline)]']">Split</button>
-                <button @click="activeDiffTab = 'unified'"
-                  :class="['px-2 py-1 text-[10px] font-bold uppercase', activeDiffTab === 'unified' ? 'bg-[var(--color-surface)] rounded shadow-sm text-[var(--color-on-surface)]' : 'text-[var(--color-outline)]']">Unified</button>
-              </div>
-            </div>
-          </div>
-          <div class="font-[var(--font-mono)] text-[13px] leading-relaxed p-4 overflow-x-auto whitespace-pre">
-            <div v-for="(line, idx) in mockToolInspection.diffLines" :key="idx"
-              :class="['flex w-full', line.type === 'added' ? 'bg-[var(--color-diff-added-bg)]' : 'bg-[var(--color-diff-removed-bg)]']">
-              <span :class="['w-10 flex-shrink-0 text-right pr-4 select-none', line.type === 'added' ? 'text-[var(--color-tertiary)] opacity-40' : 'text-[var(--color-error)] opacity-40']">{{ line.lineNo }}</span>
-              <span class="text-[var(--color-on-surface-variant)]">
-                {{ line.type === 'added' ? '+   ' : '-   ' }}{{ line.content }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Implementation Context -->
-        <div class="p-6 bg-[var(--color-surface-container-lowest)] rounded-2xl border border-[var(--color-outline-variant)]/10">
-          <h3 class="font-[var(--font-headline)] font-bold text-sm text-[var(--color-on-surface)] mb-4">Implementation Context</h3>
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div class="space-y-4">
-              <div class="flex items-start gap-3">
-                <div class="mt-1 w-6 h-6 rounded bg-[var(--color-primary-fixed)] flex items-center justify-center">
-                  <span class="material-symbols-outlined text-[14px] text-[var(--color-on-primary)]">psychology</span>
-                </div>
-                <div>
-                  <p class="text-xs font.bold uppercase tracking.widest text-[var(--color-outline)] mb-1">Reasoning</p>
-                  <p class="text-sm text-[var(--color-on-surface-variant)] leading-relaxed">The legacy auth was deprecated in RFC-204. The new SDK provides automatic session refresh.</p>
-                </div>
-              </div>
-              <div class="flex items-start gap-3">
-                <div class="mt-1 w-6 h-6 rounded bg-[var(--color-diff-added-bg)] flex items-center justify-center">
-                  <span class="material-symbols-outlined text-[14px] text-[var(--color-diff-added-text)]">science</span>
-                </div>
-                <div>
-                  <p class="text-xs font-bold uppercase tracking-widest text-[var(--color-outline)] mb-1">Impact Analysis</p>
-                  <p class="text-sm text-[var(--color-on-surface-variant)] leading-relaxed">No changes needed in calling components. The interface remains compatible.</p>
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center justify-center">
-              <div class="w-full h-32 rounded-xl bg-[var(--color-surface-container)] relative overflow-hidden">
-                <div class="absolute inset-0 bg-gradient-to-br from-[var(--color-primary)]/5 to-[var(--color-secondary)]/5" />
-                <div class="absolute inset-0 flex items-center justify-center gap-4">
-                  <div class="flex flex-col items-center gap-1">
-                    <div class="p-2 bg-[var(--color-surface)] rounded-lg shadow-sm">
-                      <span class="material-symbols-outlined text-[var(--color-outline)]">description</span>
-                    </div>
-                    <span class="text-[9px] font.bold text-[var(--color-outline)]">auth.ts</span>
-                  </div>
-                  <span class="material-symbols-outlined text-[var(--color-outline)] animate-pulse">keyboard_double_arrow_right</span>
-                  <div class="flex flex-col items-center gap-1">
-                    <div class="p-2 bg-[var(--color-surface)] rounded-lg shadow-sm border border-[var(--color-tertiary)]/20">
-                      <span class="material-symbols-outlined text-[var(--color-tertiary)]">check_circle</span>
-                    </div>
-                    <span class="text-[9px] font.bold text-[var(--color-tertiary)]">Verified</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+  <div class="tools">
+    <div class="tools__head">
+      <div>
+        <h1>工具检查</h1>
+        <p class="sub">当前注册到 Agent 的工具（内置 + MCP），共 {{ tools.length }} 个。</p>
       </div>
-    </main>
+      <button type="button" class="btn" :disabled="loading" @click="load">
+        {{ loading ? '加载中…' : '刷新' }}
+      </button>
+    </div>
+
+    <div v-if="error" class="err">{{ error }}</div>
+
+    <div class="tools__body">
+      <aside class="list">
+        <input v-model="search" class="search" placeholder="搜索工具…" />
+        <button
+          v-for="t in filtered"
+          :key="t.name"
+          type="button"
+          :class="['row', selected?.name === t.name ? 'active' : '']"
+          @click="selected = t"
+        >
+          <span class="name">{{ t.name }}</span>
+          <span class="desc">{{ t.description }}</span>
+        </button>
+        <p v-if="!loading && filtered.length === 0" class="empty">暂无工具</p>
+      </aside>
+
+      <main v-if="selected" class="detail">
+        <div class="detail__title">
+          <h2>{{ selected.name }}</h2>
+          <span class="badge">{{ selected.source || 'registry' }}</span>
+        </div>
+        <p class="detail__desc">{{ selected.description || '无描述' }}</p>
+        <h3>Parameters schema</h3>
+        <pre class="schema">{{ paramJson }}</pre>
+      </main>
+      <main v-else class="detail empty-detail">选择左侧工具查看参数 schema</main>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.tools { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 24px 28px; }
+.tools__head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; gap: 12px; }
+.tools__head h1 { margin: 0; font-size: 22px; font-weight: 700; color: var(--color-text-primary); }
+.sub { margin: 4px 0 0; font-size: 13px; color: var(--color-text-secondary); }
+.btn {
+  padding: 6px 12px; border-radius: 8px; border: 1px solid var(--color-border);
+  background: var(--color-surface); cursor: pointer; font-size: 13px;
+  color: var(--color-text-primary);
+}
+.err { color: var(--color-error); font-size: 13px; margin-bottom: 12px; }
+.tools__body { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+.list {
+  border: 1px solid var(--color-border); border-radius: 12px; overflow: auto;
+  background: var(--color-surface); display: flex; flex-direction: column;
+}
+.search {
+  margin: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--color-border);
+  background: var(--color-surface-container-low); color: var(--color-text-primary); font-size: 13px;
+}
+.row {
+  text-align: left; border: 0; border-top: 1px solid var(--color-border);
+  background: transparent; padding: 10px 12px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.row:hover { background: var(--color-sidebar-item-hover, rgba(0,0,0,0.03)); }
+.row.active { background: var(--color-sidebar-item-active, rgba(124,58,237,0.08)); }
+.name { font-size: 13px; font-weight: 600; color: var(--color-text-primary); font-family: ui-monospace, monospace; }
+.desc {
+  font-size: 11px; color: var(--color-text-tertiary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.empty { padding: 20px; text-align: center; color: var(--color-text-tertiary); font-size: 12px; }
+.detail {
+  border: 1px solid var(--color-border); border-radius: 12px; padding: 18px 20px;
+  background: var(--color-surface); overflow: auto;
+}
+.detail__title { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.detail__title h2 { margin: 0; font-size: 18px; font-family: ui-monospace, monospace; }
+.badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--color-border); color: var(--color-text-secondary);
+}
+.detail__desc { font-size: 13px; color: var(--color-text-secondary); margin: 0 0 16px; }
+.detail h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-tertiary); margin: 0 0 8px; }
+.schema {
+  margin: 0; padding: 12px; border-radius: 8px;
+  background: var(--color-surface-container-low);
+  font-size: 12px; line-height: 1.5; overflow: auto;
+  color: var(--color-text-primary); white-space: pre-wrap;
+}
+.empty-detail { display: flex; align-items: center; justify-content: center; color: var(--color-text-tertiary); font-size: 13px; }
+</style>

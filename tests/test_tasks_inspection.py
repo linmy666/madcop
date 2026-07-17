@@ -48,3 +48,12 @@ def test_session_inspection_shape():
     assert r2.status_code == 200
     data = r2.json()
     assert "sessionId" in data or "messages" in data
+
+
+def test_list_tools_endpoint():
+    client = TestClient(create_app())
+    r = client.get("/api/tools")
+    assert r.status_code == 200
+    data = r.json()
+    assert "tools" in data
+    assert data.get("total", 0) >= 1
