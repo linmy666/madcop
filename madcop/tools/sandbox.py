@@ -142,6 +142,11 @@ class SubprocessSandbox:
 
         target_cwd = self._resolve_cwd(cwd)
         if target_cwd is None:
+            logger.warning(
+                "sandbox deny: cwd=%r not in allowlist argv=%s",
+                cwd,
+                argv_list[:3],
+            )
             return SandboxResult(
                 argv=tuple(argv_list), cwd=str(cwd or ""),
                 returncode=-1, stdout="", stderr="",

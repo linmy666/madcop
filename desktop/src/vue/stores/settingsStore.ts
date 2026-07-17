@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { getApiUrl } from '../api/client'
 
 export type UpdateProxyMode = 'system' | 'manual'
 
@@ -108,13 +109,57 @@ export const useSettingsStore = defineStore('settings', {
       this.chatSendBehavior = behavior
     },
 
+    /** Load providers/models from GET /api/settings into store. */
+    async loadFromBackend(): Promise<void> {
+      try {
+        const res = await fetch(getApiUrl('/api/settings'))
+        if (!res.ok) return
+        const data = await res.json()
+        const providers = data?.providers || []
+        this.activeProviderName = data?.active_provider || null
+        const models: ModelInfo[] = []
+        for (const p of providers) {
+          if (p.model) {
+            models.push({
+              id: `${p.provider_id}:${p.model}`,
+              name: p.model,
+              provider: p.label || p.provider_id,
+            })
+          }
+        }
+        this.availableModels = models
+        const active = providers.find((p: any) => p.provider_id === data?.active_provider)
+        if (active?.model) {
+          this.currentModel = {
+            id: `${active.provider_id}:${active.model}`,
+            name: active.model,
+            provider: active.label || active.provider_id,
+          }
+        }
+      } catch {
+        /* keep local state */
+      }
+    },
+
     // ── H5Access actions ──────────────────────────────────────
     async enableH5Access(): Promise<string> {
-      // Stub: in production would call API
       this.h5AccessError = null
       try {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        const res = await fetch(getApiUrl('/api/h5-access/enable'), { method: 'POST' })
+        if (res.ok) {
+          const data = await res.json()
+          const token = data?.token || data?.accessToken
+          if (token) {
+            this.h5Access = {
+              ...this.h5Access,
+              enabled: true,
+              token,
+              tokenPreview: String(token).slice(0, 8) + '...',
+            }
+            return token
+          }
+        }
+        // Fallback local token if endpoint missing
         const token = 'h5_' + Math.random().toString(36).slice(2, 22)
         this.h5Access = { ...this.h5Access, enabled: true, token, tokenPreview: token.slice(0, 8) + '...' }
         return token
@@ -127,7 +172,7 @@ export const useSettingsStore = defineStore('settings', {
     async disableH5Access(): Promise<void> {
       this.h5AccessError = null
       try {
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        await fetch(getApiUrl('/api/h5-access/disable'), { method: 'POST' }).catch(() => null)
         this.h5Access = { ...this.h5Access, enabled: false, token: null, tokenPreview: null }
       } catch (e) {
         this.h5AccessError = e instanceof Error ? e.message : 'Failed to disable H5 access'
@@ -138,7 +183,18 @@ export const useSettingsStore = defineStore('settings', {
     async regenerateH5AccessToken(): Promise<string> {
       this.h5AccessError = null
       try {
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        const res = await fetch(getApiUrl('/api/h5-access/regenerate'), { method: 'POST' })
+        if (res.ok) {
+          const data = await res.json()
+          if (data?.token) {
+            this.h5Access = {
+              ...this.h5Access,
+              token: data.token,
+              tokenPreview: String(data.token).slice(0, 8) + '...',
+            }
+            return data.token
+          }
+        }
         const token = 'h5_' + Math.random().toString(36).slice(2, 22)
         this.h5Access = { ...this.h5Access, token, tokenPreview: token.slice(0, 8) + '...' }
         return token
@@ -156,7 +212,11 @@ export const useSettingsStore = defineStore('settings', {
     }): Promise<void> {
       this.h5AccessError = null
       try {
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        await fetch(getApiUrl('/api/h5-access'), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+        }).catch(() => null)
         this.h5Access = { ...this.h5Access, ...input }
       } catch (e) {
         this.h5AccessError = e instanceof Error ? e.message : 'Failed to update H5 access settings'
@@ -164,9 +224,17 @@ export const useSettingsStore = defineStore('settings', {
       }
     },
 
-    fetchH5Access(): Promise<void> {
-      // Stub: in production would fetch from API
-      return Promise.resolve()
+    async fetchH5Access(): Promise<void> {
+      try {
+        const res = await fetch(getApiUrl('/api/h5-access'))
+        if (!res.ok) return
+        const data = await res.json()
+        if (data && typeof data === 'object') {
+          this.h5Access = { ...this.h5Access, ...data }
+        }
+      } catch {
+        /* keep defaults */
+      }
     },
 
     setUpdateProxy(settings: UpdateProxySettings): void {

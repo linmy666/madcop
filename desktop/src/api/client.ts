@@ -5,7 +5,10 @@ const ENV_BASE_URL =
     ? import.meta.env.VITE_DESKTOP_SERVER_URL
     : undefined
 
-const DEFAULT_BASE_URL = ENV_BASE_URL || 'http://127.0.0.1:3456'
+// Align with Vue client + real FastAPI port. Legacy React UI previously
+// defaulted to 3456 which caused "Failed to fetch" whenever Vue accidentally
+// imported this module.
+const DEFAULT_BASE_URL = ENV_BASE_URL || 'http://127.0.0.1:8765'
 
 let baseUrl = DEFAULT_BASE_URL
 let authToken: string | null = null

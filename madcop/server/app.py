@@ -187,8 +187,8 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                     t = "\n\n---\n\n".join(pp.strip() for pp in pages if pp.strip())
                     if t:
                         return t[:_CAP_PDF]
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
             # Word .docx
             if lower.endswith(".docx") or "wordprocessingml" in mime_hint:
                 if raw is not None:
@@ -197,8 +197,8 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                         text = _extract_docx_text(raw)
                         if text:
                             return text[:_CAP_DOCX]
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("swallowed: %s", e)
             # Excel
             if lower.endswith((".xlsx", ".xls")):
                 if raw is not None:
@@ -213,13 +213,13 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                         kept = lines[:1] + lines[1:_CSV_SAMPLE_ROWS + 1]
                         return "\n".join(kept) + f"\n…({len(lines) - _CSV_SAMPLE_ROWS - 1} more rows truncated)"
                     return p.read_text("utf-8", errors="replace")[:_CAP_TEXT]
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
             # Plain text / json / source
             try:
                 return p.read_text("utf-8", errors="replace")[:_CAP_TEXT]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
             return f"[binary file: {name}]"
         return f"[file not readable on server: {name}]"
 
@@ -270,15 +270,15 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                     kept = lines[:1] + lines[1:_CSV_SAMPLE_ROWS + 1]
                     return "\n".join(kept) + f"\n…({len(lines) - _CSV_SAMPLE_ROWS - 1} more rows truncated)"
                 return text[:_CAP_TEXT]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
 
         # Text files (explicit mime)
         if att.dataUrl.startswith("data:text/") or att.dataUrl.startswith("data:application/json"):
             try:
                 return raw.decode("utf-8", errors="replace")[:_CAP_TEXT]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
 
         # Excel xlsx/xls — extract as text via openpyxl
         if lower.endswith((".xlsx", ".xls")):
@@ -299,8 +299,8 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
                 if len(lines) > _CSV_SAMPLE_ROWS * 2:
                     return "\n".join(lines[:_CSV_SAMPLE_ROWS * 2]) + f"\n…({len(lines) - _CSV_SAMPLE_ROWS * 2} more lines truncated)"
                 return text[:_CAP_TEXT]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("swallowed: %s", e)
 
         return f"[binary file: {name}, size: {len(body_b64)} base64 chars]"
 
@@ -527,8 +527,8 @@ def _build_memory_system_prompt(
             if omitted > 0:
                 section += f"\n... and {omitted} more (truncated by token budget)"
             parts.append(section)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("swallowed: %s", e)
 
     # --- relevant memories (L2/L3/L4 via FTS5, token-capped) ----------- #
     try:
@@ -571,8 +571,8 @@ def _build_memory_system_prompt(
             kept = _truncate_to_budget(skill_lines, 300)
             if kept:
                 parts.append("\n".join(kept))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("swallowed: %s", e)
 
     # --- File attachment instructions (so LLM knows how to handle them) ---
     _mdl = model_label or "the current model"
@@ -963,8 +963,8 @@ def create_app() -> FastAPI:
             for client in mgr._clients.values():
                 try:
                     tools.extend(client.list_tools())
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
             for t in tools:
                 try:
                     default_registry().register(t)
@@ -2318,8 +2318,8 @@ def create_app() -> FastAPI:
                     try:
                         from .memory_pipeline import schedule_extraction
                         schedule_extraction(messages)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("swallowed: %s", e)
                     # -- Auto-create skill from "how-to" conversations --- #
                     try:
                         from madcop.agent.skill_forge import get_skill_store, auto_forge_from_conversation
@@ -2332,8 +2332,8 @@ def create_app() -> FastAPI:
                                 full_assistant,
                                 tool_calls=[],
                             )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("swallowed: %s", e)
                     # Mark root done
                     tr = trace_store.get(trace_root.id)
                     if tr:
@@ -2349,13 +2349,13 @@ def create_app() -> FastAPI:
                         _preview_event = _extract_and_emit_html_preview(resp.content or "")
                         if _preview_event:
                             yield f"data: {_preview_event}\n\n"
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("swallowed: %s", e)
                     # Persist the assistant's answer so it survives restart.
                     try:
                         _sse_save_assistant(resp.content or "", resp.model or body.model or "")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("swallowed: %s", e)
                     # Emit the terminal done event (Phase-1 streams text but
                     # doesn't emit done itself, so the no-tool path must).
                     yield f"data: {json.dumps({'type': 'done', 'model': resp.model or body.model or '', 'finish_reason': 'stop'}, ensure_ascii=False)}\n\n"
@@ -2406,8 +2406,8 @@ def create_app() -> FastAPI:
                             _preview_dir = str(Path.home() / ".madcop" / "preview")
                             if _fp and _preview_dir in _fp:
                                 yield f"data: {json.dumps({'type': 'preview_update', 'path': _fp}, ensure_ascii=False)}\n\n"
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("swallowed: %s", e)
                     # Emit trace update
                     tn = trace_store.get(tool_node.id)
                     if tn:
@@ -2529,8 +2529,8 @@ def create_app() -> FastAPI:
                 # another would give the client two 'done' events.)
                 try:
                     _sse_save_assistant(assistant_text or "", body.model or "")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
 
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -2593,8 +2593,8 @@ def create_app() -> FastAPI:
             scm = ScenarioMemory(store)
             for sc in scm.list_recent(limit=50):
                 result["scenario"].append(scm.to_public_dict(sc))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("swallowed: %s", e)
         try:
             pm = PersonaMemory(store)
             for t in pm.traits():
@@ -2603,8 +2603,8 @@ def create_app() -> FastAPI:
                     "value": t.value,
                     "confidence": t.confidence,
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("swallowed: %s", e)
         try:
             im = InsightMemory(store)
             for ins in im.list(limit=50):
@@ -2616,8 +2616,8 @@ def create_app() -> FastAPI:
                     "occurrences": ins.occurrences,
                     "tags": ins.tags,
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("swallowed: %s", e)
         # v3.0: total count for clients that want a quick summary
         result["total"] = sum(len(v) for v in result.values() if isinstance(v, list))
         return result
@@ -2759,8 +2759,8 @@ def create_app() -> FastAPI:
                         "contentLength": len(s.get("body", "")),
                         "hasDirectory": False,
                     })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("swallowed: %s", e)
         # Bundled skills
         if not source or source == "bundled":
             bundled = Path(__file__).resolve().parent.parent.parent / "skills"
@@ -2960,8 +2960,8 @@ def create_app() -> FastAPI:
                     base_url=client.base_url,
                     timeout=90.0,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("swallowed: %s", e)
         from madcop.llm import Message
         messages = [
             Message(role="system", content=system_prompt),
@@ -3224,8 +3224,8 @@ def create_app() -> FastAPI:
                     _ws_ap = next((p for p in _ws_pub.get("providers", []) if p.get("provider_id") == _ws_aid), None)
                     if _ws_ap:
                         _ws_label = _ws_ap.get("label") or _ws_ap.get("model") or ""
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("swallowed: %s", e)
                 latest_user_msg = messages[-1].content if messages else ""
                 try:
                     sys_prompt = _build_memory_system_prompt(latest_user_msg, model_label=_ws_label)
@@ -3596,8 +3596,8 @@ def create_app() -> FastAPI:
                             "type": "error",
                             "message": str(e)[:500],
                         })
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("swallowed: %s", e)
         except WebSocketDisconnect:
             return
 

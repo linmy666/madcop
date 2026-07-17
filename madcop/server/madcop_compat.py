@@ -156,8 +156,8 @@ def _register_workspace(work_dir: str | None) -> None:
             if work_dir not in reg:
                 reg.add(work_dir)
                 _WORKSPACES_REGISTRY.write_text(json.dumps(sorted(reg), ensure_ascii=False, indent=2))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
 
 
 def _resolve_work_dir(sess: dict | None, fallback: str | None = None) -> str | None:
@@ -186,8 +186,8 @@ def _persist_session_to_disk(sess: dict) -> None:
                 if sid:
                     index[sid] = sess
                 _LEGACY_SESSIONS_FILE.write_text(json.dumps(index, ensure_ascii=False, indent=2))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
             return
         try:
             _register_workspace(wd)
@@ -202,8 +202,8 @@ def _persist_session_to_disk(sess: dict) -> None:
             if sid:
                 index[sid] = sess
             idx_path.write_text(json.dumps(index, ensure_ascii=False, indent=2))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
 
 
 def _persist_messages_to_disk(session_id: str, msgs: list) -> None:
@@ -218,8 +218,8 @@ def _persist_messages_to_disk(session_id: str, msgs: list) -> None:
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
             (target_dir / f"{sid}.json").write_text(json.dumps(msgs, ensure_ascii=False, indent=2))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
 
 
 def _load_from_dir(sessions_file: Path, messages_dir: Path) -> None:
@@ -234,8 +234,8 @@ def _load_from_dir(sessions_file: Path, messages_dir: Path) -> None:
                 sid = f.stem
                 try:
                     _MESSAGES.setdefault(sid, json.loads(f.read_text()))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("compat: %s", e)
     except Exception as e:
         import sys as _sys
         print(f"[cc-haha-compat] load error: {e}", file=_sys.stderr, flush=True)
@@ -346,8 +346,8 @@ def _load_sessions() -> None:
                 if mdir is None:
                     continue
                 _load_from_dir(mdir / "sessions.json", mdir / "session_messages")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
 
 
 # Load on import
@@ -440,8 +440,8 @@ def _list_memory() -> dict[str, list[dict[str, Any]]]:
                 "confidence": ins.confidence, "occurrences": ins.occurrences,
                 "tags": ins.tags,
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("compat: %s", e)
     return out
 
 
@@ -468,10 +468,10 @@ def _list_memory_projects() -> dict[str, Any]:
                         "isCurrent": tier == "semantic",
                     })
                 conn.close()
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
+    except Exception as e:
+        logger.debug("compat: %s", e)
     return {"projects": out}
 
 
@@ -839,8 +839,8 @@ def _list_installed_apps() -> list[dict[str, Any]]:
                 "displayName": display_name,
                 "path": str(app),
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("compat: %s", e)
     return out[:200]
 
 
@@ -908,8 +908,8 @@ def _list_channels() -> list[dict[str, Any]]:
                 "enabled": ch_dict.get("enabled", False),
                 "config": ch_dict.get("config", {}),
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("compat: %s", e)
     return out
 
 
@@ -929,8 +929,8 @@ def _list_activity_stats() -> dict[str, Any]:
                 "nodeCount": len(nodes),
                 "lastUpdated": max((n.created_at for n in nodes), default=0),
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("compat: %s", e)
     return {"stats": out}
 
 
@@ -997,8 +997,8 @@ def _list_traces_proper(limit: int = 50, offset: int = 0,
                 updated_at_dt = _dt.datetime.fromisoformat(
                     updated_at.replace("Z", "+00:00"))
                 updated_at = updated_at_dt.isoformat()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
         items.append({
             "sessionId": sid,
             "session": {
@@ -1068,8 +1068,8 @@ def _fs_browse(target: str) -> dict[str, Any]:
                     "size": stat.st_size if child.is_file() else 0,
                     "modifiedAt": stat.st_mtime,
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
         return {"entries": entries, "path": str(p)}
     except Exception as e:
         return {"entries": [], "path": target, "error": str(e)}
@@ -1135,8 +1135,8 @@ def register(app: FastAPI) -> None:
         # before the next background flush doesn't lose the session.
         try:
             _persist_session_to_disk(session)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
         return {"sessionId": sid, "workDir": session.get("workDir"),
                 "title": session.get("title")}
 
@@ -1167,8 +1167,8 @@ def register(app: FastAPI) -> None:
                         _LEGACY_MESSAGES_DIR.joinpath(f"{sid}.json").unlink(missing_ok=True)
                     except BaseException:
                         pass
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
         return {"ok": True, "deleted": session_id}
 
     @app.post("/api/sessions/batch-delete", include_in_schema=False)
@@ -1203,8 +1203,8 @@ def register(app: FastAPI) -> None:
                             _LEGACY_MESSAGES_DIR.joinpath(f"{safe_sid}.json").unlink(missing_ok=True)
                         except BaseException:
                             pass
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("compat: %s", e)
         return {"ok": True, "successes": list(ids), "failures": []}
 
 
@@ -1288,8 +1288,8 @@ def register(app: FastAPI) -> None:
                 sess[key] = body[key]
         try:
             _persist_session_to_disk(sess)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
         return {"ok": True, "session": _to_public_session(sess)}
 
     @app.get("/api/sessions/{session_id}/slash-commands", include_in_schema=False)
@@ -1520,8 +1520,8 @@ def register(app: FastAPI) -> None:
                     ["/usr/bin/open", f"x-apple.systempreferences:com.apple.preference.security?Privacy_{pane.replace('Privacy_', '')}"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
         return {"ok": True, "pane": pane}
 
     # ---- Agents / Teams / Tasks / Plugins / MCP / Scheduled / Search - #
@@ -2166,8 +2166,8 @@ def register(app: FastAPI) -> None:
                     if p.provider_id == s.active_provider and getattr(p, "model", None):
                         model_id = p.model
                         break
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
             return {
                 "modelId": model_id,
                 "providerId": s.active_provider or "nvidia",
@@ -2191,8 +2191,8 @@ def register(app: FastAPI) -> None:
                 if p.provider_id == s.active_provider:
                     try:
                         p.model = model_id
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("compat: %s", e)
                     break
             settings_store.save_settings(s)
             return {"ok": True, "modelId": model_id}
@@ -2431,8 +2431,8 @@ def register(app: FastAPI) -> None:
                         "enabled": data.get("enabled", True),
                         "path": str(f.parent),
                     })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("compat: %s", e)
         return {"plugins": plugins}
 
     @app.post("/api/plugins/{action}", include_in_schema=False)
@@ -2726,8 +2726,8 @@ def register(app: FastAPI) -> None:
                     "snippet": getattr(f, "object", str(f))[:200],
                     "score": 0.8,
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
         return {"results": results[:50], "total": len(results[:50])}
 
     @app.post("/api/search/sessions", include_in_schema=False)
@@ -2830,8 +2830,8 @@ def register(app: FastAPI) -> None:
             try:
                 import json as _j
                 return _j.loads(_DESKTOP_PREFS_FILE.read_text())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
         return {
             "sidebar": {"collapsed": False, "width": 240},
             "profile": {"name": "MadCop User", "avatar": ""},
@@ -2842,8 +2842,8 @@ def register(app: FastAPI) -> None:
             _DESKTOP_PREFS_FILE.parent.mkdir(parents=True, exist_ok=True)
             import json as _j
             _DESKTOP_PREFS_FILE.write_text(_j.dumps(prefs, ensure_ascii=False, indent=2))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
 
     @app.get("/api/desktop-ui/preferences", include_in_schema=False)
     async def cc_desktop_prefs() -> dict[str, Any]:
@@ -2912,8 +2912,8 @@ def register(app: FastAPI) -> None:
         try:
             from madcop.server.app import get_diagnostics_log
             get_diagnostics_log().clear()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
         return {"ok": True}
 
     @app.post("/api/diagnostics/events", include_in_schema=False)
@@ -2929,8 +2929,8 @@ def register(app: FastAPI) -> None:
                 "payload": body,
                 "timestamp": body.get("timestamp", ""),
             })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
         return {"ok": True}
 
     # ---- Settings: user, output-style, permissions, output-styles #
@@ -3285,8 +3285,8 @@ def register(app: FastAPI) -> None:
                         "memberCount": len(data.get("members", [])),
                         "createdAt": data.get("createdAt", ""),
                     })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("compat: %s", e)
         return {"teams": teams}
 
     @app.get("/api/teams/{name}", include_in_schema=False)
@@ -3296,8 +3296,8 @@ def register(app: FastAPI) -> None:
             try:
                 import json as _j
                 return _j.loads(f.read_text())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
         return {"name": name, "members": [], "description": ""}
 
     @app.delete("/api/teams/{name}", include_in_schema=False)
@@ -3318,8 +3318,8 @@ def register(app: FastAPI) -> None:
                 import json as _j
                 msgs = _j.loads(f.read_text())
                 return {"messages": msgs, "teamName": team_name, "agentId": agent_id}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("compat: %s", e)
         return {"messages": [], "teamName": team_name, "agentId": agent_id}
 
     @app.post("/api/teams/{team_name}/members/{agent_id}/messages",
@@ -3503,8 +3503,8 @@ def register(app: FastAPI) -> None:
                         capture_output=True, text=True, timeout=2)
             if r.returncode == 0:
                 info["changedFiles"] = len([l for l in r.stdout.splitlines() if l.strip()])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
         return info
 
     @app.get("/api/sessions/{session_id}/inspection", include_in_schema=False)
@@ -3589,8 +3589,8 @@ def register(app: FastAPI) -> None:
             call = store.get_node(call_id) if hasattr(store, "get_node") else None
             if call:
                 return call.to_dict() if hasattr(call, "to_dict") else {"id": call_id}
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
         return {"id": call_id, "error": "not found"}
 
     # v2.6.0: register Project Workspace endpoints (must be the LAST
@@ -3608,8 +3608,8 @@ def _load_mcp_servers() -> list[dict[str, Any]]:
         try:
             import json as _j
             return _j.loads(_MCP_FILE.read_text())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("compat: %s", e)
     return []
 
 
@@ -3618,8 +3618,8 @@ def _save_mcp_servers(servers: list[dict[str, Any]]) -> None:
         _MCP_FILE.parent.mkdir(parents=True, exist_ok=True)
         import json as _j
         _MCP_FILE.write_text(_j.dumps(servers, ensure_ascii=False, indent=2))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("compat: %s", e)
 
 
 # ---- Force-distill skill (bypasses pattern detection) ---------- #
@@ -3742,8 +3742,8 @@ def _synthesize_memory_md() -> str:
                         import json as _j
                         parsed = _j.loads(text)
                         text = parsed.get("object") or text
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("compat: %s", e)
                 if text:
                     lines.append(f"- {text}")
         lines.append("")
@@ -3760,8 +3760,8 @@ def _synthesize_memory_md() -> str:
                         import json as _j
                         parsed = _j.loads(text)
                         text = parsed.get("object") or text
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("compat: %s", e)
                 if text:
                     lines.append(f"- {text}")
         lines.append("")

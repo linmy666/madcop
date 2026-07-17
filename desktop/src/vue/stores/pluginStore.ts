@@ -1,14 +1,41 @@
 import { defineStore } from 'pinia'
+import { getApiUrl } from '../api/client'
 import type { PluginDetail, PluginReloadSummary, PluginScope, PluginSummary } from '../../types/plugin'
 
 /**
- * Pinia mirror of stores/pluginStore.ts — extended for PluginDetail page.
- * Includes full detail state, applying flags, and all mutation actions (stubbed).
+ * Pinia plugin store — wired to /api/plugins.
  */
 
 type PluginActionTarget = {
   id: string
   scope?: PluginScope
+}
+
+async function pluginsAction(
+  action: string,
+  body: Record<string, unknown> = {},
+): Promise<any> {
+  const res = await fetch(getApiUrl(`/api/plugins/${action}`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`plugins/${action} HTTP ${res.status}`)
+  return res.json().catch(() => ({}))
+}
+
+function normalizePlugin(raw: any): PluginSummary {
+  return {
+    id: raw?.id || raw?.name || 'unknown',
+    name: raw?.name || raw?.id || 'unknown',
+    version: raw?.version || '0.0.0',
+    enabled: raw?.enabled !== false,
+    description: raw?.description || '',
+    scope: raw?.scope,
+    hasErrors: Boolean(raw?.hasErrors || raw?.errors),
+    path: raw?.path,
+    ...raw,
+  } as PluginSummary
 }
 
 export const usePluginStore = defineStore('plugin', {
@@ -29,9 +56,21 @@ export const usePluginStore = defineStore('plugin', {
       this.isLoading = true
       this.error = null
       try {
-        await new Promise((resolve) => setTimeout(resolve, 200))
+        const res = await fetch(getApiUrl('/api/plugins'))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        const list = Array.isArray(data?.plugins) ? data.plugins : []
+        this.plugins = list.map(normalizePlugin)
+        this.summary = {
+          total: this.plugins.length,
+          enabled: this.plugins.filter((p) => p.enabled).length,
+          attention: this.plugins.filter((p: any) => p.hasErrors).length,
+          marketplaces: Array.isArray(data?.marketplaces) ? data.marketplaces.length : 0,
+        }
+        this.marketplaces = data?.marketplaces || []
       } catch (e: any) {
         this.error = e.message
+        this.plugins = []
       } finally {
         this.isLoading = false
       }
@@ -43,54 +82,46 @@ export const usePluginStore = defineStore('plugin', {
       this.selectedPlugin = null
     },
 
-    async enablePlugin(_id: string, _scope?: PluginScope, _cwd?: string, _sessionId?: string): Promise<string> {
+    async enablePlugin(id: string, scope?: PluginScope, _cwd?: string, _sessionId?: string): Promise<string> {
       this.isApplying = true
       try {
-        await new Promise((resolve) => setTimeout(resolve, 400))
+        await pluginsAction('enable', { id, name: id, scope })
+        await this.fetchPlugins()
         return 'Plugin enabled'
-      } catch (err) {
-        this.isApplying = false
-        throw err
       } finally {
         this.isApplying = false
       }
     },
 
-    async disablePlugin(_id: string, _scope?: PluginScope, _cwd?: string, _sessionId?: string): Promise<string> {
+    async disablePlugin(id: string, scope?: PluginScope, _cwd?: string, _sessionId?: string): Promise<string> {
       this.isApplying = true
       try {
-        await new Promise((resolve) => setTimeout(resolve, 400))
+        await pluginsAction('disable', { id, name: id, scope })
+        await this.fetchPlugins()
         return 'Plugin disabled'
-      } catch (err) {
-        this.isApplying = false
-        throw err
       } finally {
         this.isApplying = false
       }
     },
 
-    async updatePlugin(_id: string, _scope?: PluginScope, _cwd?: string, _sessionId?: string): Promise<string> {
+    async updatePlugin(id: string, scope?: PluginScope, _cwd?: string, _sessionId?: string): Promise<string> {
       this.isApplying = true
       try {
-        await new Promise((resolve) => setTimeout(resolve, 600))
+        await pluginsAction('update', { id, name: id, scope })
+        await this.fetchPlugins()
         return 'Plugin updated'
-      } catch (err) {
-        this.isApplying = false
-        throw err
       } finally {
         this.isApplying = false
       }
     },
 
-    async uninstallPlugin(_id: string, _scope?: PluginScope, _keepData = false, _cwd?: string, _sessionId?: string): Promise<string> {
+    async uninstallPlugin(id: string, scope?: PluginScope, _keepData = false, _cwd?: string, _sessionId?: string): Promise<string> {
       this.isApplying = true
       try {
-        await new Promise((resolve) => setTimeout(resolve, 800))
+        await pluginsAction('uninstall', { id, name: id, scope })
         this.selectedPlugin = null
+        await this.fetchPlugins()
         return 'Plugin uninstalled'
-      } catch (err) {
-        this.isApplying = false
-        throw err
       } finally {
         this.isApplying = false
       }
@@ -99,24 +130,45 @@ export const usePluginStore = defineStore('plugin', {
     async reloadPlugins(_cwd?: string, _sessionId?: string): Promise<PluginReloadSummary> {
       this.isApplying = true
       try {
-        await new Promise((resolve) => setTimeout(resolve, 500))
+        const data = await pluginsAction('reload', {})
         const summary: PluginReloadSummary = {
-          enabled: 1,
-          disabled: 0,
-          skills: 0,
-          agents: 0,
-          hooks: 0,
-          mcpServers: 0,
-          lspServers: 0,
-          errors: 0,
+          enabled: data?.enabled ?? this.plugins.filter((p) => p.enabled).length,
+          disabled: data?.disabled ?? this.plugins.filter((p) => !p.enabled).length,
+          skills: data?.skills ?? 0,
+          agents: data?.agents ?? 0,
+          hooks: data?.hooks ?? 0,
+          mcpServers: data?.mcpServers ?? 0,
+          lspServers: data?.lspServers ?? 0,
+          errors: data?.errors ?? 0,
         }
         this.lastReloadSummary = summary
+        await this.fetchPlugins()
         return summary
-      } catch (err) {
-        this.isApplying = false
-        throw err
       } finally {
         this.isApplying = false
+      }
+    },
+
+    async fetchPluginDetail(id: string, _cwd?: string) {
+      this.isDetailLoading = true
+      this.error = null
+      try {
+        const q = new URLSearchParams({ name: id })
+        const res = await fetch(getApiUrl(`/api/plugins/detail?${q}`))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        this.selectedPlugin = {
+          id: data?.id || id,
+          name: data?.manifest?.name || data?.id || id,
+          ...data,
+          ...data?.manifest,
+        } as PluginDetail
+        return this.selectedPlugin
+      } catch (e: any) {
+        this.error = e.message
+        return null
+      } finally {
+        this.isDetailLoading = false
       }
     },
   },
