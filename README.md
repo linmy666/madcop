@@ -270,6 +270,39 @@ Each item is independently shippable. None of them require rewriting what alread
 
 ---
 
+## Recent changes
+
+A condensed log of notable work since this README was first written.
+The full per-commit history is in `git log`.
+
+**Security (2026-07-17)**
+- `/api/filesystem/file` — added allowlist (home / cwd / /tmp) and explicit blocklist of credential paths (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.madcop/settings.json`, `master.key`). Previously any caller could read arbitrary files via this endpoint.
+- `/api/settings/providers/fetch-models` — added URL scheme + DNS resolution + private/loopback/link-local IP check, so the api_key can no longer be exfiltrated to an attacker-controlled URL.
+- Removed a real name, phone number and employer that had been hardcoded as "sample" data in `pages/MemoryPage.vue`; the page now calls the real `/api/memory/*` endpoints and shows an empty state when no data exists.
+
+**Stability**
+- `_SESSIONS` / `_MESSAGES` are now mutated under `_PERSIST_LOCK` in both the SSE handler and `_persist_sessions`, so concurrent requests no longer trigger `RuntimeError: dictionary changed size during iteration`.
+- `OpenAICompatClient` is cached per `(provider, key, base_url, model)` with a size cap of 8; HTTP keep-alive connections now survive across requests instead of being torn down every chat turn.
+- `UIMessage` type union in `chatStore.ts` aligned with what the code actually emits (the old `type: 'user'` branch was unreachable — every push was `type: 'user_text'`).
+- The empty `providerStore.fetchProviders()` is now a real fetch against `/api/settings`; components no longer see a hardcoded 4-item stub.
+
+**Experience**
+- Streaming tokens are now coalesced via `requestAnimationFrame` — the per-token markdown re-parse is gone, long replies render smoothly.
+- Global keyboard shortcuts: `Cmd/Ctrl+B` (toggle sidebar), `Cmd/Ctrl+N` (new chat), `Esc` (close palette / dispatch global-escape). They do not fire while typing in inputs (Esc is the exception).
+- Theme switch in Settings → 通用 → 主题 now actually applies (`onThemeChange` calls `setAppearance(v)`); the previous version only persisted the value to the backend and never updated `data-madcop-theme` on `<html>`.
+- SSE chat messages are now persisted by the Vue frontend (was a long-standing bug where the SSE path never wrote to `_MESSAGES`, so sessions lost all history on restart).
+- "DESIGN PRINCIPLES" (no emoji, neutral palette + one accent, 8px grid, 4-8px corners, no gradients, system fonts) added to the chat system prompt and injected into every deep-mode agent's prompt.
+
+**UI redesigns**
+- `pages/WorkflowsListPage.vue`, `KnowledgeBase.vue`, `AgentOverview.vue`, `DesignPage.vue` rewritten to use semantic class names + scoped CSS instead of inline `style="..."` attributes. Cards have hover states, the workflow list has skeletons and a proper empty state, the agent page has topology preset cards with mini SVG previews.
+
+**Bug fixes found during E2E testing (2026-07-17)**
+- "做个登录页面" was incorrectly classified as `general` (no coder/designer) — added common UI keywords ("登录页/注册页/表单/导航栏") to the design category patterns.
+- `REACT_SYSTEM_PROMPT.format(...)` raised `KeyError: '"message"'` because the prompt contained `{"message":"..."}` (literal JSON in a rule) — escaped to `{{...}}` so `format()` renders it literally.
+- Purple "ask_user" clarification card stayed stuck on screen after the user sent a new message that bypassed it — `sendMessage()` now clears `session.clarificationPending` so a fresh user turn always starts with a clean slate.
+
+---
+
 ## Project structure
 
 ```
