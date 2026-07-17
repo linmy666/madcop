@@ -1294,7 +1294,45 @@ def register(app: FastAPI) -> None:
 
     @app.get("/api/sessions/{session_id}/slash-commands", include_in_schema=False)
     async def cc_session_slash_commands(session_id: str) -> dict[str, Any]:
-        return {"commands": _SLASH_COMMANDS}
+        cmds = [dict(c) for c in _SLASH_COMMANDS]
+        try:
+            from madcop.memory.skill_distill import list_user_skills
+            for s in list_user_skills()[:40]:
+                name = s.get("name") or s.get("displayName")
+                if not name:
+                    continue
+                cmds.append({
+                    "name": f"skill:{name}",
+                    "description": (s.get("description") or f"Invoke skill {name}")[:120],
+                    "argumentHint": "",
+                })
+        except Exception as e:
+            logger.debug("slash skills: %s", e)
+        try:
+            import json as _j
+            mcp_file = Path.home() / ".madcop" / "mcp_servers.json"
+            if not mcp_file.exists():
+                mcp_file = Path.home() / ".madcop" / "mcp.json"
+            if mcp_file.exists():
+                data = _j.loads(mcp_file.read_text(encoding="utf-8"))
+                n = len(data) if isinstance(data, list) else len(data.get("mcpServers") or {}) if isinstance(data, dict) else 0
+                if n:
+                    cmds.append({
+                        "name": "mcp-status",
+                        "description": f"{n} MCP server(s) configured",
+                        "argumentHint": "",
+                    })
+        except Exception as e:
+            logger.debug("slash mcp: %s", e)
+        seen: set[str] = set()
+        out: list[dict[str, Any]] = []
+        for c in cmds:
+            n = str(c.get("name") or "")
+            if not n or n in seen:
+                continue
+            seen.add(n)
+            out.append(c)
+        return {"commands": out}
 
     @app.get("/api/sessions/{session_id}/trace", include_in_schema=False)
     async def cc_session_trace(session_id: str) -> dict[str, Any]:
