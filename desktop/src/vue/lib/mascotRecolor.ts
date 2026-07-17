@@ -1,6 +1,10 @@
 /**
- * Recolor mascot body while preserving near-white eyes and near-black pupils.
+ * Recolor mascot body while preserving face plate, white sclera, and dark pupils.
  * Canvas-based; results cached by target hex.
+ *
+ * Important: source eyes must be opaque (not transparent holes). Recolor only
+ * shifts purple body hues; blue face screen + whites stay put so sprites never
+ * look like hollow sockets on colored skins.
  */
 
 const cache = new Map<string, string>()
@@ -66,23 +70,43 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)]
 }
 
-/** True for eye whites / highlights that must not be hue-shifted. */
+/** Bright / bluish-white sclera and specular highlights — never hue-shift. */
 export function isPreserveWhite(r: number, g: number, b: number, a: number): boolean {
   if (a < 20) return false
   const max = Math.max(r, g, b)
   const min = Math.min(r, g, b)
-  // bright near-white / light gray sclera
-  return max >= 220 && min >= 200 && max - min <= 40
-}
-
-/** True for pupils / dark outlines to keep. */
-export function isPreserveDark(r: number, g: number, b: number, a: number): boolean {
-  if (a < 20) return false
-  return r < 55 && g < 55 && b < 55
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b
+  // classic near-white
+  if (max >= 210 && min >= 185 && max - min <= 55) return true
+  // slightly blue-tinted sclera (common after anti-alias)
+  if (lum >= 195 && min >= 170 && max - min <= 70) return true
+  return false
 }
 
 /**
- * Shift purple body (~hue 0.73) toward target color hue; skip whites/darks.
+ * Near-black pupils OR dark navy face-plate / iris.
+ * Face plate (~57,65,172) must not recolor with body skins.
+ */
+export function isPreserveDark(r: number, g: number, b: number, a: number): boolean {
+  if (a < 20) return false
+  // pure / near-black pupils
+  if (r < 55 && g < 55 && b < 55) return true
+  // dark navy face plate & pupils: blue-dominant, not body purple pastels
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const blueDom = b >= r + 15 && b >= g + 10
+  const midDark = max <= 210 && min <= 120
+  if (blueDom && midDark && b >= 70 && r <= 140) return true
+  return false
+}
+
+/** @deprecated alias — face plate is covered by isPreserveDark */
+export function isPreserveFacePlate(r: number, g: number, b: number, a: number): boolean {
+  return isPreserveDark(r, g, b, a) && !(r < 55 && g < 55 && b < 55)
+}
+
+/**
+ * Shift purple body (~hue 0.73) toward target color hue; skip whites / face / pupils.
  */
 export function recolorImageData(
   data: Uint8ClampedArray,
@@ -103,13 +127,15 @@ export function recolorImageData(
     if (isPreserveWhite(r, g, b, a) || isPreserveDark(r, g, b, a)) continue
 
     const [h, s, l] = rgbToHsl(r, g, b)
-    // Only recolor purple-ish / saturated body pixels
+    // Only recolor purple-ish / saturated body pixels (helmet / body pastels)
     const purpleish =
       s > 0.12 &&
-      l > 0.12 &&
+      l > 0.18 &&
       l < 0.92 &&
-      (Math.abs(h - baseH) < 0.18 || Math.abs(h - baseH) > 0.82)
-    if (!purpleish && s < 0.25) continue
+      (Math.abs(h - baseH) < 0.14 || Math.abs(h - baseH) > 0.86)
+    if (!purpleish && s < 0.28) continue
+    // Extra guard: never shift blue-ish mid tones that look like face edge AA
+    if (b > r + 25 && b > g + 15 && l < 0.55) continue
 
     const [nr, ng, nb] = hslToRgb(th, Math.min(1, s * 1.05), l)
     data[i] = nr

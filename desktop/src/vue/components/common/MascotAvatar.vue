@@ -29,7 +29,8 @@ let recolorGen = 0
 
 function loop() {
   if (cancelled) return
-  const delay = 4000 + Math.random() * 2000
+  // Blink less often and less aggressively — full scaleY squash looked like hollow sockets
+  const delay = 5500 + Math.random() * 3500
   timeoutId = window.setTimeout(() => {
     if (cancelled) return
     blinking.value = true
@@ -37,7 +38,7 @@ function loop() {
       if (cancelled) return
       blinking.value = false
       loop()
-    }, 120)
+    }, 90)
   }, delay)
 }
 
@@ -72,9 +73,10 @@ onUnmounted(() => {
 const imgStyle = computed(() => ({
   width: props.size + 'px',
   height: props.size + 'px',
-  transform: blinking.value ? 'scaleY(0.08)' : 'scaleY(1)',
-  transformOrigin: 'center 58%',
-  transition: 'transform 80ms ease-in-out',
+  // Soft squint (not full black slit) so eyes still read as eyes while blinking
+  transform: blinking.value ? 'scaleY(0.55)' : 'scaleY(1)',
+  transformOrigin: 'center 48%',
+  transition: 'transform 70ms ease-in-out',
 }))
 </script>
 
