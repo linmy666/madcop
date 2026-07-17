@@ -1200,6 +1200,34 @@ def create_app() -> FastAPI:
         api_key = body.api_key or ""
         if not base or not api_key:
             return {"models": [], "total": 0, "error": "base_url and api_key are required"}
+        # SSRF guard: only allow http(s) and reject internal/link-local
+        # addresses so an attacker can't use this endpoint to probe the
+        # internal network or exfiltrate the api_key to a rogue server.
+        from urllib.parse import urlparse
+        import ipaddress
+        import socket
+        try:
+            _parsed = urlparse(base)
+            if _parsed.scheme not in ("http", "https"):
+                return {"models": [], "total": 0, "error": "only http/https URLs are allowed"}
+            _host = _parsed.hostname or ""
+            if not _host:
+                return {"models": [], "total": 0, "error": "invalid URL: no hostname"}
+            # Resolve hostname and reject private/loopback/link-local.
+            try:
+                _addrs = socket.getaddrinfo(_host, None)
+            except socket.gaierror:
+                _addrs = []
+            for _fam, _typ, _proto, _cn, _sa in _addrs:
+                _ip = ipaddress.ip_address(_sa[0])
+                if _ip.is_private or _ip.is_loopback or _ip.is_link_local or _ip.is_reserved:
+                    # Allow loopback ONLY for localhost/127.0.0.1 (dev mode).
+                    if _host in ("localhost", "127.0.0.1", "::1"):
+                        continue
+                    return {"models": [], "total": 0,
+                            "error": f"internal/private addresses are blocked ( {_ip} )"}
+        except Exception as _ssrf_err:
+            return {"models": [], "total": 0, "error": f"URL validation failed: {_ssrf_err}"}
         try:
             from madcop.server.madcop_compat import fetch_provider_models as _fetch
         except ImportError:

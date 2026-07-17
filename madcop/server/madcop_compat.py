@@ -1929,14 +1929,61 @@ def register(app: FastAPI) -> None:
         return _safe(lambda: _fs_browse(path or cwd or str(Path.home())),
                       default={"entries": [], "path": ""})
 
+    # Directories the filesystem endpoints are allowed to serve. Anything
+    # outside this set (credentials, system files, the settings file with
+    # plaintext API keys) is refused. Sensitive sub-paths are also blocked
+    # even when inside an allowed root.
+    _FS_SENSITIVE_PATHS = (
+        Path.home() / ".ssh",
+        Path.home() / ".madcop" / "settings.json",
+        Path.home() / ".madcop" / "master.key",
+        Path.home() / ".aws",
+        Path.home() / ".gnupg",
+    )
+
+    def _fs_check_allowed(path: Path) -> Path:
+        """Resolve and validate a path for the filesystem endpoints.
+
+        Allowed: user home, current working directory, and /tmp (for
+        preview files and agent artifacts). Blocked: anything else, and
+        sensitive credential paths even if inside an allowed root.
+        """
+        p = path.expanduser().resolve()
+        # Deny sensitive credential/config paths first.
+        for sensitive in _FS_SENSITIVE_PATHS:
+            s = sensitive.expanduser().resolve()
+            try:
+                p.relative_to(s)
+                raise HTTPException(403, "access denied: sensitive path")
+            except ValueError:
+                pass  # not inside this sensitive path — OK
+            if p == s:
+                raise HTTPException(403, "access denied: sensitive path")
+        # Allow only under home, cwd, or /tmp.
+        _allowed_roots = [
+            Path.home().resolve(),
+            Path.cwd().resolve(),
+            Path("/tmp"),
+        ]
+        for root in _allowed_roots:
+            try:
+                p.relative_to(root)
+                return p  # inside an allowed root
+            except ValueError:
+                continue
+        raise HTTPException(403, f"access denied: '{p}' is outside allowed directories")
+
     @app.get("/api/filesystem/file", include_in_schema=False)
     async def cc_fs_file(path: str = Query(default="")):
-        """Serve a local file as a response (used by InlineImageGallery)."""
+        """Serve a local file as a response (used by InlineImageGallery).
+
+        Restricted to user home / cwd / /tmp and blocks credential paths
+        (~/.ssh, ~/.madcop/settings.json, ~/.aws, ~/.gnupg) to prevent
+        secret exfiltration via this endpoint.
+        """
         if not path:
             raise HTTPException(400, "path is required")
-        p = Path(path).expanduser()
-        if not p.is_absolute():
-            raise HTTPException(400, "path must be absolute")
+        p = _fs_check_allowed(Path(path))
         if not p.is_file():
             raise HTTPException(404, "file not found")
         return FileResponse(str(p))

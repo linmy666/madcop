@@ -14,6 +14,7 @@
  */
 
 import { ref, computed, onMounted } from 'vue'
+import { getApiUrl } from '../api/client'
 
 // ─── Data model ────────────────────────────────────────────────────────
 
@@ -66,139 +67,16 @@ const activeTab = ref<MemoryLayer>('profile')
 const newProfileFact = ref('')
 
 // ─── Sample data ──────────────────────────────────────────────────────
+// NOTE: all sample data removed for privacy + correctness. Previously
+// this page shipped real PII (name, phone, employer) hardcoded as
+// "sample" data and never called the backend. Now loadAll() fetches
+// from the real memory endpoints and shows an empty state when there
+// is no data yet.
 
-const SAMPLE_PROFILE: ProfileFact[] = [
-  {
-    id: 'p1',
-    content: '名字：林芮翰',
-    source: 'manual',
-    confidence: 1.0,
-    createdAt: new Date(Date.now() - 86400000 * 30).toISOString(),
-    usedCount: 247,
-  },
-  {
-    id: 'p2',
-    content: '工作：阿里巴巴菜鸟集团 BDSA',
-    source: 'auto',
-    confidence: 0.95,
-    createdAt: new Date(Date.now() - 86400000 * 20).toISOString(),
-    usedCount: 89,
-  },
-  {
-    id: 'p3',
-    content: '常用后端框架：FastAPI + SQLAlchemy',
-    source: 'auto',
-    confidence: 0.87,
-    createdAt: new Date(Date.now() - 86400000 * 12).toISOString(),
-    usedCount: 45,
-  },
-  {
-    id: 'p4',
-    content: '常用编辑器：PyCharm',
-    source: 'auto',
-    confidence: 0.92,
-    createdAt: new Date(Date.now() - 86400000 * 8).toISOString(),
-    usedCount: 12,
-  },
-  {
-    id: 'p5',
-    content: '手机：13472510177',
-    source: 'manual',
-    confidence: 1.0,
-    createdAt: new Date(Date.now() - 86400000 * 60).toISOString(),
-    usedCount: 3,
-  },
-]
-
-const SAMPLE_RELEVANT: RelevantMemory[] = [
-  {
-    id: 'r1',
-    content: '上周问了关于 Vue 3 迁移的问题，MadCop 给了 Pinia + composables 的方案',
-    layer: 'episodic',
-    relevance: 0.88,
-    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    preview: '上周问了关于 Vue 3 迁移的问题，MadCop 给了...',
-  },
-  {
-    id: 'r2',
-    content: 'Python 异步编程：asyncio 任务调度和 Future 概念',
-    layer: 'semantic',
-    relevance: 0.75,
-    createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
-    preview: 'Python 异步编程：asyncio 任务调度...',
-  },
-  {
-    id: 'r3',
-    content: '场景：每日盘后分析 WMS 库存告警',
-    layer: 'scenario',
-    relevance: 0.62,
-    createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    preview: '场景：每日盘后分析 WMS 库存告警',
-  },
-  {
-    id: 'r4',
-    content: '洞察：用户偏好 FastAPI + SQLAlchemy 组合出现 12 次',
-    layer: 'insight',
-    relevance: 0.71,
-    createdAt: new Date(Date.now() - 86400000 * 1).toISOString(),
-    preview: '洞察：用户偏好 FastAPI + SQLAlchemy...',
-  },
-]
-
-const SAMPLE_PREFERENCES: Preference[] = [
-  {
-    id: 'pr1',
-    text: '代码示例用 TypeScript 而非 JavaScript',
-    kind: 'likes',
-    strength: 0.92,
-    createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
-  },
-  {
-    id: 'pr2',
-    text: '回答时不要使用 emoji',
-    kind: 'dislikes',
-    strength: 0.88,
-    createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
-  },
-  {
-    id: 'pr3',
-    text: '回复简洁，避免冗长解释',
-    kind: 'likes',
-    strength: 0.78,
-    createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
-  },
-  {
-    id: 'pr4',
-    text: '技术细节给完整可运行代码',
-    kind: 'likes',
-    strength: 0.83,
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-]
-
-const SAMPLE_SKILLS: Skill[] = [
-  {
-    id: 's1',
-    name: '代码审查',
-    description: '自动审查 Python 代码，按 PEP8 + 项目规范给出修改建议',
-    source: 'auto-distilled',
-    triggered: 14,
-  },
-  {
-    id: 's2',
-    name: 'BI 报告生成',
-    description: '从 12 个常见行业模板生成结构化 BI 报告',
-    source: 'auto-distilled',
-    triggered: 8,
-  },
-  {
-    id: 's3',
-    name: 'SQL 优化',
-    description: '分析慢查询，给出索引建议 + 重写方案',
-    source: 'user-created',
-    triggered: 5,
-  },
-]
+const SAMPLE_PROFILE: ProfileFact[] = []
+const SAMPLE_RELEVANT: RelevantMemory[] = []
+const SAMPLE_PREFERENCES: Preference[] = []
+const SAMPLE_SKILLS: Skill[] = []
 
 // ─── Computed counts ──────────────────────────────────────────────────
 
@@ -231,11 +109,59 @@ const LAYERS: { key: MemoryLayer; label: string; desc: string; count: () => numb
 async function loadAll() {
   loading.value = true
   try {
-    // 实际接入: GET /api/memory/profile + /api/memory/relevant + /api/memory/preferences + /api/memory/skills
-    profile.value = SAMPLE_PROFILE
-    relevant.value = SAMPLE_RELEVANT
-    preferences.value = SAMPLE_PREFERENCES
-    skills.value = SAMPLE_SKILLS
+    // Fetch real memory data from the backend. Each endpoint returns
+    // its layer's facts; if the backend is unreachable or returns
+    // nothing, we fall back to empty arrays (not fake data).
+    const [profRes, relRes, prefRes, sklRes] = await Promise.allSettled([
+      fetch(getApiUrl('/api/memory/profile')),
+      fetch(getApiUrl('/api/memory/relevant')),
+      fetch(getApiUrl('/api/memory/preferences')),
+      fetch(getApiUrl('/api/skills')),
+    ])
+    if (profRes.status === 'fulfilled' && profRes.value.ok) {
+      const d = await profRes.value.json()
+      profile.value = (d.facts || d.profile || d.data || []).map((f: any) => ({
+        id: f.id || f.key || Math.random().toString(36),
+        content: f.content || f.value || f.fact || '',
+        source: f.source || 'auto',
+        confidence: f.confidence ?? 1.0,
+        createdAt: f.createdAt || f.created_at || new Date().toISOString(),
+        usedCount: f.usedCount || f.used_count || 0,
+      }))
+    }
+    if (relRes.status === 'fulfilled' && relRes.value.ok) {
+      const d = await relRes.value.json()
+      relevant.value = (d.memories || d.relevant || d.data || []).map((m: any) => ({
+        id: m.id || Math.random().toString(36),
+        content: m.content || m.text || '',
+        layer: m.layer || 'episodic',
+        relevance: m.relevance ?? m.score ?? 0.5,
+        createdAt: m.createdAt || m.created_at || new Date().toISOString(),
+        preview: (m.content || m.text || '').slice(0, 60),
+      }))
+    }
+    if (prefRes.status === 'fulfilled' && prefRes.value.ok) {
+      const d = await prefRes.value.json()
+      preferences.value = (d.preferences || d.data || []).map((p: any) => ({
+        id: p.id || Math.random().toString(36),
+        text: p.text || p.content || '',
+        kind: p.kind || 'likes',
+        strength: p.strength ?? 0.5,
+        createdAt: p.createdAt || p.created_at || new Date().toISOString(),
+      }))
+    }
+    if (sklRes.status === 'fulfilled' && sklRes.value.ok) {
+      const d = await sklRes.value.json()
+      skills.value = (d.skills || d.data || []).map((s: any) => ({
+        id: s.id || s.name || Math.random().toString(36),
+        name: s.name || s.title || '',
+        description: s.description || s.summary || '',
+        source: s.source || 'auto-distilled',
+        triggered: s.triggered || s.use_count || 0,
+      }))
+    }
+  } catch {
+    // Network error — leave arrays empty (empty state shows).
   } finally {
     loading.value = false
   }
