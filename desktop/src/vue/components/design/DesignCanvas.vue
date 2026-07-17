@@ -14,7 +14,7 @@
  *  - 保存 triggers onSave callback
  */
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -253,6 +253,9 @@ onMounted(() => {
   history.value = [JSON.parse(JSON.stringify(data.value))]
   historyIndex.value = 0
 })
+
+// Page switches remount via parent :key="pageId". Avoid deep-watching
+// initialData — parent save updates would reset the canvas mid-edit.
 
 // ── Selection ────────────────────────────────────────────────────────
 
