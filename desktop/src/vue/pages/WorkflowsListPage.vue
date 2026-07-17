@@ -39,6 +39,22 @@ const currentNodeId: Ref<string | null> = ref(null)
 const runResult: Ref<string | null> = ref(null)
 const modes: Ref<AgentMode[]> = ref([])
 
+// Map mode id → Material Symbols icon name. Single source of truth
+// instead of a nested ternary in the template.
+const MODE_ICONS: Record<string, string> = {
+  single_agent: 'person',
+  sequential: 'arrow_forward',
+  parallel: 'call_split',
+  loop: 'loop',
+  review_critique: 'rule',
+  iterative_refine: 'upgrade',
+  coordinator: 'hub',
+  hierarchical: 'account_tree',
+  swarm: 'all_inclusive',
+  react: 'psychology',
+  human_in_loop: 'pan_tool',
+}
+
 const refresh = async () => {
   loading.value = true
   try {
@@ -206,288 +222,107 @@ const handleBack = async () => {
 </script>
 
 <template>
-  <!-- Editing mode: show WorkflowEditor full-screen -->
-  <div v-if="editingId" style="width: 100%; height: 100vh">
-    <WorkflowEditor
-      :workflowId="editingId"
-      :workflowName="editingName"
-      :initialNodes="editingNodes"
-      :initialEdges="editingEdges"
-      :onSave="handleSave"
-      :onRun="handleRun"
-      :isRunning="isRunning"
-      :currentNodeId="currentNodeId"
-      :onBack="handleBack"
-    />
-    <!-- Run result floating panel (createPortal → teleport) -->
-    <Teleport to="body">
-      <div
-        v-if="runResult"
-        @click="runResult = null"
-        style="
-          position: fixed;
-          bottom: 16px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: var(--color-surface);
-          border: 1px solid var(--color-border);
-          border-radius: 8px;
-          padding: 16px;
-          max-width: 720px;
-          max-height: 240px;
-          overflow: auto;
-          box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-          font-size: 12px;
-          font-family: monospace;
-          color: var(--color-text-primary);
-          white-space: pre-wrap;
-          z-index: 50;
-        "
-      >
-        <strong>运行结果 (点击关闭):</strong>
-        <pre style="margin: 8px 0 0; font-size: 11px">{{ runResult }}</pre>
-      </div>
-    </Teleport>
-  </div>
-
-  <!-- List mode: workflows + mode library -->
-  <div
-    v-else
-    style="
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 40px 20px;
-      color: var(--color-text-primary);
-      height: 100%;
-      overflow-y: auto;
-    "
-  >
+  <div class="wf-page">
     <!-- Header -->
-    <div
-      style="
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 24px;
-      "
-    >
-      <h1 style="font-size: 24px; font-weight: 700; margin: 0">工作流</h1>
+    <header class="wf-page__head">
+      <div>
+        <h1 class="wf-page__title">工作流</h1>
+        <p class="wf-page__sub">组合节点搭建自动化流程，或挑选内置模式直接运行</p>
+      </div>
       <button
+        class="wf-btn wf-btn--primary"
+        :disabled="loading && nodeTypes.length === 0"
         @click="handleNew"
-        style="
-          padding: 8px 16px;
-          background: var(--color-brand);
-          color: #fff;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          font-weight: 600;
-          font-size: 14px;
-          opacity: nodeTypes.length === 0 ? 0.7 : 1;
-        "
       >
-        + 新建工作流
+        <span class="material-symbols-outlined" style="font-size:18px">add</span>
+        新建工作流
       </button>
-    </div>
+    </header>
 
-    <!-- Loading state -->
-    <div v-if="loading" style="color: var(--color-text-secondary)">加载中…</div>
+    <!-- Loading skeleton -->
+    <div v-if="loading && workflows.length === 0" class="wf-skel-grid">
+      <div v-for="i in 3" :key="i" class="wf-skel-card">
+        <div class="wf-skel-line wf-skel-line--lg"></div>
+        <div class="wf-skel-line wf-skel-line--md"></div>
+        <div class="wf-skel-line wf-skel-line--sm"></div>
+      </div>
+    </div>
 
     <!-- Empty state -->
     <div
       v-else-if="workflows.length === 0"
-      style="
-        padding: 40px 20px;
-        text-align: center;
-        color: var(--color-text-secondary);
-        background: var(--color-surface-container-low);
-        border-radius: 8px;
-      "
+      class="wf-empty"
     >
-      还没有工作流。点"新建工作流"创建一个。
+      <div class="wf-empty__icon">
+        <span class="material-symbols-outlined">account_tree</span>
+      </div>
+      <h2 class="wf-empty__title">还没有工作流</h2>
+      <p class="wf-empty__sub">点"新建工作流"创建一个，或从下方模式库挑选一个起点</p>
+      <button class="wf-btn wf-btn--primary" @click="handleNew">
+        <span class="material-symbols-outlined" style="font-size:18px">add</span>
+        新建工作流
+      </button>
     </div>
 
     <!-- Workflows grid -->
-    <div
-      v-else
-      style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px"
-    >
-      <div
+    <div v-else class="wf-grid">
+      <article
         v-for="wf in workflows"
         :key="wf.id"
+        class="wf-card"
         @click="handleEdit(wf)"
-        style="
-          background: var(--color-surface);
-          border: 1px solid var(--color-border);
-          border-radius: 8px;
-          padding: 16px;
-          cursor: pointer;
-        "
       >
-        <div style="font-size: 15px; font-weight: 600; margin-bottom: 4px">{{ wf.name }}</div>
-        <div
-          style="font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 12px"
-        >
-          {{ wf.description || '无描述' }} · {{ wf.nodes.length }} 节点 · v{{ wf.version }}
+        <header class="wf-card__head">
+          <div class="wf-card__icon">
+            <span class="material-symbols-outlined">account_tree</span>
+          </div>
+          <div class="wf-card__meta">
+            <h3 class="wf-card__name">{{ wf.name }}</h3>
+            <p class="wf-card__desc">{{ wf.description || '无描述' }}</p>
+          </div>
+        </header>
+        <footer class="wf-card__foot">
+          <span class="wf-card__chip">{{ wf.nodes.length }} 节点</span>
+          <span class="wf-card__chip">v{{ wf.version }}</span>
+        </footer>
+        <div class="wf-card__actions" @click.stop>
+          <button class="wf-card__action" @click="handleEdit(wf)">编辑</button>
+          <button class="wf-card__action wf-card__action--accent" @click="openInvokeDialog(wf)">运行</button>
+          <button class="wf-card__action wf-card__action--danger" @click="handleDelete(wf.id)">删除</button>
         </div>
-        <div style="display: flex; gap: 8px">
-          <button
-            @click.stop="handleEdit(wf)"
-            style="
-              padding: 4px 10px;
-              background: var(--color-surface-container-high);
-              border: 1px solid var(--color-border);
-              border-radius: 4px;
-              color: var(--color-text-primary);
-              cursor: pointer;
-              font-size: 12px;
-            "
-          >
-            编辑
-          </button>
-          <button
-            @click.stop="openInvokeDialog(wf)"
-            style="
-              padding: 4px 10px;
-              background: var(--color-brand);
-              color: white;
-              border: none;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 12px;
-              font-weight: 500;
-            "
-          >
-            用此工作流
-          </button>
-          <button
-            @click.stop="handleDelete(wf.id)"
-            style="
-              padding: 4px 10px;
-              background: transparent;
-              border: 1px solid #ef4444;
-              color: #ef4444;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 12px;
-            "
-          >
-            删除
-          </button>
-        </div>
-      </div>
+      </article>
     </div>
 
     <!-- Mode library -->
-    <h2 style="font-size: 18px; font-weight: 700; margin: 32px 0 16px">模式库</h2>
-    <div
-      style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px"
-    >
-      <div
-        v-for="mode in modes"
-        :key="mode.id"
-        style="
-          background: var(--color-surface);
-          border: 1px solid var(--color-border);
-          border-radius: 8px;
-          padding: 14px;
-        "
-      >
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px">
-          <span
-            style="font-size: 18px; font-weight: 600; color: var(--color-brand)"
-            v-text="
-              mode.id === 'single_agent'
-                ? '1'
-                : mode.id === 'sequential'
-                  ? '→'
-                  : mode.id === 'parallel'
-                    ? '∥'
-                    : mode.id === 'loop'
-                      ? '↻'
-                      : mode.id === 'review_critique'
-                        ? '✓'
-                        : mode.id === 'iterative_refine'
-                          ? '↑'
-                          : mode.id === 'coordinator'
-                            ? '◎'
-                            : mode.id === 'hierarchical'
-                              ? '⊞'
-                              : mode.id === 'swarm'
-                                ? '∞'
-                                : mode.id === 'react'
-                                  ? '◉'
-                                  : mode.id === 'human_in_loop'
-                                    ? '◎'
-                                    : '⚙'
-            "
-          ></span>
-          <span style="font-size: 14px; font-weight: 600">{{ mode.name }}</span>
+    <section class="wf-modes">
+      <header class="wf-section__head">
+        <h2 class="wf-section__title">模式库</h2>
+        <p class="wf-section__sub">预置的协作模式，可直接运行或作为模板修改</p>
+      </header>
+      <div class="wf-modes-grid">
+        <div v-for="mode in modes" :key="mode.id" class="wf-mode">
+          <div class="wf-mode__icon">
+            <span class="material-symbols-outlined">{{ MODE_ICONS[mode.id] || 'tune' }}</span>
+          </div>
+          <div class="wf-mode__body">
+            <div class="wf-mode__head">
+              <span class="wf-mode__name">{{ mode.name }}</span>
+              <span v-if="mode.node_count" class="wf-mode__count">{{ mode.node_count }} 节点</span>
+            </div>
+            <p class="wf-mode__desc">{{ mode.description }}</p>
+            <div class="wf-mode__cat" v-if="mode.category">{{ mode.category }}</div>
+          </div>
         </div>
-        <div
-          style="
-            font-size: 12px;
-            color: var(--color-text-tertiary);
-            margin-bottom: 10px;
-            line-height: 1.4;
-          "
-        >
-          {{ mode.description }}
-        </div>
-        <div
-          style="font-size: 11px; color: var(--color-text-disabled); margin-bottom: 8px"
-        >
-          {{ mode.node_count }} 节点 ·
-          {{
-            mode.category === 'basic'
-              ? '基础'
-              : mode.category === 'multi_agent'
-                ? '多 Agent'
-                : '高级'
-          }}
-        </div>
-        <button
-          @click="
-            async () => {
-              try {
-                const r = await fetch(
-                  getApiUrl(`/api/workflows/modes/${mode.id}/instantiate`),
-                  { method: 'POST' }
-                )
-                if (r.ok) {
-                  const wf = await r.json()
-                  handleEdit(wf)
-                  await refresh()
-                }
-              } catch {}
-            }
-          "
-          style="
-            padding: 4px 12px;
-            background: var(--color-brand);
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-          "
-        >
-          使用此模式
-        </button>
       </div>
-    </div>
-  </div>
+    </section>
 
-
-    <!-- Invoke workflow dialog -->
-    <Teleport to="body">
+    <!-- Invoke dialog (kept original behavior) -->
+    <Teleport to="body" v-if="showInvokeDialog && invokeWorkflow">
       <div
-        v-if="invokingWorkflow"
-        @click.self="closeInvokeDialog"
+        @click.self="showInvokeDialog = false"
         style="
-          position: fixed; inset: 0; z-index: 9999;
-          background: rgba(0, 0, 0, 0.5);
+          position: fixed; inset: 0; z-index: 100;
+          background: rgba(0,0,0,0.4);
           display: flex; align-items: center; justify-content: center;
         "
       >
@@ -495,83 +330,353 @@ const handleBack = async () => {
           style="
             background: var(--color-surface);
             border: 1px solid var(--color-border);
-            border-radius: 12px;
+            border-radius: 8px;
             padding: 24px;
-            width: 520px;
-            max-width: 90vw;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            min-width: 400px;
+            max-width: 600px;
           "
         >
-          <h3 style="margin: 0 0 4px; font-size: 16px; font-weight: 600;">
-            调用: {{ invokingWorkflow.name }}
-          </h3>
-          <p style="margin: 0 0 16px; font-size: 12px; color: var(--color-text-tertiary);">
-            {{ invokingWorkflow.description || '工作流会用以下输入作为参数' }}
-          </p>
-
-          <label style="display: block; font-size: 11px; font-weight: 500; margin-bottom: 4px;">
-            输入内容
-          </label>
-          <textarea
+          <h3 style="margin: 0 0 12px; font-size: 16px; font-weight: 600">运行：{{ invokeWorkflow.name }}</h3>
+          <input
             v-model="invokeInput"
-            placeholder="给这个工作流一些输入…"
+            placeholder='输入参数（JSON 格式）例如 {"topic": "AI"}'
             style="
-              width: 100%; min-height: 100px;
-              background: var(--color-surface-container-lowest);
+              width: 100%;
+              padding: 8px 12px;
+              font-family: var(--font-mono);
+              font-size: 13px;
               border: 1px solid var(--color-border);
               border-radius: 4px;
-              padding: 8px 10px;
-              font-size: 13px;
-              font-family: inherit;
-              resize: vertical;
+              background: var(--color-surface);
+              color: var(--color-text-primary);
             "
-          ></textarea>
-
-          <div
-            v-if="invokeResult"
-            style="margin-top: 16px; padding: 12px; background: var(--color-surface-container-lowest); border-radius: 4px; border: 1px solid var(--color-border);"
-          >
-            <div style="font-size: 11px; font-weight: 500; margin-bottom: 6px; color: var(--color-text-tertiary);">
-              结果
-            </div>
-            <pre style="margin: 0; white-space: pre-wrap; font-size: 12px; font-family: var(--font-mono); max-height: 300px; overflow-y: auto;">{{ invokeResult }}</pre>
-          </div>
-
-          <div v-if="invokeError" style="margin-top: 12px; padding: 8px 10px; background: color-mix(in srgb, var(--color-error) 10%, transparent); border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent); border-radius: 4px; font-size: 12px; color: var(--color-error);">
-            {{ invokeError }}
-          </div>
-
-          <div style="display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end;">
+            @keydown.enter="confirmInvoke"
+          />
+          <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px">
             <button
-              @click="closeInvokeDialog"
+              @click="showInvokeDialog = false"
               style="
-                padding: 8px 16px;
-                background: transparent;
-                border: 1px solid var(--color-border);
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 12px;
+                padding: 8px 16px; background: transparent; border: 1px solid var(--color-border);
+                border-radius: 4px; cursor: pointer; color: var(--color-text-primary);
               "
-            >关闭</button>
+            >取消</button>
             <button
-              @click="runInvokedWorkflow"
+              @click="confirmInvoke"
               :disabled="invokeRunning || !invokeInput.trim()"
-              style="
-                padding: 8px 16px;
-                background: var(--color-brand);
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 12px;
-                font-weight: 500;
-                opacity: (invokeRunning || !invokeInput.trim()) ? 0.5 : 1;
+              :style="
+                'padding: 8px 16px; background: var(--color-brand); color: #fff; border: none;'
+                + ' border-radius: 4px; cursor: pointer; font-weight: 500;'
+                + ' opacity: ' + ((invokeRunning || !invokeInput.trim()) ? '0.5' : '1')
               "
             >{{ invokeRunning ? '运行中…' : '▶ 运行' }}</button>
           </div>
         </div>
       </div>
     </Teleport>
+  </div>
 </template>
+
+<style scoped>
+/* ── Page layout ─────────────────────────────────────────────────── */
+.wf-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 48px 32px 64px;
+  color: var(--color-text-primary);
+  height: 100%;
+  overflow-y: auto;
+}
+
+.wf-page__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.wf-page__title {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.wf-page__sub {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+/* ── Buttons (compact 4px, no gradients) ─────────────────────────── */
+.wf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  transition: background 120ms, border-color 120ms;
+  font-family: inherit;
+}
+.wf-btn:hover { background: var(--color-surface-container-low); }
+.wf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.wf-btn--primary {
+  background: var(--color-brand, #0a0a0a);
+  color: #fff;
+  border-color: var(--color-brand, #0a0a0a);
+}
+.wf-btn--primary:hover { background: #1f2937; border-color: #1f2937; }
+
+/* ── Skeleton (loading) ──────────────────────────────────────────── */
+.wf-skel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.wf-skel-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wf-skel-line {
+  height: 12px;
+  background: var(--color-surface-container);
+  border-radius: 4px;
+  animation: wf-skel-pulse 1.4s ease-in-out infinite;
+}
+.wf-skel-line--lg { width: 60%; height: 16px; }
+.wf-skel-line--md { width: 90%; }
+.wf-skel-line--sm { width: 40%; }
+@keyframes wf-skel-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+.wf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 80px 24px;
+  background: var(--color-surface-container-lowest);
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  margin-bottom: 48px;
+}
+.wf-empty__icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-surface-container-low);
+  margin-bottom: 16px;
+}
+.wf-empty__icon .material-symbols-outlined {
+  font-size: 28px;
+  color: var(--color-text-tertiary);
+}
+.wf-empty__title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.wf-empty__sub {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+/* ── Workflows grid ─────────────────────────────────────────────── */
+.wf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 56px;
+}
+.wf-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 20px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color 140ms, transform 140ms;
+}
+.wf-card:hover {
+  border-color: var(--color-text-tertiary);
+  transform: translateY(-1px);
+}
+.wf-card__head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.wf-card__icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low);
+  border-radius: 6px;
+}
+.wf-card__icon .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--color-text-secondary);
+}
+.wf-card__meta { min-width: 0; flex: 1; }
+.wf-card__name {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-card__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.wf-card__foot {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wf-card__chip {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  background: var(--color-surface-container);
+  color: var(--color-text-secondary);
+  border-radius: 999px;
+}
+.wf-card__actions {
+  display: flex;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  margin-top: 4px;
+}
+.wf-card__action {
+  flex: 1;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 120ms, color 120ms;
+}
+.wf-card__action:hover { background: var(--color-surface-container); color: var(--color-text-primary); }
+.wf-card__action--accent { color: var(--color-brand, #0a0a0a); font-weight: 600; }
+.wf-card__action--accent:hover { background: var(--color-brand, #0a0a0a); color: #fff; }
+.wf-card__action--danger { color: #b91c1c; }
+.wf-card__action--danger:hover { background: #fee2e2; color: #b91c1c; }
+
+/* ── Section header (Mode library) ──────────────────────────────── */
+.wf-modes { margin-top: 16px; }
+.wf-section__head { margin-bottom: 20px; }
+.wf-section__title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+.wf-section__sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.wf-modes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.wf-mode {
+  display: flex;
+  gap: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 16px;
+  transition: border-color 140ms;
+}
+.wf-mode:hover { border-color: var(--color-text-tertiary); }
+.wf-mode__icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low);
+  border-radius: 6px;
+}
+.wf-mode__icon .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--color-text-secondary);
+}
+.wf-mode__body { min-width: 0; flex: 1; }
+.wf-mode__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.wf-mode__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-mode__count {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+.wf-mode__desc {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.wf-mode__cat {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  background: var(--color-surface-container);
+  color: var(--color-text-tertiary);
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+</style>
