@@ -1,8 +1,17 @@
-# Studio scene art
+# Studio scene art & walk animation
 
-Room backgrounds (`room-studio.svg`, `room-study.svg`, `room-cabin.svg`) are
-original MadCop vector scenes (CC0 for redistribution with MadCop).
+## Rooms
+`room-studio.svg`, `room-study.svg`, `room-cabin.svg` — original MadCop vector
+scenes (redistributable with MadCop). Furniture seat centers are documented in
+`spriteSceneLayout.ts` (viewBox 1200×700) for pixel alignment.
 
-Visual language draws inspiration from cozy game interiors common on itch.io
-and free CC0 packs (e.g. Kenney.nl furniture kits); no third-party binary
-assets are vendored here so the product UI stays sharp at any DPI.
+## Walk sheet
+`walk-sheet.png` — classic 16×18 LPC-style green-cap walk cycle
+(3×4 frames, 48×72 sheet) from OpenGameArt-style free sprite
+(Green-Cap-Character). Used only during **walking**; seated work still uses
+the MadCop mascot tint. If you redistribute standalone, credit OGA-style free
+base character packs.
+
+## Inspiration
+itch.io free cozy interiors / Kenney CC0 furniture kits for layout language;
+implementation is vector rooms + path walkers rather than a full tileset.
