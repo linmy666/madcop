@@ -24,6 +24,8 @@ const props = defineProps<{
   roster: SpriteAgent[]
   routeLabel?: string | null
   routeReason?: string | null
+  /** Live tool name from chat session (XSafeClaw-style observability) */
+  activeToolName?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -106,6 +108,46 @@ const litDesks = computed(() => {
 })
 
 const isEmpty = computed(() => displayRoster.value.length === 0)
+
+/** Short activity timeline from roster (Agent Town style, lightweight) */
+const activityFeed = computed(() => {
+  const items = displayRoster.value.map((a) => ({
+    id: a.id,
+    name: a.name,
+    color: a.color,
+    line:
+      a.pose === 'error'
+        ? sanitizeAgentDisplayText(a.text || a.bubble || '出错', 36)
+        : a.bubble || poseLabelSafe(a.pose),
+    pose: a.pose,
+  }))
+  if (props.activeToolName) {
+    items.unshift({
+      id: '_tool',
+      name: '工具',
+      color: '#7C3AED',
+      line: `正在调用 ${props.activeToolName}`,
+      pose: 'working',
+    })
+  }
+  return items.slice(0, 8)
+})
+
+function poseLabelSafe(pose: string) {
+  const map: Record<string, string> = {
+    idle: '守护中',
+    thinking: '思考中',
+    working: '工作中',
+    tool_file: '读写文件',
+    tool_web: '联网检索',
+    blocked: '等待你',
+    done: '完成',
+    error: '失败',
+    slacking: '待命摸鱼',
+    assigned: '已指派上岗',
+  }
+  return map[pose] || pose
+}
 
 function onSelect(id: string) {
   selectedId.value = id
@@ -201,6 +243,20 @@ function setSkin(id: StudioSkinId) {
       </div>
 
       <aside class="ss__detail">
+        <div v-if="activityFeed.length" class="ss__feed">
+          <h3 class="ss__detail-title">活动</h3>
+          <button
+            v-for="item in activityFeed"
+            :key="item.id"
+            type="button"
+            class="ss__feed-item"
+            @click="item.id !== '_tool' && onSelect(item.id)"
+          >
+            <span class="ss__feed-dot" :style="{ background: item.color }" />
+            <span class="ss__feed-name" :style="{ color: item.color }">{{ item.name }}</span>
+            <span class="ss__feed-line">{{ item.line }}</span>
+          </button>
+        </div>
         <h3 class="ss__detail-title">精灵档案</h3>
         <div v-if="!detail" class="ss__detail-empty">
           <MascotAvatar :size="40" color="#7C3AED" />
@@ -481,6 +537,44 @@ function setSkin(id: StudioSkinId) {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-text-tertiary);
+}
+.ss__feed {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.ss__feed-item {
+  display: grid;
+  grid-template-columns: 8px 52px 1fr;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 5px 0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 11px;
+}
+.ss__feed-item:hover {
+  opacity: 0.85;
+}
+.ss__feed-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.ss__feed-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ss__feed-line {
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ss__detail-empty {
   text-align: center;

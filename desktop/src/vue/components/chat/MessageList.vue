@@ -104,6 +104,7 @@ import {
   type SpriteAgent,
   type SpriteDetail,
 } from '../../lib/spriteStudio'
+import { sanitizeAgentDisplayText } from '../../lib/agentDisplayText'
 import ThinkingBlock from './ThinkingBlock.vue'
 import ToolCallBlock from './ToolCallBlock.vue'
 import ToolCallGroup from './ToolCallGroup.vue'
@@ -1129,8 +1130,8 @@ function renderItemContent(item: RenderItem) {
             <strong :style="{ color: selectedSpriteDetail.color }">{{ selectedSpriteDetail.name }}</strong>
             <button type="button" class="sprite-island-detail__close" @click="selectedSpriteId = null">×</button>
           </div>
-          <pre v-if="selectedSpriteDetail.text" class="sprite-island-detail__text">{{ selectedSpriteDetail.text }}</pre>
-          <p v-else class="sprite-island-detail__empty">{{ selectedSpriteDetail.bubble || '暂无输出' }}</p>
+          <pre v-if="selectedSpriteDetail.text" class="sprite-island-detail__text">{{ sanitizeAgentDisplayText(selectedSpriteDetail.text, 800) }}</pre>
+          <p v-else class="sprite-island-detail__empty">{{ sanitizeAgentDisplayText(selectedSpriteDetail.bubble || '暂无输出', 80) }}</p>
         </div>
 
         <!-- Streaming text (live assistant text being typed out) -->

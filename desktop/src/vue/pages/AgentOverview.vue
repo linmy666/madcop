@@ -491,6 +491,7 @@ function loadNetwork(net: any) {
         :roster="studioRoster"
         :route-label="studioRouteLabel"
         :route-reason="studioRouteReason"
+        :active-tool-name="liveSession?.activeToolName || null"
       />
     </section>
 

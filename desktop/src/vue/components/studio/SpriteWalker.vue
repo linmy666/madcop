@@ -140,6 +140,17 @@ watch(
   },
 )
 
+// Assigned / justice call-up: re-walk to desk even if station string unchanged
+watch(
+  () => props.pose,
+  (pose, prev) => {
+    if (pose === 'assigned' && prev !== 'assigned') {
+      prevStation = ''
+      walkToStation(props.station)
+    }
+  },
+)
+
 onMounted(() => {
   // Enter from door then walk to seat
   pos.value = stationPoint('door')
@@ -189,13 +200,23 @@ const mood = computed(() =>
     :title="`${name} · ${poseLabel(pose as any)}`"
     @click="emit('select', id)"
   >
+    <!-- Thinking dots (MadCop justice thinking) -->
+    <span v-if="!walking && pose === 'thinking'" class="sw__think" aria-hidden="true">
+      <i /><i /><i />
+    </span>
     <span v-if="cleanBubble && !walking" class="sw__bubble">{{ cleanBubble }}</span>
     <span class="sw__shadow" />
-    <!-- Pixel sheet only while walking; seated uses brand mascot (white eyes) -->
+    <!-- Always MadCop mascot by default; optional pixel sheet only if enabled -->
     <span v-if="showPixel" class="sw__pixel" :style="sheetStyle" />
-    <span v-else class="sw__mascot">
+    <span v-else class="sw__mascot" :class="{ 'sw__mascot--walk': walking }">
       <MascotAvatar :size="40" :color="color" :mood="mood" />
     </span>
+    <!-- Work desk glow under mascot when typing/tools -->
+    <span
+      v-if="!walking && (pose === 'working' || pose === 'tool_file' || pose === 'tool_web')"
+      class="sw__desk-fx"
+      aria-hidden="true"
+    />
     <span class="sw__badge" :data-pose="walking ? 'working' : pose" />
     <span class="sw__name">{{ name }}</span>
     <span class="sw__pose">{{ walking ? '赶路上岗' : poseLabel(pose as any) }}</span>
@@ -314,14 +335,43 @@ const mood = computed(() =>
   animation: sw-bubble 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   pointer-events: none;
 }
-.sw--thinking .sw__mascot,
-.sw--working .sw__mascot,
-.sw--tool_file .sw__mascot,
-.sw--tool_web .sw__mascot {
-  animation: sw-bob 1.8s ease-in-out infinite;
-}
 .sw--face-left .sw__mascot {
   transform: scaleX(-1);
+}
+.sw__think {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 3px;
+  z-index: 6;
+}
+.sw__think i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.5;
+  animation: sw-dot 1s ease infinite;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.sw__think i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.sw__think i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.sw__desk-fx {
+  position: absolute;
+  bottom: 18px;
+  width: 42px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(167, 139, 250, 0.55), transparent 70%);
+  animation: sw-desk 1.1s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
 }
 
 @keyframes sw-step {
@@ -361,6 +411,28 @@ const mood = computed(() =>
   to {
     opacity: 1;
     transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+@keyframes sw-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+@keyframes sw-desk {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scaleX(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scaleX(1.15);
   }
 }
 </style>
