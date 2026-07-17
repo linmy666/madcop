@@ -49,28 +49,36 @@ async function runDistill() {
       <SkillDetail />
     </template>
     <template v-else>
-      <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0">
-          <h2 class="text-base font-semibold text-[var(--color-text-primary)] mb-1">
-            {{ t('settings.skills.title') }}
-          </h2>
-          <p class="text-sm text-[var(--color-text-tertiary)]">
-            {{ t('settings.skills.description') }}
-          </p>
+      <section class="mb-5 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)]">
+        <div class="flex flex-wrap items-start justify-between gap-3 px-5 py-5">
+          <div class="min-w-0">
+            <div class="mb-2 text-[11px] font-semibold tracking-wide text-[var(--color-text-tertiary)]">
+              {{ t('settings.nav.ai') || 'AI' }}
+            </div>
+            <div class="mb-2 flex items-center gap-2">
+              <span class="material-symbols-outlined text-[20px] text-[var(--color-brand)]" style="fontVariationSettings: 'FILL' 1">auto_awesome</span>
+              <h2 class="text-lg font-semibold text-[var(--color-text-primary)]">
+                {{ t('settings.skills.title') }}
+              </h2>
+            </div>
+            <p class="max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
+              {{ t('settings.skills.description') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 text-xs font-medium text-[var(--color-text-primary)] shadow-sm transition-colors hover:bg-[var(--color-surface-hover)]"
+            @click="showDistill = !showDistill"
+          >
+            <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+            {{ t('settings.skills.distill') || '从对话蒸馏技能' }}
+          </button>
         </div>
-        <button
-          type="button"
-          class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container)] px-3 text-xs font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-hover)]"
-          @click="showDistill = !showDistill"
-        >
-          <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
-          {{ t('settings.skills.distill') || '从对话蒸馏技能' }}
-        </button>
-      </div>
+      </section>
 
       <div
         v-if="showDistill"
-        class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-4 space-y-3"
+        class="mb-5 space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm"
       >
         <p class="text-xs text-[var(--color-text-tertiary)] leading-relaxed">
           {{ t('settings.skills.distillHint') || '把一次「教我 / 怎么做」的问答落成 SKILL.md，之后相似问题可自动引用。' }}

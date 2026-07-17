@@ -555,9 +555,9 @@ export default { components: { Toggle } }
 }
 
 /* Right content */
-.settings-content { flex: 1; overflow-y: auto; padding: 28px 36px 48px; min-width: 0; }
-.settings-section--fullbleed { margin: -8px 0 0; }
-.settings-section__title { font-size: 20px; font-weight: 700; color: var(--color-text-primary); margin: 0 0 4px; }
+.settings-content { flex: 1; overflow-y: auto; padding: 24px 28px 48px; min-width: 0; }
+.settings-section--fullbleed { margin: 0; }
+.settings-section__title { font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin: 0 0 4px; }
 .settings-section__desc { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 24px; line-height: 1.5; }
 
 .settings-row {
@@ -614,9 +614,8 @@ export default { components: { Toggle } }
   background: var(--color-switch-thumb); transition: transform 140ms;
 }
 :deep(.madcop-toggle--on)::after { transform: translateX(18px); }
-</style>
 
-/* Continuous Learning styles */
+/* Continuous Learning styles (scoped) */
 .learning-modes {
   display: flex;
   flex-direction: column;
@@ -627,7 +626,7 @@ export default { components: { Toggle } }
   text-align: left;
   padding: 10px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: transparent;
   cursor: pointer;
   transition: all 0.15s;
@@ -651,7 +650,7 @@ export default { components: { Toggle } }
 }
 .training-trigger-btn {
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--color-brand);
   color: white;
   font-size: 12px;
@@ -677,9 +676,10 @@ export default { components: { Toggle } }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
   background: var(--color-surface);
+  border: 1px solid var(--color-border);
   font-size: 12px;
 }
 .learning-history__dot {
@@ -699,8 +699,8 @@ export default { components: { Toggle } }
 }
 .privacy-banner {
   margin-top: 16px;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--color-success) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);
   color: var(--color-text-secondary);
@@ -722,8 +722,8 @@ export default { components: { Toggle } }
   gap: 8px;
 }
 .settings-btn {
-  padding: 6px 12px;
-  border-radius: 8px;
+  padding: 7px 12px;
+  border-radius: 10px;
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-secondary);
@@ -738,3 +738,5 @@ export default { components: { Toggle } }
 .settings-btn--danger:hover {
   background: color-mix(in srgb, var(--color-error) 5%, transparent);
 }
+</style>
+

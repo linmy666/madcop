@@ -15,6 +15,7 @@ const best = ref<Record<string, any> | null>(null)
 const candidates = ref<Array<Record<string, any>>>([])
 const archiveCount = ref(0)
 const lastRun = ref<Record<string, any> | null>(null)
+const showActiveJson = ref(false)
 
 const iterations = ref(2)
 const suite = ref('smoke')
@@ -24,10 +25,11 @@ const activeSummary = computed(() => {
   if (!active.value) return []
   const a = active.value
   return [
-    `memory: ${a.profile_budget}/${a.relevant_budget}/${a.preferences_budget}`,
-    `skills: ${a.inject_skills ? a.max_skills : 'off'}`,
-    `tools: ${a.enable_tools ? `max ${a.max_tools}` : 'off'}`,
-    `deep=${a.enable_deep_mode} plan=${a.enable_plan_mode} compact=${a.enable_context_compact}@${a.compact_threshold_messages}`,
+    { label: '记忆预算', value: `${a.profile_budget}/${a.relevant_budget}/${a.preferences_budget}` },
+    { label: '技能', value: a.inject_skills ? `最多 ${a.max_skills}` : '关闭' },
+    { label: '工具', value: a.enable_tools ? `最多 ${a.max_tools}` : '关闭' },
+    { label: '模式', value: `deep=${a.enable_deep_mode} · plan=${a.enable_plan_mode}` },
+    { label: '压缩', value: a.enable_context_compact ? `@${a.compact_threshold_messages} 条` : '关闭' },
   ]
 })
 
@@ -99,122 +101,211 @@ onMounted(loadStatus)
 </script>
 
 <template>
-  <div class="mh">
-    <div class="mh__head">
-      <div>
-        <h2 class="text-[18px] font-semibold tracking-tight">任务外壳 (Meta-Harness)</h2>
-        <p class="sub">
-          优化任务外壳（记忆/技能/工具/deep·plan 开关），不是供应商 API 适配。
+  <div class="mh mx-auto max-w-3xl space-y-5">
+    <header class="mh__head">
+      <div class="min-w-0">
+        <div class="mh__eyebrow">AI</div>
+        <h2 class="mh__title">任务外壳 (Meta-Harness)</h2>
+        <p class="mh__sub">
+          优化任务外壳（记忆 / 技能 / 工具 / deep·plan 开关），不是供应商 API 适配。
           档案目录 <code>~/.madcop/meta_harness/</code>
         </p>
       </div>
-      <button type="button" class="btn" :disabled="loading" @click="loadStatus">
+      <button type="button" class="mh-btn" :disabled="loading" @click="loadStatus">
+        <span class="material-symbols-outlined text-[16px]" :class="{ 'animate-spin': loading }">refresh</span>
         {{ loading ? '刷新中…' : '刷新' }}
       </button>
-    </div>
+    </header>
 
-    <p v-if="error" class="err">{{ error }}</p>
+    <p v-if="error" class="mh-err">{{ error }}</p>
 
-    <section class="card">
-      <h3>当前生效 (active)</h3>
-      <ul class="summary">
-        <li v-for="(s, i) in activeSummary" :key="i">{{ s }}</li>
-      </ul>
-      <pre v-if="active" class="json">{{ JSON.stringify(active, null, 2) }}</pre>
+    <!-- Active -->
+    <section class="mh-card">
+      <div class="mh-card__head">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined mh-card__icon">bolt</span>
+          <h3>当前生效</h3>
+        </div>
+        <button
+          v-if="active"
+          type="button"
+          class="mh-btn mh-btn--ghost"
+          @click="showActiveJson = !showActiveJson"
+        >
+          {{ showActiveJson ? '隐藏 JSON' : '查看 JSON' }}
+        </button>
+      </div>
+      <div v-if="activeSummary.length" class="mh-pills">
+        <div v-for="(s, i) in activeSummary" :key="i" class="mh-pill">
+          <span class="mh-pill__label">{{ s.label }}</span>
+          <span class="mh-pill__value">{{ s.value }}</span>
+        </div>
+      </div>
+      <p v-else class="mh-muted px-4 py-3">尚未加载 active harness</p>
+      <pre v-if="showActiveJson && active" class="mh-json">{{ JSON.stringify(active, null, 2) }}</pre>
     </section>
 
-    <section class="card">
-      <h3>离线搜索</h3>
-      <div class="row">
-        <label>
-          iterations
+    <!-- Offline search -->
+    <section class="mh-card">
+      <div class="mh-card__head">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined mh-card__icon">science</span>
+          <h3>离线搜索</h3>
+        </div>
+      </div>
+      <div class="mh-form">
+        <label class="mh-field">
+          <span>迭代次数</span>
           <input v-model.number="iterations" type="number" min="1" max="10" />
         </label>
-        <label>
-          suite
+        <label class="mh-field">
+          <span>评测套件</span>
           <select v-model="suite">
-            <option value="smoke">smoke</option>
-            <option value="full">full</option>
+            <option value="smoke">smoke（快速）</option>
+            <option value="full">full（完整）</option>
           </select>
         </label>
-        <label>
-          proposer
+        <label class="mh-field">
+          <span>提议器</span>
           <select v-model="proposer">
             <option value="local">local</option>
             <option value="code_edit">code_edit</option>
             <option value="mock">mock</option>
           </select>
         </label>
-        <button type="button" class="btn primary" :disabled="running" @click="runSearch">
+        <button type="button" class="mh-btn mh-btn--primary" :disabled="running" @click="runSearch">
+          <span v-if="running" class="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
+          <span v-else class="material-symbols-outlined text-[16px]">play_arrow</span>
           {{ running ? '搜索中…' : '运行搜索' }}
         </button>
       </div>
-      <pre v-if="lastRun" class="json">{{ JSON.stringify(lastRun, null, 2) }}</pre>
+      <pre v-if="lastRun" class="mh-json">{{ JSON.stringify(lastRun, null, 2) }}</pre>
     </section>
 
-    <section class="card">
-      <div class="card__title">
-        <h3>档案候选 ({{ archiveCount }})</h3>
-        <button type="button" class="btn" @click="promote()">Promote 最优</button>
+    <!-- Archive -->
+    <section class="mh-card">
+      <div class="mh-card__head">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined mh-card__icon">inventory_2</span>
+          <h3>档案候选</h3>
+          <span class="mh-count">{{ archiveCount }}</span>
+        </div>
+        <button type="button" class="mh-btn mh-btn--primary" @click="promote()">Promote 最优</button>
       </div>
-      <p v-if="best" class="muted">
-        best: {{ best.id }} · pass_rate={{ best.pass_rate }}
+      <p v-if="best" class="mh-best">
+        最优：<code>{{ best.id }}</code>
+        <span class="mh-muted"> · pass_rate={{ best.pass_rate }}</span>
       </p>
-      <ul class="list">
-        <li v-for="c in candidates" :key="c.id" class="list__item">
-          <div>
-            <strong>{{ c.id }}</strong>
-            <span class="muted"> pass={{ c.pass_rate }} parent={{ c.parent_id || '—' }}</span>
+      <ul class="mh-list">
+        <li v-for="c in candidates" :key="c.id" class="mh-list__item">
+          <div class="min-w-0">
+            <div class="mh-list__id">{{ c.id }}</div>
+            <div class="mh-muted">
+              pass={{ c.pass_rate }} · parent={{ c.parent_id || '—' }}
+            </div>
           </div>
-          <button type="button" class="btn sm" @click="promote(c.id)">Promote</button>
+          <button type="button" class="mh-btn mh-btn--sm" @click="promote(c.id)">Promote</button>
         </li>
       </ul>
-      <p v-if="!candidates.length" class="muted">暂无候选。先跑一次搜索。</p>
+      <p v-if="!candidates.length" class="mh-empty">暂无候选。先跑一次搜索。</p>
     </section>
   </div>
 </template>
 
 <style scoped>
-.mh { max-width: 820px; }
-.mh__head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-.mh__head h2 { margin: 0; font-size: 18px; font-weight: 700; color: var(--color-text-primary); }
-.sub { margin: 4px 0 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.45; }
-.sub code { font-size: 12px; }
-.err { color: var(--color-error); font-size: 13px; }
-.card {
+.mh__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.mh__eyebrow {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--color-text-tertiary); margin-bottom: 6px;
+}
+.mh__title { margin: 0; font-size: 18px; font-weight: 700; color: var(--color-text-primary); }
+.mh__sub { margin: 6px 0 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; max-width: 40rem; }
+.mh__sub code {
+  font-size: 11px; padding: 1px 5px; border-radius: 4px;
+  background: var(--color-surface-container-low); font-family: var(--font-mono);
+}
+.mh-err {
+  padding: 10px 12px; border-radius: 10px; font-size: 13px;
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-error) 20%, transparent);
+}
+
+.mh-card {
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+.mh-card__head {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-container-low);
+}
+.mh-card__head h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+.mh-card__icon { font-size: 18px; color: var(--color-brand); }
+.mh-count {
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--color-surface-container-high); color: var(--color-text-tertiary);
+}
+
+.mh-pills {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px; padding: 14px 16px;
+}
+.mh-pill {
   border: 1px solid var(--color-border);
   border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--color-surface-container-low);
+}
+.mh-pill__label { display: block; font-size: 10px; font-weight: 600; color: var(--color-text-tertiary); margin-bottom: 4px; }
+.mh-pill__value { font-size: 12px; font-weight: 600; color: var(--color-text-primary); font-family: var(--font-mono); word-break: break-all; }
+
+.mh-form {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
   padding: 14px 16px;
-  margin-bottom: 14px;
-  background: var(--color-surface);
 }
-.card h3 { margin: 0 0 10px; font-size: 14px; color: var(--color-text-primary); }
-.card__title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.card__title h3 { margin: 0; }
-.summary { margin: 0 0 8px; padding-left: 18px; font-size: 12px; color: var(--color-text-secondary); }
-.json {
-  margin: 0; padding: 10px; border-radius: 8px; font-size: 11px;
-  background: var(--color-surface-container-low); overflow: auto; max-height: 240px;
-  color: var(--color-text-primary);
+.mh-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--color-text-tertiary); }
+.mh-field input, .mh-field select {
+  border: 1px solid var(--color-border); border-radius: 10px; padding: 7px 10px;
+  background: var(--color-surface-container-lowest, var(--color-surface));
+  color: var(--color-text-primary); font-size: 13px; min-width: 120px; outline: none;
 }
-.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
-.row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--color-text-tertiary); }
-.row input, .row select {
-  border: 1px solid var(--color-border); border-radius: 8px; padding: 6px 8px;
-  background: var(--color-surface); color: var(--color-text-primary); font-size: 13px;
-}
-.btn {
+.mh-field input:focus, .mh-field select:focus { border-color: var(--color-brand); }
+
+.mh-btn {
+  display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid var(--color-border); background: var(--color-surface);
-  border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer;
-  color: var(--color-text-primary);
+  border-radius: 10px; padding: 7px 12px; font-size: 12px; font-weight: 500;
+  cursor: pointer; color: var(--color-text-primary); flex-shrink: 0;
 }
-.btn.primary { background: var(--color-brand); color: #fff; border-color: transparent; }
-.btn.sm { padding: 4px 8px; font-size: 11px; }
-.btn:disabled { opacity: 0.6; cursor: wait; }
-.list { list-style: none; margin: 0; padding: 0; }
-.list__item {
-  display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  padding: 8px 0; border-top: 1px solid var(--color-border); font-size: 12px;
+.mh-btn:hover { background: var(--color-surface-hover); }
+.mh-btn--primary { background: var(--color-brand); color: #fff; border-color: transparent; }
+.mh-btn--primary:hover { opacity: 0.92; background: var(--color-brand); }
+.mh-btn--ghost { background: transparent; }
+.mh-btn--sm { padding: 4px 10px; font-size: 11px; border-radius: 8px; }
+.mh-btn:disabled { opacity: 0.55; cursor: wait; }
+
+.mh-json {
+  margin: 0; padding: 12px 16px; border-top: 1px solid var(--color-border);
+  font-size: 11px; line-height: 1.5; font-family: var(--font-mono);
+  background: var(--color-surface-container-lowest);
+  overflow: auto; max-height: 240px; color: var(--color-text-primary);
 }
-.muted { color: var(--color-text-tertiary); font-size: 12px; }
+.mh-best {
+  margin: 0; padding: 10px 16px; font-size: 12px; color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+.mh-best code { font-family: var(--font-mono); font-size: 11px; }
+.mh-list { list-style: none; margin: 0; padding: 0; }
+.mh-list__item {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 12px 16px; border-top: 1px solid var(--color-border);
+}
+.mh-list__item:first-child { border-top: none; }
+.mh-list__id { font-size: 12px; font-weight: 600; color: var(--color-text-primary); font-family: var(--font-mono); word-break: break-all; }
+.mh-muted { color: var(--color-text-tertiary); font-size: 12px; }
+.mh-empty { margin: 0; padding: 20px 16px; text-align: center; font-size: 12px; color: var(--color-text-tertiary); }
 </style>

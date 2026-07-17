@@ -187,12 +187,16 @@ function getSeverityClass(severity: string): string {
 </script>
 
 <template>
-  <div class="max-w-4xl">
+  <div class="max-w-4xl space-y-5">
     <!-- Header -->
-    <div class="flex items-start justify-between gap-4 mb-5">
-      <div>
-        <h2 class="text-base font-semibold text-[var(--color-text-primary)]">{{ t('settings.diagnostics.title') }}</h2>
-        <p class="text-sm text-[var(--color-text-tertiary)] mt-0.5">{{ t('settings.diagnostics.description') }}</p>
+    <div class="flex items-start justify-between gap-4 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-5 py-5">
+      <div class="min-w-0">
+        <div class="mb-2 text-[11px] font-semibold tracking-wide text-[var(--color-text-tertiary)]">{{ t('settings.nav.system') || '系统' }}</div>
+        <div class="mb-1 flex items-center gap-2">
+          <span class="material-symbols-outlined text-[20px] text-[var(--color-brand)]" style="fontVariationSettings: 'FILL' 1">monitor_heart</span>
+          <h2 class="text-lg font-semibold text-[var(--color-text-primary)]">{{ t('settings.diagnostics.title') }}</h2>
+        </div>
+        <p class="text-sm leading-6 text-[var(--color-text-secondary)]">{{ t('settings.diagnostics.description') }}</p>
       </div>
       <Button variant="secondary" size="sm" :loading="isLoading" @click="load">
         <template #icon>
@@ -203,35 +207,35 @@ function getSeverityClass(severity: string): string {
     </div>
 
     <!-- Metric grid -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-      <div class="border border-[var(--color-border)] rounded-lg px-3 py-2">
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3">
         <div class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.diagnostics.totalSize') }}</div>
-        <div class="text-sm font-semibold text-[var(--color-text-primary)] mt-1">
+        <div class="mt-1.5 text-sm font-semibold text-[var(--color-text-primary)]">
           {{ status ? formatBytes(status.totalBytes) : '-' }}
         </div>
       </div>
-      <div class="border border-[var(--color-border)] rounded-lg px-3 py-2">
+      <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3">
         <div class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.diagnostics.events') }}</div>
-        <div class="text-sm font-semibold text-[var(--color-text-primary)] mt-1">
+        <div class="mt-1.5 text-sm font-semibold text-[var(--color-text-primary)]">
           {{ status ? String(status.eventCount) : '-' }}
         </div>
       </div>
-      <div class="border border-[var(--color-border)] rounded-lg px-3 py-2">
+      <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3">
         <div class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.diagnostics.recentErrors') }}</div>
-        <div class="text-sm font-semibold text-[var(--color-text-primary)] mt-1">
+        <div class="mt-1.5 text-sm font-semibold text-[var(--color-text-primary)]">
           {{ status ? String(status.recentErrorCount) : '-' }}
         </div>
       </div>
-      <div class="border border-[var(--color-border)] rounded-lg px-3 py-2">
+      <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3">
         <div class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.diagnostics.retention') }}</div>
-        <div class="text-sm font-semibold text-[var(--color-text-primary)] mt-1">
+        <div class="mt-1.5 text-sm font-semibold text-[var(--color-text-primary)]">
           {{ status ? t('settings.diagnostics.retentionValue', { days: String(status.retentionDays), size: formatBytes(status.maxBytes) }) : '-' }}
         </div>
       </div>
     </div>
 
     <!-- DoctorPanel -->
-    <div class="mb-5">
+    <div>
       <DoctorPanel />
     </div>
 

@@ -5,6 +5,7 @@
  */
 
 import { ref, onMounted } from 'vue'
+import { getApiUrl } from '../api/client'
 
 const shellPath = ref('/bin/zsh')
 const fontSize = ref(14)
@@ -15,122 +16,172 @@ const scrollbackLines = ref(5000)
 
 async function loadSettings() {
   try {
-    const res = await fetch('/api/settings/user')
+    const res = await fetch(getApiUrl('/api/settings/user'))
     if (res.ok) {
       const data = await res.json()
       if (data.shellPath) shellPath.value = data.shellPath
       if (data.terminalFontSize) fontSize.value = data.terminalFontSize
+      if (data.terminalFontFamily) fontFamily.value = data.terminalFontFamily
       if (data.terminalTheme) terminalTheme.value = data.terminalTheme
+      if (data.cursorStyle) cursorStyle.value = data.cursorStyle
+      if (data.scrollbackLines) scrollbackLines.value = data.scrollbackLines
     }
-  } catch {}
+  } catch { /* ignore */ }
 }
 
-async function saveSetting(key: string, value: any) {
+async function saveSetting(key: string, value: unknown) {
   try {
-    await fetch('/api/settings/user', {
+    await fetch(getApiUrl('/api/settings/user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [key]: value }),
     })
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 onMounted(loadSettings)
 </script>
 
 <template>
-  <div style="max-width: 640px;">
-    <h2 class="text-[16px] font-semibold text-[var(--color-text-primary)] mb-1">终端设置</h2>
-    <p class="text-[13px] text-[var(--color-text-tertiary)] mb-6">Shell、主题、字体偏好</p>
+  <div class="ts mx-auto max-w-2xl space-y-5">
+    <header>
+      <div class="ts__eyebrow">系统</div>
+      <h2 class="ts__title">终端设置</h2>
+      <p class="ts__desc">Shell、主题、字体与滚动缓冲</p>
+    </header>
 
-    <div class="settings-row">
-      <div class="settings-row__info">
-        <div class="settings-row__label">Shell 路径</div>
-        <div class="settings-row__desc">终端使用的 shell</div>
+    <section class="ts-card">
+      <div class="ts-card__head">
+        <span class="material-symbols-outlined ts-card__icon">terminal</span>
+        <h3 class="ts-card__title">Shell 与外观</h3>
       </div>
-      <input
-        v-model="shellPath"
-        type="text"
-        style="width: 200px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 12px; background: var(--color-surface); color: var(--color-text-primary); font-family: var(--font-mono);"
-        @change="saveSetting('shellPath', shellPath)"
-      />
-    </div>
 
-    <div class="settings-row">
-      <div class="settings-row__info">
-        <div class="settings-row__label">主题</div>
-        <div class="settings-row__desc">终端配色方案</div>
+      <div class="ts-row">
+        <div class="ts-row__info">
+          <div class="ts-row__label">Shell 路径</div>
+          <div class="ts-row__desc">终端使用的 shell 可执行文件</div>
+        </div>
+        <input
+          v-model="shellPath"
+          type="text"
+          class="ts-input ts-input--mono"
+          @change="saveSetting('shellPath', shellPath)"
+        />
       </div>
-      <select :value="terminalTheme" @change="terminalTheme = ($event.target as HTMLSelectElement).value; saveSetting('terminalTheme', terminalTheme)" class="settings-select">
-        <option value="dark">深色</option>
-        <option value="light">浅色</option>
-        <option value="sepia">暖色</option>
-      </select>
-    </div>
 
-    <div class="settings-row">
-      <div class="settings-row__info">
-        <div class="settings-row__label">字号</div>
-        <div class="settings-row__desc">{{ fontSize }}px</div>
+      <div class="ts-row">
+        <div class="ts-row__info">
+          <div class="ts-row__label">主题</div>
+          <div class="ts-row__desc">终端配色方案</div>
+        </div>
+        <select
+          :value="terminalTheme"
+          class="ts-select"
+          @change="terminalTheme = ($event.target as HTMLSelectElement).value; saveSetting('terminalTheme', terminalTheme)"
+        >
+          <option value="dark">深色</option>
+          <option value="light">浅色</option>
+          <option value="sepia">暖色</option>
+        </select>
       </div>
-      <input
-        type="range"
-        :value="fontSize"
-        min="10"
-        max="24"
-        step="1"
-        style="width: 160px;"
-        @input="fontSize = Number(($event.target as HTMLInputElement).value); saveSetting('terminalFontSize', fontSize)"
-      />
-    </div>
 
-    <div class="settings-row">
-      <div class="settings-row__info">
-        <div class="settings-row__label">光标样式</div>
-        <div class="settings-row__desc">终端光标外观</div>
+      <div class="ts-row">
+        <div class="ts-row__info">
+          <div class="ts-row__label">字号</div>
+          <div class="ts-row__desc">{{ fontSize }}px</div>
+        </div>
+        <input
+          type="range"
+          class="ts-range"
+          :value="fontSize"
+          min="10"
+          max="24"
+          step="1"
+          @input="fontSize = Number(($event.target as HTMLInputElement).value); saveSetting('terminalFontSize', fontSize)"
+        />
       </div>
-      <select :value="cursorStyle" @change="cursorStyle = ($event.target as HTMLSelectElement).value" class="settings-select">
-        <option value="block">方块</option>
-        <option value="underline">下划线</option>
-        <option value="bar">竖线</option>
-      </select>
-    </div>
 
-    <div class="settings-row">
-      <div class="settings-row__info">
-        <div class="settings-row__label">回滚行数</div>
-        <div class="settings-row__desc">终端保留的历史行数</div>
+      <div class="ts-row">
+        <div class="ts-row__info">
+          <div class="ts-row__label">光标样式</div>
+          <div class="ts-row__desc">终端光标外观</div>
+        </div>
+        <select
+          :value="cursorStyle"
+          class="ts-select"
+          @change="cursorStyle = ($event.target as HTMLSelectElement).value; saveSetting('cursorStyle', cursorStyle)"
+        >
+          <option value="block">方块</option>
+          <option value="underline">下划线</option>
+          <option value="bar">竖线</option>
+        </select>
       </div>
-      <select :value="scrollbackLines" @change="scrollbackLines = Number(($event.target as HTMLSelectElement).value)" class="settings-select">
-        <option :value="1000">1,000</option>
-        <option :value="5000">5,000</option>
-        <option :value="10000">10,000</option>
-        <option :value="50000">50,000</option>
-      </select>
-    </div>
+
+      <div class="ts-row">
+        <div class="ts-row__info">
+          <div class="ts-row__label">回滚行数</div>
+          <div class="ts-row__desc">终端保留的历史行数</div>
+        </div>
+        <select
+          :value="scrollbackLines"
+          class="ts-select"
+          @change="scrollbackLines = Number(($event.target as HTMLSelectElement).value); saveSetting('scrollbackLines', scrollbackLines)"
+        >
+          <option :value="1000">1,000</option>
+          <option :value="5000">5,000</option>
+          <option :value="10000">10,000</option>
+          <option :value="50000">50,000</option>
+        </select>
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--color-border-separator);
+.ts__eyebrow {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--color-text-tertiary); margin-bottom: 6px;
 }
-.settings-row:last-child { border-bottom: none; }
-.settings-row__info { flex: 1; }
-.settings-row__label { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
-.settings-row__desc { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; }
-.settings-select {
-  padding: 6px 10px;
+.ts__title { margin: 0; font-size: 18px; font-weight: 700; color: var(--color-text-primary); }
+.ts__desc { margin: 6px 0 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.45; }
+
+.ts-card {
   border: 1px solid var(--color-border);
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 16px;
   background: var(--color-surface);
+  overflow: hidden;
+}
+.ts-card__head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-container-low);
+}
+.ts-card__icon { font-size: 18px; color: var(--color-brand); }
+.ts-card__title { margin: 0; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+
+.ts-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border-separator, var(--color-border));
+}
+.ts-row:last-child { border-bottom: none; }
+.ts-row__info { flex: 1; min-width: 0; }
+.ts-row__label { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.ts-row__desc { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; }
+
+.ts-select, .ts-input {
+  padding: 7px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  font-size: 12px;
+  background: var(--color-surface-container-lowest, var(--color-surface));
   color: var(--color-text-primary);
   outline: none;
+  min-width: 140px;
 }
-.settings-select:focus { border-color: var(--color-brand); }
+.ts-select:focus, .ts-input:focus { border-color: var(--color-brand); }
+.ts-input { width: 200px; min-width: 160px; }
+.ts-input--mono { font-family: var(--font-mono); font-size: 11px; }
+.ts-range { width: 160px; accent-color: var(--color-brand); }
 </style>

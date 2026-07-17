@@ -227,32 +227,42 @@ onMounted(loadAll)
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl space-y-6 px-6 py-8">
-    <!-- Header -->
-    <header class="flex items-start justify-between">
-      <div>
-        <h2 class="text-[20px] font-semibold tracking-tight text-[var(--color-text-primary)]">记忆</h2>
-        <p class="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+  <div class="mx-auto max-w-4xl space-y-5">
+    <!-- Header card -->
+    <header class="flex items-start justify-between gap-4 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-5 py-5">
+      <div class="min-w-0">
+        <div class="mb-2 text-[11px] font-semibold tracking-wide text-[var(--color-text-tertiary)]">AI</div>
+        <div class="mb-2 flex items-center gap-2">
+          <span class="material-symbols-outlined text-[20px] text-[var(--color-brand)]" style="fontVariationSettings: 'FILL' 1">psychology</span>
+          <h2 class="text-lg font-semibold tracking-tight text-[var(--color-text-primary)]">记忆</h2>
+          <span class="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-text-tertiary)] border border-[var(--color-border)]">
+            {{ totalCount }}
+          </span>
+        </div>
+        <p class="text-sm leading-6 text-[var(--color-text-secondary)]">
           MadCop 记住的关于你的所有信息。共 {{ totalCount }} 条。
         </p>
       </div>
-      <button
-        type="button"
-        role="switch"
-        :aria-checked="learningEnabled"
-        :class="[
-          'relative h-7 w-12 shrink-0 rounded-full transition-colors',
-          learningEnabled ? 'bg-[var(--color-brand)]' : 'bg-[var(--color-border)]',
-        ]"
-        @click="toggleLearning(!learningEnabled)"
-      >
-        <span
+      <div class="flex shrink-0 flex-col items-end gap-1.5">
+        <span class="text-[10px] font-medium text-[var(--color-text-tertiary)]">持续学习</span>
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="learningEnabled"
           :class="[
-            'absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform',
-            learningEnabled ? 'translate-x-5' : 'translate-x-0.5',
+            'relative h-7 w-12 shrink-0 rounded-full transition-colors',
+            learningEnabled ? 'bg-[var(--color-brand)]' : 'bg-[var(--color-border)]',
           ]"
-        ></span>
-      </button>
+          @click="toggleLearning(!learningEnabled)"
+        >
+          <span
+            :class="[
+              'absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform',
+              learningEnabled ? 'translate-x-5' : 'translate-x-0.5',
+            ]"
+          ></span>
+        </button>
+      </div>
     </header>
 
     <!-- Toggle hint -->

@@ -230,22 +230,25 @@ async function simulateRun() {
 
 <template>
   <div class="flex h-full flex-col bg-[var(--color-surface)]">
-    <!-- Header bar: title + graph metrics in monospace -->
-    <header class="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
-      <div>
+    <!-- Header bar: title + graph metrics -->
+    <header class="flex items-center justify-between gap-4 border-b border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-6 py-4">
+      <div class="min-w-0">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">协作网络</div>
         <h1 class="text-[18px] font-semibold tracking-tight text-[var(--color-text-primary)]">Agent</h1>
-        <p class="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">选择图拓扑 · 配置节点 · 执行协作</p>
+        <p class="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">选择图拓扑 · 配置节点 · 执行协作</p>
       </div>
-      <!-- Graph theory metrics, engineer style -->
-      <div
-        class="flex items-center gap-5 text-[11px] tabular-nums text-[var(--color-text-tertiary)]"
-        style="font-family: var(--font-mono)"
-      >
-        <span>{{ graphMetrics.n }} nodes</span>
-        <span>{{ graphMetrics.e }} edges</span>
-        <span>deg {{ graphMetrics.avgDeg }}</span>
+      <div class="flex flex-wrap items-center gap-2 text-[11px] tabular-nums" style="font-family: var(--font-mono)">
+        <span class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[var(--color-text-secondary)]">
+          {{ graphMetrics.n }} nodes
+        </span>
+        <span class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[var(--color-text-secondary)]">
+          {{ graphMetrics.e }} edges
+        </span>
+        <span class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[var(--color-text-secondary)]">
+          deg {{ graphMetrics.avgDeg }}
+        </span>
         <span
-          class="rounded px-1.5 py-0.5"
+          class="rounded-lg px-2.5 py-1 font-semibold"
           :class="graphMetrics.type === 'DAG' ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]' : 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'"
         >
           {{ graphMetrics.type }}
@@ -253,10 +256,10 @@ async function simulateRun() {
       </div>
     </header>
 
-    <!-- Topology selector — horizontal text chips, no icons -->
-    <div class="flex items-center gap-1 border-b border-[var(--color-border-separator)] px-6 py-2.5">
+    <!-- Topology selector -->
+    <div class="flex items-center gap-1.5 border-b border-[var(--color-border-separator)] px-6 py-2.5">
       <span
-        class="mr-3 text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]"
+        class="mr-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]"
         style="font-family: var(--font-mono)"
       >
         拓扑
@@ -266,14 +269,16 @@ async function simulateRun() {
         :key="preset.id"
         type="button"
         :class="[
-          'rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors',
+          'rounded-xl px-3.5 py-1.5 text-[12px] font-medium transition-all',
           activePresetId === preset.id
-            ? 'bg-[var(--color-brand)] text-white'
+            ? 'bg-[var(--color-brand)] text-white shadow-sm'
             : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)] hover:text-[var(--color-text-primary)]',
         ]"
+        :title="preset.desc"
         @click="applyPreset(preset)"
       >
         {{ preset.name }}
+        <span class="ml-1 opacity-60" style="font-family: var(--font-mono); font-size: 10px">{{ preset.nameEn }}</span>
       </button>
     </div>
 
@@ -301,110 +306,107 @@ async function simulateRun() {
       <!-- Node config panel (right) -->
       <aside
         v-if="selectedNode"
-        class="w-[280px] flex-shrink-0 border-l border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-4 overflow-y-auto"
+        class="w-[300px] flex-shrink-0 overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-4"
       >
-        <div class="mb-4">
+        <div class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3">
           <div
-            class="text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]"
+            class="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]"
             style="font-family: var(--font-mono)"
           >
             节点配置
           </div>
-          <div class="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">
+          <div class="mt-1.5 text-[16px] font-semibold text-[var(--color-text-primary)]">
             {{ selectedNode.label }}
           </div>
         </div>
 
-        <!-- Model selector — from user's settings -->
         <div class="mb-5">
           <label class="mb-2 block text-[11px] font-medium text-[var(--color-text-secondary)]">模型（来自设置）</label>
-          <div class="space-y-1">
-            <!-- User's configured models from Settings -->
+          <div class="space-y-1.5">
             <button
               v-for="modelName in userConfiguredModels"
               :key="modelName"
               type="button"
               :class="[
-                'flex w-full items-center rounded-lg border px-3 py-2 text-left transition-colors',
+                'flex w-full items-center rounded-xl border px-3 py-2.5 text-left transition-colors',
                 (selectedNode.detail || '') === modelName
-                  ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5'
-                  : 'border-[var(--color-border)] hover:border-[var(--color-border-focus)]',
+                  ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/5 shadow-sm'
+                  : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-border-focus)]',
               ]"
               @click="setNodeModel(selectedNode.id, modelName)"
             >
               <span class="text-[12px] font-medium text-[var(--color-text-primary)]">{{ modelName }}</span>
             </button>
-            <!-- Empty state: prompt to configure in Settings -->
             <div
               v-if="userConfiguredModels.length === 0"
-              class="rounded-lg border border-dashed border-[var(--color-border)] p-3 text-center"
+              class="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-center"
             >
-              <div class="text-[12px] text-[var(--color-text-secondary)]">尚未配置模型</div>
+              <div class="text-[12px] font-medium text-[var(--color-text-secondary)]">尚未配置模型</div>
               <div class="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
-                请在 <span style="font-family: var(--font-mono)">设置</span> 中添加
+                请在设置 → 模型供应商中添加
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Node info in monospace -->
         <div
-          class="rounded-lg bg-[var(--color-surface)] p-3 text-[10px] text-[var(--color-text-tertiary)]"
+          class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-[10px] text-[var(--color-text-tertiary)]"
           style="font-family: var(--font-mono)"
         >
-          <div class="flex justify-between py-0.5">
+          <div class="flex justify-between py-1">
             <span>id</span>
-            <span>{{ selectedNode.id }}</span>
+            <span class="text-[var(--color-text-secondary)]">{{ selectedNode.id }}</span>
           </div>
-          <div class="flex justify-between py-0.5">
+          <div class="flex justify-between py-1">
             <span>status</span>
-            <span>{{ selectedNode.status || 'idle' }}</span>
+            <span class="text-[var(--color-text-secondary)]">{{ selectedNode.status || 'idle' }}</span>
           </div>
-          <div class="flex justify-between py-0.5">
+          <div class="flex justify-between py-1">
             <span>pos</span>
-            <span>{{ Math.round(selectedNode.x) }}, {{ Math.round(selectedNode.y) }}</span>
+            <span class="text-[var(--color-text-secondary)]">{{ Math.round(selectedNode.x) }}, {{ Math.round(selectedNode.y) }}</span>
           </div>
         </div>
       </aside>
 
-      <!-- Empty hint when no node selected -->
       <aside
         v-else
-        class="w-[280px] flex-shrink-0 border-l border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-4"
+        class="w-[300px] flex-shrink-0 border-l border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-4"
       >
-        <div class="flex h-full flex-col items-center justify-center text-center">
-          <div class="text-[12px] text-[var(--color-text-tertiary)]">点击图中的节点进行配置</div>
+        <div class="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/50 text-center">
+          <span class="material-symbols-outlined mb-2 text-[28px] text-[var(--color-text-tertiary)] opacity-50">touch_app</span>
+          <div class="text-[12px] text-[var(--color-text-secondary)]">点击图中的节点进行配置</div>
           <div
             class="mt-2 text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-tertiary)] opacity-50"
             style="font-family: var(--font-mono)"
           >
-            select a node ○
+            select a node
           </div>
         </div>
       </aside>
     </div>
 
-    <!-- Bottom bar: task input + run button -->
-    <footer class="border-t border-[var(--color-border)] px-6 py-3">
+    <!-- Bottom bar -->
+    <footer class="border-t border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-6 py-3.5">
       <div class="flex items-center gap-3">
         <input
           v-model="runTaskInput"
           :disabled="isRunning"
           placeholder="输入要让 agent 协作完成的任务…"
-          class="flex-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-brand)]"
+          class="flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-2.5 text-[13px] text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-brand)]"
           @keydown.enter="simulateRun"
         />
         <button
           type="button"
           :disabled="isRunning"
           :class="[
-            'rounded-[var(--radius-md)] px-6 py-2 text-[13px] font-medium transition-all',
+            'inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-[13px] font-semibold transition-all',
             isRunning
               ? 'cursor-not-allowed bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'
-              : 'bg-[var(--color-brand)] text-[var(--color-on-primary)] hover:opacity-90',
+              : 'bg-[var(--color-brand)] text-white shadow-sm hover:opacity-90',
           ]"
           @click="simulateRun"
         >
+          <span class="material-symbols-outlined text-[16px]">{{ isRunning ? 'progress_activity' : 'play_arrow' }}</span>
           {{ isRunning ? '执行中…' : '执行协作' }}
         </button>
       </div>
