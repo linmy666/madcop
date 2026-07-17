@@ -1909,6 +1909,19 @@ def create_app() -> FastAPI:
                     _sse_save_assistant(_answer or "", body.model or "")
                 except Exception as e:
                     logger.warning("SSE: agent-mode persist assistant failed: %s", e)
+                # Auto-distill teach-me exchanges (parity with simple chat)
+                try:
+                    from madcop.memory.skill_distill import distill_skill_from_exchange
+                    _uq = body.messages[-1].content if body.messages else ""
+                    if isinstance(_uq, list):
+                        _uq = " ".join(
+                            str(b.get("text", b) if isinstance(b, dict) else b) for b in _uq
+                        )
+                    _skill = distill_skill_from_exchange(str(_uq or ""), str(_answer or ""))
+                    if _skill:
+                        yield f"data: {json.dumps({'type': 'skill_distilled', 'skillName': _skill, 'message': f'Auto-distilled SKILL: {_skill}'}, ensure_ascii=False)}\n\n"
+                except Exception as e:
+                    logger.debug("SSE deep skill distill: %s", e)
                 yield f"data: {json.dumps({'type': 'done', 'model': body.model or ''}, ensure_ascii=False)}\n\n"
                 return
 
