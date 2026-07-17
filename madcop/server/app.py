@@ -1644,20 +1644,36 @@ def create_app() -> FastAPI:
         # If the conversation is too long, summarise the oldest messages
         # into a single condensed system message before sending to the
         # LLM. Cheap truncate fallback if no LLM client is available.
+        # Gated / thresholded by active Meta-Harness task knobs.
         from madcop.memory import CompactionConfig, compact_messages
         try:
-            messages = compact_messages(
-                messages,
-                CompactionConfig(max_tokens=8000, keep_recent=8,
-                                 min_age_to_summarise=4,
-                                 summary_max_tokens=400),
-                llm_client=client,
-            )
+            _mh_compact = True
+            _mh_threshold = 40
+            try:
+                from madcop.meta_harness import load_active_harness as _mh_c
+                _h_c = _mh_c()
+                _mh_compact = bool(_h_c.enable_context_compact)
+                _mh_threshold = int(_h_c.compact_threshold_messages or 40)
+            except Exception:
+                pass
+            if _mh_compact and len(messages) >= _mh_threshold:
+                messages = compact_messages(
+                    messages,
+                    CompactionConfig(max_tokens=8000, keep_recent=8,
+                                     min_age_to_summarise=4,
+                                     summary_max_tokens=400),
+                    llm_client=client,
+                )
         except Exception as e:
             logger.warning("chat: context compaction failed: %s", e)
 
         registry = default_registry(store=get_memory_store(), workspace_dir=_ws_state[0])
         tool_schemas = registry.openai_schemas()
+        try:
+            from madcop.meta_harness import load_active_harness as _load_mh
+            tool_schemas = _load_mh().filter_tool_schemas(tool_schemas)
+        except Exception as _mh_e:
+            logger.debug("meta-harness tool filter: %s", _mh_e)
 
         async def event_stream() -> AsyncIterator[str]:
             # -- Create trace root node ------------------------------ #
@@ -1710,6 +1726,13 @@ def create_app() -> FastAPI:
             # frontend chat stream needs no special-casing. 'auto'/None
             # falls through to the normal Phase 0/1 flow below.
             _agent_mode = (body.agent_mode or "auto").lower()
+            try:
+                from madcop.meta_harness import load_active_harness as _mh_deep
+                _hd = _mh_deep()
+                if _agent_mode == "deep" and not _hd.enable_deep_mode:
+                    _agent_mode = "standard"
+            except Exception:
+                pass
             if _agent_mode in ("quick", "standard", "deep"):
                 from madcop.agent_network.task_router import route_task, get_mode_config
                 _task_text = body.messages[-1].content if body.messages else ""
@@ -2001,7 +2024,14 @@ def create_app() -> FastAPI:
 
             try:
                 # -- Phase 0: Plan-and-Execute (if plan_mode) ---------- #
-                if body.plan_mode:
+                _plan_ok = bool(getattr(body, "plan_mode", False))
+                try:
+                    from madcop.meta_harness import load_active_harness as _mh_plan
+                    if not _mh_plan().enable_plan_mode:
+                        _plan_ok = False
+                except Exception:
+                    pass
+                if _plan_ok:
                     from madcop.workflow.planner import generate_plan, verify_step, StepStatus
                     from madcop.workflow.planner import execute_step as _exec_step
                     _task = body.messages[-1].content if body.messages else ""
@@ -2908,6 +2938,11 @@ def create_app() -> FastAPI:
                     client = _get_client()
                     registry = default_registry(store=get_memory_store(), workspace_dir=_ws_state[0])
                     tool_schemas = registry.openai_schemas()
+                    try:
+                        from madcop.meta_harness import load_active_harness as _load_mh
+                        tool_schemas = _load_mh().filter_tool_schemas(tool_schemas)
+                    except Exception as _mh_e:
+                        logger.debug("meta-harness tool filter ws: %s", _mh_e)
                     # Annotate each tool with parallel_tool_calls: False
                     # so the model only emits ONE call per request.
                     for ts in (tool_schemas or []):

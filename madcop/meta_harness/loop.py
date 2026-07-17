@@ -1,16 +1,12 @@
-"""Outer Meta-Harness loop (Phase 0: local search proposer).
-
-Phase 1 will swap ``propose_local`` for a coding-agent proposer that
-``grep``s the archive filesystem (paper-style).
-"""
+"""Outer Meta-Harness loop with pluggable proposers."""
 from __future__ import annotations
 
-import random
 from dataclasses import dataclass
 from typing import Any
 
 from madcop.meta_harness.archive import HarnessArchive
 from madcop.meta_harness.evaluate import EvalArtifacts, evaluate_harness
+from madcop.meta_harness.proposer import Proposer, get_proposer
 from madcop.meta_harness.task_harness import (
     ChatTaskHarness,
     load_active_harness,
@@ -24,33 +20,15 @@ class LoopResult:
     best: ChatTaskHarness
     best_pass_rate: float
     history: list[dict[str, Any]]
+    proposer: str = "local"
 
 
-def propose_local(parent: ChatTaskHarness, rng: random.Random | None = None) -> ChatTaskHarness:
-    """Simple random walk over numeric/bool knobs (cheap offline proposer)."""
-    rng = rng or random.Random()
-    child = parent.mutate()
-    axis = rng.choice(
-        [
-            "profile_budget",
-            "relevant_budget",
-            "preferences_budget",
-            "skills_budget",
-            "inject_skills",
-            "max_skills",
-        ]
-    )
-    if axis == "inject_skills":
-        child.inject_skills = not parent.inject_skills
-    elif axis == "max_skills":
-        child.max_skills = max(0, min(30, parent.max_skills + rng.choice([-3, -1, 1, 3])))
-    else:
-        delta = rng.choice([-200, -100, 100, 200])
-        cur = getattr(parent, axis)
-        setattr(child, axis, max(0, min(4000, int(cur) + delta)))
-    child.name = f"mut_{axis}"
-    child.notes = f"local mutate {axis} from {parent.name}"
-    return child
+# Back-compat for tests that import propose_local
+def propose_local(parent: ChatTaskHarness, rng=None) -> ChatTaskHarness:
+    from madcop.meta_harness.proposer import LocalRandomProposer
+    import random
+    p = LocalRandomProposer(rng or random.Random())
+    return p.propose(HarnessArchive(), parent)
 
 
 class MetaHarnessLoop:
@@ -60,10 +38,18 @@ class MetaHarnessLoop:
         *,
         seed: int = 0,
         promote_best: bool = False,
+        proposer: str | Proposer = "local",
+        suite: str = "smoke",
     ) -> None:
         self.archive = archive or HarnessArchive()
-        self.rng = random.Random(seed)
         self.promote_best = promote_best
+        self.suite = suite
+        if isinstance(proposer, str):
+            self.proposer_name = proposer
+            self._proposer: Proposer = get_proposer(proposer, seed=seed)
+        else:
+            self.proposer_name = "custom"
+            self._proposer = proposer
 
     def run(
         self,
@@ -78,10 +64,9 @@ class MetaHarnessLoop:
         def _eval(h: ChatTaskHarness) -> EvalArtifacts:
             if live_llm:
                 from madcop.meta_harness.evaluate import evaluate_with_live_llm
-                return evaluate_with_live_llm(h)
-            return evaluate_harness(h)
+                return evaluate_with_live_llm(h, suite=self.suite)
+            return evaluate_harness(h, suite=self.suite)
 
-        # seed evaluation
         art = _eval(current)
         rec = self.archive.write(
             current,
@@ -94,10 +79,18 @@ class MetaHarnessLoop:
             name_suffix=current.name or "seed",
         )
         best_h, best_rate = current, art.report.pass_rate
-        history.append({"id": rec.id, "pass_rate": best_rate, "name": current.name})
+        history.append({
+            "id": rec.id,
+            "pass_rate": best_rate,
+            "name": current.name,
+            "parent_id": None,
+        })
 
-        for i in range(iterations):
-            child = propose_local(best_h, self.rng)
+        for _i in range(iterations):
+            parent_id = history[-1]["id"]
+            child = self._proposer.propose(
+                self.archive, best_h, parent_id=parent_id
+            )
             art = _eval(child)
             rec = self.archive.write(
                 child,
@@ -105,12 +98,17 @@ class MetaHarnessLoop:
                 total=art.report.total,
                 passed=art.report.passed,
                 failed=art.report.failed,
-                parent_id=history[-1]["id"],
+                parent_id=parent_id,
                 notes=child.notes,
                 case_traces=art.case_traces,
                 name_suffix=child.name,
             )
-            history.append({"id": rec.id, "pass_rate": art.report.pass_rate, "name": child.name})
+            history.append({
+                "id": rec.id,
+                "pass_rate": art.report.pass_rate,
+                "name": child.name,
+                "parent_id": parent_id,
+            })
             if art.report.pass_rate >= best_rate:
                 best_h, best_rate = child, art.report.pass_rate
 
@@ -122,4 +120,5 @@ class MetaHarnessLoop:
             best=best_h,
             best_pass_rate=best_rate,
             history=history,
+            proposer=self.proposer_name,
         )

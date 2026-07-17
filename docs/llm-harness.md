@@ -75,19 +75,40 @@ msg = user_message_with_images(
 | Layer | Module | Meaning |
 |---|---|---|
 | **Provider harness** | `madcop/llm/harness.py` | API field differences across vendors |
-| **Task harness (Meta-Harness)** | `madcop/meta_harness/` | What chat injects: memory budgets, skills, addendum |
+| **Task harness (Meta-Harness)** | `madcop/meta_harness/` | Memory budgets, skills, tools, deep/plan/compact |
 
-Active task harness: `~/.madcop/meta_harness/active.json` (used by
-`_build_memory_system_prompt`). Search archive: `~/.madcop/meta_harness/archive/`.
+Active: `~/.madcop/meta_harness/active.json` (chat system prompt + tool filter +
+compact/deep/plan gates). Archive: `~/.madcop/meta_harness/archive/`.
+
+### Phases
+
+| Phase | Capability |
+|---|---|
+| 0 | Knobs + archive + local proposer |
+| 1 | Suites: `smoke` / `full` (lang, distill, tools, coding side-effects) |
+| 2 | Proposers: `local` \| `code_edit` (archive-aware) \| `mock` |
+| 3 | Expanded axes applied live (tools allowlist/max, deep/plan/compact) |
+| 4 | HTTP `/api/meta-harness/*` + Settings → Meta-Harness UI |
+
+### CLI
 
 ```bash
 python -m madcop.meta_harness status
-python -m madcop.meta_harness run --iterations 5 --promote
+python -m madcop.meta_harness suites
 python -m madcop.meta_harness axes
+python -m madcop.meta_harness run --iterations 3 --suite full --proposer code_edit --promote
+python -m madcop.meta_harness promote            # best
+python -m madcop.meta_harness promote --id 0002  # by id prefix
 ```
 
-See paper: Meta-Harness (arXiv:2603.28052). Phase 0 = knob search + filesystem
-archive; Phase 1+ = coding-agent proposer over full traces.
+### HTTP
+
+- `GET /api/meta-harness/status` — active + best + axes
+- `GET /api/meta-harness/candidates`
+- `POST /api/meta-harness/promote` body `{ "id"?: string }`
+- `POST /api/meta-harness/run` body `{ iterations, suite, proposer, promote }`
+
+Paper: Meta-Harness (arXiv:2603.28052).
 
 ## Capabilities cache
 

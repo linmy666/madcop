@@ -21,6 +21,7 @@ const ComputerUseSettingsPage = defineAsyncComponent(() => import('./ComputerUse
 const ActivitySettingsPage = defineAsyncComponent(() => import('./ActivitySettings.vue'))
 const DiagnosticsSettingsPage = defineAsyncComponent(() => import('./DiagnosticsSettings.vue'))
 const AboutSettingsPage = defineAsyncComponent(() => import('./AboutSettings.vue'))
+const MetaHarnessSettings = defineAsyncComponent(() => import('./settings/MetaHarnessSettings.vue'))
 
 type SettingsTab =
   | 'providers'    // 模型供应商
@@ -29,10 +30,12 @@ type SettingsTab =
   | 'memory'       // 记忆
   | 'plugins'      // 插件
   | 'mcp'          // MCP 工具
+  | 'metaHarness'  // Meta-Harness 任务外壳
   | 'terminal'     // 终端
   | 'activity'     // 活动统计
   | 'diagnostics'  // 诊断
   | 'about'        // 关于（新）
+  | string
 
 const tabStore = useTabStore()
 const sessionStore = useSessionStore()
@@ -55,6 +58,7 @@ const navItems: NavItem[] = [
   { id: 'memory',      label: '记忆',       icon: 'psychology', group: 'ai' },
   { id: 'mcp',         label: 'MCP 工具',   icon: 'build',   group: 'ai' },
   { id: 'skills',      label: '技能构建',  icon: 'auto_awesome', group: 'ai' },
+  { id: 'metaHarness', label: 'Meta-Harness', icon: 'science', group: 'ai' },
   { id: 'adapters',    label: '适配器',    icon: 'chat',     group: 'ai' },
   { id: 'h5Access',    label: 'H5 访问',   icon: 'qr_code_2', group: 'ai' },
   // System
@@ -470,6 +474,10 @@ onMounted(loadLearning)
           <AgentsSettingsPage />
         </div>
         <!-- ═══ Skills ═══ -->
+        <div v-else-if="activeTab === 'metaHarness'" class="settings-section settings-section--fullbleed">
+          <MetaHarnessSettings />
+        </div>
+
         <div v-else-if="activeTab === 'skills'" class="settings-section settings-section--fullbleed">
           <SkillSettingsPage />
         </div>

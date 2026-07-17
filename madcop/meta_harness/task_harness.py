@@ -1,8 +1,4 @@
-"""Searchable chat/agent task harness knobs.
-
-These parameters currently live as magic numbers in ``app._build_memory_system_prompt``.
-Making them a dataclass is the first step toward Meta-Harness-style search.
-"""
+"""Searchable chat/agent task harness knobs (Meta-Harness search space)."""
 from __future__ import annotations
 
 import json
@@ -19,15 +15,12 @@ _ACTIVE_PATH = _ROOT / "active.json"
 
 @dataclass
 class ChatTaskHarness:
-    """Task harness for MadCop chat memory + skill injection.
+    """Task harness for MadCop chat + agent construction.
 
-    Optimizable axes (Meta-Harness search space for chat domain):
-      - memory section token budgets
-      - whether / how many skills to inject
-      - identity / language policy flags (conservative defaults)
+    Phase 0–3 axes: memory budgets, skills, tools, deep/plan/compact flags.
     """
 
-    # Memory injection budgets (approx token caps in _truncate_to_budget)
+    # Memory injection budgets (approx token caps)
     profile_budget: int = 800
     relevant_budget: int = 800
     preferences_budget: int = 400
@@ -37,7 +30,18 @@ class ChatTaskHarness:
     inject_skills: bool = True
     max_skills: int = 10
 
-    # Optional short system addendum (free-form; proposer can write this)
+    # Tool policy (applied when building openai_schemas for chat)
+    max_tools: int = 64
+    tool_allowlist: tuple[str, ...] = ()  # empty = all tools
+    enable_tools: bool = True
+
+    # Agent / deep-mode style flags
+    enable_deep_mode: bool = True
+    enable_plan_mode: bool = True
+    enable_context_compact: bool = True
+    compact_threshold_messages: int = 40
+
+    # Optional short system addendum (proposer can write this)
     system_addendum: str = ""
 
     # Metadata
@@ -45,7 +49,10 @@ class ChatTaskHarness:
     notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        # JSON-friendly
+        d["tool_allowlist"] = list(self.tool_allowlist)
+        return d
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> ChatTaskHarness:
@@ -53,12 +60,32 @@ class ChatTaskHarness:
             return cls()
         known = {f.name for f in fields(cls)}
         kwargs = {k: v for k, v in data.items() if k in known}
+        if "tool_allowlist" in kwargs and kwargs["tool_allowlist"] is not None:
+            kwargs["tool_allowlist"] = tuple(kwargs["tool_allowlist"])
         return cls(**kwargs)
 
     def mutate(self, **overrides: Any) -> ChatTaskHarness:
         d = self.to_dict()
         d.update(overrides)
         return ChatTaskHarness.from_dict(d)
+
+    def filter_tool_schemas(self, schemas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Apply enable_tools / allowlist / max_tools to OpenAI-style tool schemas."""
+        if not self.enable_tools:
+            return []
+        out = list(schemas or [])
+        if self.tool_allowlist:
+            allow = set(self.tool_allowlist)
+            filtered = []
+            for s in out:
+                fn = s.get("function") or s
+                name = fn.get("name") or s.get("name") or ""
+                if name in allow:
+                    filtered.append(s)
+            out = filtered
+        if self.max_tools >= 0:
+            out = out[: int(self.max_tools)]
+        return out
 
 
 def ensure_root() -> Path:
@@ -95,5 +122,12 @@ def list_knob_axes() -> list[dict[str, Any]]:
         {"name": "skills_budget", "type": "int", "min": 0, "max": 1500, "step": 50},
         {"name": "inject_skills", "type": "bool"},
         {"name": "max_skills", "type": "int", "min": 0, "max": 30, "step": 1},
+        {"name": "max_tools", "type": "int", "min": 0, "max": 128, "step": 1},
+        {"name": "enable_tools", "type": "bool"},
+        {"name": "tool_allowlist", "type": "list[str]"},
+        {"name": "enable_deep_mode", "type": "bool"},
+        {"name": "enable_plan_mode", "type": "bool"},
+        {"name": "enable_context_compact", "type": "bool"},
+        {"name": "compact_threshold_messages", "type": "int", "min": 8, "max": 200, "step": 4},
         {"name": "system_addendum", "type": "str"},
     ]
