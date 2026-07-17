@@ -29,6 +29,58 @@ onMounted(() => {
     paletteOpen.value = !paletteOpen.value
   })
 })
+
+// Global keyboard shortcuts (Cursor/Claude Code parity):
+//   ⌘/Ctrl+B  → toggle sidebar
+//   Esc       → close command palette / panels
+//   ⌘/Ctrl+N  → new chat
+// Don't interfere with typing — skip when the target is an input,
+// textarea, or contenteditable element (except for Esc).
+const _isTypingTarget = (el: EventTarget | null) => {
+  if (!(el instanceof HTMLElement)) return false
+  const tag = el.tagName.toLowerCase()
+  return tag === 'input' || tag === 'textarea' || el.isContentEditable
+}
+
+function _handleGlobalKeydown(e: KeyboardEvent) {
+  const mod = e.metaKey || e.ctrlKey
+  // Esc — always works, even in inputs (closes palette/panels).
+  if (e.key === 'Escape') {
+    if (paletteOpen.value) {
+      paletteOpen.value = false
+      e.preventDefault()
+      return
+    }
+    // Dispatch a global esc event so panels (workbench, plan sidebar)
+    // can close themselves.
+    window.dispatchEvent(new CustomEvent('madcop:global-escape'))
+    return
+  }
+  // Shortcuts below are blocked while typing in inputs.
+  if (_isTypingTarget(e.target)) return
+  if (mod && e.key.toLowerCase() === 'b') {
+    e.preventDefault()
+    sidebarOpen.value = !sidebarOpen.value
+    return
+  }
+  if (mod && e.key.toLowerCase() === 'n') {
+    e.preventDefault()
+    // Trigger new-session via the session store.
+    try {
+      const sessionStore = useSessionStore()
+      sessionStore.createSession()
+    } catch {}
+    return
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', _handleGlobalKeydown)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', _handleGlobalKeydown)
+})
+
 const startupError = ref<string | null>(null)
 const sidebarOpen = ref(true)
 

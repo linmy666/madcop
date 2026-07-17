@@ -517,6 +517,21 @@ export const useChatStore = defineStore('chat', {
           // the assistant message in the timeline.
           let assistantPushed = false
           let assistantMsgObj: any = null
+          // Throttle UI updates during streaming: accumulate tokens and
+          // flush to assistantMsgObj.content at most once per animation
+          // frame (~60fps). Without this, every token triggers a full
+          // markdown re-parse in MessageList, causing jank on long replies.
+          let _pendingFlush = false
+          const _flushContent = () => {
+            _pendingFlush = false
+            if (assistantMsgObj) assistantMsgObj.content = assistantMsg
+          }
+          const _scheduleFlush = () => {
+            if (!_pendingFlush) {
+              _pendingFlush = true
+              requestAnimationFrame(_flushContent)
+            }
+          }
 
           const ensureAssistantPushed = () => {
             if (assistantPushed) return
@@ -551,7 +566,9 @@ export const useChatStore = defineStore('chat', {
                     assistantMsg += event.content
                     // Update the placeholder message via the cached reference
                     // (avoids an O(n) Array.find on every streamed token).
-                    if (assistantMsgObj) assistantMsgObj.content = assistantMsg
+                    // Throttled via requestAnimationFrame so we don't trigger
+                    // a markdown re-parse per token on long replies.
+                    _scheduleFlush()
                     // The final answer is now streaming in. Switch out of the
                     // "thinking" state so the hand-drawn planning animation is
                     // hidden and the text trickles in live (instead of popping
@@ -564,7 +581,9 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'done') {
                     session.chatState = 'idle'
-                    // Update the final message
+                    // Cancel any pending throttled flush and write the
+                    // final content immediately so nothing is lost.
+                    _pendingFlush = false
                     if (assistantMsgObj) {
                       assistantMsgObj.content = assistantMsg
                       assistantMsgObj.isStreaming = false

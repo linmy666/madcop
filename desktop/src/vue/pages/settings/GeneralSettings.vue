@@ -5,6 +5,7 @@
  */
 
 import { ref, onMounted, computed } from 'vue'
+import { useAppearance } from '../../composables/useAppearance'
 
 const t = (key: string) => key
 
@@ -18,13 +19,26 @@ const uiZoom = ref(1.0)
 const webSearchEnabled = ref(true)
 const networkTimeout = ref(60)
 
+// Appearance composable — the theme select below drives this so
+// changing light/dark/sepia applies instantly (previously it only
+// saved to the backend but never touched data-madcop-theme).
+const { appearance, setAppearance } = useAppearance()
+
 async function loadSettings() {
   try {
     const res = await fetch('/api/settings/user')
     if (res.ok) {
       const data = await res.json()
       if (data.locale) locale.value = data.locale
-      if (data.theme) theme.value = data.theme
+      if (data.theme) {
+        theme.value = data.theme
+        // Sync the appearance composable so the <html> data-madcop-theme
+        // attribute matches the persisted value.
+        setAppearance(data.theme as 'light' | 'dark' | 'sepia')
+      } else {
+        // No persisted theme — sync from the composable's current value.
+        theme.value = appearance.value
+      }
       if (data.chatSendBehavior) chatSendBehavior.value = data.chatSendBehavior
       if (data.responseLanguage) responseLanguage.value = data.responseLanguage
       if (data.uiZoom) uiZoom.value = data.uiZoom
@@ -56,8 +70,12 @@ function onSendBehaviorChange(e: Event) {
   saveSetting('chatSendBehavior', chatSendBehavior.value)
 }
 function onThemeChange(e: Event) {
-  theme.value = (e.target as HTMLSelectElement).value
-  saveSetting('theme', theme.value)
+  const v = (e.target as HTMLSelectElement).value as 'light' | 'dark' | 'sepia'
+  theme.value = v
+  // Apply the theme immediately via the appearance composable so the
+  // UI updates without a restart. Also persist to backend for sync.
+  setAppearance(v)
+  saveSetting('theme', v)
 }
 
 onMounted(loadSettings)
