@@ -1219,12 +1219,12 @@ const projectMenuData = computed(() => {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.knowledge') }}</span>
       </button>
-      <!-- Agent hub -->
+      <!-- Agent hub: multi-agent topology / collaboration graph -->
       <button
         type="button"
-        :class="primaryNavClass(activeTabType === 'workflows')"
+        :class="primaryNavClass(activeTabType === 'agents')"
         :aria-label="t('sidebar.agentHub')"
-        @click="() => { tabStore.openWorkflowsTab(); closeMobileDrawer() }"
+        @click="() => { tabStore.openAgentHubTab(); closeMobileDrawer() }"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/><line x1="6.5" y1="6.5" x2="10" y2="10"/><line x1="17.5" y1="6.5" x2="14" y2="10"/><line x1="6.5" y1="17.5" x2="10" y2="14"/><line x1="17.5" y1="17.5" x2="14" y2="14"/></svg>
         <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.agentHub') }}</span>
@@ -1265,7 +1265,8 @@ const projectMenuData = computed(() => {
         aria-hidden="true"
       ></div>
 
-      <!-- Secondary items — shown when expanded AND navMoreOpen is true -->
+      <!-- Secondary items — shown when expanded AND navMoreOpen is true.
+           Agent topology lives in primary nav; here: workflows + tools. -->
       <template v-if="expanded && navMoreOpen">
 
         <button
@@ -1282,7 +1283,7 @@ const projectMenuData = computed(() => {
           @click="() => { tabStore.openWorkflowsTab(); closeMobileDrawer() }"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 opacity-60"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-          <span class="flex-1 text-left text-[12px]">{{ t('sidebar.agentHub') }}</span>
+          <span class="flex-1 text-left text-[12px]">{{ t('sidebar.workflows') }}</span>
         </button>
         <button
           type="button"
@@ -1294,7 +1295,7 @@ const projectMenuData = computed(() => {
         </button>
         <button
           type="button"
-          :class="secondaryNavClass(false)"
+          :class="secondaryNavClass(activeTabType === 'skill-builder')"
           @click="() => { tabStore.openSkillBuilderTab(); closeMobileDrawer() }"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 opacity-60"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>

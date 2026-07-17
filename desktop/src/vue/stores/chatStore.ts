@@ -143,7 +143,7 @@ export type PerSessionState = {
   activeThinkingId: string | null
   /** Plan-and-Execute mode toggle (per-session) */
   planModeEnabled: boolean
-  /** Plan-and-Execute state */
+  /** Plan-and-Execute / deep-mode state */
   plan: {
     goal: string
     steps: Array<{
@@ -161,6 +161,25 @@ export type PerSessionState = {
     completed_steps: number
     failed_steps: number
     status: string
+    /** Deep-mode scenario classification (optional) */
+    category?: string
+    category_label?: string
+    category_label_en?: string
+    specialists?: string[]
+    roster_labels?: string[]
+    classification_reason?: string
+    matched_signals?: string[]
+    mode?: string
+  } | null
+  /** Last deep-mode route detail (from SSE deep_route) */
+  deepRoute?: {
+    category: string
+    specialists: string[]
+    label_zh: string
+    label_en: string
+    reason?: string
+    pipeline?: string[]
+    matched?: string[]
   } | null
   pendingPermission: {
     requestId: string
@@ -223,6 +242,7 @@ function createDefaultSessionState(): PerSessionState {
     activeThinkingId: null,
     planModeEnabled: true,  // Plan-and-Execute mode default ON
     plan: null,
+    deepRoute: null,
     pendingPermission: null,
     pendingComputerUsePermission: null,
     pendingClarification: null,
@@ -393,6 +413,8 @@ export const useChatStore = defineStore('chat', {
       // message's completed plan while the new one is being generated.
       // The new SSE stream will populate fresh plan data.
       session.plan = null
+      session.deepRoute = null
+      session.agentStreams = {}
 
       // Abort any in-flight request for this session so stale SSE events
       // from the old message can't overwrite the new plan / messages.
@@ -705,9 +727,23 @@ export const useChatStore = defineStore('chat', {
                       const ss = useSessionStore()
                       ss.updateSessionTitle(sessionId, event.title)
                     } catch {}
+                  } else if (event.type === 'deep_route' && event.route) {
+                    // Deep mode: scenario → specialist roster preview
+                    this.sessions[sessionId].deepRoute = event.route
                   } else if (event.type === 'plan' && event.plan) {
-                    // Plan-and-Execute: full plan update
+                    // Plan-and-Execute / deep multi-agent: full plan update
                     this.sessions[sessionId].plan = event.plan
+                    if (event.plan.category) {
+                      this.sessions[sessionId].deepRoute = {
+                        category: event.plan.category,
+                        specialists: event.plan.specialists || [],
+                        label_zh: event.plan.category_label || event.plan.category,
+                        label_en: event.plan.category_label_en || event.plan.category,
+                        reason: event.plan.classification_reason,
+                        pipeline: event.plan.roster_labels,
+                        matched: event.plan.matched_signals,
+                      }
+                    }
                   } else if (event.type === 'plan_step' && event.step) {
                     // Plan-and-Execute: single step status update
                     const plan = this.sessions[sessionId].plan

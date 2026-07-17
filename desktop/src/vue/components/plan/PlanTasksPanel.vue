@@ -21,6 +21,14 @@ export interface PlanData {
   completed_steps: number
   failed_steps: number
   status: string
+  category?: string
+  category_label?: string
+  category_label_en?: string
+  specialists?: string[]
+  roster_labels?: string[]
+  classification_reason?: string
+  matched_signals?: string[]
+  mode?: string
 }
 
 const props = defineProps<{
@@ -63,6 +71,17 @@ function truncate(s: string | null, max = 36): string {
           <span class="tp__dot-pulse"></span>
         </span>
       </div>
+      <!-- Deep-mode scenario badge -->
+      <div v-if="plan?.category_label || plan?.category" class="tp__route">
+        <span class="tp__route-badge">{{ plan.category_label || plan.category }}</span>
+        <span v-if="plan.roster_labels?.length" class="tp__route-roster">
+          {{ plan.roster_labels.join(' → ') }}
+        </span>
+        <span v-else-if="plan.specialists?.length" class="tp__route-roster">
+          规划 → {{ plan.specialists.join(' · ') }} → 综合
+        </span>
+      </div>
+      <p v-if="plan?.classification_reason" class="tp__route-reason">{{ plan.classification_reason }}</p>
       <div v-if="plan" class="tp__progress">
         <div
           class="tp__progress-fill"
@@ -176,6 +195,37 @@ function truncate(s: string | null, max = 36): string {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+}
+.tp__route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.tp__route-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-brand, #7c3aed) 12%, transparent);
+  color: var(--color-brand, #7c3aed);
+  border: 1px solid color-mix(in srgb, var(--color-brand, #7c3aed) 25%, transparent);
+}
+.tp__route-roster {
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--color-text-tertiary, #8b8b96);
+  line-height: 1.4;
+}
+.tp__route-reason {
+  margin: 0 0 8px;
+  font-size: 10px;
+  color: var(--color-text-tertiary, #8b8b96);
+  line-height: 1.4;
 }
 .tp__title {
   font-size: 13px;

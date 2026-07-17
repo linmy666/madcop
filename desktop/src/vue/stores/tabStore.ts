@@ -140,11 +140,12 @@ export const useTabStore = defineStore('madcop-tabs', () => {
   function openDesignTab() {
     openTab('__design__', '设计工具', 'design' as TabType)
   }
+  /** Agent topology / multi-agent hub (AgentOverview). */
   function openAgentHubTab() {
-    openTab('__agent_hub__', 'Agent 中心', 'workflows' as TabType)
+    openTab('__agents__', 'Agent', 'agents' as TabType)
   }
   function openKnowledgeTab() {
-    openTab('__knowledge__', '知识库', 'workflows' as TabType)
+    openTab('__knowledge__', '知识库', 'knowledge' as TabType)
   }
   function openSkillBuilderTab() {
     openTab('__skill_builder__', '技能构建器', 'skill-builder' as TabType)

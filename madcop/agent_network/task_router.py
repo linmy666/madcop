@@ -7,7 +7,7 @@ pick a mode.
 Heuristics (no LLM needed — pure keyword/length analysis):
   - Quick: short questions, syntax help, explanations, simple lookups
   - Standard: bug fixes, single-file edits, feature additions
-  - Deep: multi-file refactors, architecture, system design, "review"
+  - Deep: multi-file refactors, architecture, system design, multi-agent
 
 Priority order (important!):
   1. Deep patterns checked FIRST — even short inputs like "重构X" are deep
@@ -38,14 +38,19 @@ _DEEP_PATTERNS = [
     r"模块", r"module", r"系统设计", r"system.design",
     r"端到端", r"end.to.end", r"全栈", r"full.stack",
     r"代码审查", r"code.review", r"审计", r"audit",
-    r"安全检查", r"security", r"全面分析", r"comprehensive",
+    r"安全检查", r"security.review", r"威胁建模", r"threat.model",
+    r"全面分析", r"comprehensive",
     r"从零开始", r"from.scratch", r"完整.*实现", r"完整.*项目",
     r"搭建", r"scaffold", r"脚手架",
-    r"前端.*后端", r"frontend.*backend",
+    r"前端.*后端", r"后端.*前端", r"frontend.*backend", r"backend.*frontend",
     r"评审", r"评估.*方案",
-    # Parallelism signals — tasks that benefit from multiple agents at once.
+    # Multi-agent / parallelism signals
     r"同时", r"并行", r"分别", r"多个", r"两边",
-    r"对比.*方案", r"多.*方案", r"协同",
+    r"对比.*方案", r"多.*方案", r"协同", r"多.?agent", r"multi.?agent",
+    # Research / design depth that benefits from roster
+    r"行业调研", r"竞品分析", r"调研报告", r"深度研究",
+    r"设计系统", r"design.system", r"完整.*原型",
+    r"数据看板", r"可视化分析", r"端到端.*数据",
 ]
 
 _DEEP_RE = [re.compile(p, re.IGNORECASE) for p in _DEEP_PATTERNS]
@@ -57,6 +62,7 @@ _QUICK_PATTERNS = [
     r"什么意思", r"是什么", r"什么是", r"怎么写", r"如何使用",
     r"语法", r"syntax", r"格式", r"区别", r"difference",
     r"翻译", r"translate", r"解释", r"explain", r"说明",
+    r"举个例子", r"example", r"怎么读", r"发音",
 ]
 
 _QUICK_RE = [re.compile(p, re.IGNORECASE) for p in _QUICK_PATTERNS]
@@ -73,6 +79,7 @@ _STANDARD_PATTERNS = [
     r"优化", r"optimize", r"改进", r"improve",
     r"测试", r"test", r"部署", r"deploy",
     r"写", r"write", r"编写", r"编", r"码",
+    r"改一下", r"帮我看", r"检查", r"排查",
 ]
 
 _STANDARD_RE = [re.compile(p, re.IGNORECASE) for p in _STANDARD_PATTERNS]
@@ -96,7 +103,6 @@ def route_task(user_input: str, context: str = "") -> RouteDecision:
     deep_hits = sum(1 for r in _DEEP_RE if r.search(text))
     if deep_hits > 0:
         conf = min(0.6 + deep_hits * 0.15, 0.95)
-        # Very long + deep = extra confident
         if length > 200:
             conf = min(conf + 0.05, 0.98)
         return RouteDecision(DEEP, conf, f"匹配 {deep_hits} 个复杂任务模式")
@@ -117,6 +123,9 @@ def route_task(user_input: str, context: str = "") -> RouteDecision:
     # ── Priority 4: Standard patterns ── #
     if standard_hits > 0:
         conf = min(0.65 + standard_hits * 0.1, 0.9)
+        # Long multi-concern text without deep keywords → still standard but lower conf
+        if length > 400:
+            conf = min(conf + 0.05, 0.92)
         return RouteDecision(STANDARD, conf, f"匹配 {standard_hits} 个操作模式")
 
     # ── Fallback heuristics ── #
@@ -153,7 +162,7 @@ MODE_LABELS: dict[str, str] = {
 MODE_DESCRIPTIONS: dict[str, str] = {
     QUICK: "直接回答，适合简单问答",
     STANDARD: "ReAct 推理循环，读文件/跑命令",
-    DEEP: "多 Agent 协作，规划→编码→审查",
+    DEEP: "多 Agent 协作：按场景选专家（编码/设计/调研/…）→ 综合",
 }
 
 

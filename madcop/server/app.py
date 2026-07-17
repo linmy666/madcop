@@ -1793,13 +1793,18 @@ def create_app() -> FastAPI:
                                 yield f"data: {_pe}\n\n"
                             yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                     else:  # deep — multi-agent DAG
-                        from madcop.agent_network.engine import build_engine, build_network_for_task
+                        from madcop.agent_network.engine import (
+                            build_engine,
+                            build_network_for_task,
+                            classify_task_detail,
+                        )
                         from madcop.agent_network.api import BUILTIN_AGENTS as _BA
                         _dag = build_engine()
                         _agent_colors = {a["id"]: a.get("color", "#7C3AED") for a in _BA}
                         # Pick an agent roster that fits THIS task instead of
                         # a fixed coder pipeline — a research report shouldn't
-                        # spawn a coder. The two specialists run in parallel.
+                        # spawn a coder. Specialists run in parallel.
+                        _classification = classify_task_detail(_task_text)
                         _net = build_network_for_task(_task_text)
                         # Build a PLAN view of the DAG so the right-side task
                         # panel shows live progress instead of spinning on
@@ -1814,7 +1819,17 @@ def create_app() -> FastAPI:
                             "designer": "设计界面与原型",
                             "researcher": "调研收集资料",
                             "reviewer": "审查与质量检查",
+                            "assistant": "文案/综合撰写",
                             "synthesizer": "综合产出最终结果",
+                        }
+                        _ZH_AGENT = {
+                            "planner": "规划",
+                            "coder": "编码",
+                            "designer": "设计",
+                            "researcher": "调研",
+                            "reviewer": "审查",
+                            "assistant": "助手",
+                            "synthesizer": "综合",
                         }
                         for _n in _net["nodes"]:
                             _aid = _n.get("agentId", "")
@@ -1824,13 +1839,17 @@ def create_app() -> FastAPI:
                                 "step": len(_plan_steps) + 1,
                                 "action": _ZH_ACTION.get(_n["id"], _n.get("name", _aid)),
                                 "tool": None,
-                                "input_hint": "",
+                                "input_hint": _ZH_AGENT.get(_n["id"], _n.get("name", "")),
                                 "expected_result": "",
                                 "status": "pending",
                                 "result": None,
                                 "error": None,
                                 "retry_count": 0,
                             })
+                        _roster_labels = [
+                            _ZH_AGENT.get(a, a)
+                            for a in (["planner"] + list(_classification.specialists) + ["synthesizer"])
+                        ]
                         _deep_plan = {
                             "goal": _task_text[:60],
                             "steps": _plan_steps,
@@ -1839,7 +1858,18 @@ def create_app() -> FastAPI:
                             "completed_steps": 0,
                             "failed_steps": 0,
                             "status": "running",
+                            # Deep-mode classification metadata (frontend banner)
+                            "category": _classification.category,
+                            "category_label": _classification.label_zh,
+                            "category_label_en": _classification.label_en,
+                            "specialists": list(_classification.specialists),
+                            "roster_labels": _roster_labels,
+                            "classification_reason": _classification.reason,
+                            "matched_signals": list(_classification.matched),
+                            "mode": "deep",
                         }
+                        # Explicit route event for UI badge (also embedded in plan).
+                        yield f"data: {json.dumps({'type': 'deep_route', 'route': _classification.to_dict()}, ensure_ascii=False)}\n\n"
                         yield f"data: {json.dumps({'type': 'plan', 'plan': _deep_plan}, ensure_ascii=False)}\n\n"
                         # Bridge on_token (called from worker threads) to SSE
                         # yields via a queue. Track which agents have started

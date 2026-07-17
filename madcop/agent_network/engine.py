@@ -439,21 +439,207 @@ _DESIGN_PRINCIPLES = (
     "WHEN IN DOUBT: visualize Linear.app or Stripe.com — match that restraint."
 )
 
-# Signal patterns → task category. Checked in priority order.
-# Each roster lists the PARALLEL specialists (planner + synthesizer are
-# added automatically by build_network_for_task).
-_TASK_CATEGORIES: list[tuple[str, list, list[str]]] = [
-    # (category, [compiled patterns], [specialist agent ids])
+# ── Task classification (score-based, multi-category) ───────────────── #
+# Each category has signal regexes. We score every category by hit count,
+# then resolve hybrid cases (e.g. coding+design → fullstack). Specialist
+# rosters EXCLUDE planner + synthesizer (added by build_network_for_task).
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class TaskClassification:
+    """Result of deep-mode task routing."""
+    category: str
+    specialists: list[str]
+    label_zh: str
+    label_en: str
+    scores: dict[str, int] = field(default_factory=dict)
+    matched: list[str] = field(default_factory=list)
+    reason: str = ""
+
+    def as_tuple(self) -> tuple[str, list[str]]:
+        return self.category, list(self.specialists)
+
+    def to_dict(self) -> dict:
+        return {
+            "category": self.category,
+            "specialists": list(self.specialists),
+            "label_zh": self.label_zh,
+            "label_en": self.label_en,
+            "scores": dict(self.scores),
+            "matched": list(self.matched),
+            "reason": self.reason,
+            "pipeline": (
+                ["planner"] + list(self.specialists) + [SYNTHESIZER_NODE_ID]
+            ),
+        }
+
+
+_CATEGORY_META: dict[str, tuple[str, str]] = {
+    "coding": ("编码开发", "Coding"),
+    "design": ("界面设计", "Design"),
+    "research": ("调研分析", "Research"),
+    "writing": ("文案写作", "Writing"),
+    "data": ("数据/分析", "Data"),
+    "security": ("安全审计", "Security"),
+    "fullstack": ("全栈交付", "Full-stack"),
+    "general": ("通用协作", "General"),
+}
+
+# Ordered for documentation; scoring is independent of order.
+_TASK_SIGNAL_DEFS: list[tuple[str, list[str], list[str]]] = [
+    # (category, raw patterns, specialist roster)
     ("coding", [
-        _re.compile(r"代码|code|bug|修复|fix|函数|function|实现|implement|程序|脚本|script|重构|refactor|算法|algorithm|API|接口|类|class|游戏|game|应用|app|网站|web|开发|develop|搭建.*服务|后端|前端|backend|frontend", _re.IGNORECASE),
+        r"代码|code|bug|缺陷|修复|fix|函数|function|实现|implement|程序|脚本|script",
+        r"重构|refactor|算法|algorithm|API|接口|类\b|class\b|模块化",
+        r"游戏|game|应用|app\b|网站|web\b|开发|develop|编译|compile|调试|debug",
+        r"后端|前端|backend|frontend|服务端|client.?side|SDK|CLI|插件|plugin",
+        r"小程序|TypeScript|Python|JavaScript|Rust|Go\b|Java\b|SQL|数据库|database",
+        r"单元测试|unit.?test|CI/CD|部署脚本|dockerfile|kubernetes|k8s",
     ], ["coder", "reviewer"]),
     ("design", [
-        _re.compile(r"设计|design|UI|界面|原型|prototype|样式|CSS|布局|layout|配色|主题|theme|页面", _re.IGNORECASE),
+        r"\bUI\b|\bUX\b|界面|原型|prototype|样式|CSS|布局|layout|配色|主题|theme",
+        r"页面设计|视觉|视觉稿|设计稿|交互稿|线框|wireframe|Figma|组件库|design.?system",
+        r"着陆页|落地页|landing|图标|icon|动效|动画|响应式|responsive",
+        r"好看|美观|精致|高端|简约.*界面|界面.*设计",
     ], ["designer", "reviewer"]),
     ("research", [
-        _re.compile(r"调研|研究|报告|report|分析|analysis|资料|搜索|查阅|文献|市场|行业|论文|综述|survey|investigat", _re.IGNORECASE),
+        r"调研|研究|报告|report|分析|analysis|资料|搜索|查阅|文献|市场|行业",
+        r"论文|综述|survey|investigat|竞品|对标|情报|白皮书|趋势|洞察|insight",
+        r"可行性|背景调研|desk.?research|案头",
     ], ["researcher"]),
+    ("writing", [
+        r"文案|写作|撰写|润色|改写|rewrite|copywrit",
+        r"诗|诗歌|散文|小说|故事|剧本|演讲稿|稿件|博客|blog.?post",
+        r"邮件|email|信件|公告|通知|README|文档说明|产品介绍|slogan|标语",
+        r"翻译成|translate|中译英|英译中",
+    ], []),  # planner → synthesizer only (creative synthesis)
+    ("data", [
+        r"数据|data|统计|统计表|图表|可视化|visuali[sz]e|dashboard|看板",
+        r"pandas|numpy|Excel|CSV|指标|KPI|漏斗|归因|A/B|实验分析",
+        r"机器学习|ML\b|训练模型|数据集|dataset|ETL|数仓",
+    ], ["researcher", "coder"]),
+    ("security", [
+        r"安全|security|漏洞|CVE|渗透|渗透测试|审计|audit|鉴权|权限提升",
+        r"OWASP|XSS|CSRF|注入|injection|加密|密钥|泄漏|泄露|合规",
+        r"威胁建模|threat.?model|安全审查|安全检查",
+    ], ["reviewer", "coder"]),
+    ("fullstack", [
+        r"全栈|full.?stack|端到端|end.to.end|前后端|前端.*后端|后端.*前端",
+        r"完整.*项目|完整.*实现|从零.*搭建|scaffold|脚手架",
+        r"产品.*上线|MVP|最小可行",
+    ], ["coder", "designer", "reviewer"]),
 ]
+
+_TASK_CATEGORIES: list[tuple[str, list, list[str]]] = [
+    (
+        cat,
+        [_re.compile(p, _re.IGNORECASE) for p in pats],
+        roster,
+    )
+    for cat, pats, roster in _TASK_SIGNAL_DEFS
+]
+
+_ROSTER_BY_CATEGORY: dict[str, list[str]] = {
+    cat: list(roster) for cat, _pats, roster in _TASK_SIGNAL_DEFS
+}
+_ROSTER_BY_CATEGORY["general"] = ["researcher"]
+
+
+def _score_categories(text: str) -> tuple[dict[str, int], list[str]]:
+    scores: dict[str, int] = {}
+    matched: list[str] = []
+    for category, patterns, _roster in _TASK_CATEGORIES:
+        hits = 0
+        for pat in patterns:
+            m = pat.search(text)
+            if m:
+                hits += 1
+                snippet = m.group(0)
+                if snippet and snippet not in matched:
+                    matched.append(snippet)
+        if hits:
+            scores[category] = hits
+    return scores, matched
+
+
+def _resolve_category(scores: dict[str, int], text: str) -> tuple[str, str]:
+    """Pick category from scores + hybrid rules. Returns (category, reason)."""
+    if not scores:
+        return "general", "无明确场景信号，使用通用协作"
+
+    # Explicit fullstack signals win when present.
+    if scores.get("fullstack", 0) > 0:
+        return "fullstack", f"命中全栈信号 (score={scores['fullstack']})"
+
+    # Hybrid: strong coding + design → fullstack (unless pure UI wording only).
+    c, d = scores.get("coding", 0), scores.get("design", 0)
+    if c > 0 and d > 0:
+        pure_ui = bool(_re.search(
+            r"\bUI\b|界面|原型|配色|视觉|Figma|线框|landing|着陆",
+            text,
+            _re.IGNORECASE,
+        ))
+        pure_code = bool(_re.search(
+            r"代码|bug|API|重构|算法|函数|编译|SQL|数据库",
+            text,
+            _re.IGNORECASE,
+        ))
+        if pure_ui and not pure_code:
+            return "design", f"编码+设计信号并存，偏界面 (c={c}, d={d})"
+        if pure_code and not pure_ui:
+            return "coding", f"编码+设计信号并存，偏实现 (c={c}, d={d})"
+        return "fullstack", f"编码+设计双高 (c={c}, d={d}) → 全栈"
+
+    # Hybrid: coding + security → security roster.
+    if scores.get("security", 0) > 0 and scores.get("coding", 0) > 0:
+        return "security", "安全+编码信号 → 安全审计协作"
+
+    # Hybrid: research + coding/data → data.
+    if scores.get("data", 0) > 0:
+        return "data", f"数据信号 (score={scores['data']})"
+    if scores.get("research", 0) > 0 and scores.get("coding", 0) > 0:
+        return "data", "调研+编码 → 数据分析协作"
+
+    # Writing vs research: "报告" is research; pure creative is writing.
+    if scores.get("writing", 0) > 0 and scores.get("research", 0) == 0:
+        return "writing", f"文案写作信号 (score={scores['writing']})"
+    if scores.get("writing", 0) > 0 and scores.get("research", 0) > 0:
+        # "调研报告" style
+        if _re.search(r"调研|市场|行业|竞品|论文|综述", text, _re.IGNORECASE):
+            return "research", "写作+调研信号，偏调研报告"
+        return "writing", "写作+调研信号，偏文案"
+
+    # Default: highest score; tie-break by product priority.
+    priority = [
+        "security", "fullstack", "data", "coding", "design",
+        "research", "writing", "general",
+    ]
+    best = max(scores.values())
+    for cat in priority:
+        if scores.get(cat, 0) == best:
+            return cat, f"最高分场景 {cat}={best}"
+    cat = max(scores, key=scores.get)  # type: ignore[arg-type]
+    return cat, f"最高分场景 {cat}={scores[cat]}"
+
+
+def classify_task_detail(user_input: str) -> TaskClassification:
+    """Full classification with scores, labels, and specialist roster."""
+    text = (user_input or "").strip()
+    scores, matched = _score_categories(text)
+    category, reason = _resolve_category(scores, text)
+    specialists = list(_ROSTER_BY_CATEGORY.get(category, ["researcher"]))
+    label_zh, label_en = _CATEGORY_META.get(category, ("通用协作", "General"))
+    return TaskClassification(
+        category=category,
+        specialists=specialists,
+        label_zh=label_zh,
+        label_en=label_en,
+        scores=scores,
+        matched=matched[:12],
+        reason=reason,
+    )
 
 
 def classify_task(user_input: str) -> tuple[str, list[str]]:
@@ -463,52 +649,53 @@ def classify_task(user_input: str) -> tuple[str, list[str]]:
     automatically by build_network_for_task). Falls back to a
     general-purpose roster when no category matches.
     """
-    for category, patterns, agents in _TASK_CATEGORIES:
-        for pat in patterns:
-            if pat.search(user_input):
-                return category, list(agents)
-    # General / writing / unknown — researcher covers information needs.
-    return "general", ["researcher"]
+    return classify_task_detail(user_input).as_tuple()
 
 
 def build_network_for_task(user_input: str) -> dict:
     """Build a DAG network tailored to the task category.
 
     Shape: input → planner → (specialists in parallel) → synthesizer → output.
-    Specialists run in the same wave (parallel). The synthesizer then
-    runs alone, receiving all specialist outputs, and produces the final
-    coherent answer.
+    When there are no specialists (e.g. pure writing), edges are
+    planner → synthesizer directly.
     """
-    _category, specialist_ids = classify_task(user_input)
+    detail = classify_task_detail(user_input)
+    specialist_ids = list(detail.specialists)
 
     _ZH_NAME = {
         "coder": "编码", "designer": "设计",
         "researcher": "调研", "reviewer": "审查",
-        "assistant": "综合",
+        "assistant": "综合", "planner": "规划",
     }
 
     nodes: list[dict] = [
         {"id": "input", "agentId": "", "name": "输入"},
         {"id": "planner", "agentId": "planner", "name": "规划"},
     ]
-    # Parallel specialists.
     for aid in specialist_ids:
         nodes.append({"id": aid, "agentId": aid, "name": _ZH_NAME.get(aid, aid)})
-    # Synthesizer — real LLM agent (assistant role) that merges everything.
     nodes.append({"id": SYNTHESIZER_NODE_ID, "agentId": SYNTHESIZER_AGENT_ID, "name": "综合"})
     nodes.append({"id": "output", "agentId": "", "name": "输出"})
 
     edges: list[dict] = [
         {"from": "input", "to": "planner"},
     ]
-    # planner fans out to each specialist (parallel wave).
-    for aid in specialist_ids:
-        edges.append({"from": "planner", "to": aid})
-        edges.append({"from": aid, "to": SYNTHESIZER_NODE_ID})
-    # synthesizer → output (final answer).
+    if specialist_ids:
+        for aid in specialist_ids:
+            edges.append({"from": "planner", "to": aid})
+            edges.append({"from": aid, "to": SYNTHESIZER_NODE_ID})
+    else:
+        # No parallel specialists — planner hands off to synthesizer.
+        edges.append({"from": "planner", "to": SYNTHESIZER_NODE_ID})
     edges.append({"from": SYNTHESIZER_NODE_ID, "to": "output"})
 
-    return {"name": "deep", "nodes": nodes, "edges": edges}
+    return {
+        "name": "deep",
+        "category": detail.category,
+        "classification": detail.to_dict(),
+        "nodes": nodes,
+        "edges": edges,
+    }
 
 
 # ── Convenience: build engine from settings ────────────────────────── #

@@ -235,7 +235,9 @@ async function simulateRun() {
       <div class="min-w-0">
         <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">协作网络</div>
         <h1 class="text-[18px] font-semibold tracking-tight text-[var(--color-text-primary)]">Agent</h1>
-        <p class="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">选择图拓扑 · 配置节点 · 执行协作</p>
+        <p class="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+          选择图拓扑 · 配置节点 · 执行协作。对话「深度」模式会按场景自动拼专家；本页可手动画图试跑。
+        </p>
       </div>
       <div class="flex flex-wrap items-center gap-2 text-[11px] tabular-nums" style="font-family: var(--font-mono)">
         <span class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[var(--color-text-secondary)]">

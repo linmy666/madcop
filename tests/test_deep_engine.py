@@ -28,22 +28,52 @@ from madcop.llm.client import StreamChunk
 class TestClassifyTask:
     def test_research_no_coder_no_reviewer(self):
         """A research report should use researcher specialists only."""
-        _cat, specs = classify_task("帮我写快递行业调研报告")
-        assert "coder" not in specs, "调研任务不该有编码专家"
-        assert "reviewer" not in specs, "调研任务不需要审查员拖慢流程"
+        from madcop.agent_network.engine import classify_task_detail
+        detail = classify_task_detail("帮我写快递行业调研报告")
+        assert detail.category == "research"
+        assert "coder" not in detail.specialists, "调研任务不该有编码专家"
+        assert "reviewer" not in detail.specialists, "调研任务不需要审查员拖慢流程"
 
     def test_coding_has_coder(self):
         _cat, specs = classify_task("帮我做一个植物大战僵尸游戏")
+        assert _cat == "coding"
         assert "coder" in specs
 
     def test_design_has_designer(self):
         _cat, specs = classify_task("帮我设计登录页面 UI 原型")
+        assert _cat == "design"
         assert "designer" in specs
 
-    def test_general_falls_back_to_researcher(self):
-        _cat, specs = classify_task("写一首关于秋天的诗")
+    def test_writing_no_coder(self):
+        """Creative writing → writing category, no coding specialist."""
+        from madcop.agent_network.engine import classify_task_detail
+        detail = classify_task_detail("写一首关于秋天的诗")
+        assert detail.category == "writing"
+        assert "coder" not in detail.specialists
+        assert detail.specialists == []
+
+    def test_security_roster(self):
+        _cat, specs = classify_task("帮我做一次安全审计和漏洞检查")
+        assert _cat == "security"
+        assert "reviewer" in specs
+        assert "coder" in specs
+
+    def test_data_roster(self):
+        _cat, specs = classify_task("用 pandas 做数据可视化和 KPI 看板")
+        assert _cat == "data"
         assert "researcher" in specs
-        assert "coder" not in specs
+        assert "coder" in specs
+
+    def test_fullstack_hybrid(self):
+        _cat, specs = classify_task("实现完整的前端页面和后端 API")
+        assert _cat in ("fullstack", "coding")
+        assert "coder" in specs
+
+    def test_detail_includes_pipeline(self):
+        from madcop.agent_network.engine import classify_task_detail
+        d = classify_task_detail("调研行业报告")
+        assert "planner" in d.to_dict()["pipeline"]
+        assert "synthesizer" in d.to_dict()["pipeline"]
 
 
 # ── DAG structure with synthesizer ────────────────────────────────── #
@@ -67,6 +97,15 @@ class TestBuildNetwork:
         # specialist → synthesizer → output
         assert ("researcher", SYNTHESIZER_NODE_ID) in edges
         assert (SYNTHESIZER_NODE_ID, "output") in edges
+        assert net.get("category") == "research"
+        assert "classification" in net
+
+    def test_writing_planner_to_synth_direct(self):
+        """Writing with empty specialists still connects planner → synthesizer."""
+        net = build_network_for_task("写一首关于秋天的诗")
+        edges = [(e["from"], e["to"]) for e in net["edges"]]
+        assert ("planner", SYNTHESIZER_NODE_ID) in edges
+        assert net.get("category") == "writing"
 
     def test_output_only_receives_synthesizer(self):
         """The output merge node should have ONLY synthesizer as upstream,

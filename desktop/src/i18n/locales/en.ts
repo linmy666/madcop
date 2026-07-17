@@ -45,6 +45,7 @@ export const en = {
   'sidebar.less': 'Less',
   'sidebar.knowledge': 'Knowledge',
   'sidebar.agentHub': 'Agent',
+  'sidebar.workflows': 'Workflows',
   'sidebar.designTool': 'Design',
   'sidebar.skillBuilder': 'Skill builder',
   'settings.nav.core': 'Core',

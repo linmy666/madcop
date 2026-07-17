@@ -21,6 +21,14 @@ export interface PlanData {
   completed_steps: number
   failed_steps: number
   status: string
+  category?: string
+  category_label?: string
+  category_label_en?: string
+  specialists?: string[]
+  roster_labels?: string[]
+  classification_reason?: string
+  matched_signals?: string[]
+  mode?: string
 }
 
 const props = defineProps<{
@@ -79,6 +87,12 @@ function toolBadge(tool: string | null): string {
     <!-- Header -->
     <div class="plan-header">
       <div class="plan-goal">{{ plan.goal }}</div>
+      <div v-if="plan.category_label || plan.category" class="plan-route">
+        <span class="plan-route__badge">{{ plan.category_label || plan.category }}</span>
+        <span v-if="plan.roster_labels?.length" class="plan-route__roster">
+          {{ plan.roster_labels.join(' → ') }}
+        </span>
+      </div>
       <div class="plan-progress">
         <div class="plan-progress-bar">
           <div class="plan-progress-fill" :style="{ width: progressPct + '%' }"></div>
@@ -133,6 +147,27 @@ function toolBadge(tool: string | null): string {
   font-weight: 600;
   margin-bottom: 8px;
   color: var(--color-text-primary, #222);
+}
+.plan-route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.plan-route__badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-brand, #7c3aed) 12%, transparent);
+  color: var(--color-brand, #7c3aed);
+  border: 1px solid color-mix(in srgb, var(--color-brand, #7c3aed) 25%, transparent);
+}
+.plan-route__roster {
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--color-text-tertiary, #888);
 }
 .plan-progress {
   display: flex;

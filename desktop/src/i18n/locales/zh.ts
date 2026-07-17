@@ -47,6 +47,7 @@ export const zh: Record<TranslationKey, string> = {
   'sidebar.less': '收起',
   'sidebar.knowledge': '知识库',
   'sidebar.agentHub': 'Agent',
+  'sidebar.workflows': '工作流',
   'sidebar.designTool': '设计工具',
   'sidebar.skillBuilder': '技能构建器',
   'settings.nav.core': '核心配置',

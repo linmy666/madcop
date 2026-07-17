@@ -61,13 +61,33 @@ async def list_modes():
 async def route(req: RouteRequest):
     """Preview which mode the task router would choose (no execution)."""
     decision = route_task(req.input, req.context)
-    return {
+    payload: dict[str, Any] = {
         "mode": decision.mode,
         "confidence": decision.confidence,
         "reason": decision.reason,
         "label": MODE_LABELS.get(decision.mode, decision.mode),
         "config": get_mode_config(decision.mode),
     }
+    # When deep (or user asks), also preview specialist classification.
+    if decision.mode == DEEP:
+        try:
+            from .engine import classify_task_detail
+            payload["deep_classification"] = classify_task_detail(req.input).to_dict()
+        except Exception:
+            pass
+    return payload
+
+
+class ClassifyRequest(BaseModel):
+    input: str
+
+
+@router.post("/classify")
+async def classify_deep(req: ClassifyRequest):
+    """Preview deep-mode scenario → specialist roster (no execution)."""
+    from .engine import classify_task_detail
+    detail = classify_task_detail(req.input)
+    return detail.to_dict()
 
 
 @router.post("/run-sync")
