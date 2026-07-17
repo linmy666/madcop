@@ -240,253 +240,490 @@ function formatRelative(ts: number): string {
 </script>
 
 <template>
-  <!-- ============================== -->
-  <!-- Project list (no active project) -->
-  <!-- ============================== -->
-  <div v-if="!activeProject" class="design-page bg-[var(--color-surface)] flex h-full w-full overflow-y-auto">
-    <div class="mx-auto w-full max-w-[960px] px-12 py-20">
-      <!-- Title -->
-      <div class="mb-16">
-        <h1 class="text-[28px] font-semibold tracking-tight text-[var(--color-text-primary)] mb-2">设计工具</h1>
-        <p class="text-[14px] text-[var(--color-text-secondary)] leading-relaxed max-w-xl">
-          用 AI 批量生成原型设计。拖拽组件、属性面板、导出 .madcop 分享。
-        </p>
-      </div>
+  <!-- ============================================ -->
+  <!-- Project list (no active project)             -->
+  <!-- ============================================ -->
+  <div v-if="!activeProject" class="dp-page">
+    <div class="dp-page__inner">
+      <!-- Header -->
+      <header class="dp-page__head">
+        <div>
+          <h1 class="dp-page__title">设计工具</h1>
+          <p class="dp-page__sub">用 AI 批量生成 UI 原型，拖拽组件、配置属性、导出分享</p>
+        </div>
+      </header>
 
-      <!-- New project card (top, prominent) -->
-      <div class="mb-12">
-        <div class="design-new-card">
-          <div class="design-new-card__title">新建项目</div>
-          <div class="flex gap-2">
-            <input
-              ref="newProjectNameInput"
-              v-model="newProjectName"
-              type="text"
-              placeholder="项目名…"
-              @keydown.enter="createProject(newProjectName)"
-              class="design-input flex-1"
-            />
-            <button
-              @click="createProject(newProjectName)"
-              :disabled="!newProjectName.trim()"
-              class="design-btn-primary"
-              :class="{ 'design-btn-primary--disabled': !newProjectName.trim() }"
-            >创建</button>
+      <!-- Hero: quick AI generation -->
+      <section class="dp-hero">
+        <div class="dp-hero__inner">
+          <div class="dp-hero__icon">
+            <span class="material-symbols-outlined">auto_awesome</span>
+          </div>
+          <div class="dp-hero__body">
+            <h2 class="dp-hero__title">从一个提示词开始</h2>
+            <p class="dp-hero__sub">输入项目名，下方选一个模板，AI 自动生成完整页面</p>
           </div>
         </div>
-      </div>
+        <div class="dp-hero__form">
+          <input
+            ref="newProjectNameInput"
+            v-model="newProjectName"
+            type="text"
+            placeholder="项目名…"
+            class="dp-input"
+            @keydown.enter="createProject(newProjectName)"
+          />
+          <button
+            @click="createProject(newProjectName)"
+            :disabled="!newProjectName.trim()"
+            class="dp-btn dp-btn--primary"
+          >创建项目</button>
+        </div>
+      </section>
+
+      <!-- Page presets (quick start) -->
+      <section class="dp-presets">
+        <header class="dp-section__head">
+          <h3 class="dp-section__title">页面模板</h3>
+          <p class="dp-section__sub">创建项目后选择模板，AI 生成完整 UI</p>
+        </header>
+        <div class="dp-presets-grid">
+          <button
+            v-for="(p, i) in PAGE_PRESETS"
+            :key="i"
+            class="dp-preset"
+            @click="newProjectName.trim() && createProjectAndApply(p.prompt)"
+          >
+            <span class="dp-preset__label">{{ p.label }}</span>
+            <span class="dp-preset__arrow material-symbols-outlined">arrow_forward</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- App full templates -->
+      <section class="dp-presets" v-if="FULL_APP_PROMPTS.length">
+        <header class="dp-section__head">
+          <h3 class="dp-section__title">多页面 App 模板</h3>
+          <p class="dp-section__sub">一次生成整个 App 的多个页面</p>
+        </header>
+        <div class="dp-app-templates">
+          <button
+            v-for="(t, i) in FULL_APP_PROMPTS"
+            :key="i"
+            class="dp-app-template"
+            @click="newProjectName.trim() && createProjectAndApply(t)"
+          >
+            <div class="dp-app-template__name">{{ t.name }}</div>
+            <div class="dp-app-template__pages">{{ t.pages.length }} 个页面 · {{ t.pages.join(' · ') }}</div>
+          </button>
+        </div>
+      </section>
 
       <!-- Recent projects -->
-      <div>
-        <div class="design-section-label flex items-center justify-between mb-4">
-          <span>最近的项目</span>
-          <span class="design-meta">{{ projects.length }} 个</span>
+      <section class="dp-recent">
+        <header class="dp-section__head dp-section__head--row">
+          <h3 class="dp-section__title">最近的项目</h3>
+          <span class="dp-meta">{{ projects.length }} 个</span>
+        </header>
+
+        <div v-if="projects.length === 0" class="dp-empty">
+          <div class="dp-empty__icon">
+            <span class="material-symbols-outlined">draw</span>
+          </div>
+          <h4 class="dp-empty__title">还没有项目</h4>
+          <p class="dp-empty__sub">在上方输入项目名创建第一个</p>
         </div>
 
-        <div v-if="projects.length === 0" class="design-empty">
-          <div class="design-empty__icon">○</div>
-          <div class="design-empty__text">还没有项目</div>
-          <div class="design-empty__hint">在上方创建一个开始</div>
-        </div>
-
-        <div v-else class="grid grid-cols-3 gap-4">
-          <div
+        <div v-else class="dp-projects">
+          <article
             v-for="proj in projects"
             :key="proj.id"
+            class="dp-project"
             @click="activeProject = proj"
-            class="design-project-tile"
           >
-            <!-- Mini "thumbnail" — stacked page rectangles -->
-            <div class="design-project-tile__thumb">
+            <div class="dp-project__thumb">
               <div
                 v-for="(p, i) in proj.pages.slice(0, 3)"
                 :key="p.id"
-                :style="{
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '3px',
-                  height: '6px',
-                  width: (40 + i * 12) + '%',
-                  marginBottom: '4px',
-                  opacity: 0.6 + i * 0.13,
-                }"
-              ></div>
-              <div v-if="proj.pages.length === 0" class="design-project-tile__empty">—</div>
+                class="dp-project__page"
+                :style="{ width: (40 + i * 12) + '%', opacity: 0.6 + i * 0.13 }"
+              />
+              <div v-if="proj.pages.length === 0" class="dp-project__empty">—</div>
             </div>
-            <div class="design-project-tile__name">{{ proj.name }}</div>
-            <div class="design-project-tile__meta">
-              <span class="design-meta">{{ proj.pages.length }} 个页面</span>
-              <span class="design-meta">{{ formatRelative(proj.createdAt) }}</span>
+            <div class="dp-project__body">
+              <h4 class="dp-project__name">{{ proj.name }}</h4>
+              <div class="dp-project__meta">
+                <span class="dp-meta">{{ proj.pages.length }} 个页面</span>
+                <span class="dp-meta">·</span>
+                <span class="dp-meta">{{ formatRelative(proj.createdAt) }}</span>
+              </div>
             </div>
             <button
               @click.stop="deleteProject(proj.id)"
-              class="design-project-tile__delete"
+              class="dp-project__del"
               aria-label="删除"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              <span class="material-symbols-outlined" style="font-size:16px">delete</span>
             </button>
-          </div>
+          </article>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 
-  <!-- ============================== -->
-  <!-- Active project: editor -->
-  <!-- ============================== -->
-  <div v-else class="design-page flex h-full w-full flex-col overflow-hidden bg-[var(--color-surface)]">
-    <!-- Quiet top bar -->
-    <header
-      class="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 h-12 flex-shrink-0"
-    >
-      <div class="flex items-center gap-4">
-        <button
-          @click="activeProject = null"
-          class="design-btn-ghost flex items-center gap-1.5"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-          <span>项目</span>
-        </button>
-        <div class="h-4 w-px bg-[var(--color-border)]"></div>
-        <span class="text-[14px] font-medium text-[var(--color-text-primary)]">{{ activeProject.name }}</span>
-        <span class="design-meta">{{ activeProject.pages.length }} 页</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <button
-          @click="showGenAll = !showGenAll"
-          class="design-btn-ghost flex items-center gap-1.5"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-          <span>批量生成</span>
-        </button>
-      </div>
+  <!-- ============================================ -->
+  <!-- Active project: editor                       -->
+  <!-- ============================================ -->
+  <div v-else class="dp-editor">
+    <header class="dp-editor__topbar">
+      <button @click="activeProject = null" class="dp-editor__back">
+        <span class="material-symbols-outlined" style="font-size:18px">arrow_back</span>
+        返回
+      </button>
+      <div class="dp-editor__title">{{ activeProject.name }}</div>
+      <div class="dp-editor__spacer" />
+      <button @click="saveProject" class="dp-btn">保存</button>
+      <button @click="deleteCurrentProject" class="dp-btn dp-btn--danger">删除项目</button>
     </header>
 
-    <!-- Batch generation strip -->
-    <div
-      v-if="showGenAll"
-      class="border-b border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-5 py-3 flex items-center gap-3 flex-shrink-0"
-    >
-      <span class="design-meta shrink-0">一套生成</span>
-      <button
-        v-for="preset in FULL_APP_PROMPTS"
-        :key="preset.name"
-        @click="handleGenerateApp(preset)"
-        :disabled="loading"
-        class="design-chip"
-      >{{ preset.name }} <span class="opacity-60">· {{ preset.pages.length }}页</span></button>
-    </div>
-
-    <!-- Page tabs strip -->
-    <div
-      class="flex items-center gap-1 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 h-10 overflow-x-auto flex-shrink-0"
-    >
-      <button
-        v-for="page in activeProject.pages"
-        :key="page.id"
-        @click="selectPage(page.id)"
-        :class="['design-page-tab', activeProject.activePageId === page.id ? 'design-page-tab--active' : '']"
-      >
-        <span>{{ page.name }}</span>
-        <span
-          @click.stop="deletePage(page.id)"
-          class="design-page-tab__close"
-          aria-label="删除页面"
-        >×</span>
-      </button>
-      <button
-        @click="addPage(`页面 ${activeProject.pages.length + 1}`)"
-        class="design-page-tab-add"
-      >+ 新页面</button>
-    </div>
-
-    <!-- Content: prompt bar OR canvas -->
-    <div v-if="!activePage && !loading" class="flex-1 overflow-y-auto bg-[var(--color-surface-container-lowest)]">
-      <div class="mx-auto max-w-[640px] px-8 py-16">
-        <!-- Presets (as quiet chips) -->
-        <div class="mb-6">
-          <div class="design-section-label mb-3">快速开始</div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="p in PAGE_PRESETS"
-              :key="p.label"
-              @click="prompt = p.prompt"
-              :class="['design-preset', prompt === p.prompt ? 'design-preset--active' : '']"
-            >{{ p.label }}</button>
-          </div>
+    <div class="dp-editor__body">
+      <div class="dp-editor__pages">
+        <div class="dp-section__head">
+          <h3 class="dp-section__title">页面</h3>
+          <button @click="addPage" class="dp-btn dp-btn--sm">+ 新页面</button>
         </div>
-
-        <!-- Prompt area — like Notion / Figma -->
-        <div class="design-prompt-area">
-          <textarea
-            v-model="prompt"
-            placeholder="描述你想生成的页面…&#10;&#10;例: 一个深色主题的登录页,左侧有产品图,右侧是邮箱密码登录框,登录按钮用品牌色"
-            rows="6"
-            class="design-prompt-textarea"
-          ></textarea>
-          <div class="flex items-center justify-between mt-3">
-            <span class="design-meta">GLM-5.2 · 约 30s</span>
-            <button
-              @click="handleGenerate"
-              :disabled="!prompt.trim()"
-              :class="['design-btn-primary', !prompt.trim() ? 'design-btn-primary--disabled' : '']"
-            >生成</button>
-          </div>
+        <div class="dp-page-list">
+          <button
+            v-for="p in activeProject.pages"
+            :key="p.id"
+            :class="['dp-page-tab', { 'dp-page-tab--active': p.id === activePageId }]"
+            @click="activePageId = p.id"
+          >
+            {{ p.name || '未命名' }}
+          </button>
         </div>
       </div>
-    </div>
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex-1 flex items-center justify-center bg-[var(--color-surface)]">
-      <div class="text-center">
-        <div class="design-loading-dot"></div>
-        <div class="text-[13px] text-[var(--color-text-tertiary)] mt-4">AI 正在生成</div>
-      </div>
-    </div>
-
-    <!-- Camera / Preview tabs -->
-    <div v-if="activePage && !loading" class="flex-1 flex flex-col overflow-hidden">
-      <!-- Tab bar -->
-      <div class="px-5 pt-2 pb-0 border-b border-[var(--color-border)] bg-[var(--color-surface)] flex items-center gap-0 flex-shrink-0">
-        <button
-          @click="viewMode = 'editor'"
-          :class="['preview-tab', viewMode === 'editor' ? 'preview-tab--active' : '']"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="margin-right:4px;">
-            <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-          </svg>
-          编辑
-        </button>
-        <button
-          @click="viewMode = 'preview'"
-          :class="['preview-tab', viewMode === 'preview' ? 'preview-tab--active' : '']"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="margin-right:4px;">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-          预览
-        </button>
-      </div>
-      <!-- Editor -->
-      <div v-show="viewMode === 'editor'" class="flex-1 overflow-hidden">
+      <div class="dp-editor__canvas">
         <DesignCanvas
-          :initial-data="activePage.data"
-          @save="(data) => updatePageData(activePage.id, data)"
+          v-if="activePage"
+          :data="activePage.data"
+          @update="onCanvasUpdate"
         />
       </div>
-      <!-- Preview -->
-      <div v-show="viewMode === 'preview'" class="flex-1 overflow-hidden">
-        <PreviewPanel :refresh-key="previewRefreshKey" />
+
+      <div class="dp-editor__props">
+        <div class="dp-section__head">
+          <h3 class="dp-section__title">属性</h3>
+        </div>
+        <div v-if="selectedNode" class="dp-props-form">
+          <label class="dp-field">
+            <span class="dp-field__label">类型</span>
+            <input :value="selectedNode.type" disabled class="dp-input" />
+          </label>
+          <label class="dp-field">
+            <span class="dp-field__label">文本</span>
+            <input v-model="selectedNode.props.text" class="dp-input" />
+          </label>
+        </div>
+        <div v-else class="dp-props-empty">
+          <p>选中画布上的组件以编辑属性</p>
+        </div>
       </div>
     </div>
 
-    <!-- Error toast -->
-    <Transition name="design-fade">
-      <div v-if="error" class="design-toast">{{ error }}</div>
-    </Transition>
+    <PreviewPanel v-if="activePage" :data="activePage.data" />
   </div>
 </template>
+
+<style scoped>
+/* ── Page layout ─────────────────────────────────────────────── */
+.dp-page { width: 100%; height: 100%; overflow-y: auto; background: var(--color-surface); }
+.dp-page__inner { max-width: 960px; margin: 0 auto; padding: 48px 32px 64px; }
+
+.dp-page__head { margin-bottom: 32px; }
+.dp-page__title { font-size: 28px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+.dp-page__sub { margin: 0; font-size: 14px; color: var(--color-text-secondary); }
+
+/* ── Section heading (shared) ────────────────────────────────── */
+.dp-section__head { margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dp-section__head--row { justify-content: space-between; }
+.dp-section__title { font-size: 14px; font-weight: 600; margin: 0; color: var(--color-text-primary); }
+.dp-section__sub { margin: 0; font-size: 12px; color: var(--color-text-secondary); }
+
+/* ── Hero (new project) ───────────────────────────────────── */
+.dp-hero {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dp-hero__inner { display: flex; gap: 12px; align-items: center; }
+.dp-hero__icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+.dp-hero__icon .material-symbols-outlined { font-size: 22px; }
+.dp-hero__body { flex: 1; min-width: 0; }
+.dp-hero__title { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
+.dp-hero__sub { margin: 0; font-size: 12px; color: var(--color-text-secondary); }
+.dp-hero__form { display: flex; gap: 8px; }
+
+/* ── Page preset chips ───────────────────────────────────── */
+.dp-presets { margin-bottom: 32px; }
+.dp-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.dp-preset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 140ms, background 140ms;
+}
+.dp-preset:hover { border-color: var(--color-text-tertiary); background: var(--color-surface-container-lowest); }
+.dp-preset__label { flex: 1; }
+.dp-preset__arrow { font-size: 16px !important; color: var(--color-text-tertiary); }
+
+/* ── App full templates ─────────────────────────────────── */
+.dp-app-templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.dp-app-template {
+  text-align: left;
+  padding: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  transition: border-color 140ms;
+}
+.dp-app-template:hover { border-color: var(--color-text-tertiary); }
+.dp-app-template__name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.dp-app-template__pages { font-size: 11px; color: var(--color-text-tertiary); line-height: 1.5; }
+
+/* ── Recent projects ────────────────────────────────────── */
+.dp-recent { margin-top: 8px; }
+.dp-meta { font-size: 11px; color: var(--color-text-tertiary); }
+.dp-projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.dp-project {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  padding: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 140ms, transform 140ms;
+  position: relative;
+}
+.dp-project:hover { border-color: var(--color-text-tertiary); transform: translateY(-1px); }
+.dp-project__thumb {
+  grid-column: 1 / -1;
+  height: 56px;
+  background: var(--color-surface-container-lowest);
+  border-radius: 4px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+.dp-project__page {
+  height: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+}
+.dp-project__empty { color: var(--color-text-tertiary); font-size: 11px; text-align: center; }
+.dp-project__name { font-size: 14px; font-weight: 600; margin: 0; }
+.dp-project__meta { display: flex; gap: 4px; align-items: center; }
+.dp-project__del {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+}
+.dp-project__del:hover { background: #fee2e2; color: #b91c1c; }
+
+/* ── Empty state ──────────────────────────────────────── */
+.dp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 60px 20px;
+  background: var(--color-surface-container-lowest);
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+}
+.dp-empty__icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  border-radius: 50%;
+  margin-bottom: 12px;
+}
+.dp-empty__icon .material-symbols-outlined { font-size: 24px; color: var(--color-text-tertiary); }
+.dp-empty__title { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+.dp-empty__sub { margin: 0; font-size: 12px; color: var(--color-text-secondary); }
+
+/* ── Buttons (shared) ────────────────────────────────── */
+.dp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 120ms, border-color 120ms;
+}
+.dp-btn:hover:not(:disabled) { background: var(--color-surface-container-low); }
+.dp-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.dp-btn--sm { padding: 5px 10px; font-size: 12px; }
+.dp-btn--primary {
+  background: var(--color-brand, #0a0a0a);
+  color: #fff;
+  border-color: var(--color-brand, #0a0a0a);
+}
+.dp-btn--primary:hover:not(:disabled) { background: #1f2937; border-color: #1f2937; }
+.dp-btn--danger { color: #b91c1c; }
+.dp-btn--danger:hover:not(:disabled) { background: #fee2e2; }
+
+.dp-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  font-size: 13px;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 120ms;
+}
+.dp-input:focus { border-color: var(--color-text-tertiary); }
+.dp-input:disabled { background: var(--color-surface-container); color: var(--color-text-tertiary); cursor: not-allowed; }
+
+/* ── Editor mode ──────────────────────────────────────── */
+.dp-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-surface);
+}
+.dp-editor__topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.dp-editor__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  border-radius: 4px;
+}
+.dp-editor__back:hover { background: var(--color-surface-container-low); color: var(--color-text-primary); }
+.dp-editor__title { font-size: 14px; font-weight: 600; }
+.dp-editor__spacer { flex: 1; }
+.dp-editor__body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 180px 1fr 280px;
+  min-height: 0;
+}
+.dp-editor__pages {
+  border-right: 1px solid var(--color-border);
+  padding: 16px;
+  overflow-y: auto;
+}
+.dp-page-list { display: flex; flex-direction: column; gap: 4px; }
+.dp-page-tab {
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+}
+.dp-page-tab:hover { background: var(--color-surface-container-low); color: var(--color-text-primary); }
+.dp-page-tab--active {
+  background: var(--color-text-primary);
+  color: var(--color-surface);
+  border-color: var(--color-text-primary);
+}
+.dp-editor__canvas { background: var(--color-surface-container-lowest); overflow: auto; min-height: 0; }
+.dp-editor__props {
+  border-left: 1px solid var(--color-border);
+  padding: 16px;
+  overflow-y: auto;
+}
+.dp-props-form { display: flex; flex-direction: column; gap: 12px; }
+.dp-props-empty { font-size: 13px; color: var(--color-text-secondary); text-align: center; padding: 24px 0; }
+.dp-field { display: flex; flex-direction: column; gap: 6px; }
+.dp-field__label { font-size: 11px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+</style>
 
 <style scoped>
 /* ── Type system ────────────────────────────────────── */
