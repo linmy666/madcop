@@ -191,7 +191,7 @@ class ReActEngine:
                     messages,
                     model=self.model,
                     temperature=0.1,
-                    max_tokens=2048,
+                    max_tokens=4096,
                 )
                 raw = getattr(resp, "content", "") or str(resp)
             except Exception as e:

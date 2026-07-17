@@ -1887,15 +1887,58 @@ def create_app() -> FastAPI:
                     elif _agent_mode == "standard":
                         # ReAct loop. Stream each step as tool/tool_result
                         # so the existing UI surfaces Thought/Action/Observation.
+                        #
+                        # CRITICAL: pass conversation history as context.
+                        # Previously only the last user line was sent, so follow-ups
+                        # like「改简历放到下载目录」lost the prior attachment/analysis
+                        # and the model called ask_user as if starting from zero.
                         from madcop.agent_network.react_engine import ReActEngine
+                        _ctx_parts: list[str] = []
+                        _ua = [
+                            m for m in messages
+                            if getattr(m, "role", None) in ("user", "assistant")
+                            and (getattr(m, "content", None) or "").strip()
+                        ]
+                        # Drop the last user turn (that's the current task).
+                        _prior = _ua[:-1] if _ua and getattr(_ua[-1], "role", None) == "user" else _ua
+                        for _m in _prior[-16:]:
+                            _role = "用户" if _m.role == "user" else "助手"
+                            _c = (_m.content or "").strip()
+                            # Cap each turn so context stays usable
+                            if len(_c) > 12_000:
+                                _c = _c[:12_000] + "\n…(截断)"
+                            _ctx_parts.append(f"[{_role}]\n{_c}")
+                        _react_ctx = "\n\n---\n\n".join(_ctx_parts)
+                        if len(_react_ctx) > 80_000:
+                            _react_ctx = _react_ctx[-80_000:]
+                        try:
+                            _home = str(Path.home())
+                        except Exception:
+                            _home = "~"
+                        _react_prefix = (
+                            "你是 MadCop 标准模式助手。你可以看到下方「对话历史」。\n"
+                            "规则：\n"
+                            "1. 历史里若已有附件正文(ATTACHMENT)或助手对文件的分析，视为你已掌握该文件，"
+                            "不要再 ask_user 问「要改哪个文件/改什么」。\n"
+                            "2. 用户说「放到下载目录/Downloads/桌面」时，直接用 write_file 写绝对路径"
+                            f"（如 {_home}/Downloads/文件名.md），禁止用 ask_user 反复确认。\n"
+                            "3. 需要落盘时必须调用 write_file/edit_file；不要只口头说「已保存」。\n"
+                            "4. 仅当目的地或改动内容真正缺失且历史里也没有时，才 ask_user。\n"
+                        )
                         _eng = ReActEngine(
                             client=_am_client,
                             tools=default_registry(workspace_dir=_effective_wd).openai_schemas(),
-                            max_steps=10,
+                            max_steps=12,
                             model=_am_model,
+                            system_prefix=_react_prefix,
                         )
                         _result = await _loop.run_in_executor(
-                            None, lambda: _eng.run(_task_text, work_dir=_effective_wd)
+                            None,
+                            lambda: _eng.run(
+                                _task_text,
+                                work_dir=_effective_wd,
+                                context=_react_ctx,
+                            ),
                         )
                         _clarify_emitted = False
                         for _st in _result.steps:

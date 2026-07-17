@@ -436,14 +436,24 @@ export const useChatStore = defineStore('chat', {
       // the backend never received the prior messages.
       const history = (session.messages || [])
         .filter((m: any) => m && (m.type === 'user_text' || m.type === 'assistant_text'))
-        .map((m: any) => ({
-          role: m.role || (m.type === 'user_text' ? 'user' : 'assistant'),
-          content: m.content || '',
-          // Stable id for backend persist / branch cut points
-          id: m.transcriptMessageId || m.id || undefined,
-        }))
-        // Cap at the last 20 messages to keep the request small
-        .slice(-20)
+        .map((m: any) => {
+          let content = m.content || ''
+          // Keep attachment filenames in history so follow-up turns know a
+          // file was uploaded even if the first turn only stored a short caption.
+          if (m.type === 'user_text' && Array.isArray(m.attachments) && m.attachments.length) {
+            const names = m.attachments.map((a: any) => a.name || a.path || 'file').filter(Boolean)
+            if (names.length && !content.includes('ATTACHMENT:') && !content.includes('[已上传附件')) {
+              content = `${content}\n\n[已上传附件: ${names.join(', ')}]`
+            }
+          }
+          return {
+            role: m.role || (m.type === 'user_text' ? 'user' : 'assistant'),
+            content,
+            id: m.transcriptMessageId || m.id || undefined,
+          }
+        })
+        // Keep more history so resume analysis stays available for rewrite turns
+        .slice(-30)
       // NOTE: The system prompt is owned by the backend (madcop/server/app.py
       // prepends a memory + workspace + tool system message and replaces any
       // frontend-sent `system` role). Sending a frontend-authored system
