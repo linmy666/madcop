@@ -260,15 +260,26 @@ def _ensure_session(session_id: str, work_dir: str | None = None) -> dict[str, A
 
 def _persist_sessions() -> None:
     """Save sessions + messages to disk so they survive restarts.
-    Each workspace's data is written under <work_dir>/.madcop/."""
+    Each workspace's data is written under <work_dir>/.madcop/.
+
+    Takes a snapshot of the dicts inside the lock so the iteration +
+    disk writes happen on a stable copy — concurrent SSE/WS handlers
+    can mutate _SESSIONS / _MESSAGES without triggering 'dictionary
+    changed size during iteration'.
+    """
     try:
-        for sid, s in _SESSIONS.items():
+        # Snapshot under lock — the dicts can be mutated by request
+        # handlers while we iterate, so copy first.
+        with _PERSIST_LOCK:
+            sessions_snapshot = list(_SESSIONS.items())
+            messages_snapshot = list(_MESSAGES.items())
+        for sid, s in sessions_snapshot:
             safe = {
                 k: v for k, v in s.items()
                 if isinstance(v, (str, int, float, bool, type(None), list, dict))
             }
             _persist_session_to_disk(safe)
-        for sid, msgs in _MESSAGES.items():
+        for sid, msgs in messages_snapshot:
             _persist_messages_to_disk(sid, msgs)
     except Exception as e:
         import sys as _sys

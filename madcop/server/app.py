@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -1371,17 +1372,39 @@ def create_app() -> FastAPI:
     # Chat (SSE streaming)
     # ------------------------------------------------------------------- #
 
+    # Client cache: avoid rebuilding OpenAICompatClient (and its
+    # underlying httpx.Client connection pool) on every /api/chat
+    # request. Keyed on (provider_id, api_key, base_url, model) so a
+    # settings change invalidates the cache automatically.
+    _client_cache: dict[str, Any] = {}
+    _client_cache_lock = threading.Lock()
+
     def _get_client():
-        """Build an LLM client from stored settings, fall back to Mock."""
+        """Build an LLM client from stored settings, fall back to Mock.
+
+        Cached per (provider_id, key, base_url, model) so HTTP keep-alive
+        connections survive across requests instead of being recreated.
+        """
         s = settings_store.load_settings()
         cfg = settings_store.get_active_client_config(s)
         if cfg and cfg.get("api_key"):
-            return OpenAICompatClient(
-                api_key=cfg["api_key"],
-                base_url=cfg["base_url"],
-                model=cfg["model"],
-                timeout=120.0,          # Complex tasks (reports, planning) need more time
-            )
+            _cache_key = f"{s.active_provider}|{cfg['api_key'][:8]}|{cfg['base_url']}|{cfg['model']}"
+            with _client_cache_lock:
+                cached = _client_cache.get(_cache_key)
+                if cached is not None:
+                    return cached
+                client = OpenAICompatClient(
+                    api_key=cfg["api_key"],
+                    base_url=cfg["base_url"],
+                    model=cfg["model"],
+                    timeout=120.0,
+                )
+                _client_cache[_cache_key] = client
+                # Cap cache size — evict oldest if too many entries
+                # (happens when user switches providers often).
+                if len(_client_cache) > 8:
+                    _client_cache.pop(next(iter(_client_cache)), None)
+                return client
         # No key configured — use mock so the UI still works for demo
         return MockClient(
             default_response="⚠️ No API key configured. Open Settings (⚙️) to add one."
@@ -1755,50 +1778,52 @@ def create_app() -> FastAPI:
             # history except the title. Save the user turn up-front and
             # the assistant turn when the stream finishes below.
             import time as _sse_t, uuid as _sse_u
-            from madcop.server.madcop_compat import _MESSAGES as _SSE_MSGS, _SESSIONS as _SSE_SESS
+            from madcop.server.madcop_compat import _MESSAGES as _SSE_MSGS, _SESSIONS as _SSE_SESS, _PERSIST_LOCK as _SSE_LOCK
             _sse_sid = body.conversation_id or conv_id
 
             def _sse_save_assistant(content: str, model: str = "") -> None:
                 """Persist the assistant's final answer so it survives restart."""
                 try:
                     _now = _sse_t.strftime("%Y-%m-%dT%H:%M:%SZ", _sse_t.gmtime())
-                    _SSE_MSGS.setdefault(_sse_sid, []).append({
-                        "id": _sse_u.uuid4().hex,
-                        "type": "assistant",
-                        "content": content,
-                        "timestamp": _now,
-                        "model": model,
-                    })
-                    if _sse_sid in _SSE_SESS:
-                        _SSE_SESS[_sse_sid]["messageCount"] = len(_SSE_MSGS[_sse_sid])
-                        _SSE_SESS[_sse_sid]["modifiedAt"] = _now
+                    with _SSE_LOCK:
+                        _SSE_MSGS.setdefault(_sse_sid, []).append({
+                            "id": _sse_u.uuid4().hex,
+                            "type": "assistant",
+                            "content": content,
+                            "timestamp": _now,
+                            "model": model,
+                        })
+                        if _sse_sid in _SSE_SESS:
+                            _SSE_SESS[_sse_sid]["messageCount"] = len(_SSE_MSGS[_sse_sid])
+                            _SSE_SESS[_sse_sid]["modifiedAt"] = _now
                 except Exception:
                     pass
 
             try:
                 _sse_now = _sse_t.strftime("%Y-%m-%dT%H:%M:%SZ", _sse_t.gmtime())
-                if _sse_sid not in _SSE_SESS:
-                    _SSE_SESS[_sse_sid] = {
-                        "id": _sse_sid,
-                        "title": (body.messages[-1].content[:40] if body.messages else "New Session"),
-                        "createdAt": _sse_now,
-                        "modifiedAt": _sse_now,
-                        "messageCount": 0,
-                        "projectPath": _ws_state[0] if _ws_state else "",
-                        "workDir": _ws_state[0] if _ws_state else None,
-                    }
-                _sse_sess = _SSE_SESS[_sse_sid]
-                _sse_sess["modifiedAt"] = _sse_now
-                if not _sse_sess.get("title") or _sse_sess.get("title") == "New Session":
-                    _sse_sess["title"] = body.messages[-1].content[:40] if body.messages else "New Session"
-                _SSE_MSGS.setdefault(_sse_sid, [])
-                _SSE_MSGS[_sse_sid].append({
-                    "id": _sse_u.uuid4().hex,
-                    "type": "user",
-                    "content": body.messages[-1].content if body.messages else "",
-                    "timestamp": _sse_now,
-                })
-                _sse_sess["messageCount"] = len(_SSE_MSGS[_sse_sid])
+                with _SSE_LOCK:
+                    if _sse_sid not in _SSE_SESS:
+                        _SSE_SESS[_sse_sid] = {
+                            "id": _sse_sid,
+                            "title": (body.messages[-1].content[:40] if body.messages else "New Session"),
+                            "createdAt": _sse_now,
+                            "modifiedAt": _sse_now,
+                            "messageCount": 0,
+                            "projectPath": _ws_state[0] if _ws_state else "",
+                            "workDir": _ws_state[0] if _ws_state else None,
+                        }
+                    _sse_sess = _SSE_SESS[_sse_sid]
+                    _sse_sess["modifiedAt"] = _sse_now
+                    if not _sse_sess.get("title") or _sse_sess.get("title") == "New Session":
+                        _sse_sess["title"] = body.messages[-1].content[:40] if body.messages else "New Session"
+                    _SSE_MSGS.setdefault(_sse_sid, [])
+                    _SSE_MSGS[_sse_sid].append({
+                        "id": _sse_u.uuid4().hex,
+                        "type": "user",
+                        "content": body.messages[-1].content if body.messages else "",
+                        "timestamp": _sse_now,
+                    })
+                    _sse_sess["messageCount"] = len(_SSE_MSGS[_sse_sid])
             except Exception:
                 pass
 

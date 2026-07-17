@@ -72,12 +72,19 @@ export type ComputerUsePermissionRequest = Record<string, unknown>
 export type ComputerUsePermissionResponse = Record<string, unknown>
 
 export type UIMessage =
-  | { type: 'user'; content: string; attachments?: AttachmentRef[]; id: string; timestamp: number }
-  | { type: 'assistant_text'; content: string; id: string; timestamp: number; model?: string }
-  | { type: 'tool_use'; toolUseId: string; toolName: string; input: unknown; id: string; timestamp: number; isPending?: boolean; status?: string }
-  | { type: 'tool_result'; toolUseId: string; result: string; id: string; timestamp: number }
+  | { type: 'user_text'; content: string; attachments?: AttachmentRef[]; id: string; timestamp: number; pending?: boolean; role?: string; sessionId?: string }
+  | { type: 'assistant_text'; content: string; id: string; timestamp: number; model?: string; isStreaming?: boolean }
+  | { type: 'tool_use'; toolUseId: string; toolName: string; input: unknown; id: string; timestamp: number; isPending?: boolean; status?: string; partialInput?: string; result?: string; isError?: boolean; args?: unknown }
+  | { type: 'tool_result'; toolUseId: string; result: string; id: string; timestamp: number; isError?: boolean; toolName?: string }
   | { type: 'thinking'; thinkingId: string; content: string; id: string; timestamp: number }
-  | { type: 'compact_summary'; summary: string; id: string; timestamp: number }
+  | { type: 'compact_summary'; summary: string; id: string; timestamp: number; phase?: string; trigger?: string; preTokens?: number; messagesSummarized?: number; title?: string }
+  | { type: 'goal_event'; action?: string; status?: string; objective?: string; message?: string; id: string; timestamp: number }
+  | { type: 'memory_event'; files?: Array<{ path?: string }>; message?: string; id: string; timestamp: number }
+  | { type: 'background_task'; task?: { status?: string; taskType?: string; summary?: string; lastToolName?: string; description?: string; outputFile?: string; taskId?: string; usage?: { durationMs?: number; totalTokens?: number } }; id: string; timestamp: number }
+  | { type: 'task_summary'; tasks?: unknown[]; id: string; timestamp: number }
+  | { type: 'permission_request'; requestId?: string; toolUseId?: string; description?: string; id: string; timestamp: number }
+  | { type: 'error'; message?: string; code?: string; id: string; timestamp: number }
+  | { type: 'system'; content?: string; id: string; timestamp: number }
 
 export type ComposerAttachment = {
   id: string
