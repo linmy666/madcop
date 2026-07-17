@@ -52,8 +52,54 @@ async def get_agent_routing() -> dict[str, Any]:
 
 @router.put("/api/settings/agent-routing")
 async def put_agent_routing(body: dict) -> dict[str, Any]:
+    """Persist per-agent model routing.
+
+    Validates that each `model` value is reachable in the active
+    provider's /v1/models list (cached for 5 min via /api/models).
+    Rejects the whole request with 400 if any model is unknown —
+    silently saving an invalid model (e.g. from a typo or a model
+    that was removed upstream) caused every deep-mode run to fail
+    with 'model not found' before this check was added.
+    """
+    if not isinstance(body, dict):
+        raise HTTPException(400, "body must be a dict of agent_id → {model: '...'}")
     s = settings_store.load_settings()
-    s.agent_routing = body if isinstance(body, dict) else {}
+    # Load the live model list (5-min cache) once for the active
+    # provider so we can validate everything in one shot.
+    from madcop.server.madcop_compat import fetch_provider_models
+    cfg = settings_store.get_active_client_config(s)
+    available: set[str] = set()
+    if cfg and cfg.get("api_key"):
+        try:
+            for m in fetch_provider_models(cfg["base_url"], cfg["api_key"]):
+                mid = m.get("id")
+                if mid:
+                    available.add(mid)
+        except Exception:
+            # If the upstream call fails, don't block the user from
+            # saving — the LLM call later will surface the real error.
+            pass
+    # Validate every model. Empty string / null is allowed (means
+    # 'use the agent's default model').
+    unknown: list[str] = []
+    for agent_id, cfg in body.items():
+        if not isinstance(cfg, dict):
+            raise HTTPException(400, f"agent {agent_id!r} config must be a dict")
+        model = cfg.get("model")
+        if not model:
+            continue
+        if available and model not in available:
+            unknown.append(f"{agent_id}={model!r}")
+    if unknown:
+        raise HTTPException(
+            400,
+            "model(s) not available in active provider: "
+            + ", ".join(unknown)
+            + " (active provider = "
+            + (s.active_provider or "(none)")
+            + ")",
+        )
+    s.agent_routing = body
     settings_store.save_settings(s)
     return {"agent_routing": s.agent_routing}
 
