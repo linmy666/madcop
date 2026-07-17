@@ -11,6 +11,7 @@
  */
 
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+// computed used for activeSelectedId
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -21,6 +22,12 @@ export interface GraphNodeData {
   x: number
   y: number
   status?: 'idle' | 'running' | 'completed' | 'failed'
+  /** Specialist id used by agent_network engine (planner/coder/…) */
+  agentId?: string
+  role?: string
+  model?: string
+  systemPrompt?: string
+  tools?: string[]
 }
 
 export interface GraphEdgeData {
@@ -37,12 +44,16 @@ const props = withDefaults(
   defineProps<{
     nodes: GraphNodeData[]
     edges: GraphEdgeData[]
+    /** Preferred prop name */
     selectedNodeId?: string | null
+    /** Alias used by some callers */
+    selectedId?: string | null
     readonly?: boolean
     showGrid?: boolean
   }>(),
   {
     selectedNodeId: null,
+    selectedId: null,
     readonly: false,
     showGrid: true,
   },
@@ -50,8 +61,19 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'select-node': [id: string]
+  /** Alias for parents listening @select */
+  select: [id: string]
   'update:node-position': [id: string, x: number, y: number]
 }>()
+
+const activeSelectedId = computed(
+  () => props.selectedNodeId ?? props.selectedId ?? null,
+)
+
+function emitSelect(id: string) {
+  emit('select-node', id)
+  emit('select', id)
+}
 
 // ─── Internal state ────────────────────────────────────────────────────
 
@@ -65,11 +87,20 @@ const nodePositions = ref<Record<string, { x: number; y: number }>>({})
 watch(
   () => props.nodes,
   (nodes) => {
-    for (const n of nodes) {
-      if (!nodePositions.value[n.id]) {
-        nodePositions.value[n.id] = { x: n.x, y: n.y }
+    // Full resync so preset switches update seats; keep drag mid-flight
+    if (draggingNode.value) {
+      for (const n of nodes) {
+        if (!nodePositions.value[n.id]) {
+          nodePositions.value[n.id] = { x: n.x, y: n.y }
+        }
       }
+      return
     }
+    const next: Record<string, { x: number; y: number }> = {}
+    for (const n of nodes) {
+      next[n.id] = { x: n.x, y: n.y }
+    }
+    nodePositions.value = next
   },
   { immediate: true, deep: true },
 )
@@ -198,7 +229,7 @@ onUnmounted(() => {
       class="relative h-full w-full"
       viewBox="0 0 1000 600"
       preserveAspectRatio="xMidYMid meet"
-      @click="emit('select-node', '')"
+      @click="emitSelect('')"
     >
       <!-- Edges layer (drawn first, below nodes) -->
       <g class="edges-layer">
@@ -232,8 +263,8 @@ onUnmounted(() => {
           :key="node.id"
           :transform="`translate(${getPos(node.id).x}, ${getPos(node.id).y})`"
           class="node-group"
-          :class="{ 'node-group--selected': selectedNodeId === node.id }"
-          @click.stop="emit('select-node', node.id)"
+          :class="{ 'node-group--selected': activeSelectedId === node.id }"
+          @click.stop="emitSelect(node.id)"
           @mousedown="startDrag($event, node.id)"
         >
           <!-- Pulsing ring when running -->
@@ -251,8 +282,8 @@ onUnmounted(() => {
           <circle
             :r="NODE_RADIUS"
             :fill="nodeFill(node.status)"
-            :stroke="nodeStroke(node.status, selectedNodeId === node.id)"
-            :stroke-width="selectedNodeId === node.id ? 2.5 : 1.5"
+            :stroke="nodeStroke(node.status, activeSelectedId === node.id)"
+            :stroke-width="activeSelectedId === node.id ? 2.5 : 1.5"
             class="node-circle"
           />
 

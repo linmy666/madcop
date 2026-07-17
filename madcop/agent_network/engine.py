@@ -233,17 +233,31 @@ class AgentEngine:
             )
             return
 
-        # Build system prompt from agent definition
+        # Build system prompt from agent registry, with ad-hoc canvas fallbacks
+        # (node may carry systemPrompt / model / description from the UI).
         caps = agent.get("capabilities", [])
         caps_str = ", ".join(caps) if caps else "general assistance"
-        desc = agent.get("description", "You are a helpful AI assistant.")
-        model = agent.get("model", "")
+        desc = (
+            agent.get("description")
+            or node.get("description")
+            or node.get("systemPrompt")
+            or "You are a helpful AI assistant."
+        )
+        model = agent.get("model") or node.get("model") or ""
+        agent_name = (
+            agent.get("name")
+            or node.get("name")
+            or node.get("label")
+            or agent_id
+        )
 
         # The synthesizer node gets a bespoke prompt that tells it to merge
         # all upstream outputs into one coherent report. Other agents use
         # their role definition + the generic "do your part" instruction.
         if node_id == SYNTHESIZER_NODE_ID:
             system_prompt = _SYNTH_PROMPT
+        elif node.get("systemPrompt"):
+            system_prompt = str(node.get("systemPrompt"))
         else:
             system_prompt = (
                 f"你是「{agent_name}」。{desc}\n"

@@ -3,6 +3,8 @@
  * No Vue. Driven by real session agentStreams + deepRoute + clarify signals.
  */
 
+import { sanitizeAgentDisplayText } from './agentDisplayText'
+
 export type SpritePose =
   | 'idle'
   | 'thinking'
@@ -12,6 +14,10 @@ export type SpritePose =
   | 'blocked'
   | 'done'
   | 'error'
+  /** 摸鱼 / 待命（正义小队也要休息，但随时可上岗） */
+  | 'slacking'
+  /** 被用户点名指派上岗 */
+  | 'assigned'
 
 export type StudioSkinId = 'studio' | 'study' | 'cabin'
 
@@ -40,6 +46,8 @@ export interface SpriteRosterInput {
   activeToolName?: string | null
   /** chatStore ChatState plus stream labels: idle|busy|streaming|tool_executing|… */
   chatState?: string | null
+  /** User-pinned sprite to “call up” for the next justice shift */
+  assignedSpriteId?: string | null
 }
 
 export interface SpriteAgent {
@@ -140,16 +148,22 @@ export function isChatBusy(chatState: string | null | undefined): boolean {
 }
 
 function bubbleForPose(pose: SpritePose, text: string, clarifyQ?: string): string {
-  if (pose === 'blocked' && clarifyQ) return clarifyQ.slice(0, 48)
-  if (pose === 'error') return '出错了'
-  if (pose === 'done') return '完成'
-  if (pose === 'tool_file') return '读写文件…'
-  if (pose === 'tool_web') return '检索中…'
-  if (pose === 'thinking') return '思考中…'
-  if (pose === 'working') {
-    const t = (text || '').replace(/\s+/g, ' ').trim()
-    return t ? t.slice(0, 36) + (t.length > 36 ? '…' : '') : '工作中…'
+  if (pose === 'blocked' && clarifyQ) return sanitizeAgentDisplayText(clarifyQ, 40)
+  if (pose === 'error') {
+    const e = sanitizeAgentDisplayText(text || '出错了', 36)
+    return e || '出错了'
   }
+  if (pose === 'done') return '任务完成 ✓'
+  if (pose === 'tool_file') return '正在读写文件…'
+  if (pose === 'tool_web') return '正在检索…'
+  if (pose === 'thinking') return '认真思考中…'
+  if (pose === 'slacking') return '咖啡角待命中…'
+  if (pose === 'assigned') return '收到！我来！'
+  if (pose === 'working') {
+    const t = sanitizeAgentDisplayText(text || '', 36)
+    return t || '工作中…'
+  }
+  if (pose === 'idle') return '守护中'
   return ''
 }
 
@@ -162,7 +176,8 @@ function poseFromStreamStatus(
   },
 ): SpritePose {
   if (status === 'error') return 'error'
-  if (status === 'done') return 'done'
+  // After done: justice squad rests at the lounge (slacking = 待命摸鱼, not lazy forever)
+  if (status === 'done') return 'slacking'
   // running
   if (opts.clarificationPending) return 'blocked'
   const toolPose = poseFromToolName(opts.activeToolName)
@@ -189,18 +204,28 @@ export function buildSpriteRoster(input: SpriteRosterInput): SpriteAgent[] {
       const s = streams[id]
       const role = inferRole(id, s.name)
       const meta = ROLE_META[role] || ROLE_META.general
-      const pose = poseFromStreamStatus(s.status, {
+      let pose = poseFromStreamStatus(s.status, {
         clarificationPending: clarify && s.status === 'running',
         activeToolName: s.status === 'running' ? input.activeToolName : null,
         text: s.text || '',
       })
+      // User assigned this sprite while idle/slacking → show “我来了”
+      if (
+        input.assignedSpriteId === id &&
+        (pose === 'slacking' || pose === 'idle' || pose === 'done')
+      ) {
+        pose = 'assigned'
+      }
+      // Assigned agents sit at their desk; slacking goes to lounge
+      const station =
+        pose === 'slacking' ? 'lounge' : meta.station
       return {
         id,
         name: s.name || meta.label,
         color: s.color || meta.color,
         pose,
         role,
-        station: meta.station,
+        station,
         text: s.text || '',
         status: s.status,
         bubble: bubbleForPose(pose, s.text || '', clarifyQ),
@@ -294,7 +319,7 @@ export function selectSpriteDetail(
 
 export function poseLabel(pose: SpritePose): string {
   const map: Record<SpritePose, string> = {
-    idle: '空闲',
+    idle: '守护中',
     thinking: '思考',
     working: '工作中',
     tool_file: '文件',
@@ -302,8 +327,53 @@ export function poseLabel(pose: SpritePose): string {
     blocked: '等待你',
     done: '完成',
     error: '失败',
+    slacking: '待命摸鱼',
+    assigned: '已指派',
   }
   return map[pose] || pose
+}
+
+/** Map pose → MascotAvatar mood class */
+export function poseToMood(pose: SpritePose | string): string {
+  switch (pose) {
+    case 'working':
+    case 'tool_file':
+    case 'tool_web':
+    case 'thinking':
+      return 'work'
+    case 'slacking':
+    case 'idle':
+      return 'slack'
+    case 'assigned':
+      return 'assign'
+    case 'done':
+      return 'celebrate'
+    case 'blocked':
+      return 'blocked'
+    default:
+      return ''
+  }
+}
+
+export const ASSIGNED_STORAGE_KEY = 'madcop_sprite_assigned_id'
+
+export function loadAssignedSpriteId(): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    return localStorage.getItem(ASSIGNED_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function saveAssignedSpriteId(id: string | null): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    if (!id) localStorage.removeItem(ASSIGNED_STORAGE_KEY)
+    else localStorage.setItem(ASSIGNED_STORAGE_KEY, id)
+  } catch {
+    /* ignore */
+  }
 }
 
 // ── Preferences (localStorage; SSR-safe) ──────────────────────────────

@@ -13,7 +13,10 @@ import {
   selectSpriteDetail,
   loadStudioSkin,
   saveStudioSkin,
+  loadAssignedSpriteId,
+  saveAssignedSpriteId,
 } from '../../lib/spriteStudio'
+import { sanitizeAgentDisplayText } from '../../lib/agentDisplayText'
 import { STATION_SPOTS } from '../../lib/spriteSceneLayout'
 import { publicAssetPath } from '../../lib/publicAsset'
 
@@ -29,13 +32,49 @@ const emit = defineEmits<{
 
 const skin = ref<StudioSkinId>(loadStudioSkin())
 const selectedId = ref<string | null>(null)
-const usePixelWalk = ref(true)
+// Brand: MadCop mascot only by default (no green-cap pixel sheet)
+const usePixelWalk = ref(false)
+const assignedId = ref<string | null>(loadAssignedSpriteId())
 
 watch(skin, (s) => saveStudioSkin(s))
 
+/** Overlay assigned flag onto roster for walkers (parent may also pass via roster). */
+const displayRoster = computed(() => {
+  if (!assignedId.value) return props.roster
+  return props.roster.map((a) => {
+    if (a.id !== assignedId.value) return a
+    if (a.pose === 'working' || a.pose === 'thinking' || a.pose === 'tool_file' || a.pose === 'tool_web') {
+      return a
+    }
+    return {
+      ...a,
+      pose: 'assigned' as const,
+      station: a.role || a.station || 'general',
+      bubble: '收到！正义上岗！',
+    }
+  })
+})
+
 const detail = computed<SpriteDetail | null>(() =>
-  selectSpriteDetail(props.roster, selectedId.value),
+  selectSpriteDetail(displayRoster.value, selectedId.value),
 )
+
+const detailText = computed(() =>
+  detail.value?.text
+    ? sanitizeAgentDisplayText(detail.value.text, 800)
+    : '',
+)
+
+function assignSelected() {
+  if (!selectedId.value) return
+  assignedId.value = selectedId.value
+  saveAssignedSpriteId(selectedId.value)
+}
+
+function clearAssign() {
+  assignedId.value = null
+  saveAssignedSpriteId(null)
+}
 
 const roomSrc = computed(() => {
   const map: Record<StudioSkinId, string> = {
@@ -48,7 +87,7 @@ const roomSrc = computed(() => {
 
 /** Agents rendered as independent walkers (not stacked empty desks). */
 const walkers = computed(() =>
-  props.roster.map((a) => ({
+  displayRoster.value.map((a) => ({
     ...a,
     station: a.station || a.role || 'general',
   })),
@@ -66,7 +105,7 @@ const litDesks = computed(() => {
     }))
 })
 
-const isEmpty = computed(() => props.roster.length === 0)
+const isEmpty = computed(() => displayRoster.value.length === 0)
 
 function onSelect(id: string) {
   selectedId.value = id
@@ -93,9 +132,9 @@ function setSkin(id: StudioSkinId) {
         </p>
       </div>
       <div class="ss__controls">
-        <label class="ss__toggle" title="行走时使用像素步帧（itch 风格）">
+        <label class="ss__toggle" title="默认关闭：一律用 MadCop 小精灵；开启后行走时可用像素辅助帧">
           <input v-model="usePixelWalk" type="checkbox" />
-          <span>像素步帧</span>
+          <span>像素辅助帧</span>
         </label>
         <div class="ss__skins" role="group" aria-label="场景皮肤">
           <button
@@ -170,16 +209,36 @@ function setSkin(id: StudioSkinId) {
         </div>
         <div v-else class="ss__detail-card" :style="{ '--c': detail.color }">
           <div class="ss__detail-head">
-            <MascotAvatar :size="48" :color="detail.color" />
+            <MascotAvatar :size="48" :color="detail.color" :mood="detail.pose === 'slacking' ? 'slack' : detail.pose === 'assigned' ? 'assign' : 'work'" />
             <div>
               <div class="ss__detail-name">{{ detail.name }}</div>
               <div class="ss__detail-meta">{{ detail.pose }} · {{ detail.status }}</div>
             </div>
           </div>
-          <div v-if="detail.bubble" class="ss__detail-bubble">{{ detail.bubble }}</div>
-          <pre v-if="detail.text" class="ss__detail-text">{{ detail.text }}</pre>
+          <div v-if="detail.bubble" class="ss__detail-bubble">{{ sanitizeAgentDisplayText(detail.bubble, 48) }}</div>
+          <pre v-if="detailText" class="ss__detail-text">{{ detailText }}</pre>
           <p v-else class="ss__detail-muted">等待输出…</p>
-          <p class="ss__detail-note">选择仅聚焦；不会改写服务端路由。</p>
+          <div class="ss__detail-actions">
+            <button
+              type="button"
+              class="ss__assign"
+              :disabled="assignedId === detail.id"
+              @click="assignSelected"
+            >
+              {{ assignedId === detail.id ? '已指派上岗' : `指派 ${detail.name} 干活` }}
+            </button>
+            <button
+              v-if="assignedId"
+              type="button"
+              class="ss__assign ss__assign--ghost"
+              @click="clearAssign"
+            >
+              取消指派
+            </button>
+          </div>
+          <p class="ss__detail-note">
+            指派是本地「点名」——精灵会走回工位，不改服务端路由。MadCop 小队：摸鱼可休，有难必上。
+          </p>
         </div>
       </aside>
     </div>
@@ -488,6 +547,31 @@ function setSkin(id: StudioSkinId) {
   margin: 0;
   font-size: 10px;
   color: var(--color-text-tertiary);
+  line-height: 1.45;
+}
+.ss__detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ss__assign {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-brand, #7c3aed);
+  color: #fff;
+}
+.ss__assign:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+.ss__assign--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
 }
 
 @keyframes ss-live {

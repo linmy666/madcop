@@ -54,15 +54,26 @@ describe('buildSpriteRoster', () => {
     expect(c.text).toContain('def foo')
   })
 
-  it('maps done → done and error → error', () => {
+  it('maps done → slacking (lounge) and error → error', () => {
     const roster = buildSpriteRoster({
       agentStreams: {
         a: { name: 'A', color: '#111', text: 'ok', status: 'done' },
         b: { name: 'B', color: '#222', text: 'fail', status: 'error' },
       },
     })
-    expect(roster.find((r) => r.id === 'a')!.pose).toBe('done')
+    expect(roster.find((r) => r.id === 'a')!.pose).toBe('slacking')
+    expect(roster.find((r) => r.id === 'a')!.station).toBe('lounge')
     expect(roster.find((r) => r.id === 'b')!.pose).toBe('error')
+  })
+
+  it('marks assigned sprite when pinned', () => {
+    const roster = buildSpriteRoster({
+      agentStreams: {
+        a: { name: '规划', color: '#7C3AED', text: 'ok', status: 'done' },
+      },
+      assignedSpriteId: 'a',
+    })
+    expect(roster[0].pose).toBe('assigned')
   })
 
   it('maps clarification → blocked on running agents', () => {

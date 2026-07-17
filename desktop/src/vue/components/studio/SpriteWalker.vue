@@ -12,7 +12,8 @@ import {
   facingBetween,
   stationPoint,
 } from '../../lib/spriteSceneLayout'
-import { poseLabel, type SpritePose } from '../../lib/spriteStudio'
+import { poseLabel, poseToMood, type SpritePose } from '../../lib/spriteStudio'
+import { sanitizeAgentDisplayText } from '../../lib/agentDisplayText'
 import { publicAssetPath } from '../../lib/publicAsset'
 
 const props = defineProps<{
@@ -160,7 +161,15 @@ const rootStyle = computed(() => ({
 }))
 
 const showPixel = computed(
-  () => props.usePixelSheet && (walking.value || props.pose === 'idle'),
+  () => props.usePixelSheet && walking.value,
+)
+
+const cleanBubble = computed(() =>
+  props.bubble ? sanitizeAgentDisplayText(props.bubble, 40) : '',
+)
+
+const mood = computed(() =>
+  walking.value ? 'work' : poseToMood(props.pose),
 )
 </script>
 
@@ -180,17 +189,16 @@ const showPixel = computed(
     :title="`${name} · ${poseLabel(pose as any)}`"
     @click="emit('select', id)"
   >
-    <span v-if="bubble && !walking" class="sw__bubble">{{ bubble }}</span>
+    <span v-if="cleanBubble && !walking" class="sw__bubble">{{ cleanBubble }}</span>
     <span class="sw__shadow" />
-    <!-- Pixel sheet (itch-style) while walking -->
+    <!-- Pixel sheet only while walking; seated uses brand mascot (white eyes) -->
     <span v-if="showPixel" class="sw__pixel" :style="sheetStyle" />
-    <!-- Brand mascot when seated / working -->
-    <span v-else class="sw__mascot" :class="{ 'sw__mascot--walk': walking }">
-      <MascotAvatar :size="40" :color="color" />
+    <span v-else class="sw__mascot">
+      <MascotAvatar :size="40" :color="color" :mood="mood" />
     </span>
     <span class="sw__badge" :data-pose="walking ? 'working' : pose" />
     <span class="sw__name">{{ name }}</span>
-    <span class="sw__pose">{{ walking ? '赶路中' : poseLabel(pose as any) }}</span>
+    <span class="sw__pose">{{ walking ? '赶路上岗' : poseLabel(pose as any) }}</span>
   </button>
 </template>
 
@@ -291,8 +299,8 @@ const showPixel = computed(
   bottom: calc(100% - 2px);
   left: 50%;
   transform: translateX(-50%);
-  max-width: 120px;
-  padding: 4px 8px;
+  max-width: 132px;
+  padding: 5px 9px;
   border-radius: 10px 10px 10px 4px;
   background: #fff;
   color: #1f2937;
@@ -304,6 +312,7 @@ const showPixel = computed(
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
   z-index: 5;
   animation: sw-bubble 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
 }
 .sw--thinking .sw__mascot,
 .sw--working .sw__mascot,
