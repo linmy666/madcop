@@ -1598,17 +1598,7 @@ def register(app: FastAPI) -> None:
 
 
 
-    @app.post("/api/scheduled-tasks/{id}/run", include_in_schema=False)
-    async def cc_scheduled_run(id: str) -> dict[str, Any]:
-        return {"runId": f"run-{id}-{int(time.time())}",
-                "scheduledTaskId": id}
-
-
-    @app.delete("/api/scheduled-tasks/{id}", include_in_schema=False)
-    async def cc_scheduled_delete(id: str) -> dict[str, Any]:
-        return {"ok": True, "deleted": id}
-
-
+    # scheduled-tasks CRUD/run implemented later via task_scheduler (single source)
 
     @app.get("/api/mcp/{name}", include_in_schema=False)
     async def cc_mcp_get(name: str) -> dict[str, Any]:
@@ -2314,62 +2304,21 @@ def register(app: FastAPI) -> None:
         return {"ok": True, "deleted": name}
 
     # ---- Scheduled tasks (basic cron-like) ---------------------- #
+    # Source of truth: madcop.server.task_scheduler (disk + cron tick)
 
-    _SCHED_FILE = Path.home() / ".madcop" / "scheduled_tasks.json"
-    _SCHED_RUNS_FILE = Path.home() / ".madcop" / "scheduled_task_runs.json"
-
-    def _load_scheduled_tasks() -> dict[str, dict[str, Any]]:
-        try:
-            if _SCHED_FILE.exists():
-                import json as _j
-                data = _j.loads(_SCHED_FILE.read_text(encoding="utf-8"))
-                if isinstance(data, list):
-                    return {t["id"]: t for t in data if isinstance(t, dict) and t.get("id")}
-                if isinstance(data, dict):
-                    return {k: v for k, v in data.items() if isinstance(v, dict)}
-        except Exception as e:
-            logger.debug("load scheduled tasks: %s", e)
-        return {}
-
-    def _save_scheduled_tasks(tasks: dict[str, dict[str, Any]]) -> None:
-        try:
-            import json as _j
-            _SCHED_FILE.parent.mkdir(parents=True, exist_ok=True)
-            _SCHED_FILE.write_text(
-                _j.dumps(list(tasks.values()), ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-        except Exception as e:
-            logger.debug("save scheduled tasks: %s", e)
-
-    def _load_scheduled_runs() -> list[dict[str, Any]]:
-        try:
-            if _SCHED_RUNS_FILE.exists():
-                import json as _j
-                data = _j.loads(_SCHED_RUNS_FILE.read_text(encoding="utf-8"))
-                if isinstance(data, list):
-                    return data[-200:]
-        except Exception as e:
-            logger.debug("load scheduled runs: %s", e)
-        return []
-
-    def _save_scheduled_runs(runs: list[dict[str, Any]]) -> None:
-        try:
-            import json as _j
-            _SCHED_RUNS_FILE.parent.mkdir(parents=True, exist_ok=True)
-            _SCHED_RUNS_FILE.write_text(
-                _j.dumps(runs[-200:], ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-        except Exception as e:
-            logger.debug("save scheduled runs: %s", e)
-
-    _SCHEDULED_TASKS: dict[str, dict[str, Any]] = _load_scheduled_tasks()
-    _SCHEDULED_RUNS: list[dict[str, Any]] = _load_scheduled_runs()
+    from madcop.server import task_scheduler as _sched
 
     @app.get("/api/scheduled-tasks", include_in_schema=False)
     async def cc_sched_list() -> dict[str, Any]:
-        return {"tasks": list(_SCHEDULED_TASKS.values())}
+        tasks = list(_sched.load_tasks().values())
+        # Enrich nextRunAt for UI if missing
+        for t in tasks:
+            cron = t.get("cron") or t.get("schedule") or ""
+            if cron and not t.get("nextRunAt"):
+                nxt = _sched.next_run_ts(cron)
+                if nxt is not None:
+                    t["nextRunAt"] = nxt
+        return {"tasks": tasks}
 
     @app.post("/api/scheduled-tasks", include_in_schema=False)
     async def cc_sched_create(request: Request) -> dict[str, Any]:
@@ -2379,16 +2328,21 @@ def register(app: FastAPI) -> None:
         except Exception:
             body = {}
         tid = body.get("id") or _u.uuid4().hex
+        cron = body.get("cron") or body.get("schedule") or "*/5 * * * *"
         task = {
             "id": tid,
             "name": body.get("name", "Untitled task"),
-            "cron": body.get("cron", "*/5 * * * *"),
+            "cron": cron,
             "prompt": body.get("prompt", ""),
             "enabled": body.get("enabled", True),
             "createdAt": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()),
         }
-        _SCHEDULED_TASKS[tid] = task
-        _save_scheduled_tasks(_SCHEDULED_TASKS)
+        nxt = _sched.next_run_ts(cron)
+        if nxt is not None:
+            task["nextRunAt"] = nxt
+        tasks = _sched.load_tasks()
+        tasks[tid] = task
+        _sched.save_tasks(tasks)
         return {"ok": True, "task": task}
 
     @app.put("/api/scheduled-tasks/{task_id}", include_in_schema=False)
@@ -2397,44 +2351,44 @@ def register(app: FastAPI) -> None:
             body = await request.json()
         except Exception:
             body = {}
-        if task_id not in _SCHEDULED_TASKS:
+        tasks = _sched.load_tasks()
+        if task_id not in tasks:
             return {"ok": False, "error": "not found"}
-        _SCHEDULED_TASKS[task_id].update(body)
-        _save_scheduled_tasks(_SCHEDULED_TASKS)
-        return {"ok": True, "task": _SCHEDULED_TASKS[task_id]}
+        tasks[task_id].update(body)
+        cron = tasks[task_id].get("cron") or tasks[task_id].get("schedule") or ""
+        if cron:
+            nxt = _sched.next_run_ts(cron)
+            if nxt is not None:
+                tasks[task_id]["nextRunAt"] = nxt
+        _sched.save_tasks(tasks)
+        return {"ok": True, "task": tasks[task_id]}
 
     @app.delete("/api/scheduled-tasks/{task_id}", include_in_schema=False)
     async def cc_sched_delete(task_id: str) -> dict[str, Any]:
-        if _SCHEDULED_TASKS.pop(task_id, None) is None:
+        tasks = _sched.load_tasks()
+        if tasks.pop(task_id, None) is None:
             return {"ok": False, "error": "not found"}
-        _save_scheduled_tasks(_SCHEDULED_TASKS)
+        _sched.save_tasks(tasks)
         return {"ok": True, "deleted": task_id}
 
     @app.post("/api/scheduled-tasks/{task_id}/run", include_in_schema=False)
     async def cc_sched_run(task_id: str) -> dict[str, Any]:
-        import time as _t, uuid as _u
-        task = _SCHEDULED_TASKS.get(task_id)
+        tasks = _sched.load_tasks()
+        task = tasks.get(task_id)
         if not task:
             return {"ok": False, "error": "not found"}
-        run = {
-            "id": _u.uuid4().hex,
-            "taskId": task_id,
-            "status": "completed",
-            "startedAt": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()),
-            "finishedAt": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()),
-            "output": f"[stub] Ran task '{task['name']}' with prompt: {task['prompt'][:80]}",
-        }
-        _SCHEDULED_RUNS.append(run)
-        _save_scheduled_runs(_SCHEDULED_RUNS)
-        return {"ok": True, "run": run}
+        import asyncio as _aio
+        run = await _aio.to_thread(_sched.execute_task, task, source="manual")
+        return {"ok": True, "run": run, "runId": run.get("id"), "scheduledTaskId": task_id}
 
     @app.get("/api/scheduled-tasks/runs", include_in_schema=False)
     async def cc_sched_runs(limit: int = Query(default=50)) -> dict[str, Any]:
-        return {"runs": _SCHEDULED_RUNS[-limit:]}
+        runs = _sched.load_runs()
+        return {"runs": runs[-limit:]}
 
     @app.get("/api/scheduled-tasks/{task_id}/runs", include_in_schema=False)
     async def cc_sched_task_runs(task_id: str) -> dict[str, Any]:
-        runs = [r for r in _SCHEDULED_RUNS if r["taskId"] == task_id]
+        runs = [r for r in _sched.load_runs() if r.get("taskId") == task_id]
         return {"runs": runs}
 
     # ---- Plugins (from ~/.madcop/plugins/ + bundled) ------------ #

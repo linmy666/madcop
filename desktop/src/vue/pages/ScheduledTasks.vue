@@ -76,6 +76,18 @@ async function removeTask(id: string) {
   await taskStore.deleteTask(id)
   uiStore.addToast({ type: 'info', message: '已删除任务' })
 }
+
+function formatTs(v: string | number | undefined) {
+  if (v == null || v === '') return '—'
+  try {
+    if (typeof v === 'number' || (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v))) {
+      return new Date(Number(v) * (Number(v) < 1e12 ? 1000 : 1)).toLocaleString()
+    }
+    return new Date(v).toLocaleString()
+  } catch {
+    return String(v)
+  }
+}
 </script>
 
 <template>
@@ -139,6 +151,10 @@ async function removeTask(id: string) {
               </span>
             </div>
             <p class="prompt">{{ t.prompt }}</p>
+            <p v-if="t.nextRunAt || t.lastFiredAt" class="meta muted">
+              <span v-if="t.lastFiredAt">上次 {{ formatTs(t.lastFiredAt) }}</span>
+              <span v-if="t.nextRunAt"> · 下次 {{ formatTs(t.nextRunAt) }}</span>
+            </p>
           </div>
           <div class="scheduled__item-actions">
             <button type="button" class="ghost" @click="toggleEnabled(t.id, !t.enabled)">
@@ -265,4 +281,5 @@ async function removeTask(id: string) {
   padding: 8px 10px; border-radius: 8px; background: var(--color-surface-container-low);
 }
 .muted { color: var(--color-text-tertiary); }
+.meta { margin: 6px 0 0; font-size: 11px; }
 </style>

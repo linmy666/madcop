@@ -794,12 +794,32 @@ def create_app() -> FastAPI:
                     logger.warning("persist-loop error: %s", e)
 
         app.state.persist_task = _aio.create_task(_persist_loop())
+
+        async def _scheduler_loop() -> None:
+            from madcop.server.task_scheduler import tick as _sched_tick
+            # Stagger first tick so startup stays snappy
+            await _aio.sleep(15.0)
+            while True:
+                try:
+                    fired = await _aio.to_thread(_sched_tick)
+                    if fired:
+                        logger.info("scheduler: fired %d task(s)", len(fired))
+                except _aio.CancelledError:
+                    return
+                except Exception as e:
+                    logger.warning("scheduler-loop error: %s", e)
+                await _aio.sleep(30.0)
+
+        app.state.scheduler_task = _aio.create_task(_scheduler_loop())
         try:
             yield
         finally:
             task = getattr(app.state, "persist_task", None)
             if task:
                 task.cancel()
+            st = getattr(app.state, "scheduler_task", None)
+            if st:
+                st.cancel()
             try:
                 await _aio.to_thread(_persist_sessions)
             except Exception as e:
