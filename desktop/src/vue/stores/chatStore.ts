@@ -377,6 +377,11 @@ export const useChatStore = defineStore('chat', {
     ) {
       const session = this.getSession(sessionId)
       session.chatState = 'busy'
+      // The user is sending a new message — clear any pending
+      // clarification from a prior ask_user turn. Otherwise the purple
+      // ClarificationPanel stays stuck on screen even though the user
+      // has moved on to a new question.
+      session.clarificationPending = null
       // Add the user message. transcriptMessageId mirrors id so session
       // branching (fork-from-here) can locate the backend message by id.
       const userId = nextId()
