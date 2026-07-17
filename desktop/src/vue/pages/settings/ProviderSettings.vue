@@ -12,6 +12,7 @@
 
 import { ref, onMounted, computed } from 'vue'
 import { getApiUrl } from '../../api/client'
+import { useTranslation } from '../../i18n'
 
 interface Provider {
   provider_id: string
@@ -52,7 +53,7 @@ interface FetchedModel {
   context_window: number | null
 }
 
-const t = (key: string) => key
+const t = useTranslation()
 
 // ── Enums ───────────────────────────────────────────────────────────
 const AUTH_STRATEGIES = [
@@ -447,10 +448,10 @@ function fmtContext(n: number | null | undefined) {
             <div class="provider-card__model">{{ p.model || '未指定模型（在会话中选择）' }}</div>
           </div>
           <div class="provider-card__actions">
-            <button v-if="activeProviderId !== p.provider_id" @click="activateProvider(p.provider_id)" class="provider-card__btn">设为当前</button>
-            <button @click="testProvider(p.provider_id)" :disabled="testResults[p.provider_id]?.loading" class="provider-card__btn">{{ testResults[p.provider_id]?.loading ? '测试中…' : '测试' }}</button>
-            <button @click="openEdit(p)" class="provider-card__btn">编辑</button>
-            <button v-if="activeProviderId !== p.provider_id" @click="confirmDelete(p)" class="provider-card__btn provider-card__btn--danger">删除</button>
+            <button v-if="activeProviderId !== p.provider_id" @click="activateProvider(p.provider_id)" class="provider-card__btn">{{ t('settings.providers.setDefault') }}</button>
+            <button @click="testProvider(p.provider_id)" :disabled="testResults[p.provider_id]?.loading" class="provider-card__btn">{{ testResults[p.provider_id]?.loading ? t('settings.providers.test') + '…' : t('settings.providers.test') }}</button>
+            <button @click="openEdit(p)" class="provider-card__btn">{{ t('settings.providers.edit') }}</button>
+            <button v-if="activeProviderId !== p.provider_id" @click="confirmDelete(p)" class="provider-card__btn provider-card__btn--danger">{{ t('common.delete') || '删除' }}</button>
           </div>
         </div>
         <div class="provider-card__details">
@@ -482,7 +483,7 @@ function fmtContext(n: number | null | undefined) {
     <Teleport to="body">
       <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
         <div class="modal-panel">
-          <h3 class="modal-title">添加供应商</h3>
+          <h3 class="modal-title">{{ t('settings.providers.addTitle') }}</h3>
 
           <div style="margin-bottom: 12px;">
             <label class="modal-label">预设 (可选)</label>

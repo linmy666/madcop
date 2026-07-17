@@ -67,10 +67,24 @@ watch(debouncedQuery, () => {
   error.value = false
   searchApi
     .searchSessions(q, { limit: SEARCH_LIMIT })
-    .then((resp) => {
+    .then((resp: any) => {
       if (reqId !== requestIdRef.value) return
-      results.value = resp.results
-      truncated.value = resp.truncated
+      // Backend historically returned {sessions}; current shape is {results}.
+      const list = Array.isArray(resp?.results)
+        ? resp.results
+        : Array.isArray(resp?.sessions)
+          ? resp.sessions.map((s: any) => ({
+              sessionId: s.id ?? s.sessionId,
+              title: s.title ?? '',
+              projectPath: s.projectPath ?? '',
+              workDir: s.workDir ?? null,
+              modifiedAt: s.modifiedAt ?? '',
+              matchCount: s.matchCount ?? 0,
+              matches: s.matches ?? [],
+            }))
+          : []
+      results.value = list
+      truncated.value = Boolean(resp?.truncated)
       loading.value = false
     })
     .catch(() => {
@@ -177,6 +191,34 @@ watch(
 )
 
 // ─── Helper functions ──────────────────────────────────────────────
+function renderHighlightedParts(
+  snippet: string,
+  highlights: Array<{ start: number; end: number }> | undefined,
+): Array<{ text: string; highlighted: boolean }> {
+  if (!snippet) return []
+  if (!highlights?.length) return [{ text: snippet, highlighted: false }]
+  const parts: Array<{ text: string; highlighted: boolean }> = []
+  let cursor = 0
+  const ordered = [...highlights]
+    .map((h) => ({
+      start: Math.max(0, Math.min(h.start, snippet.length)),
+      end: Math.max(0, Math.min(h.end, snippet.length)),
+    }))
+    .filter((h) => h.end > h.start)
+    .sort((a, b) => a.start - b.start)
+  for (const h of ordered) {
+    if (h.start > cursor) {
+      parts.push({ text: snippet.slice(cursor, h.start), highlighted: false })
+    }
+    parts.push({ text: snippet.slice(h.start, h.end), highlighted: true })
+    cursor = h.end
+  }
+  if (cursor < snippet.length) {
+    parts.push({ text: snippet.slice(cursor), highlighted: false })
+  }
+  return parts
+}
+
 function projectLabel(row: Row): string {
   const candidate = row.workDir || row.projectPath
   if (!candidate) return ''

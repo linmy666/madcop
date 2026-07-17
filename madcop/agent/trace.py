@@ -119,6 +119,11 @@ class TraceStore:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # WAL reduces "database is locked" under concurrent readers/writers.
+        try:
+            self._conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.Error:
+            pass
         self._conn.executescript(SCHEMA)
         self._conn.commit()
 

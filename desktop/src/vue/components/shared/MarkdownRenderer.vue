@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, defineComponent } from 'vue'
+import { computed, h, defineComponent, ref } from 'vue'
 import DOMPurify from 'dompurify'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
@@ -514,8 +514,28 @@ const MermaidStreamingPlaceholder = defineComponent({
 })
 
 // ── Computed state ────────────────────────────────────────────────────────────
+// Long-doc collapse (parity with components/markdown/MarkdownRenderer.vue).
+const LONG_COLLAPSE_CHARS = 80_000
+const longDocExpanded = ref(false)
+const isLongCollapsed = computed(
+  () =>
+    !props.streaming
+    && !longDocExpanded.value
+    && props.content.length > LONG_COLLAPSE_CHARS,
+)
+const parseTarget = computed(() => {
+  const full = props.content
+  if (!isLongCollapsed.value) return full
+  const slice = full.slice(0, LONG_COLLAPSE_CHARS)
+  const lastNl = slice.lastIndexOf('\n')
+  return lastNl > LONG_COLLAPSE_CHARS * 0.6 ? slice.slice(0, lastNl) : slice
+})
+function expandLongDoc() {
+  longDocExpanded.value = true
+}
+
 const parsed = computed(() =>
-  props.cache ? getCachedMarkdownParse(props.content, props.streaming) : parseMarkdown(props.content),
+  props.cache ? getCachedMarkdownParse(parseTarget.value, props.streaming) : parseMarkdown(parseTarget.value),
 )
 
 const proseClasses = computed(() => getProseClasses(props.variant, props.class))
@@ -582,32 +602,61 @@ function handleClick(event: MouseEvent): void {
 </script>
 
 <template>
-  <div
-    v-if="parts.length === 1 && parts[0].type === 'html'"
-    :class="proseClasses"
-    v-html="parts[0].content"
-    @click="handleClick"
-  />
-  <div
-    v-else
-    :class="proseClasses"
-    @click="handleClick"
-  >
-    <template v-for="(part, i) in parts" :key="i">
-      <div
-        v-if="part.type === 'html'"
-        v-html="part.content"
-      />
-      <MermaidStreamingPlaceholder
-        v-else-if="shouldRenderAsMermaid(part.block) && props.streaming"
-      />
-      <MermaidRenderer
-        v-else-if="shouldRenderAsMermaid(part.block)"
-        :code="part.block.code"
-      />
-      <div v-else class="my-4">
-        <CodeViewer :code="part.block.code" :language="part.block.language" />
-      </div>
-    </template>
+  <div class="md-root">
+    <div
+      v-if="parts.length === 1 && parts[0].type === 'html'"
+      :class="proseClasses"
+      v-html="parts[0].content"
+      @click="handleClick"
+    />
+    <div
+      v-else
+      :class="proseClasses"
+      @click="handleClick"
+    >
+      <template v-for="(part, i) in parts" :key="i">
+        <div
+          v-if="part.type === 'html'"
+          v-html="part.content"
+        />
+        <MermaidStreamingPlaceholder
+          v-else-if="shouldRenderAsMermaid(part.block) && props.streaming"
+        />
+        <MermaidRenderer
+          v-else-if="shouldRenderAsMermaid(part.block)"
+          :code="part.block.code"
+        />
+        <div v-else class="my-4">
+          <CodeViewer :code="part.block.code" :language="part.block.language" />
+        </div>
+      </template>
+    </div>
+    <button
+      v-if="isLongCollapsed"
+      type="button"
+      class="md-expand-long"
+      @click="expandLongDoc"
+    >
+      Show full message ({{ Math.round(props.content.length / 1000) }}k chars)
+    </button>
   </div>
 </template>
+
+<style scoped>
+.md-expand-long {
+  margin-top: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-container-low);
+  padding: 0.4rem 0.75rem;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.md-expand-long:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+</style>

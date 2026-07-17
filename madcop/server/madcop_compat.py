@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import threading
@@ -33,6 +34,13 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from madcop.config import settings as settings_store
 
+logger = logging.getLogger(__name__)
+
+# Caps for in-memory session message storage (DoS / memory exhaustion).
+_MAX_SESSION_MESSAGES = 2_000          # max messages per session
+_MAX_MESSAGE_CONTENT_CHARS = 500_000   # max chars per message content field
+_MAX_SAVE_PAYLOAD_MESSAGES = 2_000     # max messages accepted in one POST
+
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -44,7 +52,8 @@ def _madcop_root() -> Path:
 def _safe(fn, default: Any = None):
     try:
         return fn()
-    except Exception:
+    except Exception as e:
+        logger.debug("compat _safe swallowed: %s", e)
         return default
 
 
@@ -258,6 +267,35 @@ def _ensure_session(session_id: str, work_dir: str | None = None) -> dict[str, A
     return _SESSIONS[session_id]
 
 
+# Fingerprint of last successful full persist — skip no-op writes every 3s.
+_last_persist_fp: tuple | None = None
+
+
+def _persist_fingerprint() -> tuple:
+    """Cheap signature of sessions/messages to detect dirty state."""
+    return (
+        len(_SESSIONS),
+        tuple(
+            (
+                sid,
+                s.get("modifiedAt"),
+                s.get("messageCount"),
+                s.get("title"),
+                s.get("workDir"),
+            )
+            for sid, s in sorted(_SESSIONS.items())
+        ),
+        tuple(
+            (
+                sid,
+                len(msgs),
+                (msgs[-1].get("id") if msgs and isinstance(msgs[-1], dict) else None),
+            )
+            for sid, msgs in sorted(_MESSAGES.items())
+        ),
+    )
+
+
 def _persist_sessions() -> None:
     """Save sessions + messages to disk so they survive restarts.
     Each workspace's data is written under <work_dir>/.madcop/.
@@ -266,13 +304,21 @@ def _persist_sessions() -> None:
     disk writes happen on a stable copy — concurrent SSE/WS handlers
     can mutate _SESSIONS / _MESSAGES without triggering 'dictionary
     changed size during iteration'.
+
+    Skips the write entirely when nothing changed since the last persist
+    (dirty tracking via fingerprint).
     """
+    global _last_persist_fp
     try:
         # Snapshot under lock — the dicts can be mutated by request
         # handlers while we iterate, so copy first.
         with _PERSIST_LOCK:
+            fp = _persist_fingerprint()
+            if fp == _last_persist_fp:
+                return
             sessions_snapshot = list(_SESSIONS.items())
             messages_snapshot = list(_MESSAGES.items())
+            _last_persist_fp = fp
         for sid, s in sessions_snapshot:
             safe = {
                 k: v for k, v in s.items()
@@ -282,6 +328,7 @@ def _persist_sessions() -> None:
         for sid, msgs in messages_snapshot:
             _persist_messages_to_disk(sid, msgs)
     except Exception as e:
+        logger.warning("persist_sessions failed: %s", e)
         import sys as _sys
         print(f"[cc-haha-compat] persist error: {e}", file=_sys.stderr, flush=True)
 
@@ -1189,7 +1236,24 @@ def register(app: FastAPI) -> None:
         msgs = body.get("messages") if isinstance(body, dict) else None
         if not isinstance(msgs, list):
             msgs = []
-        _MESSAGES[session_id] = msgs
+        # Cap list length to prevent memory exhaustion via this endpoint.
+        if len(msgs) > _MAX_SAVE_PAYLOAD_MESSAGES:
+            raise HTTPException(
+                400,
+                f"too many messages: {len(msgs)} > max {_MAX_SAVE_PAYLOAD_MESSAGES}",
+            )
+        # Cap per-message content size (truncate oversized, don't reject —
+        # client may be replaying a legitimate long tool output).
+        for m in msgs:
+            if isinstance(m, dict) and isinstance(m.get("content"), str):
+                if len(m["content"]) > _MAX_MESSAGE_CONTENT_CHARS:
+                    m["content"] = m["content"][:_MAX_MESSAGE_CONTENT_CHARS]
+        # Keep only the most recent messages if somehow still over the
+        # in-memory cap (e.g. after truncation of individual contents).
+        if len(msgs) > _MAX_SESSION_MESSAGES:
+            msgs = msgs[-_MAX_SESSION_MESSAGES:]
+        with _PERSIST_LOCK:
+            _MESSAGES[session_id] = msgs
         # Honour the working directory carried by the client so messages land
         # under <workDir>/.madcop/ rather than the backend's own cwd.
         wd = None
@@ -1206,8 +1270,8 @@ def register(app: FastAPI) -> None:
         try:
             _persist_session_to_disk(sess)
             _persist_messages_to_disk(session_id, msgs)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("cc_save_session_messages persist failed: %s", e)
         return {"ok": True, "count": len(msgs)}
 
     @app.patch("/api/sessions/{session_id}", include_in_schema=False)
@@ -1930,52 +1994,66 @@ def register(app: FastAPI) -> None:
     async def cc_open_targets() -> dict[str, Any]:
         return {"targets": []}
 
-    # ---- Filesystem browse ---------------------------------------- #
-
-    @app.get("/api/filesystem/browse", include_in_schema=False)
-    async def cc_fs_browse(
-        path: str = Query(default=""),
-        cwd: str = Query(default=""),
-    ) -> dict[str, Any]:
-        return _safe(lambda: _fs_browse(path or cwd or str(Path.home())),
-                      default={"entries": [], "path": ""})
-
+    # ---- Filesystem browse / file --------------------------------- #
     # Directories the filesystem endpoints are allowed to serve. Anything
     # outside this set (credentials, system files, the settings file with
     # plaintext API keys) is refused. Sensitive sub-paths are also blocked
     # even when inside an allowed root.
+    #
+    # Entire ~/.madcop is blocked (settings, master.key, session history,
+    # memory DBs). Preview is served via /preview StaticFiles, not here.
     _FS_SENSITIVE_PATHS = (
         Path.home() / ".ssh",
-        Path.home() / ".madcop" / "settings.json",
-        Path.home() / ".madcop" / "master.key",
+        Path.home() / ".madcop",
         Path.home() / ".aws",
         Path.home() / ".gnupg",
+        Path.home() / ".kube",
+        Path.home() / ".docker",
+        Path.home() / ".netrc",
+        Path.home() / ".git-credentials",
+        Path.home() / ".npmrc",
+        Path.home() / ".config" / "gh",
+        Path.home() / ".config" / "gcloud",
     )
 
     def _fs_check_allowed(path: Path) -> Path:
         """Resolve and validate a path for the filesystem endpoints.
 
         Allowed: user home, current working directory, and /tmp (for
-        preview files and agent artifacts). Blocked: anything else, and
-        sensitive credential paths even if inside an allowed root.
+        agent artifacts). Blocked: anything else, and sensitive
+        credential paths even if inside an allowed root.
         """
         p = path.expanduser().resolve()
         # Deny sensitive credential/config paths first.
         for sensitive in _FS_SENSITIVE_PATHS:
-            s = sensitive.expanduser().resolve()
+            try:
+                s = sensitive.expanduser().resolve()
+            except OSError:
+                continue
+            if p == s:
+                raise HTTPException(403, "access denied: sensitive path")
             try:
                 p.relative_to(s)
                 raise HTTPException(403, "access denied: sensitive path")
             except ValueError:
                 pass  # not inside this sensitive path — OK
-            if p == s:
-                raise HTTPException(403, "access denied: sensitive path")
         # Allow only under home, cwd, or /tmp.
+        # Resolve /tmp too — on macOS it is a symlink to /private/tmp.
         _allowed_roots = [
             Path.home().resolve(),
             Path.cwd().resolve(),
-            Path("/tmp"),
+            Path("/tmp").resolve(),
+            Path("/private/tmp").resolve() if Path("/private/tmp").exists() else None,
         ]
+        _allowed_roots = [r for r in _allowed_roots if r is not None]
+        # Deduplicate while preserving order
+        _seen: set[Path] = set()
+        _uniq_roots: list[Path] = []
+        for r in _allowed_roots:
+            if r not in _seen:
+                _seen.add(r)
+                _uniq_roots.append(r)
+        _allowed_roots = _uniq_roots
         for root in _allowed_roots:
             try:
                 p.relative_to(root)
@@ -1984,13 +2062,32 @@ def register(app: FastAPI) -> None:
                 continue
         raise HTTPException(403, f"access denied: '{p}' is outside allowed directories")
 
+    @app.get("/api/filesystem/browse", include_in_schema=False)
+    async def cc_fs_browse(
+        path: str = Query(default=""),
+        cwd: str = Query(default=""),
+    ) -> dict[str, Any]:
+        """List directory entries — same allowlist as /filesystem/file.
+
+        Sensitive paths (credentials, ~/.madcop, etc.) return 403.
+        Outside allowed roots also 403. HTTPException must not be
+        swallowed by _safe.
+        """
+        target = path or cwd or str(Path.home())
+        p = _fs_check_allowed(Path(target))
+        try:
+            return _fs_browse(str(p))
+        except Exception as e:
+            logger.warning("fs_browse failed for %s: %s", p, e)
+            return {"entries": [], "path": str(p), "error": str(e)}
+
     @app.get("/api/filesystem/file", include_in_schema=False)
     async def cc_fs_file(path: str = Query(default="")):
         """Serve a local file as a response (used by InlineImageGallery).
 
         Restricted to user home / cwd / /tmp and blocks credential paths
-        (~/.ssh, ~/.madcop/settings.json, ~/.aws, ~/.gnupg) to prevent
-        secret exfiltration via this endpoint.
+        (~/.ssh, ~/.madcop, ~/.aws, ~/.gnupg, …) to prevent secret
+        exfiltration via this endpoint.
         """
         if not path:
             raise HTTPException(400, "path is required")
@@ -2635,17 +2732,94 @@ def register(app: FastAPI) -> None:
 
     @app.post("/api/search/sessions", include_in_schema=False)
     async def cc_search_sessions(request: Request) -> dict[str, Any]:
+        """Search session titles + message contents for the global search modal.
+
+        Response shape matches desktop GlobalSearchModal:
+          { results: [{sessionId, title, projectPath, workDir, modifiedAt,
+                       matchCount, matches: [{role, messageId, lineNumber,
+                       snippet, highlights}]}], total, truncated }
+        """
         try:
             body = await request.json()
         except Exception:
             body = {}
-        query = body.get("query") or body.get("q") or ""
-        sessions = [
-            _to_public_session(s)
-            for s in _SESSIONS.values()
-            if not query or query.lower() in (s.get("title") or "").lower()
-        ]
-        return {"sessions": sessions, "total": len(sessions)}
+        query = (body.get("query") or body.get("q") or "").strip()
+        if not query:
+            return {"results": [], "total": 0, "truncated": False}
+        try:
+            limit = max(1, min(100, int(body.get("limit") or 50)))
+        except (TypeError, ValueError):
+            limit = 50
+        try:
+            matches_per = max(1, min(10, int(body.get("matchesPerSession") or 3)))
+        except (TypeError, ValueError):
+            matches_per = 3
+        case_sensitive = bool(body.get("caseSensitive"))
+        q = query if case_sensitive else query.lower()
+        q_len = len(query)
+
+        results: list[dict[str, Any]] = []
+        for sid, sess in _SESSIONS.items():
+            title = sess.get("title") or ""
+            title_hay = title if case_sensitive else title.lower()
+            title_hit = q in title_hay
+            msgs = _MESSAGES.get(sid, [])
+            matches: list[dict[str, Any]] = []
+            for i, m in enumerate(msgs):
+                if not isinstance(m, dict):
+                    continue
+                content = m.get("content") or ""
+                if not isinstance(content, str):
+                    content = str(content)
+                hay = content if case_sensitive else content.lower()
+                idx = hay.find(q)
+                if idx < 0:
+                    continue
+                snip_start = max(0, idx - 40)
+                snip_end = min(len(content), idx + q_len + 40)
+                snippet = content[snip_start:snip_end]
+                hl_start = idx - snip_start
+                hl_end = hl_start + q_len
+                mtype = (m.get("type") or m.get("role") or "").lower()
+                role = "user" if mtype in ("user", "user_text", "human") else "assistant"
+                matches.append({
+                    "role": role,
+                    "messageId": m.get("id"),
+                    "lineNumber": i + 1,
+                    "snippet": snippet,
+                    "highlights": [{"start": hl_start, "end": hl_end}],
+                    "timestamp": m.get("timestamp"),
+                })
+                if len(matches) >= matches_per:
+                    break
+
+            if not matches and not title_hit:
+                continue
+            if not matches and title_hit:
+                t_idx = title_hay.find(q)
+                matches = [{
+                    "role": "user",
+                    "messageId": None,
+                    "lineNumber": 0,
+                    "snippet": title,
+                    "highlights": (
+                        [{"start": t_idx, "end": t_idx + q_len}] if t_idx >= 0 else []
+                    ),
+                }]
+            results.append({
+                "sessionId": sid,
+                "title": title or "新对话",
+                "projectPath": sess.get("projectPath") or "",
+                "workDir": sess.get("workDir"),
+                "modifiedAt": sess.get("modifiedAt") or "",
+                "matchCount": len(matches),
+                "matches": matches,
+            })
+
+        results.sort(key=lambda r: r.get("modifiedAt") or "", reverse=True)
+        truncated = len(results) > limit
+        results = results[:limit]
+        return {"results": results, "total": len(results), "truncated": truncated}
 
     # ---- Desktop UI preferences (local user prefs) -------------- #
 
@@ -3359,6 +3533,8 @@ def register(app: FastAPI) -> None:
             body = await request.json()
         except Exception:
             body = {}
+        if session_id not in _SESSIONS and session_id not in _MESSAGES:
+            raise HTTPException(404, f"session not found: {session_id}")
         new_sid = _u.uuid4().hex
         now = _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())
         target_msg_id = body.get("targetMessageId")
@@ -3370,10 +3546,15 @@ def register(app: FastAPI) -> None:
             new_msgs = list(original_msgs[:cutoff + 1])
         else:
             new_msgs = list(original_msgs)
+        # Cap branch size so a huge parent can't blow memory on fork.
+        if len(new_msgs) > _MAX_SESSION_MESSAGES:
+            new_msgs = new_msgs[-_MAX_SESSION_MESSAGES:]
         original = _SESSIONS.get(session_id, {})
-        _SESSIONS[new_sid] = {
-            "id": new_sid, "title": body.get("title") or
-                                  (original.get("title", "New Session") + " (branch)"),
+        title = body.get("title") or (
+            (original.get("title") or "New Session") + " (branch)"
+        )
+        new_sess = {
+            "id": new_sid, "title": title,
             "createdAt": now, "modifiedAt": now,
             "model": original.get("model", "minimaxai/minimax-m2.7"),
             "workDir": original.get("workDir"),
@@ -3381,10 +3562,23 @@ def register(app: FastAPI) -> None:
             "projectRoot": original.get("projectRoot"),
             "messages": new_msgs, "chatState": "idle",
             "permissionMode": original.get("permissionMode", "bypassPermissions"),
+            "messageCount": len(new_msgs),
         }
-        _MESSAGES[new_sid] = new_msgs
-        return {"sessionId": new_sid, "title": _SESSIONS[new_sid]["title"],
-                "workDir": _SESSIONS[new_sid].get("workDir")}
+        with _PERSIST_LOCK:
+            _SESSIONS[new_sid] = new_sess
+            _MESSAGES[new_sid] = new_msgs
+        try:
+            _persist_session_to_disk(new_sess)
+            _persist_messages_to_disk(new_sid, new_msgs)
+        except Exception as e:
+            logger.warning("branch session persist failed: %s", e)
+        return {
+            "sessionId": new_sid,
+            "title": title,
+            "workDir": new_sess.get("workDir"),
+            "sourceSessionId": session_id,
+            "targetMessageId": target_msg_id or "",
+        }
 
     @app.get("/api/sessions/{session_id}/trace/calls/{call_id}",
               include_in_schema=False)

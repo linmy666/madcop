@@ -82,6 +82,19 @@
         <button v-if="!isStreaming" type="button" class="msg-action" title="重新生成" @click="regenerate">
           <span class="material-symbols-outlined text-[16px]">refresh</span>
         </button>
+        <button
+          v-if="canBranch && !isStreaming"
+          type="button"
+          class="msg-action"
+          :title="branchLabel"
+          :aria-label="branchLabel"
+          :disabled="branchLoading"
+          @click.stop="emit('branch')"
+        >
+          <span class="material-symbols-outlined text-[16px]">
+            {{ branchLoading ? 'progress_activity' : 'call_split' }}
+          </span>
+        </button>
       </div>
     </div>
   </div>
@@ -106,11 +119,19 @@ const props = withDefaults(defineProps<{
   isStreaming?: boolean
   sessionId?: string
   reasoningContent?: string | null
+  canBranch?: boolean
+  branchLoading?: boolean
+  branchLabel?: string
 }>(), {
   isStreaming: false,
   sessionId: '',
   reasoningContent: null,
+  canBranch: false,
+  branchLoading: false,
+  branchLabel: '从此分支',
 })
+
+const emit = defineEmits<{ (e: 'branch'): void }>()
 
 const chatStore = useChatStore()
 const tabStore = useTabStore()

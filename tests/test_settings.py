@@ -17,7 +17,9 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     key_path = tmp_path / "master.key"
     monkeypatch.setattr(S, "DEFAULT_SETTINGS_PATH", settings_path)
     monkeypatch.setattr(S, "DEFAULT_MASTER_KEY_PATH", key_path)
-    return settings_path, key_path
+    S._invalidate_settings_cache()
+    yield settings_path, key_path
+    S._invalidate_settings_cache()
 
 
 # --------------------------------------------------------------------------- #

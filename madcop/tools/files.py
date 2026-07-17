@@ -37,16 +37,23 @@ def _resolve_in_allowlist(
 ) -> Path:
     """Resolve ``path`` and verify it's inside one of ``allowed_dirs``.
 
-    Raises ``PermissionError`` if outside.
+    Raises ``PermissionError`` if outside. Denied attempts are logged so
+    a bypass attempt is auditable even when the caller only returns
+    ``{"error": ...}`` to the model.
     """
     p = Path(path).expanduser().resolve()
     for allowed in allowed_dirs:
         a = Path(allowed).expanduser().resolve()
         if p == a or a in p.parents:
             return p
+    allowed_list = [str(Path(d).expanduser().resolve()) for d in allowed_dirs]
+    logger.warning(
+        "allowlist denial: path=%s allowed_dirs=%s",
+        p,
+        allowed_list,
+    )
     raise PermissionError(
-        f"Path '{p}' is outside allowed directories: "
-        f"{[str(Path(d).expanduser().resolve()) for d in allowed_dirs]}"
+        f"Path '{p}' is outside allowed directories: {allowed_list}"
     )
 
 
@@ -237,6 +244,7 @@ class ReadFileTool(Tool):
         try:
             p = _resolve_in_allowlist(path_str, self._allowed_dirs)
         except PermissionError as e:
+            logger.info("read_file denied: %s", e)
             return {"error": str(e)}
 
         if not p.exists():
@@ -353,6 +361,7 @@ class WriteFileTool(Tool):
         try:
             p = _resolve_in_allowlist(path_str, self._allowed_dirs)
         except PermissionError as e:
+            logger.info("write_file denied: %s", e)
             return {"error": str(e)}
 
         try:
@@ -423,6 +432,7 @@ class EditFileTool(Tool):
         try:
             p = _resolve_in_allowlist(path_str, self._allowed_dirs)
         except PermissionError as e:
+            logger.info("edit_file denied: %s", e)
             return {"error": str(e)}
 
         if not p.exists():
@@ -514,6 +524,7 @@ class WriteXlsxTool(Tool):
         try:
             p = _resolve_in_allowlist(path_str, self._allowed_dirs)
         except PermissionError as e:
+            logger.info("write_xlsx denied: %s", e)
             return {"error": str(e)}
 
         try:

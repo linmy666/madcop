@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { getApiUrl } from '../api/client'
+import { sessionsApi } from '../api/sessions'
 import { useTabStore, saveTabs } from './tabStore'
 
 /**
@@ -263,8 +264,45 @@ export const useSessionStore = defineStore('session', {
       backendUpsertSession(session)
       return id
     },
-    async branchSession(_sourceSessionId: string, _targetMessageId: string, _options?: any): Promise<{ sessionId: string; title: string; workDir: string | null }> {
-      return { sessionId: 'branch-1', title: 'Branched Session', workDir: null }
+    async branchSession(
+      sourceSessionId: string,
+      targetMessageId: string,
+      options?: { title?: string },
+    ): Promise<{ sessionId: string; title: string; workDir: string | null }> {
+      const result = await sessionsApi.branch(sourceSessionId, {
+        targetMessageId,
+        ...(options?.title ? { title: options.title } : {}),
+      })
+      const sourceSession = this.sessions.find((s) => s.id === sourceSessionId)
+      const now = new Date().toISOString()
+      const optimistic: SessionListItem = {
+        id: result.sessionId,
+        title: result.title || '新对话',
+        createdAt: now,
+        modifiedAt: now,
+        messageCount: 0,
+        projectPath: sourceSession?.projectPath ?? '',
+        projectRoot: sourceSession?.projectRoot ?? sourceSession?.workDir ?? result.workDir ?? null,
+        workDir: result.workDir ?? sourceSession?.workDir ?? null,
+        workDirExists: true,
+        permissionMode: sourceSession?.permissionMode,
+      }
+      if (this.sessions.some((s) => s.id === result.sessionId)) {
+        this.sessions = this.sessions.map((s) =>
+          s.id === result.sessionId ? { ...s, ...optimistic } : s,
+        )
+      } else {
+        this.sessions.unshift(optimistic)
+      }
+      this.activeSessionId = result.sessionId
+      saveToStorage(this.sessions)
+      // Refresh from backend so messageCount / title stay authoritative.
+      void this.fetchSessions()
+      return {
+        sessionId: result.sessionId,
+        title: result.title,
+        workDir: result.workDir,
+      }
     },
     async deleteSession(id: string) {
       this.sessions = this.sessions.filter(s => s.id !== id)

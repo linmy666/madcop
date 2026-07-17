@@ -72,6 +72,12 @@ function _handleGlobalKeydown(e: KeyboardEvent) {
     } catch {}
     return
   }
+  // ⌘/Ctrl+Shift+F — global chat search (⌘K is owned by CommandPalette).
+  if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
+    e.preventDefault()
+    uiStore.openModal('globalSearch')
+    return
+  }
 }
 
 onMounted(() => {

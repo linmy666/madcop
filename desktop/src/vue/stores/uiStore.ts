@@ -43,12 +43,26 @@ export const useUIStore = defineStore('ui', {
     setActiveModal(modal: string | null) {
       this.activeModal = modal
     },
+    openModal(modal: string) {
+      this.activeModal = modal
+    },
+    closeModal() {
+      this.activeModal = null
+    },
     showToast(message: string, type: 'info' | 'success' | 'error' = 'info') {
       const id = `toast-${++toastCounter}`
       this.toasts.push({ id, message, type })
       setTimeout(() => {
         this.toasts = this.toasts.filter(t => t.id !== id)
       }, 4000)
+    },
+    /** Compat alias used by several Vue pages: addToast({ type, message }). */
+    addToast(payload: { message: string; type?: 'info' | 'success' | 'error' } | string, type?: 'info' | 'success' | 'error') {
+      if (typeof payload === 'string') {
+        this.showToast(payload, type ?? 'info')
+        return
+      }
+      this.showToast(payload.message, payload.type ?? 'info')
     },
     removeToast(id: string) {
       this.toasts = this.toasts.filter(t => t.id !== id)

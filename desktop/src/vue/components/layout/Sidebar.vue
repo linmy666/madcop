@@ -18,8 +18,32 @@ import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import AnimationPlayer from '../animations/AnimationPlayer.vue'
 import MascotAvatar from '../common/MascotAvatar.vue'
 import WorkspacePanel from '../workspace/WorkspacePanel.vue'
-// GlobalSearchModal not yet translated — using placeholder
-const GlobalSearchModal = { template: '<div></div>' }
+import GlobalSearchModal from '../search/GlobalSearchModal.vue'
+import {
+  type SidebarProjectOrganization,
+  type SidebarProjectSortBy,
+  type ProjectGroup,
+  PROJECT_GROUP_VISIBLE_COUNT,
+  PROJECT_GROUP_SCROLL_COUNT,
+  isDocumentVisible,
+  domSafeProjectKey,
+  positionProjectMenu,
+  formatRelativeTime,
+  normalizeProjectKeyList,
+  projectPathMatches as projectPathMatchesBase,
+  hasSidebarProjectPreferences,
+  normalizeProjectOrganization,
+  normalizeProjectSortBy,
+  normalizeSidebarProjectPreferences,
+  buildSidebarProjectPreferences,
+  getVisibleProjectSessions,
+  compareSessionsByTimestamp,
+  projectTitle,
+  projectSubtitle,
+  isWorktreeSession,
+  moveProjectKey,
+  applyProjectOrder,
+} from './sidebarUtils'
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
@@ -27,28 +51,20 @@ const desktopHost = getDesktopHost()
 const isDesktopRuntime = desktopHost.isDesktop
 const canUseNativeDialogs = desktopHost.capabilities.dialogs
 const isWindows = typeof navigator !== 'undefined' && /Win/.test(navigator.platform)
-const SESSION_LIST_AUTO_REFRESH_MS = 30_000
+// Background poll is a slow safety net only — focus/visibility already
+// refreshes the list. 90s keeps multi-window sync without hammering /api/sessions.
+const SESSION_LIST_AUTO_REFRESH_MS = 90_000
 const SESSION_LIST_FOCUS_REFRESH_MIN_MS = 5_000
 const PROJECT_ORDER_STORAGE_KEY = 'madcop-agent-sidebar-project-order'
 const PROJECT_PINNED_STORAGE_KEY = 'madcop-agent-sidebar-pinned-projects'
 const PROJECT_HIDDEN_STORAGE_KEY = 'madcop-agent-sidebar-hidden-projects'
 const PROJECT_ORGANIZATION_STORAGE_KEY = 'madcop-agent-sidebar-project-organization'
 const PROJECT_SORT_STORAGE_KEY = 'madcop-agent-sidebar-project-sort'
-const PROJECT_GROUP_VISIBLE_COUNT = 6
-const PROJECT_GROUP_SCROLL_COUNT = 12
 
-// ─── Type definitions ───────────────────────────────────────────────────
-
-type SidebarProjectOrganization = 'project' | 'recentProject' | 'time'
-type SidebarProjectSortBy = 'createdAt' | 'updatedAt'
 type SidebarHeaderMenuType = 'main' | 'organize' | 'sort' | 'create'
 
-type ProjectGroup = {
-  key: string
-  title: string
-  subtitle: string | null
-  workDir: string | undefined
-  sessions: SessionListItem[]
+function projectPathMatches(projectKey: string, workDir: string): boolean {
+  return projectPathMatchesBase(projectKey, workDir, isWindows)
 }
 
 // ─── Props ──────────────────────────────────────────────────────────────
@@ -71,114 +87,7 @@ const openTargetStore = useOpenTargetStore()
 const t = (key: TranslationKey, params?: Record<string, string | number>): string =>
   translate(settingsStore.locale as any, key, params)
 
-// ─── Helper function s (pure, no state) ──────────────────────────────────
-
-function isDocumentVisible(): boolean {
-  return typeof document === 'undefined' || document.visibilityState !== 'hidden'
-}
-
-function domSafeProjectKey(projectKey: string): string {
-  return projectKey.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown'
-}
-
-function positionProjectMenu(clientX: number, clientY: number): { left: number; top: number } {
-  if (typeof window === 'undefined') return { left: clientX, top: clientY }
-  const width = 230
-  const height = 280
-  return {
-    left: Math.max(8, Math.min(clientX, window.innerWidth - width - 8)),
-    top: Math.max(8, Math.min(clientY, window.innerHeight - height - 8)),
-  }
-}
-
-function formatRelativeTime(
-  dateStr: string,
-  tFn: (key: TranslationKey, params?: Record<string, string | number>) => string,
-): string {
-  const date = new Date(dateStr)
-  const timestamp = date.getTime()
-  if (!Number.isFinite(timestamp)) return ''
-  const diff = Date.now() - timestamp
-  const min = Math.floor(diff / 60000)
-  if (min < 1) return tFn('session.timeJustNow')
-  if (min < 60) return tFn('session.timeMinutes', { n: min })
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return tFn('session.timeHours', { n: hr })
-  const day = Math.floor(hr / 24)
-  if (day < 30) return tFn('session.timeDays', { n: day })
-  return new Intl.DateTimeFormat(undefined, { month: 'numeric', day: 'numeric' }).format(date)
-}
-
-function normalizeProjectKeyList(values: unknown): string[] {
-  if (!Array.isArray(values)) return []
-  const seen = new Set<string>()
-  const normalized: string[] = []
-  for (const value of values) {
-    if (typeof value !== 'string' || value.length === 0 || seen.has(value)) continue
-    seen.add(value)
-    normalized.push(value)
-  }
-  return normalized
-}
-
-function normalizeProjectPathForComparison(value: string): string {
-  const normalized = value.replace(/\\/g, '/').replace(/\/+$/g, '') || value
-  return isWindows ? normalized.toLowerCase() : normalized
-}
-
-function isDriveRootComparisonPath(value: string): boolean {
-  return /^[a-z]:$/i.test(value)
-}
-
-function projectPathMatches(projectKey: string, workDir: string): boolean {
-  const normalizedProjectKey = normalizeProjectPathForComparison(projectKey)
-  const normalizedWorkDir = normalizeProjectPathForComparison(workDir)
-  if (normalizedProjectKey === normalizedWorkDir) return true
-  if (isDriveRootComparisonPath(normalizedProjectKey)) return false
-  return normalizedWorkDir.startsWith(`${normalizedProjectKey}/`)
-}
-
-function hasSidebarProjectPreferences(preferences: SidebarProjectPreferences): boolean {
-  return preferences.projectOrder.length > 0
-    || preferences.pinnedProjects.length > 0
-    || preferences.hiddenProjects.length > 0
-    || preferences.projectOrganization !== 'recentProject'
-    || preferences.projectSortBy !== 'updatedAt'
-}
-
-function normalizeProjectOrganization(value: unknown): SidebarProjectOrganization {
-  return (value === 'project' || value === 'recentProject' || value === 'time') ? (value as SidebarProjectOrganization) : 'recentProject'
-}
-
-function normalizeProjectSortBy(value: unknown): SidebarProjectSortBy {
-  return (value === 'createdAt' || value === 'updatedAt') ? (value as SidebarProjectSortBy) : 'updatedAt'
-}
-
-function normalizeSidebarProjectPreferences(preferences?: Partial<SidebarProjectPreferences>): SidebarProjectPreferences {
-  return {
-    projectOrder: normalizeProjectKeyList(preferences?.projectOrder),
-    pinnedProjects: normalizeProjectKeyList(preferences?.pinnedProjects),
-    hiddenProjects: normalizeProjectKeyList(preferences?.hiddenProjects),
-    projectOrganization: normalizeProjectOrganization(preferences?.projectOrganization),
-    projectSortBy: normalizeProjectSortBy(preferences?.projectSortBy),
-  }
-}
-
-function buildSidebarProjectPreferences(
-  projectOrder: string[],
-  pinnedProjectKeys: Set<string>,
-  hiddenProjectKeys: Set<string>,
-  projectOrganization: SidebarProjectOrganization,
-  projectSortBy: SidebarProjectSortBy,
-): SidebarProjectPreferences {
-  return normalizeSidebarProjectPreferences({
-    projectOrder,
-    pinnedProjects: [...pinnedProjectKeys],
-    hiddenProjects: [...hiddenProjectKeys],
-    projectOrganization,
-    projectSortBy,
-  })
-}
+// ─── localStorage helpers (kept here — touch browser storage) ───────────
 
 function readStoredProjectOrder(): string[] {
   if (typeof localStorage === 'undefined') return []
@@ -274,18 +183,6 @@ function writeCachedSidebarProjectPreferences(preferences: SidebarProjectPrefere
   writeStoredProjectSortBy(normalized.projectSortBy)
 }
 
-function getVisibleProjectSessions(
-  sessions: SessionListItem[],
-  expanded: boolean,
-  activeSessionId: string | null,
-): SessionListItem[] {
-  if (expanded || sessions.length <= PROJECT_GROUP_VISIBLE_COUNT) return sessions
-  const visible = sessions.slice(0, PROJECT_GROUP_VISIBLE_COUNT)
-  if (!activeSessionId || visible.some((session) => session.id === activeSessionId)) return visible
-  const activeSession = sessions.find((session) => session.id === activeSessionId)
-  return activeSession ? [...visible, activeSession] : visible
-}
-
 function getSessionProjectKey(session: SessionListItem): string {
   // The session's projectRoot may be missing (e.g. older sessions
   // saved before the field was added, or sessions created before the
@@ -338,76 +235,6 @@ onMounted(async () => {
   }
 })
 
-function compareSessionsByTimestamp(
-  a: SessionListItem | undefined,
-  b: SessionListItem | undefined,
-  sortBy: SidebarProjectSortBy,
-): number {
-  return getSessionTimestamp(b, sortBy) - getSessionTimestamp(a, sortBy)
-}
-
-function getSessionTimestamp(session: SessionListItem | undefined, sortBy: SidebarProjectSortBy): number {
-  const value = sortBy === 'createdAt' ? session?.createdAt : session?.modifiedAt
-  const timestamp = new Date(value ?? 0).getTime()
-  return Number.isFinite(timestamp) ? timestamp : 0
-}
-
-function projectTitle(pathLike: string | null | undefined): string {
-  if (!pathLike) return '默认'
-  if (pathLike === '__default__') return '默认'
-  const normalized = pathLike.replace(/[\\/]+$/, '')
-  const segments = normalized.split(/[\\/]/).filter(Boolean)
-  const last = segments[segments.length - 1]
-  if (last) return last
-  return normalized || '默认'
-}
-
-function projectSubtitle(projectRoot: string | null | undefined, fallbackKey: string): string | null {
-  if (!projectRoot) return fallbackKey === 'unknown' ? null : fallbackKey
-  return compactProjectPath(projectRoot)
-}
-
-function isWorktreeSession(session: SessionListItem): boolean {
-  if (!session.workDir) return false
-  if (/[/\\]\.claude[/\\]worktrees[/\\]/.test(session.workDir)) return true
-  if (!session.projectRoot || session.workDir === session.projectRoot) return false
-  return !isSameOrChildPath(session.workDir, session.projectRoot)
-}
-
-function isSameOrChildPath(childPath: string, parentPath: string): boolean {
-  const child = normalizePathForCompare(childPath)
-  const parent = normalizePathForCompare(parentPath)
-  return child === parent || child.startsWith(`${parent}/`)
-}
-
-function normalizePathForCompare(pathLike: string): string {
-  return pathLike.replace(/\\/g, '/').replace(/\/+$/, '')
-}
-
-function compactProjectPath(pathLike: string): string {
-  const normalized = normalizePathForCompare(pathLike)
-  const segments = normalized.split('/').filter(Boolean)
-  if (segments.length <= 3) return normalized
-  return `.../${segments.slice(-3, -1).join('/')}`
-}
-
-function moveProjectKey(
-  projectKeys: string[],
-  sourceKey: string,
-  targetKey: string,
-  position: 'before' | 'after',
-): string[] {
-  const withoutSource = projectKeys.filter((key) => key !== sourceKey)
-  const targetIndex = withoutSource.indexOf(targetKey)
-  if (targetIndex < 0) return projectKeys
-  const insertIndex = position === 'before' ? targetIndex : targetIndex + 1
-  return [
-    ...withoutSource.slice(0, insertIndex),
-    sourceKey,
-    ...withoutSource.slice(insertIndex),
-  ]
-}
-
 function getProjectDropPosition(event: MouseEvent): 'before' | 'after' {
   const target = event.currentTarget as HTMLElement
   const rect = target.getBoundingClientRect()
@@ -417,7 +244,7 @@ function getProjectDropPosition(event: MouseEvent): 'before' | 'after' {
 function groupByProject(sessions: SessionListItem[], sortBy: SidebarProjectSortBy): ProjectGroup[] {
   const groupsByKey = new Map<string, SessionListItem[]>()
   for (const session of sessions) {
-    const key =getSessionProjectKey(session)
+    const key = getSessionProjectKey(session)
     const items = groupsByKey.get(key) ?? []
     items.push(session)
     groupsByKey.set(key, items)
@@ -435,28 +262,6 @@ function groupByProject(sessions: SessionListItem[], sortBy: SidebarProjectSortB
     }
   })
   return groups.sort((a, b) => compareSessionsByTimestamp(a.sessions[0], b.sessions[0], sortBy))
-}
-
-function applyProjectOrder(
-  groups: ProjectGroup[],
-  projectOrder: string[],
-  pinnedProjectKeys: Set<string>,
-  organization: SidebarProjectOrganization,
-  sortBy: SidebarProjectSortBy,
-): ProjectGroup[] {
-  const orderIndex = new Map(projectOrder.map((key, index) => [key, index]))
-  return [...groups].sort((a, b) => {
-    const aPinned = pinnedProjectKeys.has(a.key)
-    const bPinned = pinnedProjectKeys.has(b.key)
-    if (aPinned !== bPinned) return aPinned ? -1 : 1
-    if (organization === 'project') return a.title.localeCompare(b.title)
-    const aIndex = orderIndex.get(a.key)
-    const bIndex = orderIndex.get(b.key)
-    if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex
-    if (aIndex !== undefined) return -1
-    if (bIndex !== undefined) return 1
-    return compareSessionsByTimestamp(a.sessions[0], b.sessions[0], sortBy)
-  })
 }
 
 // ─── SVG Icon Components ────────────────────────────────────────────────
@@ -675,8 +480,10 @@ const refreshSessionsNow = (() => {
     window.addEventListener('focus', refreshIfVisible)
     document.addEventListener('visibilitychange', refreshIfVisible)
     const timer = window.setInterval(() => {
+      // Soft poll: respect min interval so we don't force-refresh right
+      // after a focus/visibility refresh.
       if (!isDocumentVisible()) return
-      void refreshSessions(true)
+      void refreshSessions(false)
     }, SESSION_LIST_AUTO_REFRESH_MS)
 
     ;(refreshSessionsNow as any)._cleanup = () => {
@@ -1559,7 +1366,7 @@ const projectMenuData = computed(() => {
               <SearchIcon />
             </span>
             <span class="min-w-0 flex-1 truncate pl-2">{{ t('search.global.trigger') }}</span>
-            <kbd class="pointer-events-none shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-1 font-mono text-[10px] leading-tight text-[var(--color-text-tertiary)]">⌘K</kbd>
+            <kbd class="pointer-events-none shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-1 font-mono text-[10px] leading-tight text-[var(--color-text-tertiary)]">⇧⌘F</kbd>
           </button>
           <!-- Refresh button -->
           <button
@@ -1809,7 +1616,7 @@ const projectMenuData = computed(() => {
                       ? []
                       : getVisibleProjectSessions(project.sessions, expandedProjectKeys.has(project.key), activeTabId))"
                     :key="session.id"
-                    class="relative mb-0.5 last:mb-0"
+                    class="sidebar-session-row relative mb-0.5 last:mb-0"
                   >
                     <!-- Rename input -->
                     <input
@@ -2122,5 +1929,10 @@ const projectMenuData = computed(() => {
 .sidebar-session-row--active,
 .sidebar-session-row--selected {
   box-shadow: inset 0 0 0 1px var(--color-brand);
+}
+/* Skip layout/paint for off-screen session rows in long project lists. */
+.sidebar-session-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 36px;
 }
 </style>

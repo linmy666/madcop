@@ -12,10 +12,13 @@ import { useTranslation } from '../i18n'
 import { getDesktopHost } from '../lib/desktopHost'
 import type { TraceSessionList, TraceSessionListItem } from '../types/trace'
 
-const POLL_MS = 5_000
+const POLL_MS = 10_000
 const PAGE_SIZE = 50
 const SEARCH_DEBOUNCE_MS = 250
 const MAX_MODEL_CHIPS = 2
+/** Fixed row height (h-14 = 3.5rem ≈ 56px) for windowed rendering. */
+const TRACE_ROW_HEIGHT = 56
+const TRACE_OVERSCAN = 8
 
 type TraceListState =
   | { status: 'loading' }
@@ -102,9 +105,55 @@ const summary = computed(() => {
 // ── Lifecycle ───────────────────────────────────────────────────────
 let initialLoadDone = false
 
+function isDocumentVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState !== 'hidden'
+}
+
+// ── Windowed list (fixed-height rows) ───────────────────────────────
+const listScrollEl = ref<HTMLDivElement | null>(null)
+const listScrollTop = ref(0)
+const listViewportH = ref(600)
+
+function onListScroll(e: Event) {
+  const el = e.target as HTMLDivElement
+  listScrollTop.value = el.scrollTop
+  listViewportH.value = el.clientHeight
+}
+
+const allTraces = computed(() =>
+  state.value.status === 'ready' ? state.value.data.traces : [],
+)
+
+const virtualWindow = computed(() => {
+  const traces = allTraces.value
+  const total = traces.length
+  if (total === 0) {
+    return { start: 0, end: 0, items: [] as TraceSessionListItem[], totalH: 0, offsetY: 0 }
+  }
+  // For small lists, skip windowing overhead.
+  if (total <= 40) {
+    return { start: 0, end: total, items: traces, totalH: total * TRACE_ROW_HEIGHT, offsetY: 0 }
+  }
+  const start = Math.max(0, Math.floor(listScrollTop.value / TRACE_ROW_HEIGHT) - TRACE_OVERSCAN)
+  const visibleCount = Math.ceil(listViewportH.value / TRACE_ROW_HEIGHT) + TRACE_OVERSCAN * 2
+  const end = Math.min(total, start + visibleCount)
+  return {
+    start,
+    end,
+    items: traces.slice(start, end),
+    totalH: total * TRACE_ROW_HEIGHT,
+    offsetY: start * TRACE_ROW_HEIGHT,
+  }
+})
+
 onMounted(() => {
   loadTrace()
   initialLoadDone = true
+  requestAnimationFrame(() => {
+    if (listScrollEl.value) {
+      listViewportH.value = listScrollEl.value.clientHeight || 600
+    }
+  })
 })
 
 watch(query, () => {
@@ -120,6 +169,8 @@ watch(
     }
     if (newState.status !== 'ready' || !newState.data.settings.enabled) return
     pollTimer.value = setInterval(() => {
+      // Skip background tabs — silent full reloads are wasteful when hidden.
+      if (!isDocumentVisible()) return
       loadTrace({
         limit: Math.max(PAGE_SIZE, newState.data.traces.length),
         silent: true,
@@ -320,11 +371,21 @@ function formatUpdatedAt(value: string | null): string {
 
       <div
         v-else-if="state.status === 'ready' && state.data.traces.length > 0"
+        ref="listScrollEl"
         class="min-h-0 flex-1 overflow-y-auto"
+        @scroll="onListScroll"
       >
-        <div class="divide-y divide-[var(--color-border)]" role="list">
+        <div
+          class="relative divide-y divide-[var(--color-border)]"
+          role="list"
+          :style="{ height: virtualWindow.totalH + 'px' }"
+        >
           <div
-            v-for="trace in state.data.traces"
+            class="absolute left-0 right-0 top-0"
+            :style="{ transform: `translateY(${virtualWindow.offsetY}px)` }"
+          >
+          <div
+            v-for="trace in virtualWindow.items"
             :key="trace.sessionId"
             :aria-label="trace.session?.title || t('session.untitled')"
             role="listitem"
@@ -415,6 +476,7 @@ function formatUpdatedAt(value: string | null): string {
                 <span class="material-symbols-outlined text-sm" aria-hidden="true">open_in_new</span>
               </button>
             </div>
+          </div>
           </div>
         </div>
         <div class="flex items-center justify-between border-t border-[var(--color-border)] px-5 py-3 text-xs text-[var(--color-text-tertiary)]">

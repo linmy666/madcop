@@ -450,12 +450,15 @@ function getGroupTitleKey(bucket: PluginBucket): string {
           <span class="text-xs text-[var(--color-text-tertiary)]">{{ items.length }}</span>
         </div>
 
-        <div class="flex flex-col p-2">
+        <div
+          class="flex flex-col p-2"
+          :class="items.length > 24 ? 'max-h-[min(70vh,720px)] overflow-y-auto' : ''"
+        >
           <div
             v-for="plugin in items"
             :key="plugin.id"
             :class="[
-              'group rounded-xl border px-3 py-3 transition-all hover:border-[var(--color-border-focus)] hover:bg-[var(--color-surface-hover)]',
+              'plugin-list-row group rounded-xl border px-3 py-3 transition-all hover:border-[var(--color-border-focus)] hover:bg-[var(--color-surface-hover)]',
               selectedPluginIds.has(plugin.id)
                 ? 'border-[var(--color-brand)]/45 bg-[var(--color-surface-selected)]'
                 : 'border-transparent',
@@ -566,3 +569,11 @@ function getGroupTitleKey(bucket: PluginBucket): string {
     </ConfirmDialog>
   </div>
 </template>
+
+<style scoped>
+/* Skip layout/paint for off-screen plugin rows in long groups. */
+.plugin-list-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
+</style>

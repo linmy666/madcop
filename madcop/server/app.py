@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import threading
 import time
@@ -27,7 +28,13 @@ from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+# Per-message content cap for chat requests (DoS / memory protection).
+_MAX_CHAT_CONTENT_CHARS = 500_000
+_MAX_CHAT_MESSAGES = 200
 
 from madcop.config import settings as settings_store
 from madcop.llm import Message, MockClient, OpenAICompatClient
@@ -81,7 +88,7 @@ class FetchModelsRequest(BaseModel):
 
 class ChatMessage(BaseModel):
     role: str = "user"
-    content: str = ""
+    content: str = Field(default="", max_length=_MAX_CHAT_CONTENT_CHARS)
 
 
 class ChatAttachment(BaseModel):
@@ -286,7 +293,7 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
 
 
 class ChatRequest(BaseModel):
-    messages: list[ChatMessage]
+    messages: list[ChatMessage] = Field(default_factory=list, max_length=_MAX_CHAT_MESSAGES)
     model: str | None = None
     temperature: float | None = None  # None = use provider config default
     max_tokens: int | None = None  # None = use provider config default
@@ -1641,8 +1648,8 @@ def create_app() -> FastAPI:
                     body.temperature = _prov_cfg.get("temperature", body.temperature)
                     if _prov_cfg.get("max_tokens"):
                         body.max_tokens = _prov_cfg["max_tokens"]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("chat: failed to resolve provider sampling params: %s", e)
         # Ensure max_tokens is always a concrete int — downstream code
         # (e.g. context-window budget math) does arithmetic on it and
         # None would raise TypeError. Fall back to the provider default
@@ -1651,7 +1658,8 @@ def create_app() -> FastAPI:
             try:
                 _pc = settings_store.get_active_client_config(settings_store.load_settings())
                 body.max_tokens = (_pc or {}).get("max_tokens") or 8192
-            except Exception:
+            except Exception as e:
+                logger.warning("chat: max_tokens fallback failed: %s", e)
                 body.max_tokens = 8192
         # Same guarantee for temperature — the frontend may send null to
         # mean "use provider default". If no provider default resolved,
@@ -1660,7 +1668,8 @@ def create_app() -> FastAPI:
             try:
                 _pc2 = settings_store.get_active_client_config(settings_store.load_settings())
                 body.temperature = (_pc2 or {}).get("temperature") or 0.7
-            except Exception:
+            except Exception as e:
+                logger.warning("chat: temperature fallback failed: %s", e)
                 body.temperature = 0.7
 
         # Convert text-only messages. Attachments' content is EXTRACTED
@@ -1684,8 +1693,8 @@ def create_app() -> FastAPI:
                                 "mimeType": att.dataUrl.split(";")[0].replace("data:", "") if ";" in att.dataUrl else "",
                                 "data": att.dataUrl,
                             })
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("chat: inline attachment register failed: %s", e)
                     # Extract attachment content directly (real file or dataUrl)
                     content = _read_attachment_direct(att)
                     if content:
@@ -1706,8 +1715,8 @@ def create_app() -> FastAPI:
             _ap = next((p for p in _pub.get("providers", []) if p.get("provider_id") == _aid), None)
             if _ap:
                 _active_label = _ap.get("label") or _ap.get("model") or ""
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("chat: failed to resolve active provider label: %s", e)
 
         # Find the latest user message and use it as the retrieval query.
         latest_user_msg = ""
@@ -1718,7 +1727,8 @@ def create_app() -> FastAPI:
         if latest_user_msg:
             try:
                 sys_prompt = _build_memory_system_prompt(latest_user_msg, model_label=_active_label)
-            except Exception:
+            except Exception as e:
+                logger.warning("chat: memory system prompt build failed: %s", e)
                 sys_prompt = (
                     "You are MadCop Agent, a personal AI agent. "
                     "You can remember facts about the user across sessions.\n\n"
@@ -1751,8 +1761,8 @@ def create_app() -> FastAPI:
                                  summary_max_tokens=400),
                 llm_client=client,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("chat: context compaction failed: %s", e)
 
         registry = default_registry(store=get_memory_store(), workspace_dir=_ws_state[0])
         tool_schemas = registry.openai_schemas()
@@ -1784,23 +1794,36 @@ def create_app() -> FastAPI:
             def _sse_save_assistant(content: str, model: str = "") -> None:
                 """Persist the assistant's final answer so it survives restart."""
                 try:
+                    from madcop.server.madcop_compat import (
+                        _MAX_SESSION_MESSAGES as _SSE_MAX_MSGS,
+                        _MAX_MESSAGE_CONTENT_CHARS as _SSE_MAX_CHARS,
+                    )
                     _now = _sse_t.strftime("%Y-%m-%dT%H:%M:%SZ", _sse_t.gmtime())
+                    _capped = (content or "")[:_SSE_MAX_CHARS]
                     with _SSE_LOCK:
                         _SSE_MSGS.setdefault(_sse_sid, []).append({
                             "id": _sse_u.uuid4().hex,
                             "type": "assistant",
-                            "content": content,
+                            "content": _capped,
                             "timestamp": _now,
                             "model": model,
                         })
+                        # Bound in-memory history so a long session can't OOM.
+                        if len(_SSE_MSGS[_sse_sid]) > _SSE_MAX_MSGS:
+                            _SSE_MSGS[_sse_sid] = _SSE_MSGS[_sse_sid][-_SSE_MAX_MSGS:]
                         if _sse_sid in _SSE_SESS:
                             _SSE_SESS[_sse_sid]["messageCount"] = len(_SSE_MSGS[_sse_sid])
                             _SSE_SESS[_sse_sid]["modifiedAt"] = _now
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("SSE: persist assistant message failed: %s", e)
 
             try:
+                from madcop.server.madcop_compat import (
+                    _MAX_SESSION_MESSAGES as _SSE_MAX_MSGS2,
+                    _MAX_MESSAGE_CONTENT_CHARS as _SSE_MAX_CHARS2,
+                )
                 _sse_now = _sse_t.strftime("%Y-%m-%dT%H:%M:%SZ", _sse_t.gmtime())
+                _user_content = (body.messages[-1].content if body.messages else "")[:_SSE_MAX_CHARS2]
                 with _SSE_LOCK:
                     if _sse_sid not in _SSE_SESS:
                         _SSE_SESS[_sse_sid] = {
@@ -1820,12 +1843,14 @@ def create_app() -> FastAPI:
                     _SSE_MSGS[_sse_sid].append({
                         "id": _sse_u.uuid4().hex,
                         "type": "user",
-                        "content": body.messages[-1].content if body.messages else "",
+                        "content": _user_content,
                         "timestamp": _sse_now,
                     })
+                    if len(_SSE_MSGS[_sse_sid]) > _SSE_MAX_MSGS2:
+                        _SSE_MSGS[_sse_sid] = _SSE_MSGS[_sse_sid][-_SSE_MAX_MSGS2:]
                     _sse_sess["messageCount"] = len(_SSE_MSGS[_sse_sid])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("SSE: persist user message failed: %s", e)
 
             # -- Phase -1: Agent Mode (quick/standard/deep) ------------- #
             # Unified mode picker. When the user explicitly selects quick
@@ -2105,8 +2130,8 @@ def create_app() -> FastAPI:
                 # Persist the final agent-mode answer so it survives restart.
                 try:
                     _sse_save_assistant(_answer or "", body.model or "")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("SSE: agent-mode persist assistant failed: %s", e)
                 yield f"data: {json.dumps({'type': 'done', 'model': body.model or ''}, ensure_ascii=False)}\n\n"
                 return
 
@@ -2489,8 +2514,8 @@ def create_app() -> FastAPI:
                 try:
                     from .memory_pipeline import schedule_extraction
                     schedule_extraction(messages)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("SSE: memory extraction schedule failed: %s", e)
 
                 # -- Auto-create skill from "how-to" conversations --------- #
                 title_user_msg = ""
@@ -2505,8 +2530,8 @@ def create_app() -> FastAPI:
                         assistant_text,
                         tool_calls=[{"name": c.name, "args": c.arguments} for c in resp.tool_calls],
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("SSE: skill auto-forge failed: %s", e)
 
                 # Mark root done
                 tr2 = trace_store.get(trace_root.id)

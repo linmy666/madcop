@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,14 @@ DEFAULT_SETTINGS_PATH = Path(
 DEFAULT_MASTER_KEY_PATH = Path(
     os.environ.get("MADCOP_MASTER_KEY", "~/.madcop/master.key")
 ).expanduser()
+
+# Process-local cache so hot paths (each chat request loads settings 7+
+# times) don't re-read + decrypt the JSON on every call. Invalidated on
+# save, or when the on-disk mtime changes (external edit).
+_settings_cache: Any = None
+_settings_cache_path: Path | None = None
+_settings_cache_mtime: float | None = None
+_settings_cache_lock = threading.Lock()
 
 
 # --------------------------------------------------------------------------- #
@@ -187,16 +196,49 @@ def _settings_from_dict(raw: dict[str, Any]) -> Settings:
     )
 
 
+def _invalidate_settings_cache() -> None:
+    """Drop the process-local settings cache (call after save)."""
+    global _settings_cache, _settings_cache_path, _settings_cache_mtime
+    with _settings_cache_lock:
+        _settings_cache = None
+        _settings_cache_path = None
+        _settings_cache_mtime = None
+
+
 def load_settings(path: Path | str | None = None) -> Settings:
-    """Load settings from ~/.madcop/settings.json. Returns empty Settings if missing."""
+    """Load settings from ~/.madcop/settings.json. Returns empty Settings if missing.
+
+    Results are cached in-process and refreshed when the file mtime changes.
+    """
+    global _settings_cache, _settings_cache_path, _settings_cache_mtime
     path = Path(path) if path else DEFAULT_SETTINGS_PATH
-    if not path.exists():
-        return Settings()
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return Settings()
-    return _settings_from_dict(raw)
+        mtime = path.stat().st_mtime if path.exists() else None
+    except OSError:
+        mtime = None
+
+    with _settings_cache_lock:
+        if (
+            _settings_cache is not None
+            and _settings_cache_path == path
+            and _settings_cache_mtime == mtime
+        ):
+            return _settings_cache
+
+    if not path.exists():
+        result = Settings()
+    else:
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            result = _settings_from_dict(raw)
+        except (json.JSONDecodeError, OSError):
+            result = Settings()
+
+    with _settings_cache_lock:
+        _settings_cache = result
+        _settings_cache_path = path
+        _settings_cache_mtime = mtime
+    return result
 
 
 def save_settings(settings: Settings, path: Path | str | None = None) -> Path:
@@ -213,6 +255,17 @@ def save_settings(settings: Settings, path: Path | str | None = None) -> Path:
         path.chmod(0o600)
     except OSError:
         pass
+    _invalidate_settings_cache()
+    # Warm the cache with the just-written value so the next load is free.
+    global _settings_cache, _settings_cache_path, _settings_cache_mtime
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = None
+    with _settings_cache_lock:
+        _settings_cache = settings
+        _settings_cache_path = path
+        _settings_cache_mtime = mtime
     return path
 
 
@@ -390,4 +443,5 @@ __all__ = [
     "settings_to_public_dict",
     "upsert_provider",
     "get_active_client_config",
+    "_invalidate_settings_cache",
 ]

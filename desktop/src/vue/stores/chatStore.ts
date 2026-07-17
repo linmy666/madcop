@@ -72,8 +72,8 @@ export type ComputerUsePermissionRequest = Record<string, unknown>
 export type ComputerUsePermissionResponse = Record<string, unknown>
 
 export type UIMessage =
-  | { type: 'user_text'; content: string; attachments?: AttachmentRef[]; id: string; timestamp: number; pending?: boolean; role?: string; sessionId?: string }
-  | { type: 'assistant_text'; content: string; id: string; timestamp: number; model?: string; isStreaming?: boolean }
+  | { type: 'user_text'; content: string; attachments?: AttachmentRef[]; id: string; timestamp: number; pending?: boolean; role?: string; sessionId?: string; transcriptMessageId?: string }
+  | { type: 'assistant_text'; content: string; id: string; timestamp: number; model?: string; isStreaming?: boolean; sessionId?: string; transcriptMessageId?: string }
   | { type: 'tool_use'; toolUseId: string; toolName: string; input: unknown; id: string; timestamp: number; isPending?: boolean; status?: string; partialInput?: string; result?: string; isError?: boolean; args?: unknown }
   | { type: 'tool_result'; toolUseId: string; result: string; id: string; timestamp: number; isError?: boolean; toolName?: string }
   | { type: 'thinking'; thinkingId: string; content: string; id: string; timestamp: number }
@@ -353,12 +353,15 @@ export const useChatStore = defineStore('chat', {
     ) {
       const session = this.getSession(sessionId)
       session.chatState = 'busy'
-      // Add the user message
+      // Add the user message. transcriptMessageId mirrors id so session
+      // branching (fork-from-here) can locate the backend message by id.
+      const userId = nextId()
       const userMsg: UIMessage = {
         type: 'user_text',
         content,
         attachments: _attachments,
-        id: nextId(),
+        id: userId,
+        transcriptMessageId: userId,
         timestamp: Date.now(),
       }
       session.messages.push(userMsg)
@@ -422,10 +425,12 @@ export const useChatStore = defineStore('chat', {
       // assistant message so the reason is never silently swallowed.
       const pushChatError = (message: string) => {
         session.chatState = 'error'
+        const errId = nextId()
         session.messages.push({
           type: 'assistant_text',
           content: `错误: ${message}`,
-          id: nextId(),
+          id: errId,
+          transcriptMessageId: errId,
           timestamp: Date.now(),
           model: session.messages.find((m: any) => m.type === 'assistant_text')?.model,
         } as any)
@@ -540,6 +545,7 @@ export const useChatStore = defineStore('chat', {
               type: 'assistant_text',
               content: assistantMsg,
               id: assistantId,
+              transcriptMessageId: assistantId,
               timestamp: Date.now(),
             }
             session.messages.push(assistantMsgObj)
@@ -815,13 +821,24 @@ export const useChatStore = defineStore('chat', {
         // UIMessage shape (has both `type` and `id`), keep it as-is so
         // tool_use/tool_result/plan messages round-trip intact.
         const normalized = list.map((m: any) => {
-          if (m && m.type && m.id) return m
+          const id = m.id || m.messageId || `${sessionId}-${m.createdAt || Math.random()}`
+          if (m && m.type && m.id) {
+            return {
+              ...m,
+              id,
+              transcriptMessageId: m.transcriptMessageId || id,
+            }
+          }
+          const role = m.role || m.type || 'assistant'
+          const type = m.type || (role === 'user' || role === 'user_text' ? 'user_text' : 'assistant_text')
           return {
-            id: m.id || m.messageId || `${sessionId}-${m.createdAt || Math.random()}`,
-            role: m.role || m.type || 'assistant',
-            type: m.type || (m.role === 'user' ? 'user_text' : 'assistant_text'),
+            id,
+            transcriptMessageId: id,
+            role,
+            type,
             content: m.content || m.text || '',
             createdAt: m.createdAt || m.timestamp || new Date().toISOString(),
+            timestamp: typeof m.timestamp === 'number' ? m.timestamp : Date.now(),
             toolCalls: m.toolCalls || [],
             attachments: m.attachments || [],
             reasoning: m.reasoning,

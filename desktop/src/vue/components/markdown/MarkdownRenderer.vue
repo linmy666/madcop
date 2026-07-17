@@ -525,13 +525,69 @@ const MermaidStreamingPlaceholder = defineComponent({
 // token triggers a full marked re-parse + re-render, which flickers code
 // blocks and tables. The frame-aligned ref coalesces a burst of tokens into
 // a single render. When not streaming, render the final content immediately.
+//
+// For long documents we escalate the throttle and optionally collapse the
+// visible slice so a 200KB reply does not re-parse the whole tree every frame.
+const LONG_STREAM_CHARS = 24_000
+const LONG_COLLAPSE_CHARS = 80_000
+const LONG_STREAM_MIN_INTERVAL_MS = 120
+const LONG_STREAM_MIN_DELTA = 96
+
 const frameContent = ref(props.content)
+const longDocExpanded = ref(false)
 let rafId: number | null = null
+let throttleTimer: ReturnType<typeof setTimeout> | null = null
+let lastFlushAt = 0
+let lastFlushedLen = props.content.length
+
+function flushFrameContent() {
+  frameContent.value = props.content
+  lastFlushAt = Date.now()
+  lastFlushedLen = props.content.length
+}
+
+function clearSchedule() {
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId)
+    rafId = null
+  }
+  if (throttleTimer !== null) {
+    clearTimeout(throttleTimer)
+    throttleTimer = null
+  }
+}
+
 function scheduleFrame() {
-  if (rafId !== null || !props.streaming) return
+  if (!props.streaming) return
+  const len = props.content.length
+  const isLong = len >= LONG_STREAM_CHARS
+  if (isLong) {
+    // Skip tiny token-by-token flushes on large docs.
+    const delta = len - lastFlushedLen
+    const elapsed = Date.now() - lastFlushAt
+    if (delta < LONG_STREAM_MIN_DELTA && elapsed < LONG_STREAM_MIN_INTERVAL_MS) {
+      if (throttleTimer === null) {
+        throttleTimer = setTimeout(() => {
+          throttleTimer = null
+          flushFrameContent()
+        }, LONG_STREAM_MIN_INTERVAL_MS - elapsed)
+      }
+      return
+    }
+    if (throttleTimer === null && elapsed < LONG_STREAM_MIN_INTERVAL_MS) {
+      throttleTimer = setTimeout(() => {
+        throttleTimer = null
+        flushFrameContent()
+      }, LONG_STREAM_MIN_INTERVAL_MS - elapsed)
+      return
+    }
+    flushFrameContent()
+    return
+  }
+  if (rafId !== null) return
   rafId = requestAnimationFrame(() => {
     rafId = null
-    frameContent.value = props.content
+    flushFrameContent()
   })
 }
 watch(() => props.content, () => {
@@ -539,19 +595,46 @@ watch(() => props.content, () => {
     scheduleFrame()
   } else {
     // Non-streaming (final): update immediately so the finished render is exact.
-    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-    frameContent.value = props.content
+    clearSchedule()
+    flushFrameContent()
+    // Reset collapse when content is replaced with a new short message.
+    if (props.content.length < LONG_COLLAPSE_CHARS) longDocExpanded.value = false
   }
 })
 watch(() => props.streaming, (s) => {
-  if (!s) { if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }; frameContent.value = props.content }
+  if (!s) {
+    clearSchedule()
+    flushFrameContent()
+  }
 })
-onBeforeUnmount(() => { if (rafId !== null) cancelAnimationFrame(rafId) })
+onBeforeUnmount(() => { clearSchedule() })
 
-const parseTarget = computed(() => props.streaming ? frameContent.value : props.content)
+const rawParseTarget = computed(() => props.streaming ? frameContent.value : props.content)
+
+/** Collapsed slice for huge finalized messages (user can expand). */
+const isLongCollapsed = computed(
+  () =>
+    !props.streaming
+    && !longDocExpanded.value
+    && rawParseTarget.value.length > LONG_COLLAPSE_CHARS,
+)
+
+const parseTarget = computed(() => {
+  const full = rawParseTarget.value
+  if (!isLongCollapsed.value) return full
+  // Cut at a line boundary near the limit so we don't mid-fence a code block.
+  const slice = full.slice(0, LONG_COLLAPSE_CHARS)
+  const lastNl = slice.lastIndexOf('\n')
+  return lastNl > LONG_COLLAPSE_CHARS * 0.6 ? slice.slice(0, lastNl) : slice
+})
+
 const parsed = computed(() =>
   props.cache ? getCachedMarkdownParse(parseTarget.value, props.streaming) : parseMarkdown(parseTarget.value),
 )
+
+function expandLongDoc() {
+  longDocExpanded.value = true
+}
 
 const proseClasses = computed(() => getProseClasses(props.variant, props.class))
 
@@ -617,32 +700,62 @@ function handleClick(event: MouseEvent): void {
 </script>
 
 <template>
-  <div
-    v-if="parts.length === 1 && parts[0].type === 'html'"
-    :class="proseClasses"
-    v-html="parts[0].content"
-    @click="handleClick"
-  />
-  <div
-    v-else
-    :class="proseClasses"
-    @click="handleClick"
-  >
-    <template v-for="(part, i) in parts" :key="i">
-      <div
-        v-if="part.type === 'html'"
-        v-html="part.content"
-      />
-      <MermaidStreamingPlaceholder
-        v-else-if="shouldRenderAsMermaid(part.block) && props.streaming"
-      />
-      <MermaidRenderer
-        v-else-if="shouldRenderAsMermaid(part.block)"
-        :code="part.block.code"
-      />
-      <div v-else class="my-4">
-        <CodeViewer :code="part.block.code" :language="part.block.language" />
-      </div>
-    </template>
+  <div class="md-root">
+    <div
+      v-if="parts.length === 1 && parts[0].type === 'html'"
+      :class="proseClasses"
+      v-html="parts[0].content"
+      @click="handleClick"
+    />
+    <div
+      v-else
+      :class="proseClasses"
+      @click="handleClick"
+    >
+      <template v-for="(part, i) in parts" :key="i">
+        <div
+          v-if="part.type === 'html'"
+          v-html="part.content"
+        />
+        <MermaidStreamingPlaceholder
+          v-else-if="shouldRenderAsMermaid(part.block) && props.streaming"
+        />
+        <MermaidRenderer
+          v-else-if="shouldRenderAsMermaid(part.block)"
+          :code="part.block.code"
+        />
+        <div v-else class="my-4">
+          <CodeViewer :code="part.block.code" :language="part.block.language" />
+        </div>
+      </template>
+    </div>
+    <button
+      v-if="isLongCollapsed"
+      type="button"
+      class="md-expand-long"
+      @click="expandLongDoc"
+    >
+      Show full message ({{ Math.round(rawParseTarget.length / 1000) }}k chars)
+    </button>
   </div>
 </template>
+
+<style scoped>
+.md-expand-long {
+  margin-top: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-container-low);
+  padding: 0.4rem 0.75rem;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.md-expand-long:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+</style>

@@ -250,6 +250,36 @@ const branchableMessageTargets = computed(() => {
   return getBranchableMessageTargets(messages.value)
 })
 
+const branchingMessageId = ref<string | null>(null)
+
+async function handleBranchMessage(target: BranchableMessageTarget) {
+  const sid = activeTabId.value
+  if (!sid || branchingMessageId.value || branchActionsDisabled.value) return
+  branchingMessageId.value = target.uiMessageId
+  try {
+    const result = await sessionStore.branchSession(sid, target.transcriptMessageId)
+    const title = (result.title || '').trim() || t('sidebar.newSession')
+    tabStore.openTab(result.sessionId, title)
+    try {
+      await chatStore.connectToSession?.(result.sessionId)
+    } catch {
+      // connectToSession may not exist / may no-op depending on chatStore version
+    }
+    uiStore.addToast({
+      type: 'success',
+      message: t('chat.branchSuccess', { title }),
+    })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    uiStore.addToast({
+      type: 'error',
+      message: t('chat.branchError', { detail }),
+    })
+  } finally {
+    branchingMessageId.value = null
+  }
+}
+
 // ─── Turn change cards ────────────────────────────────────────
 const turnChangeCards = ref<TurnChangeCardModel[]>([])
 const turnChangeLoadError = ref<string | null>(null)
@@ -922,7 +952,19 @@ function renderItemContent(item: RenderItem) {
     })
   }
   if (msg.type === 'assistant_text') {
-    return h(AssistantMessage, { content: msg.content || '', isStreaming: msg.isStreaming, sessionId: msg.sessionId, timestamp: msg.timestamp, compact: props.compact })
+    const branchTarget = branchableMessageTargets.value.get(msg.id)
+    const canBranch = Boolean(branchTarget) && !branchActionsDisabled.value
+    return h(AssistantMessage, {
+      content: msg.content || '',
+      isStreaming: msg.isStreaming,
+      sessionId: msg.sessionId,
+      timestamp: msg.timestamp,
+      compact: props.compact,
+      canBranch,
+      branchLoading: branchingMessageId.value === msg.id,
+      branchLabel: t('chat.branchFromHere'),
+      onBranch: branchTarget ? () => { void handleBranchMessage(branchTarget) } : undefined,
+    })
   }
   if (msg.type === 'thinking') {
     return h(ThinkingBlock, { message: msg })
