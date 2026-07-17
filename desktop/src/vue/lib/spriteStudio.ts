@@ -38,7 +38,7 @@ export interface SpriteRosterInput {
   deepRoute?: DeepRouteInput | null
   clarificationPending?: { question?: string; options?: string[] } | null
   activeToolName?: string | null
-  /** e.g. 'idle' | 'streaming' | 'sending' — from chatStore chatState */
+  /** chatStore ChatState plus stream labels: idle|busy|streaming|tool_executing|… */
   chatState?: string | null
 }
 
@@ -127,6 +127,18 @@ export function poseFromToolName(toolName: string | null | undefined): SpritePos
   return 'working'
 }
 
+/** True when the session is mid-turn (matches chatStore ChatState + stream labels). */
+export function isChatBusy(chatState: string | null | undefined): boolean {
+  if (!chatState) return false
+  return (
+    chatState === 'busy' ||
+    chatState === 'streaming' ||
+    chatState === 'sending' ||
+    chatState === 'thinking' ||
+    chatState === 'tool_executing'
+  )
+}
+
 function bubbleForPose(pose: SpritePose, text: string, clarifyQ?: string): string {
   if (pose === 'blocked' && clarifyQ) return clarifyQ.slice(0, 48)
   if (pose === 'error') return '出错了'
@@ -168,10 +180,9 @@ export function buildSpriteRoster(input: SpriteRosterInput): SpriteAgent[] {
   const streamIds = Object.keys(streams)
   const clarify = !!input.clarificationPending
   const clarifyQ = input.clarificationPending?.question
-  const busy =
-    input.chatState === 'streaming' ||
-    input.chatState === 'sending' ||
-    input.chatState === 'thinking'
+  // chatStore sets 'busy' on sendMessage; 'streaming' only after assistant
+  // text tokens. Also accept legacy / thinking-adjacent labels.
+  const busy = isChatBusy(input.chatState)
 
   if (streamIds.length > 0) {
     return streamIds.map((id) => {

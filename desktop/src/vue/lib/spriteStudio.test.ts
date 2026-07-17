@@ -3,6 +3,7 @@ import {
   buildSpriteRoster,
   selectSpriteDetail,
   poseFromToolName,
+  isChatBusy,
   inferRole,
   loadStudioSkin,
   saveStudioSkin,
@@ -12,7 +13,7 @@ import {
   ISLAND_ENABLED_KEY,
 } from './spriteStudio'
 
-describe('inferRole / poseFromToolName', () => {
+describe('inferRole / poseFromToolName / isChatBusy', () => {
   it('infers specialist roles from ids and names', () => {
     expect(inferRole('planner', '规划')).toBe('planner')
     expect(inferRole('coder-1', '写码助手')).toBe('coder')
@@ -25,6 +26,15 @@ describe('inferRole / poseFromToolName', () => {
     expect(poseFromToolName('web_search')).toBe('tool_web')
     expect(poseFromToolName('unknown_tool')).toBe('working')
     expect(poseFromToolName(null)).toBeNull()
+  })
+
+  it('treats chatStore busy/tool_executing as busy', () => {
+    expect(isChatBusy('busy')).toBe(true)
+    expect(isChatBusy('tool_executing')).toBe(true)
+    expect(isChatBusy('streaming')).toBe(true)
+    expect(isChatBusy('idle')).toBe(false)
+    expect(isChatBusy('stopped')).toBe(false)
+    expect(isChatBusy(null)).toBe(false)
   })
 })
 
@@ -93,6 +103,33 @@ describe('buildSpriteRoster', () => {
     expect(roster.some((r) => r.pose === 'thinking' || r.pose === 'idle')).toBe(true)
   })
 
+  it('treats chatState busy (chatStore primary) as busy for deepRoute specialists', () => {
+    const roster = buildSpriteRoster({
+      deepRoute: {
+        category: 'coding',
+        specialists: ['planner', 'coder'],
+        label_zh: '编码',
+        label_en: 'coding',
+      },
+      chatState: 'busy',
+    })
+    expect(roster).toHaveLength(2)
+    expect(roster.some((r) => r.pose === 'thinking')).toBe(true)
+    expect(roster.every((r) => r.status === 'pending')).toBe(true)
+  })
+
+  it('treats tool_executing as busy for deepRoute specialists', () => {
+    const roster = buildSpriteRoster({
+      deepRoute: {
+        specialists: ['researcher'],
+        label_zh: '调研',
+      },
+      chatState: 'tool_executing',
+    })
+    expect(roster).toHaveLength(1)
+    expect(roster[0].pose).toBe('thinking')
+  })
+
   it('returns empty roster when fully idle', () => {
     expect(buildSpriteRoster({ chatState: 'idle' })).toEqual([])
     expect(buildSpriteRoster({})).toEqual([])
@@ -103,6 +140,26 @@ describe('buildSpriteRoster', () => {
     expect(roster).toHaveLength(1)
     expect(roster[0].id).toBe('main')
     expect(roster[0].pose).toBe('tool_web')
+  })
+
+  it('solo sprite on chatState busy with activeToolName (production path)', () => {
+    const roster = buildSpriteRoster({
+      chatState: 'busy',
+      activeToolName: 'write_file',
+    })
+    expect(roster).toHaveLength(1)
+    expect(roster[0].id).toBe('main')
+    expect(roster[0].pose).toBe('tool_file')
+  })
+
+  it('solo sprite blocked on busy + clarificationPending', () => {
+    const roster = buildSpriteRoster({
+      chatState: 'busy',
+      clarificationPending: { question: '继续吗？', options: ['是', '否'] },
+    })
+    expect(roster).toHaveLength(1)
+    expect(roster[0].pose).toBe('blocked')
+    expect(roster[0].bubble).toContain('继续')
   })
 })
 
