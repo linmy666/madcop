@@ -775,6 +775,16 @@ function openTerminalInTab() {
         <!-- Team status bar -->
         <TeamStatusBar />
 
+        <!-- Clarification sits above composer so it never overlays message history -->
+        <div
+          v-if="!isMemberSession && activeTabId"
+          class="relative z-20 w-full shrink-0 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)] px-4 pt-2"
+        >
+          <div class="mx-auto max-w-[860px]">
+            <ClarificationPanel :session-id="activeTabId" />
+          </div>
+        </div>
+
         <!-- Chat input -->
         <ChatInput
           :variant="isEmpty && !isMemberSession && !showRightPanel ? 'hero' : 'default'"
@@ -829,7 +839,10 @@ function openTerminalInTab() {
       >
         <!-- 任务监控 (always visible when sidebar open; shows loading state while waiting for new plan) -->
         <div class="shrink-0 overflow-y-auto" style="max-height: 50%;">
-          <PlanTasksPanel :plan="chatStore.sessions[activeTabId]?.plan ?? null" />
+          <PlanTasksPanel
+            :plan="chatStore.sessions[activeTabId]?.plan ?? null"
+            :busy="['busy', 'streaming', 'tool_executing'].includes(String(chatStore.sessions[activeTabId]?.chatState || 'idle'))"
+          />
         </div>
         <!-- 产物 (always visible) -->
         <div class="flex-1 min-h-0 border-t border-[var(--color-border)]">
@@ -882,12 +895,6 @@ function openTerminalInTab() {
       v-if="!isMemberSession && activeTabId"
       :session-id="activeTabId"
       :request="pendingComputerUsePermission?.request ?? null"
-    />
-
-    <!-- Clarification panel (non-member) -->
-    <ClarificationPanel
-      v-if="!isMemberSession && activeTabId"
-      :session-id="activeTabId"
     />
   </div>
 </template>

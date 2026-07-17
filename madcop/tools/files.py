@@ -338,9 +338,10 @@ class WriteFileTool(Tool):
     name = "write_file"
     description = (
         "Write text content to a file. Creates parent directories. "
-        "Overwrites existing content. Path must be in allowed dirs. "
-        "Prefer a path under the active workspace; relative paths "
-        "(e.g. analysis.md) resolve into the workspace root."
+        "Overwrites existing content. Path must be in allowed dirs "
+        "(active workspace, user home, Downloads, Desktop, preview). "
+        "Relative paths (e.g. analysis.md) resolve into the workspace root. "
+        "For 下载目录 use absolute path like /Users/<name>/Downloads/file.md."
     )
 
     def __init__(self, allowed_dirs: Sequence[str | Path] | None = None) -> None:

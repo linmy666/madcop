@@ -71,9 +71,11 @@ def default_registry(store: MemoryStore | None = None, workspace_dir: str | None
     if workspace_dir:
         _write_dirs.append(workspace_dir)
     _preview_dir = str(_P.home() / ".madcop" / "preview")
+    _downloads = str(_P.home() / "Downloads")
+    _desktop = str(_P.home() / "Desktop")
     _write_dirs.append(_preview_dir)
-    _write_dirs.extend([_os.getcwd(), _user_home])
-    _read_dirs: list[str] = [_user_home, _os.getcwd(), _preview_dir]
+    _write_dirs.extend([_os.getcwd(), _user_home, _downloads, _desktop])
+    _read_dirs: list[str] = [_user_home, _os.getcwd(), _preview_dir, _downloads, _desktop]
     if workspace_dir:
         _read_dirs.insert(0, workspace_dir)
     reg.register(ReadFileTool(allowed_dirs=_read_dirs))   # v2.7.0 — include active workspace

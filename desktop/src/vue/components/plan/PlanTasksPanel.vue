@@ -33,6 +33,8 @@ export interface PlanData {
 
 const props = defineProps<{
   plan: PlanData | null
+  /** Session is waiting for a plan (streaming/busy). When false and plan is null, show idle empty. */
+  busy?: boolean
 }>()
 
 const queuedSteps = computed(() =>
@@ -90,11 +92,19 @@ function truncate(s: string | null, max = 36): string {
       </div>
     </header>
 
-    <!-- Waiting for plan from new message -->
-    <div v-if="!plan" class="tp__body tp__body--loading">
+    <!-- No plan yet: only show spinner while the session is actively running -->
+    <div v-if="!plan && busy" class="tp__body tp__body--loading">
       <div class="tp__loading-row">
         <div class="tp__check tp__check--active"><div class="tp__spinner"></div></div>
-        <div class="tp__action">正在分析任务，生成执行计划…</div>
+        <div class="tp__action">正在处理…</div>
+      </div>
+    </div>
+
+    <div v-else-if="!plan" class="tp__body tp__body--idle">
+      <div class="tp__idle">
+        <span class="material-symbols-outlined tp__idle-icon">task_alt</span>
+        <div class="tp__idle-title">暂无执行计划</div>
+        <div class="tp__idle-desc">普通对话不会生成步骤计划。深度模式或多步任务时会显示在这里。</div>
       </div>
     </div>
 
@@ -270,6 +280,32 @@ function truncate(s: string | null, max = 36): string {
 @keyframes tp-shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(200%); }
+}
+
+.tp__body--idle {
+  padding: 20px 16px 24px;
+}
+.tp__idle {
+  text-align: center;
+  color: var(--color-text-tertiary, #8b8b96);
+}
+.tp__idle-icon {
+  font-size: 28px;
+  opacity: 0.45;
+  display: block;
+  margin: 0 auto 8px;
+}
+.tp__idle-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #666);
+  margin-bottom: 4px;
+}
+.tp__idle-desc {
+  font-size: 11px;
+  line-height: 1.45;
+  max-width: 220px;
+  margin: 0 auto;
 }
 
 /* ── Body ── */

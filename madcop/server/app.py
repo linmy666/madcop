@@ -539,7 +539,10 @@ def _build_memory_system_prompt(
         "- Short messages like 「看看」「分析一下」together with an attachment mean: "
         "summarize / review that file now.\n"
         f"- Images: the current model ({_mdl}) may not support vision; say so if needed.\n"
-        "- Prefer write_file into the active workspace when the user asks to save results."
+        "- Prefer write_file into the active workspace when the user asks to save results.\n"
+        "- If the user names a clear destination (e.g. 下载目录, ~/Downloads, Desktop), "
+        "write there with write_file using an absolute path — do NOT call ask_user to reconfirm "
+        "unless the destination is truly ambiguous."
     )
 
     parts.append(

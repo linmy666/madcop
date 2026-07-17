@@ -240,7 +240,9 @@ function createDefaultSessionState(): PerSessionState {
     activeToolUseId: null,
     activeToolName: null,
     activeThinkingId: null,
-    planModeEnabled: true,  // Plan-and-Execute mode default ON
+    // Default OFF: plan sidebar "生成执行计划" confuses normal chat / file Q&A.
+    // Multi-step planning still works when the user enables plan mode explicitly.
+    planModeEnabled: false,
     plan: null,
     deepRoute: null,
     pendingPermission: null,
@@ -416,6 +418,7 @@ export const useChatStore = defineStore('chat', {
       session.plan = null
       session.deepRoute = null
       session.agentStreams = {}
+      session.clarificationPending = null
 
       // Abort any in-flight request for this session so stale SSE events
       // from the old message can't overwrite the new plan / messages.
