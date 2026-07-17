@@ -12,7 +12,7 @@ import {
   nextTick,
   type Ref,
 } from 'vue'
-import { ApiError } from '../../../api/client'
+import { ApiError } from '../../api/client'
 import { filesystemApi } from '../../../api/filesystem'
 import { useTranslation, type TranslationKey } from '../../i18n'
 

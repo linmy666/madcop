@@ -734,7 +734,7 @@ export function memoryFileLabel(path: string): string {
 
 // ─── API error helper ────────────────────────────────────────
 
-import { ApiError } from '../../../api/client'
+import { ApiError } from '../../api/client'
 
 export function getApiErrorMessage(error: unknown): string {
   return error instanceof ApiError

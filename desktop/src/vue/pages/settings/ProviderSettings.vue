@@ -11,7 +11,7 @@
  */
 
 import { ref, onMounted, computed } from 'vue'
-import { getApiUrl } from '../../../api/client'
+import { getApiUrl } from '../../api/client'
 
 interface Provider {
   provider_id: string
