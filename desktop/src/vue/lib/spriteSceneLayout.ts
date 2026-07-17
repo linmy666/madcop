@@ -3,6 +3,8 @@
  * Desk centers match furniture rects in public/studio/room-*.svg.
  */
 
+import { buildGridWalkPath } from './studioPathFinder'
+
 export const SCENE_W = 1200
 export const SCENE_H = 700
 
@@ -43,21 +45,22 @@ export function stationPoint(stationId: string): ScenePoint {
 }
 
 /**
- * Build a simple walk path: door → mid floor → destination.
- * Optional via intermediate station for longer routes.
+ * Walk path in percent space. Prefer grid BFS (XSafeClaw PathFinder-inspired, MIT ideas only).
  */
 export function buildWalkPath(from: ScenePoint, to: ScenePoint): ScenePoint[] {
-  const mid: ScenePoint = {
-    x: (from.x + to.x) / 2,
-    y: Math.max(from.y, to.y) * 0.5 + 48 * 0.5, // stay on floor band
-  }
-  // Keep mid on walkable floor (~55–90% height)
-  mid.y = Math.min(90, Math.max(55, mid.y))
-  // If almost same desk, short hop
   const dx = Math.abs(from.x - to.x)
   const dy = Math.abs(from.y - to.y)
   if (dx < 3 && dy < 3) return [to]
   if (dx < 12 && dy < 8) return [from, to]
+  const path = buildGridWalkPath(from, to)
+  if (path.length >= 2) {
+    // Keep exact endpoints (grid snaps midpoints only)
+    return [{ ...from }, ...path.slice(1, -1), { ...to }]
+  }
+  const mid: ScenePoint = {
+    x: (from.x + to.x) / 2,
+    y: Math.min(90, Math.max(55, (from.y + to.y) / 2)),
+  }
   return [from, mid, to]
 }
 

@@ -17,6 +17,7 @@ import {
   saveAssignedSpriteId,
 } from '../../lib/spriteStudio'
 import { sanitizeAgentDisplayText } from '../../lib/agentDisplayText'
+import { buildTimelineFromRoster, countByStatus, type TimelineStatus } from '../../lib/agentEventNormalize'
 import { STATION_SPOTS } from '../../lib/spriteSceneLayout'
 import { publicAssetPath } from '../../lib/publicAsset'
 
@@ -109,45 +110,39 @@ const litDesks = computed(() => {
 
 const isEmpty = computed(() => displayRoster.value.length === 0)
 
-/** Short activity timeline from roster (Agent Town style, lightweight) */
+const statusFilter = ref<'all' | TimelineStatus>('all')
+
+const timeline = computed(() =>
+  buildTimelineFromRoster(displayRoster.value, props.activeToolName),
+)
+
+const statusCounts = computed(() => countByStatus(timeline.value))
+
+/** Short activity timeline (XSafeClaw Agent Town–style, MadCop data) */
 const activityFeed = computed(() => {
-  const items = displayRoster.value.map((a) => ({
-    id: a.id,
-    name: a.name,
-    color: a.color,
-    line:
-      a.pose === 'error'
-        ? sanitizeAgentDisplayText(a.text || a.bubble || '出错', 36)
-        : a.bubble || poseLabelSafe(a.pose),
-    pose: a.pose,
+  const all = timeline.value
+  const filtered =
+    statusFilter.value === 'all'
+      ? all
+      : all.filter(
+          (e) => e.agentId === '_tool' || e.status === statusFilter.value,
+        )
+  return filtered.slice(0, 10).map((e) => ({
+    id: e.agentId,
+    name: e.agentName,
+    color: e.color,
+    line: e.label,
+    status: e.status,
   }))
-  if (props.activeToolName) {
-    items.unshift({
-      id: '_tool',
-      name: '工具',
-      color: '#7C3AED',
-      line: `正在调用 ${props.activeToolName}`,
-      pose: 'working',
-    })
-  }
-  return items.slice(0, 8)
 })
 
-function poseLabelSafe(pose: string) {
-  const map: Record<string, string> = {
-    idle: '守护中',
-    thinking: '思考中',
-    working: '工作中',
-    tool_file: '读写文件',
-    tool_web: '联网检索',
-    blocked: '等待你',
-    done: '完成',
-    error: '失败',
-    slacking: '待命摸鱼',
-    assigned: '已指派上岗',
-  }
-  return map[pose] || pose
-}
+const FILTERS: { id: 'all' | TimelineStatus; label: string }[] = [
+  { id: 'all', label: '全部' },
+  { id: 'running', label: '工作' },
+  { id: 'pending', label: '等待' },
+  { id: 'idle', label: '摸鱼' },
+  { id: 'error', label: '出错' },
+]
 
 function onSelect(id: string) {
   selectedId.value = id
@@ -243,11 +238,28 @@ function setSkin(id: StudioSkinId) {
       </div>
 
       <aside class="ss__detail">
-        <div v-if="activityFeed.length" class="ss__feed">
-          <h3 class="ss__detail-title">活动</h3>
+        <div class="ss__feed">
+          <h3 class="ss__detail-title">小队状态</h3>
+          <div class="ss__counts">
+            <span>工作 {{ statusCounts.running }}</span>
+            <span>等待 {{ statusCounts.pending }}</span>
+            <span>摸鱼 {{ statusCounts.idle }}</span>
+            <span>出错 {{ statusCounts.error }}</span>
+          </div>
+          <div class="ss__filters">
+            <button
+              v-for="f in FILTERS"
+              :key="f.id"
+              type="button"
+              :class="['ss__filter', { 'ss__filter--on': statusFilter === f.id }]"
+              @click="statusFilter = f.id"
+            >
+              {{ f.label }}
+            </button>
+          </div>
           <button
             v-for="item in activityFeed"
-            :key="item.id"
+            :key="item.id + item.line"
             type="button"
             class="ss__feed-item"
             @click="item.id !== '_tool' && onSelect(item.id)"
@@ -256,6 +268,7 @@ function setSkin(id: StudioSkinId) {
             <span class="ss__feed-name" :style="{ color: item.color }">{{ item.name }}</span>
             <span class="ss__feed-line">{{ item.line }}</span>
           </button>
+          <p v-if="!activityFeed.length" class="ss__detail-muted">当前筛选下没有精灵</p>
         </div>
         <h3 class="ss__detail-title">精灵档案</h3>
         <div v-if="!detail" class="ss__detail-empty">
@@ -542,6 +555,36 @@ function setSkin(id: StudioSkinId) {
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--color-border);
+}
+.ss__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  margin: -4px 0 10px;
+}
+.ss__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.ss__filter {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+.ss__filter--on {
+  border-color: var(--color-brand, #7c3aed);
+  color: var(--color-brand, #7c3aed);
+  background: color-mix(in srgb, var(--color-brand, #7c3aed) 10%, transparent);
+  font-weight: 700;
 }
 .ss__feed-item {
   display: grid;

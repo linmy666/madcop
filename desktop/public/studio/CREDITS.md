@@ -1,19 +1,40 @@
-# Studio scene art & walk animation
+# Studio assets & third-party licensing notes
 
-## Rooms
-`room-studio.svg`, `room-study.svg`, `room-cabin.svg` — original MadCop vector
-scenes (redistributable with MadCop). Furniture seat centers are documented in
-`spriteSceneLayout.ts` (viewBox 1200×700) for pixel alignment.
+## MadCop brand (first-class)
 
-## Brand character
-**MadCop mascot is the only first-class character** (recolored per agent role,
-white eyes preserved). Optional `walk-sheet.png` is an off-by-default debug aid,
-not the product avatar.
+- **Character**: MadCop mascot only (`mascot.png` via `MascotAvatar`).
+  Recolor preserves near-white eye whites and near-black pupils
+  (`mascotRecolor.ts`).
+- **Rooms**: `room-studio.svg`, `room-study.svg`, `room-cabin.svg` —
+  original MadCop vector scenes.
+- **Pixel walk sheet** (`walk-sheet.png`): optional, **off by default**.
 
-## Walk sheet (optional)
-`walk-sheet.png` — classic 16×18 LPC-style green-cap walk cycle
-(3×4 frames). Not used by default; product path is MadCop mascot + CSS moods.
+## Inspired by (code ideas only — not vendored binaries)
 
-## Inspiration
-itch.io free cozy interiors / Kenney CC0 furniture kits for layout language;
-implementation is vector rooms + path walkers rather than a full tileset.
+### XSafeClaw (`XSafeAI/XSafeClaw`)
+- **Code license**: MIT (`LICENSE`, Copyright 2026 XSafeAI).
+- **README** also notes contact for commercial enterprise arrangements;
+  the OSI MIT text itself grants commercial use for the *Software*.
+- **What we used**: reimplemented patterns only:
+  - grid pathfinding ideas (`studioPathFinder.ts` ↔ their `PathFinder.js`)
+  - status/timeline normalize (`agentEventNormalize.ts` ↔ `AgentJourney`)
+  - roster status filters / activity console (Agent Town UX)
+- **What we did NOT copy into this repo**:
+  - `frontend/public/character_assets/*` (Adam/Alex etc.) — no per-asset
+    license file in-tree; third-party pixel packs often require separate
+    attribution; **MadCop face stays MadCop**.
+  - PixiJS engine, maps, beams, portals, music packs.
+
+### 摸鱼大厂 (user project)
+- Owned by the MadCop author; usable as design reference.
+- **Not vendored**: office JPEG / colleague sprites (product IP stays MadCop).
+
+## Summary for commercial MadCop Agent
+
+| Asset / idea              | OK for MadCop product?      |
+|---------------------------|-----------------------------|
+| XSafeClaw MIT code ideas  | Yes (reimplement)           |
+| XSafeClaw character PNGs  | **No** (ambiguous upstream) |
+| MadCop mascot + SVG rooms | Yes                         |
+| 摸鱼大厂 layout ideas     | Yes                         |
+| 摸鱼大厂 colleague faces  | No (product choice)         |
