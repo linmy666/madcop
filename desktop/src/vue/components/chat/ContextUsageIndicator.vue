@@ -1,16 +1,13 @@
 <script setup lang="ts">
 /**
- * v3.2 — ContextUsageIndicator
+ * v3.3 — ContextUsageIndicator
  *
- * Real-time context usage meter driven by client-side message count.
- * Backend endpoint /api/sessions/{id}/inspection is a stub that doesn't
- * return tokens, so we estimate from messageCount locally.
- *
- * Token estimate: ~600 tokens per turn (user + assistant), refined by
- * character count of all visible messages. Max defaults to 128K.
+ * Prefers server inspection estimate when available; falls back to
+ * client-side char/message heuristics. Max defaults to 128K.
  */
 
 import { ref, computed, watch } from 'vue'
+import { sessionsApi } from '../../api/sessions'
 
 interface ContextCategory {
   name: string
@@ -33,8 +30,42 @@ const props = withDefaults(defineProps<{
   totalContent: '',
 })
 
+const serverTokens = ref<number | null>(null)
+
+async function refreshFromServer() {
+  if (!props.sessionId) {
+    serverTokens.value = null
+    return
+  }
+  try {
+    const data = await sessionsApi.getInspection(props.sessionId, {
+      includeContext: true,
+      timeout: 12_000,
+    })
+    const est =
+      (data as any)?.context?.estimatedTokens ??
+      (data as any)?.status?.estimatedTokens ??
+      null
+    serverTokens.value = typeof est === 'number' && est > 0 ? est : null
+  } catch {
+    /* keep local estimate */
+  }
+}
+
+watch(
+  () => [props.sessionId, props.messageCount, props.chatState] as const,
+  ([, , state]) => {
+    // Refresh after a turn finishes or on session switch
+    if (state === 'idle' || state === undefined) {
+      void refreshFromServer()
+    }
+  },
+  { immediate: true },
+)
+
 // Live total tokens, recomputed when content changes
 const totalTokens = computed(() => {
+  if (serverTokens.value != null) return serverTokens.value
   if (props.totalContent && props.totalContent.length > 0) {
     // ~1 token per 1.6 characters for English; ~1 token per 1 character for Chinese
     // Mixed → ~1.3 chars/token average

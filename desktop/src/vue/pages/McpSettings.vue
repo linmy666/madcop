@@ -21,6 +21,7 @@
 import type { McpServerRecord, McpWritableScope, McpUpsertPayload } from '../types/mcp'
 import { useTranslation } from "../i18n"
 import { useMcpStore } from "../stores/mcpStore"
+import { useSessionStore } from '../stores/sessionStore'
 
 import {
   ref,
@@ -115,6 +116,7 @@ const props = defineProps<{
 
 const t = useTranslation()
 const mcpStore = useMcpStore()
+const sessionStore = useSessionStore()
 const sessionsApi = { getRecentProjects: async () => ({ projects: [] }) }
 const mcpApi = { projectPaths: async () => ({ projectPaths: [] }) }
 
@@ -326,10 +328,13 @@ const refreshInFlightRef: Ref<Set<string>> = ref(new Set())
 
 // ─── Derived / refs to store ──────────────────────────────────────
 const activeSession = computed(() => {
-  const { sessions = [], activeSessionId = null } = mcpStore  // sessionStore not wired, using empty
-  return sessions.find((session) => session.id === activeSessionId) ?? null
+  const id = sessionStore.activeSessionId
+  if (!id) return null
+  return sessionStore.sessions.find((session) => session.id === id) ?? null
 })
-const currentWorkDir = computed(() => activeSession.value?.workDir)
+const currentWorkDir = computed(
+  () => activeSession.value?.workDir || activeSession.value?.projectRoot || activeSession.value?.projectPath || '',
+)
 
 const resolveOperationCwd = (server?: McpServerRecord) => server?.projectPath ?? currentWorkDir.value
 
