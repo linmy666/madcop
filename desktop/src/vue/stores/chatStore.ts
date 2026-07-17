@@ -3,6 +3,7 @@ import { deriveSessionTitle, isPlaceholderTitle } from '../lib/autoTitle'
 import { saveToStorage } from './sessionStore'
 import { useSessionStore } from './sessionStore'
 import { useSessionRuntimeStore } from './sessionRuntimeStore'
+import { useUIStore } from './uiStore'
 import { getApiUrl } from '../api/client'
 
 // v3.0: local persistence for per-session messages. The chat API
@@ -599,6 +600,14 @@ export const useChatStore = defineStore('chat', {
                       assistantMsgObj.content = assistantMsg
                       assistantMsgObj.isStreaming = false
                     }
+                  } else if (event.type === 'skill_distilled' && (event.skillName || event.skill_name)) {
+                    const skillName = event.skillName || event.skill_name
+                    try {
+                      useUIStore().addToast({
+                        type: 'success',
+                        message: `已自动蒸馏技能：${skillName}`,
+                      })
+                    } catch { /* toast optional */ }
                   } else if (event.type === 'reasoning' && event.content) {
                     session.reasoningContent = (session.reasoningContent || '') + event.content
                   } else if (event.type === 'agent_start') {

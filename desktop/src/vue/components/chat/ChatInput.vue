@@ -21,9 +21,10 @@
 
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, useTemplateRef } from 'vue'
 import { useChatStore, type AttachmentRef, type QueuedUserMessage } from '../../stores/chatStore'
-import { useTabStore } from '../../stores/tabs'
+import { useTabStore, SETTINGS_TAB_ID } from '../../stores/tabs'
 import { useSessionStore } from '../../stores/sessionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useUIStore } from '../../stores/uiStore'
 import { useSessionRuntimeStore, DRAFT_RUNTIME_SELECTION_KEY } from '../../stores/sessionRuntimeStore'
 import { useWorkspaceChatContextStore } from '../../stores/workspaceChatContextStore'
 import { useTranslation } from '../../i18n'
@@ -83,6 +84,7 @@ const chatStore = useChatStore()
 const tabStore = useTabStore()
 const sessionStore = useSessionStore()
 const settingsStore = useSettingsStore()
+const uiStore = useUIStore()
 const runtimeStore = useSessionRuntimeStore()
 const workspaceStore = useWorkspaceChatContextStore()
 
@@ -617,8 +619,11 @@ const handleLaunchWorkDirChange = async (newWorkDir: string) => {
   launchTransitioning.value = true
   try {
     await replaceEmptySession(newWorkDir)
-  } catch {
-    // Toast would go here: useUIStore().addToast(...)
+  } catch (e) {
+    uiStore.addToast({
+      type: 'error',
+      message: e instanceof Error ? e.message : '切换工作目录失败',
+    })
   } finally {
     launchTransitioning.value = false
   }
@@ -642,7 +647,9 @@ const handleSubmit = async () => {
 
   // Slash UI action: settings tab
   if (pendingSlashUiAction.value?.type === 'settings') {
-    // Would open settings: useUIStore().setPendingSettingsTab(...)
+    const tab = pendingSlashUiAction.value.tab || 'general'
+    uiStore.setPendingSettingsTab(tab)
+    tabStore.openTab(SETTINGS_TAB_ID, 'Settings', 'settings')
     setComposerInput('')
     slashMenuOpen.value = false
     fileSearchOpen.value = false

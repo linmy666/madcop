@@ -21,14 +21,24 @@ USER_SKILLS_DIR = Path.home() / ".madcop" / "skills"
 
 # Patterns that signal "the user is teaching me / asking for reusable knowledge"
 _TEACH_PATTERNS_ZH = [
+    # 教我怎么部署 X / 教我如何写 X
+    re.compile(r"教我(?:怎么|如何)(.+?)(?:[?？。!！]|$)", re.UNICODE),
+    # 教我 X 怎么做
     re.compile(r"教我(.{2,40}?)(?:怎么|如何|方法|步骤|做法)", re.UNICODE),
-    re.compile(r"(?:怎么|如何)(?:做|写|实现|处理|使用|部署|配置|搭建|开发)(?:.{2,40}?)(?:[?？。!！]|$)", re.UNICODE),
-    re.compile(r"我想(?:学|了解|知道)(?:.{2,40}?)(?:[?？。!！]|$)", re.UNICODE),
+    # 怎么部署 X / 如何实现 X
+    re.compile(
+        r"(?:怎么|如何)(?:做|写|实现|处理|使用|部署|配置|搭建|开发)(.+?)(?:[?？。!！]|$)",
+        re.UNICODE,
+    ),
+    re.compile(r"我想(?:学|了解|知道)(.+?)(?:[?？。!！]|$)", re.UNICODE),
     re.compile(r"(.+?)的(?:最佳实践|方法|步骤|流程|模板|教程|示例)是什么", re.UNICODE),
 ]
 _TEACH_PATTERNS_EN = [
     re.compile(r"teach me (?:how to )?(.+)", re.IGNORECASE),
-    re.compile(r"how (?:do|should) (?:I |we )?(?:do|use|implement|deploy|configure|set up) (.+)", re.IGNORECASE),
+    re.compile(
+        r"how (?:do|should) (?:I |we )?(?:do|use|implement|deploy|configure|set up)\s+(.+)",
+        re.IGNORECASE,
+    ),
     re.compile(r"best (?:practice|way) (?:for|to) (.+)", re.IGNORECASE),
     re.compile(r"(.+?) tutorial", re.IGNORECASE),
 ]
@@ -47,10 +57,16 @@ def _looks_like_teaching_request(text: str) -> str | None:
     text = text.strip()
     for pat in _TEACH_PATTERNS_ZH + _TEACH_PATTERNS_EN:
         m = pat.search(text)
-        if m:
-            topic = m.group(1).strip()
-            if 2 <= len(topic) <= 80:
-                return topic
+        if not m:
+            continue
+        try:
+            topic = (m.group(1) or "").strip()
+        except IndexError:
+            topic = text[:60].strip()
+        # Drop trailing punctuation / whitespace
+        topic = re.sub(r"[?？。!！\s]+$", "", topic).strip(" .,;:：")
+        if 2 <= len(topic) <= 80:
+            return topic
     return None
 
 

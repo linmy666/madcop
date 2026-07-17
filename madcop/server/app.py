@@ -2143,6 +2143,16 @@ def create_app() -> FastAPI:
                             )
                     except Exception as e:
                         logger.debug("swallowed: %s", e)
+                    # Teach-me → SKILL.md (same path as WebSocket chat)
+                    try:
+                        from madcop.memory.skill_distill import distill_skill_from_exchange
+                        user_msg = body.messages[-1].content if body.messages else ""
+                        full_assistant = resp.content or ""
+                        _skill = distill_skill_from_exchange(user_msg, full_assistant)
+                        if _skill:
+                            yield f"data: {json.dumps({'type': 'skill_distilled', 'skillName': _skill, 'message': f'Auto-distilled SKILL: {_skill}'}, ensure_ascii=False)}\n\n"
+                    except Exception as e:
+                        logger.debug("SSE skill distill: %s", e)
                     # Mark root done
                     tr = trace_store.get(trace_root.id)
                     if tr:
@@ -2309,6 +2319,19 @@ def create_app() -> FastAPI:
                     )
                 except Exception as e:
                     logger.warning("SSE: skill auto-forge failed: %s", e)
+                try:
+                    from madcop.memory.skill_distill import distill_skill_from_exchange
+                    if not title_user_msg:
+                        title_user_msg = body.messages[-1].content if body.messages else ""
+                    if not assistant_text:
+                        assistant_text = "".join(
+                            m.content for m in messages if m.role == "assistant" and isinstance(m.content, str)
+                        )
+                    _skill = distill_skill_from_exchange(title_user_msg, assistant_text)
+                    if _skill:
+                        yield f"data: {json.dumps({'type': 'skill_distilled', 'skillName': _skill, 'message': f'Auto-distilled SKILL: {_skill}'}, ensure_ascii=False)}\n\n"
+                except Exception as e:
+                    logger.debug("SSE skill distill (tools path): %s", e)
 
                 # Mark root done
                 tr2 = trace_store.get(trace_root.id)
