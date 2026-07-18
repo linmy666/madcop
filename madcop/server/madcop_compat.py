@@ -1034,6 +1034,18 @@ def _get_diagnostics_status() -> dict[str, Any]:
     return {"status": "ok", "capturing": False}
 
 
+def _get_diagnostics_events(limit: int = 100) -> dict[str, Any]:
+    """Return recent diagnostic events (errors / warnings / traces).
+
+    This is a stub — the cc-haha UI uses it to populate the doctor
+    panel. The /api/diagnostics/events endpoint crashed with
+    NameError before because the helper was deleted in a refactor
+    while the route stayed. Returns an empty list until event
+    capture is implemented.
+    """
+    return {"events": []}
+
+
 def _get_doctor_report() -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     # Cheap checks
@@ -1573,11 +1585,26 @@ def register(app: FastAPI) -> None:
 
     @app.post("/api/tasks", include_in_schema=False)
     async def cc_task_create(request: Request) -> dict[str, Any]:
+        """Create a scheduled task in the default task list.
+
+        Previously this endpoint just echoed the request body without
+        storing anything, so GET /api/tasks always returned [] and the
+        user's tasks silently vanished. Now it persists into the same
+        `_TASK_LISTS` dict that the other task-list endpoints read.
+        """
         try:
             body = await request.json()
         except Exception:
             body = {}
-        return {"task": {"id": body.get("id", "task-1"), **body}}
+        if not isinstance(body, dict):
+            body = {}
+        # Ensure every task has an id; generate a short one if missing.
+        if not body.get("id"):
+            import uuid as _uuid
+            body["id"] = f"task-{_uuid.uuid4().hex[:8]}"
+        _TASK_LISTS.setdefault("default", {"id": "default", "tasks": []})
+        _TASK_LISTS["default"]["tasks"].append(body)
+        return {"task": body}
 
     @app.put("/api/tasks/lists/{list_id}/{task_id}",
               include_in_schema=False)
