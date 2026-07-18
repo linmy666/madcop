@@ -2264,7 +2264,20 @@ def create_app() -> FastAPI:
                         yield f"data: {json.dumps({'type': 'skill_distilled', 'skillName': _skill, 'message': f'Auto-distilled SKILL: {_skill}'}, ensure_ascii=False)}\n\n"
                 except Exception as e:
                     logger.debug("SSE deep skill distill: %s", e)
-                yield f"data: {json.dumps({'type': 'done', 'model': body.model or ''}, ensure_ascii=False)}\n\n"
+                # Fall back through: synthesizer-emitted model (if any) → body.model
+                # (user-picked) → active provider model (settings) → empty.
+                # The synthesizer agent's own agent_done event carries the
+                # model it actually used; we resolve that here so the UI
+                # can show "answered by X" without an extra round trip.
+                _synth_model = ""
+                _active_model = ""
+                try:
+                    from madcop.config import settings as _s
+                    _active_model = (_s.get_active_client_config(_s.load_settings()) or {}).get("model", "")
+                except Exception:
+                    pass
+                _done_model = _synth_model or (body.model or "") or _active_model
+                yield f"data: {json.dumps({'type': 'done', 'model': _done_model, 'finish_reason': 'stop'}, ensure_ascii=False)}\n\n"
                 return
 
             try:
@@ -2567,7 +2580,19 @@ def create_app() -> FastAPI:
                         logger.debug("swallowed: %s", e)
                     # Emit the terminal done event (Phase-1 streams text but
                     # doesn't emit done itself, so the no-tool path must).
-                    yield f"data: {json.dumps({'type': 'done', 'model': resp.model or body.model or '', 'finish_reason': 'stop'}, ensure_ascii=False)}\n\n"
+                    # Prefer the model reported by the response; fall back
+                    # to the user-picked model, then the active provider's
+                    # configured model (so the UI can show which model
+                    # actually answered even when the response didn't
+                    # report one back).
+                    _done_model = resp.model or body.model or ""
+                    if not _done_model:
+                        try:
+                            from madcop.config import settings as _s
+                            _done_model = (_s.get_active_client_config(_s.load_settings()) or {}).get("model", "")
+                        except Exception:
+                            pass
+                    yield f"data: {json.dumps({'type': 'done', 'model': _done_model, 'finish_reason': 'stop'}, ensure_ascii=False)}\n\n"
                     return
 
                 # Has tool calls — execute them, then do a second call.
