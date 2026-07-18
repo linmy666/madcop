@@ -2088,6 +2088,17 @@ def create_app() -> FastAPI:
                         _evq: asyncio.Queue = asyncio.Queue()
                         _sentinel = object()
                         _started_agents: set[str] = set()
+                        # Per-agent text buffer for coalescing small chunks.
+                        # Chinese LLMs in particular fire 1-2 chars per token,
+                        # producing 100+ SSE events for a 200-char reply.
+                        # We coalesce until the buffered payload hits
+                        # _TOKEN_FLUSH_BYTES, then emit one event per flush.
+                        # _on_token runs in the engine worker thread so
+                        # the buffer dict + lock are required.
+                        import threading as _thr
+                        _TOKEN_FLUSH_BYTES = 64
+                        _buf_lock = _thr.Lock()
+                        _text_buf: dict[str, str] = {}
 
                         def _on_token(node_id, agent_name, agent_id, text):
                             aid = agent_id or node_id
@@ -2125,7 +2136,37 @@ def create_app() -> FastAPI:
                                             "retry_count": 0,
                                         },
                                     })
-                            _evq.put_nowait({"type": "agent_token", "agent_id": aid, "text": text})
+                            # Skip empty chunks — the engine sometimes emits
+                            # a zero-length first token to mark the start of
+                            # a stream. agent_start already fired above; this
+                            # event would only trigger a no-op Vue re-render.
+                            if not text:
+                                return
+                            # Coalesce small chunks per agent. Flush when the
+                            # buffered payload hits the byte threshold; the
+                            # next chunk of a different agent must not be
+                            # merged with this one, so the per-agent dict
+                            # keying is what provides the isolation.
+                            with _buf_lock:
+                                prev = _text_buf.get(aid, "")
+                                merged = prev + text
+                                # Flush when (a) we've already sent at least
+                                # one event for this agent (so the UI is
+                                # responsive) AND the buffer has grown past
+                                # the threshold, or (b) the buffer is large
+                                # enough to flush on its own. Otherwise hold.
+                                if (len(merged.encode("utf-8")) >= _TOKEN_FLUSH_BYTES):
+                                    _text_buf[aid] = ""
+                                    payload = merged
+                                else:
+                                    _text_buf[aid] = merged
+                                    payload = None
+                            if payload is not None:
+                                _evq.put_nowait({
+                                    "type": "agent_token",
+                                    "agent_id": aid,
+                                    "text": payload,
+                                })
 
                         async def _run_dag():
                             try:
@@ -2184,6 +2225,13 @@ def create_app() -> FastAPI:
                             for _ns in _dag_result.steps:
                                 if _ns.node_id in ("input", "output"):
                                     continue
+                                # Flush any buffered partial text for this
+                                # agent so the very last chunk isn't dropped
+                                # when the engine finishes mid-stream.
+                                with _buf_lock:
+                                    _tail = _text_buf.pop(_ns.agent_id or _ns.node_id, "")
+                                if _tail:
+                                    yield f"data: {json.dumps({'type': 'agent_token', 'agent_id': _ns.agent_id or _ns.node_id, 'text': _tail}, ensure_ascii=False)}\n\n"
                                 _status = "failed" if _ns.status == "error" else "completed"
                                 yield f"data: {json.dumps({'type': 'agent_done', 'agent_id': _ns.agent_id or _ns.node_id, 'status': _ns.status, 'elapsed_ms': _ns.elapsed_ms}, ensure_ascii=False)}\n\n"
                                 # Update the matching plan step in BOTH
