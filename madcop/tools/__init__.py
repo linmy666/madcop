@@ -44,6 +44,10 @@ from .eventbus import (
 # v2.1.0 — weather tool for chat
 from .weather import WeatherTool
 from .clarify import ClarifyTool
+# v3.x — Gushen (股神) research quant tools (no live trading)
+from .market import MarketQuoteTool, MarketHistoryTool
+from .quant import QuantFactorsTool, QuantBacktestSimpleTool
+from .paper import PaperAccountTool, PaperOrderTool, PaperResetTool
 
 
 def default_registry(store: MemoryStore | None = None, workspace_dir: str | None = None) -> ToolRegistry:
@@ -59,6 +63,13 @@ def default_registry(store: MemoryStore | None = None, workspace_dir: str | None
     reg.register(WebFetchTool())
     reg.register(WeatherTool())
     reg.register(ClarifyTool())  # v2.6.3.3 — ask_user for clarifying questions
+    reg.register(MarketQuoteTool())
+    reg.register(MarketHistoryTool())
+    reg.register(QuantFactorsTool())
+    reg.register(QuantBacktestSimpleTool())
+    reg.register(PaperAccountTool())
+    reg.register(PaperOrderTool())
+    reg.register(PaperResetTool())
     import os as _os
     from pathlib import Path as _P
     _user_home = str(_P.home())
@@ -71,14 +82,24 @@ def default_registry(store: MemoryStore | None = None, workspace_dir: str | None
     if workspace_dir:
         _write_dirs.append(workspace_dir)
     _preview_dir = str(_P.home() / ".madcop" / "preview")
+    # Gushen quant research outputs (reports + cache written by tools)
+    try:
+        from madcop.quant.store import ensure_quant_dirs
+
+        _quant_dir = str(ensure_quant_dirs())
+    except Exception:  # noqa: BLE001
+        _quant_dir = str(_P.home() / ".madcop" / "quant")
     _downloads = str(_P.home() / "Downloads")
     _desktop = str(_P.home() / "Desktop")
     _tmp = "/tmp"  # common scratch dir for agent tool outputs (artifacts,
                    # temp logs). No sensitive data lives here, and the
                    # OS already scrubs it on reboot.
     _write_dirs.append(_preview_dir)
+    _write_dirs.append(_quant_dir)
     _write_dirs.extend([_os.getcwd(), _user_home, _downloads, _desktop, _tmp])
-    _read_dirs: list[str] = [_user_home, _os.getcwd(), _preview_dir, _downloads, _desktop, _tmp]
+    _read_dirs: list[str] = [
+        _user_home, _os.getcwd(), _preview_dir, _quant_dir, _downloads, _desktop, _tmp,
+    ]
     if workspace_dir:
         _read_dirs.insert(0, workspace_dir)
     reg.register(ReadFileTool(allowed_dirs=_read_dirs))   # v2.7.0 — include active workspace
@@ -144,5 +165,13 @@ __all__ = [
     "WeatherTool",
     # v2.6.3.3
     "ClarifyTool",
+    # Gushen research quant
+    "MarketQuoteTool",
+    "MarketHistoryTool",
+    "QuantFactorsTool",
+    "QuantBacktestSimpleTool",
+    "PaperAccountTool",
+    "PaperOrderTool",
+    "PaperResetTool",
     "default_registry",
 ]

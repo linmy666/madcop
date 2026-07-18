@@ -32,6 +32,8 @@ export const STATION_SPOTS: Record<string, StationSpot> = {
   researcher: { id: 'researcher', label: '调研', x: (120 + 100) / SCENE_W * 100, y: 560 / SCENE_H * 100 },
   reviewer: { id: 'reviewer', label: '审核', x: (500 + 100) / SCENE_W * 100, y: 560 / SCENE_H * 100 },
   synthesizer: { id: 'synthesizer', label: '合成', x: (880 + 80) / SCENE_W * 100, y: 560 / SCENE_H * 100 },
+  /** 股神工位 — 右下「行情屏」旁 */
+  gushen: { id: 'gushen', label: '股神', x: (1000) / SCENE_W * 100, y: 600 / SCENE_H * 100 },
   // coffee / general lounge bottom-left
   general: { id: 'general', label: '助手', x: 120 / SCENE_W * 100, y: 600 / SCENE_H * 100 },
   lounge: { id: 'lounge', label: '休息', x: 100 / SCENE_W * 100, y: 640 / SCENE_H * 100 },

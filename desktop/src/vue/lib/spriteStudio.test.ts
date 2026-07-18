@@ -19,6 +19,8 @@ describe('inferRole / poseFromToolName / isChatBusy', () => {
     expect(inferRole('coder-1', '写码助手')).toBe('coder')
     expect(inferRole('x', 'UI 设计')).toBe('designer')
     expect(inferRole('researcher', '')).toBe('researcher')
+    expect(inferRole('gushen', '股神')).toBe('gushen')
+    expect(inferRole('n1', 'quant research')).toBe('gushen')
   })
 
   it('maps tool names to tool poses', () => {

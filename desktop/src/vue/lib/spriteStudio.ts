@@ -87,6 +87,8 @@ export const ROLE_META: Record<
   researcher: { label: '调研', color: '#0891B2', station: 'researcher' },
   reviewer: { label: '审核', color: '#F59E0B', station: 'reviewer' },
   synthesizer: { label: '合成', color: '#10B981', station: 'synthesizer' },
+  /** 股神 — 量化研究 / 模拟盘（金色） */
+  gushen: { label: '股神', color: '#D97706', station: 'gushen' },
   general: { label: '助手', color: '#7C3AED', station: 'general' },
 }
 
@@ -97,6 +99,7 @@ export const STUDIO_STATIONS = [
   'researcher',
   'reviewer',
   'synthesizer',
+  'gushen',
   'general',
 ] as const
 
@@ -118,6 +121,7 @@ export const AGENT_HUB_VIEW_KEY = 'madcop_agent_hub_view'
 
 export function inferRole(id: string, name?: string): string {
   const s = `${id} ${name || ''}`.toLowerCase()
+  if (/(gushen|股神|quant|paper_order|market_quote)/.test(s)) return 'gushen'
   if (/(plan|规划|planner)/.test(s)) return 'planner'
   if (/(code|coder|写码|编程|dev)/.test(s)) return 'coder'
   if (/(design|设计|ui|ux)/.test(s)) return 'designer'
@@ -132,6 +136,8 @@ export function poseFromToolName(toolName: string | null | undefined): SpritePos
   const t = toolName.toLowerCase()
   if (/(write|read|edit|file|xlsx|path|dir|workspace)/.test(t)) return 'tool_file'
   if (/(web|search|fetch|http|browse|url)/.test(t)) return 'tool_web'
+  // market / quant / paper → still "working" with quant-ish bubble via text
+  if (/(market_|quant_|paper_)/.test(t)) return 'working'
   return 'working'
 }
 
@@ -161,6 +167,7 @@ function bubbleForPose(pose: SpritePose, text: string, clarifyQ?: string): strin
   if (pose === 'assigned') return '收到！我来！'
   if (pose === 'working') {
     const t = sanitizeAgentDisplayText(text || '', 36)
+    if (/market_|quant_|paper_|报价|回测|模拟/.test(text || '')) return t || '盯盘演算中…'
     return t || '工作中…'
   }
   if (pose === 'idle') return '守护中'

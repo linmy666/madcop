@@ -1,11 +1,11 @@
-"""v0.7.0 — Built-in sub-agent configurations.
+"""Built-in sub-agent configurations.
 
-Two ships with v0.7.0:
+Ships with:
   - general-purpose: multi-step reasoning, all tools (minus `task`)
   - bash:           shell command execution, only `bash` tool
+  - gushen:         quant research (market + factors + simple backtest)
 
-Both are deliberately simple. Custom sub-agents from user config
-land in v0.7.1.
+Custom sub-agents can also be loaded from YAML/TOML/JSON via loader.py.
 """
 from __future__ import annotations
 
@@ -61,10 +61,63 @@ BASH = SubagentSpec(
 )
 
 
+GUSHEN = SubagentSpec(
+    name="gushen",
+    description=(
+        "股神 / quant research assistant: delayed market quotes, OHLCV history, "
+        "simple factors (SMA/momentum/vol), and educational single-symbol "
+        "backtests. Use for stock/ETF research reports. "
+        "Does NOT place orders or access brokers."
+    ),
+    system_prompt=(
+        "You are MadCop「股神」— a quantitative *research* assistant, not a "
+        "licensed advisor and not a trading bot.\n\n"
+        "Hard rules:\n"
+        "1. Prices, returns, factors, and backtest numbers MUST come from tools "
+        "(market_quote, market_history, quant_factors, quant_backtest_simple). "
+        "Never invent OHLC or performance figures.\n"
+        "2. If a tool returns error, say data is unavailable — do not guess.\n"
+        "3. Never place orders, request broker passwords, or claim guaranteed profits.\n"
+        "4. Separate **facts** (tool data) from **views** (your interpretation).\n"
+        "5. Every conclusion must include: logic, watchpoints, invalidation, "
+        "risks, and a disclaimer.\n"
+        "6. Match the user's language (中文/EN).\n"
+        "7. paper_order / paper_account are VIRTUAL only — always say 「模拟盘」; "
+        "never imply real fills.\n\n"
+        "Output template:\n"
+        "## 标的与数据时点\n"
+        "## 市场事实（引用工具）\n"
+        "## 因子快照\n"
+        "## 观点（非投资建议）\n"
+        "## 关键观察 / 失效条件\n"
+        "## 风险\n"
+        "## 免责声明：仅供研究学习，不构成投资建议。模拟盘≠实盘。\n"
+    ),
+    tools=(
+        "market_quote",
+        "market_history",
+        "quant_factors",
+        "quant_backtest_simple",
+        "paper_account",
+        "paper_order",
+        "paper_reset",
+        "web_search",
+        "web_fetch",
+        "read_file",
+        "write_file",
+        "get_current_time",
+    ),
+    disallowed_tools=("task", "bash", "computer_use", "docker"),
+    max_turns=24,
+    timeout_seconds=240,
+)
+
+
 # Registry: name -> SubagentSpec. Used by SubagentExecutor.
 BUILTIN_SUBAGENTS: dict[str, SubagentSpec] = {
     GENERAL_PURPOSE.name: GENERAL_PURPOSE,
     BASH.name: BASH,
+    GUSHEN.name: GUSHEN,
 }
 
 
@@ -73,4 +126,4 @@ def get_builtin(name: str) -> SubagentSpec | None:
     return BUILTIN_SUBAGENTS.get(name)
 
 
-__all__ = ["GENERAL_PURPOSE", "BASH", "BUILTIN_SUBAGENTS", "get_builtin"]
+__all__ = ["GENERAL_PURPOSE", "BASH", "GUSHEN", "BUILTIN_SUBAGENTS", "get_builtin"]

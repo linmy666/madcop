@@ -4,7 +4,7 @@ Public surface:
 
   spec:        SubagentSpec (configuration dataclass)
   status:      SubagentStatus, SubagentResult (race-safe state machine)
-  builtins:    GENERAL_PURPOSE, BASH, BUILTIN_SUBAGENTS, get_builtin
+  builtins:    GENERAL_PURPOSE, BASH, GUSHEN, BUILTIN_SUBAGENTS, get_builtin
   executor:    SubagentExecutor, ExecutorConfig, Runner, FnRunner
 
 The sub-agent layer is a small, parallel-running extension to the
@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from .spec import SubagentSpec
 from .status import SubagentResult, SubagentStatus
-from .builtins import BASH, BUILTIN_SUBAGENTS, GENERAL_PURPOSE, get_builtin
+from .builtins import BASH, BUILTIN_SUBAGENTS, GENERAL_PURPOSE, GUSHEN, get_builtin
 from .executor import (
     DEFAULT_CONCURRENT,
     ExecutorConfig,
@@ -55,6 +55,7 @@ __all__ = [
     # builtins
     "GENERAL_PURPOSE",
     "BASH",
+    "GUSHEN",
     "BUILTIN_SUBAGENTS",
     "get_builtin",
     # executor

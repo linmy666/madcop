@@ -169,6 +169,49 @@ const presets: TopologyPreset[] = [
       { id: 'e6', from: 'n3', to: 'n4', type: 'dependency' },
     ],
   },
+  {
+    id: 'gushen-research',
+    name: '股神研报',
+    nameEn: 'Gushen',
+    desc: '股神研究 → 风控挑刺（仅研究/模拟盘，不下真单）',
+    buildNodes: () => [
+      mkNode({
+        id: 'n1',
+        label: '股神',
+        agentId: 'gushen',
+        x: 280,
+        y: 300,
+        systemPrompt:
+          '你是 MadCop「股神」研究助理。价格/因子/回测/模拟成交必须来自工具' +
+          '（market_*、quant_*、paper_*），禁止编造数字。输出结构化研报并含免责声明。' +
+          'paper_order 仅模拟盘。不构成投资建议。',
+        tools: [
+          'market_quote',
+          'market_history',
+          'quant_factors',
+          'quant_backtest_simple',
+          'paper_account',
+          'paper_order',
+          'web_search',
+          'web_fetch',
+          'write_file',
+        ],
+      }),
+      mkNode({
+        id: 'n2',
+        label: '风控',
+        agentId: 'reviewer',
+        x: 720,
+        y: 300,
+        systemPrompt:
+          '你是风控审查员。只基于上游股神报告挑刺：数据缺口、过度自信、' +
+          '仓位风险、回撤与失效条件是否写清。禁止给出必涨/必跌承诺。' +
+          '结尾重复：非投资建议；模拟盘≠实盘。',
+        tools: ['read_file'],
+      }),
+    ],
+    buildEdges: () => [{ id: 'e1', from: 'n1', to: 'n2', type: 'dependency', label: '研报' }],
+  },
 ]
 
 // ─── Active state ──────────────────────────────────────────────────────
@@ -352,8 +395,22 @@ const availableRoles = [
   { id: 'reviewer', label: '审查' },
   { id: 'synthesizer', label: '合成' },
   { id: 'assistant', label: '助手' },
+  { id: 'gushen', label: '股神' },
 ]
-const availableTools = ['read_file', 'write_file', 'web_search', 'web_fetch', 'edit_file']
+const availableTools = [
+  'read_file',
+  'write_file',
+  'web_search',
+  'web_fetch',
+  'edit_file',
+  'market_quote',
+  'market_history',
+  'quant_factors',
+  'quant_backtest_simple',
+  'paper_account',
+  'paper_order',
+  'paper_reset',
+]
 const uniqueRoles = computed(() => {
   const set = new Set(nodes.value.map((n) => n.agentId || n.role || n.label).filter(Boolean))
   return [...set]
