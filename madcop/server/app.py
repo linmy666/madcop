@@ -274,6 +274,98 @@ def _read_attachment_direct(att: ChatAttachment) -> str:
 # Memory helpers
 # --------------------------------------------------------------------------- #
 
+def _classify_llm_error(exc: BaseException) -> dict[str, Any]:
+    """Map an LLM/transport exception to a typed `{kind, ...}` payload.
+
+    Used to populate the SSE `{"type": "error", ...}` event so the
+    client can show a specific recovery hint (e.g. "you're on a free
+    tier — wait N seconds", "context overflow — try /compact") instead
+    of a generic "request failed". Mirrors the kind set OpenCode
+    uses (retry.ts) but kept lightweight for our 4-class taxonomy.
+
+    Kinds:
+      aborted         — user-initiated interrupt (DOMException-like)
+      rate_limit      — 429 / explicit rate-limit / overloaded
+      context_overflow— context too long / token limit
+      auth            — 401 / 403 / invalid_api_key
+      unavailable     — 404 model / 404 not_found_error
+      server          — 5xx / network
+      unknown         — anything else
+    """
+    name = type(exc).__name__
+    msg = str(exc) or ""
+    lower = msg.lower()
+
+    # Abort: explicit user interruption or DuckDuckGo-style ABORTED.
+    if "abort" in lower or "aborted" in lower or "aborterror" in lower:
+        return {"kind": "aborted", "retryable": False, "message": msg}
+
+    # Rate limit / free tier / overloaded — 429 + substrings the
+    # major providers emit (OpenAI "rate_limit_exceeded", Anthropic
+    # "Overloaded", Google "RESOURCE_EXHAUSTED", etc.).
+    if (
+        "rate limit" in lower
+        or "rate_limit" in lower
+        or "overloaded" in lower
+        or "too many requests" in lower
+        or "resource_exhausted" in lower
+        or "free_usage" in lower
+        or "429" in lower
+    ):
+        return {"kind": "rate_limit", "retryable": True, "message": msg}
+
+    # Context overflow: token limit, context too long, prompt too long.
+    if (
+        "context length" in lower
+        or "context_length" in lower
+        or "max tokens" in lower
+        or "context window" in lower
+        or "prompt is too long" in lower
+    ):
+        return {
+            "kind": "context_overflow",
+            "retryable": False,
+            "message": msg,
+            "hint": "context too long — consider compacting or shortening history",
+        }
+
+    # Auth / 401.
+    if (
+        "401" in lower
+        or "403" in lower
+        or "unauthorized" in lower
+        or "invalid api key" in lower
+        or "invalid_api_key" in lower
+    ):
+        return {"kind": "auth", "retryable": False, "message": msg,
+                "hint": "check the provider's API key in Settings → 模型供应商"}
+
+    # Model not found / 404.
+    if (
+        "model not found" in lower
+        or "not_found_error" in lower
+        or "model is not found" in lower
+    ):
+        return {
+            "kind": "unavailable",
+            "retryable": False,
+            "message": msg,
+            "hint": "model is not offered by the active provider — pick a different one",
+        }
+
+    # Server / network / 5xx.
+    if (
+        name in ("APIConnectionError", "APIError", "Timeout", "TimeoutError",
+                 "ConnectionError", "ServiceUnavailableError")
+        or any(s in lower for s in ("502", "503", "504", "500", "internal server",
+                                    "service unavailable", "gateway timeout",
+                                    "connection aborted", "connection refused"))
+    ):
+        return {"kind": "server", "retryable": True, "message": msg}
+
+    return {"kind": "unknown", "retryable": False, "message": msg}
+
+
 def _estimate_tokens(text: str) -> int:
     """Rough token count: 1 token ~ 4 chars (English) or 1.5 chars (CJK)."""
     cjk = sum(1 for c in text if ord(c) > 0x4E00)
@@ -2104,12 +2196,16 @@ def create_app() -> FastAPI:
                             aid = agent_id or node_id
                             if aid not in _started_agents:
                                 _started_agents.add(aid)
+                                # Short form: t=1 → agent_start, id=agent_id,
+                                # n=agent_name, c=color. Frontend falls back
+                                # to the long {"type": ..., "agent_id": ...,
+                                # ...} form for backward compatibility.
                                 _evq.put_nowait({
-                                    "type": "agent_start",
-                                    "agent_id": aid,
-                                    "agent_name": agent_name or node_id,
-                                    "node_id": node_id,
-                                    "color": _agent_colors.get(agent_id, "#7C3AED"),
+                                    "t": 1,
+                                    "id": aid,
+                                    "n": agent_name or node_id,
+                                    "o": node_id,
+                                    "c": _agent_colors.get(agent_id, "#7C3AED"),
                                 })
                                 # Flip the matching plan step to in_progress so
                                 # the right panel shows it as the active task.
@@ -2161,12 +2257,18 @@ def create_app() -> FastAPI:
                                 else:
                                     _text_buf[aid] = merged
                                     payload = None
-                            if payload is not None:
-                                _evq.put_nowait({
-                                    "type": "agent_token",
-                                    "agent_id": aid,
-                                    "text": payload,
-                                })
+                                if payload is not None:
+                                    # Short form: {"t": 2, "id": "<aid>", "x": "<text>"}
+                                    # t=2 means "agent_token" (see SHORT_TYPE_CODES
+                                    # in chatStore.ts). The frontend falls back
+                                    # to the long {"type": ..., "agent_id": ...,
+                                    # "text": ...} form when short keys are
+                                    # missing, so this is backward compatible.
+                                    _evq.put_nowait({
+                                        "t": 2,
+                                        "id": aid,
+                                        "x": payload,
+                                    })
 
                         async def _run_dag():
                             try:
@@ -2202,7 +2304,8 @@ def create_app() -> FastAPI:
                                 continue
                             if "_error" in _item:
                                 _err_msg = f"DAG 执行失败: {_item['_error']}"
-                                yield f"data: {json.dumps({'type': 'error', 'message': _err_msg}, ensure_ascii=False)}\n\n"
+                                _err_cls = _classify_llm_error(Exception(_item['_error']))
+                                yield f"data: {json.dumps({'type': 'error', 'message': _err_msg, 'kind': _err_cls.get('kind', 'unknown'), 'retryable': _err_cls.get('retryable', False), 'hint': _err_cls.get('hint', '')}, ensure_ascii=False)}\n\n"
                                 continue
                             # Emit agent_done for any started agents that didn't
                             # get a final event yet (best-effort, from result).
@@ -2231,7 +2334,7 @@ def create_app() -> FastAPI:
                                 with _buf_lock:
                                     _tail = _text_buf.pop(_ns.agent_id or _ns.node_id, "")
                                 if _tail:
-                                    yield f"data: {json.dumps({'type': 'agent_token', 'agent_id': _ns.agent_id or _ns.node_id, 'text': _tail}, ensure_ascii=False)}\n\n"
+                                    yield f"data: {json.dumps({'t': 2, 'id': _ns.agent_id or _ns.node_id, 'x': _tail}, ensure_ascii=False)}\n\n"
                                 _status = "failed" if _ns.status == "error" else "completed"
                                 yield f"data: {json.dumps({'type': 'agent_done', 'agent_id': _ns.agent_id or _ns.node_id, 'status': _ns.status, 'elapsed_ms': _ns.elapsed_ms}, ensure_ascii=False)}\n\n"
                                 # Update the matching plan step in BOTH
@@ -2292,7 +2395,8 @@ def create_app() -> FastAPI:
                                     yield f"data: {_pe}\n\n"
                                 yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                 except Exception as _am_err:
-                    yield f"data: {json.dumps({'type': 'error', 'message': f'Agent 模式执行失败: {_am_err}'}, ensure_ascii=False)}\n\n"
+                    _am_cls = _classify_llm_error(_am_err)
+                    yield f"data: {json.dumps({'type': 'error', 'message': f'Agent 模式执行失败: {_am_err}', 'kind': _am_cls.get('kind','unknown'), 'retryable': _am_cls.get('retryable', False), 'hint': _am_cls.get('hint','')}, ensure_ascii=False)}\n\n"
                 trace_store.mark_done(trace_root.id, output="deep mode completed")
                 # Persist the final agent-mode answer so it survives restart.
                 try:
@@ -2544,7 +2648,7 @@ def create_app() -> FastAPI:
                             f"超出当前模型上下文窗口（{_ctx_window//1000}K tokens）。"
                             f"请尝试：缩小文件、减少对话历史、或换用更大上下文的模型。"
                         )
-                        yield f"data: {json.dumps({'type': 'error', 'message': _overflow_msg}, ensure_ascii=False)}\n\n"
+                        yield f"data: {json.dumps({'type': 'error', 'message': _overflow_msg, 'kind': 'context_overflow', 'retryable': False, 'hint': 'reduce file size or conversation history, or switch to a model with a larger context window'}, ensure_ascii=False)}\n\n"
                         tr = trace_store.get(trace_root.id)
                         if tr:
                             trace_store.mark_done(trace_root.id, output="context overflow")
@@ -2828,15 +2932,21 @@ def create_app() -> FastAPI:
                     logger.debug("swallowed: %s", e)
 
             except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                _cls = _classify_llm_error(e)
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e), 'kind': _cls.get('kind','unknown'), 'retryable': _cls.get('retryable', False), 'hint': _cls.get('hint','')}, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(
             event_stream(),
             media_type="text/event-stream",
             headers={
-                "Cache-Control": "no-cache",
+                # OpenCode's pattern: triple-defense against buffering
+                # proxies (nginx, Cloudflare, etc.) so SSE tokens reach
+                # the client as they're emitted. `Cache-Control: no-transform`
+                # also tells compliant CDNs not to re-encode the body.
+                "Cache-Control": "no-cache, no-transform",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
+                "X-Content-Type-Options": "nosniff",
             },
         )
 

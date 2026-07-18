@@ -593,7 +593,10 @@ export const useChatStore = defineStore('chat', {
           // Throttle UI updates during streaming: accumulate tokens and
           // flush to assistantMsgObj.content at most once per animation
           // frame (~60fps). Without this, every token triggers a full
-          // markdown re-parse in MessageList, causing jank on long replies.
+          // Coalesce token updates so a burst of agent_token events
+          // produces one DOM write per microtask (faster than rAF for
+          // stream workloads, and the next token's flush is a
+          // microtask away regardless of vsync).
           let _pendingFlush = false
           const _flushContent = () => {
             _pendingFlush = false
@@ -602,7 +605,7 @@ export const useChatStore = defineStore('chat', {
           const _scheduleFlush = () => {
             if (!_pendingFlush) {
               _pendingFlush = true
-              requestAnimationFrame(_flushContent)
+              queueMicrotask(_flushContent)
             }
           }
 
@@ -691,33 +694,54 @@ export const useChatStore = defineStore('chat', {
                     } catch { /* toast optional */ }
                   } else if (event.type === 'reasoning' && event.content) {
                     session.reasoningContent = (session.reasoningContent || '') + event.content
-                  } else if (event.type === 'agent_start') {
+                  } else if (
+                    // Short form: t=1 (agent_start) with id / n / c / o
+                    // Long form (legacy): type='agent_start' + agent_id +
+                    // agent_name / node_id / color
+                    event.t === 1 || event.type === 'agent_start'
+                  ) {
                     // Deep mode: a sub-agent begins. Register it in the
                     // session's agentStreams so SubAgentPanel renders it.
                     if (!session.agentStreams) session.agentStreams = {}
-                    const aid = event.agent_id
+                    const aid = event.id || event.agent_id
+                    const aName = event.n || event.agent_name || aid
+                    const aNode = event.o || event.node_id
                     if (!session.agentStreams[aid]) {
                       session.agentStreams[aid] = {
-                        name: event.agent_name || aid,
-                        color: event.color || '#7C3AED',
+                        name: aName || aid,
+                        color: event.c || event.color || '#7C3AED',
                         text: '',
                         status: 'running',
                       }
                     } else {
                       session.agentStreams[aid].status = 'running'
                     }
-                  } else if (event.type === 'agent_token' && event.agent_id) {
+                  } else if (
+                    // Short form: t=2 (agent_token) with id / x
+                    // Long form (legacy): type='agent_token' + agent_id + text
+                    (event.t === 2 || event.type === 'agent_token') &&
+                    (event.id || event.agent_id)
+                  ) {
                     // Append the token to the matching sub-agent's stream.
                     if (!session.agentStreams) session.agentStreams = {}
-                    const aid = event.agent_id
+                    const aid = event.id || event.agent_id
+                    const text = event.x !== undefined ? event.x : event.text
                     if (!session.agentStreams[aid]) {
                       session.agentStreams[aid] = { name: aid, color: '#7C3AED', text: '', status: 'running' }
                     }
-                    session.agentStreams[aid].text += (event.text || '')
-                  } else if (event.type === 'agent_done' && event.agent_id) {
-                    if (session.agentStreams && session.agentStreams[event.agent_id]) {
-                      session.agentStreams[event.agent_id].status = event.status === 'error' ? 'error' : 'done'
-                      session.agentStreams[event.agent_id].elapsed_ms = event.elapsed_ms
+                    session.agentStreams[aid].text += (text || '')
+                  } else if (
+                    // Short form: t=3 (agent_done) with id / s / ms
+                    // Long form (legacy): type='agent_done' + agent_id +
+                    // status / elapsed_ms
+                    (event.t === 3 || event.type === 'agent_done') &&
+                    (event.id || event.agent_id)
+                  ) {
+                    const aid = event.id || event.agent_id
+                    if (session.agentStreams && session.agentStreams[aid]) {
+                      const st = event.s || event.status
+                      session.agentStreams[aid].status = st === 'error' ? 'error' : 'done'
+                      session.agentStreams[aid].elapsed_ms = event.ms !== undefined ? event.ms : event.elapsed_ms
                     }
                   } else if (event.type === 'tool' && event.name) {
                     // AI is calling a tool — show it transparently under the
