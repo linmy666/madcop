@@ -1568,7 +1568,8 @@ def create_app() -> FastAPI:
                 )
             except Exception as exc:
                 result_holder["error"] = str(exc)
-                q.put_nowait(f"data: {json.dumps({'type': 'error', 'message': f'LLM 调用失败: {exc}'}, ensure_ascii=False)}\n\n")
+                _cls = _classify_llm_error(exc)
+                q.put_nowait(f"data: {json.dumps({'type': 'error', 'message': f'LLM 调用失败: {exc}', 'kind': _cls.get('kind','unknown'), 'retryable': _cls.get('retryable', False), 'hint': _cls.get('hint','')}, ensure_ascii=False)}\n\n")
             finally:
                 q.put_nowait(sentinel)
 
