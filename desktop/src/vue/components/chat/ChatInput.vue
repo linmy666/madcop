@@ -1503,25 +1503,30 @@ watch(input, (v) => {
               />
             </template>
 
-            <!-- Send / Stop / Steer button -->
+            <!-- Send / Queue next / Abort button (opencode semantics):
+                 empty input + busy = truly Abort (kills the in-flight run);
+                 non-empty input + busy = Queue next (current run keeps going,
+                 new prompt runs after it finishes, like opencode's
+                 followup:"queue" mode). The "Steer" guidance layer
+                 is what injects *into* the current run between steps. -->
             <Tooltip
               :label="
                 !isMemberSession && isActive
-                  ? (input.trim() ? 'Steer — 注入中途指引（不中断）' : t('chat.stopTitle'))
+                  ? (input.trim() ? 'Queue next — 本轮跑完后跑这条' : t('chat.stopTitle'))
                   : (isMemberSession ? t('common.send') : t('common.run'))
               "
             >
               <button
                 :disabled="!isMemberSession && isActive ? false : !canSubmit"
-                @click="handleSubmit" 
+                @click="handleSubmit"
                 :aria-label="
                   !isMemberSession && isActive
-                    ? (input.trim() ? 'Steer' : t('common.stop'))
+                    ? (input.trim() ? 'Queue next' : t('common.stop'))
                     : (isMemberSession ? t('common.send') : t('common.run'))
                 "
                 :title="
                   !isMemberSession && isActive
-                    ? (input.trim() ? 'Steer — 注入中途指引' : t('chat.stopTitle'))
+                    ? (input.trim() ? 'Queue next — 本轮跑完后跑这条' : t('chat.stopTitle'))
                     : iconOnlyAction
                       ? (isMemberSession ? t('common.send') : t('common.run'))
                       : undefined

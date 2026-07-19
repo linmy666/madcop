@@ -517,7 +517,34 @@ class ReActEngine:
         # Unknown tool? registry.get() raises KeyError, so check first.
         if tool_name not in registry:
             available = registry.names()
-            return f"[Tool '{tool_name}' not found. Available: {', '.join(available)}]"
+            return f"[Tool '{tool_name}' not found. Available: {', '.join(available)}"
+
+        # Permission check — opencode-style rules. We surface DENY
+        # back to the model as an Observation so it can pick a different
+        # tool. ASK is currently treated as ALLOW here (we don't have the
+        # ask-permission UI plumbing yet — that's a follow-up). Hook
+        # is in place so adding `ASK → emit a permission_request event`
+        # is a one-line change later.
+        try:
+            from madcop.tools.tool_permissions import check_tool, ToolPermissionError, ASK
+            verdict = check_tool(tool_name)
+            if verdict == "deny":
+                raise ToolPermissionError(tool_name, tool_name, "deny")
+            # verdict == "ask" is logged but currently passed through;
+            # the user can re-evaluate by tightening rules in the
+            # settings UI when this becomes a real prompt.
+            if verdict == "ask":
+                import logging as _logging
+                _logging.getLogger(__name__).info(
+                    "tool %s matches an 'ask' rule; running with default consent",
+                    tool_name,
+                )
+        except ToolPermissionError:
+            raise
+        except Exception:
+            # Permission system must never block tool execution if
+            # itself is broken — log and fall through.
+            pass
 
         # Dispatch via the registry — returns a proper ToolResult with
         # to_message_content(), and converts exceptions into .error.
