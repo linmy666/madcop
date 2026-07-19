@@ -326,12 +326,34 @@ class ReActEngine:
         task: str,
         work_dir: str | None = None,
         context: str = "",
+        session_id: str | None = None,
     ) -> Iterator[ReActStep]:
-        """Yield each step as it completes, for real-time UI updates."""
-        started = time.time()
+        """Yield each step as it completes, for real-time UI updates.
+
+        If ``session_id`` is set, drain mid-run steers between steps
+        (Codex-style guidance without aborting the loop).
+        """
         messages = self._build_initial_messages(task, context)
 
         for step_num in range(1, self.max_steps + 1):
+            # Inject steers before each LLM call (including the first after
+            # a tool step). First iteration only has steers that arrived
+            # after the run started.
+            if session_id:
+                try:
+                    from madcop.server.steer_queue import (
+                        drain_steers,
+                        format_steer_block,
+                    )
+                    steers = drain_steers(session_id)
+                    if steers:
+                        messages.append(Message(
+                            role="user",
+                            content=format_steer_block(steers),
+                        ))
+                except Exception:
+                    pass
+
             step_start = time.time()
 
             try:
@@ -350,6 +372,28 @@ class ReActEngine:
             thought, action, action_input = parse_react_response(raw)
 
             if action.upper() == "FINAL_ANSWER":
+                # Last chance: if user steered while we were generating the
+                # final answer, do not exit — inject and continue loop.
+                if session_id:
+                    try:
+                        from madcop.server.steer_queue import (
+                            drain_steers,
+                            format_steer_block,
+                        )
+                        steers = drain_steers(session_id)
+                        if steers:
+                            messages.append(Message(role="assistant", content=raw))
+                            messages.append(Message(
+                                role="user",
+                                content=(
+                                    format_steer_block(steers)
+                                    + "\n\n请根据上述指引继续，不要立刻结束；"
+                                    "需要工具就调用，否则再 FINAL_ANSWER。"
+                                ),
+                            ))
+                            continue
+                    except Exception:
+                        pass
                 step = ReActStep(
                     step_num=step_num, thought=thought,
                     action="FINAL_ANSWER", action_input=action_input,

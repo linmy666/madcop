@@ -1286,6 +1286,35 @@ def register(app: FastAPI) -> None:
             logger.warning("cc_save_session_messages persist failed: %s", e)
         return {"ok": True, "count": len(msgs)}
 
+    @app.post("/api/sessions/{session_id}/steer", include_in_schema=False)
+    async def cc_session_steer(session_id: str, request: Request) -> dict[str, Any]:
+        """Queue a mid-run steer (Codex-style) for the active chat turn.
+
+        Standard ReAct drains between steps; deep drains between DAG waves;
+        quick applies one follow-up turn after the first answer if steers
+        arrived during generation.
+        """
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        text = ""
+        if isinstance(body, dict):
+            text = str(body.get("text") or body.get("message") or body.get("steer") or "")
+        from madcop.server.steer_queue import push_steer, pending_count
+
+        result = push_steer(session_id, text)
+        if not result.get("ok"):
+            raise HTTPException(400, result.get("error") or "steer failed")
+        result["pending"] = pending_count(session_id)
+        return result
+
+    @app.get("/api/sessions/{session_id}/steer", include_in_schema=False)
+    async def cc_session_steer_status(session_id: str) -> dict[str, Any]:
+        from madcop.server.steer_queue import pending_count
+
+        return {"session_id": session_id, "pending": pending_count(session_id)}
+
     @app.patch("/api/sessions/{session_id}", include_in_schema=False)
     async def cc_update_session(session_id: str, request: Request) -> dict[str, Any]:
         try:

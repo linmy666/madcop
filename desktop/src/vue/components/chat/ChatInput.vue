@@ -199,7 +199,7 @@ const isStreaming = computed(() => chatState.value === 'busy')
 const isActive = computed(() =>
   chatState.value === 'busy' || chatState.value === 'streaming' || chatState.value === 'tool_executing',
 )
-// Disable the composer controls while a request is in flight.
+// Only disable model/mode pickers while in flight — composer stays open for Steer.
 const isSubmitting = computed(() => isActive.value)
 
 const messageCount = computed(() => {
@@ -635,6 +635,19 @@ const handleLaunchWorkDirChange = async (newWorkDir: string) => {
 
 const handleSubmit = async () => {
   const text = input.value.trim()
+  // While generating: empty submit = Stop; non-empty = Codex-style Steer.
+  if (!isMemberSession.value && isActive.value && activeTabId.value) {
+    if (text) {
+      await chatStore.steerMessage(activeTabId.value, text)
+      setComposerInput('')
+      plusMenuOpen.value = false
+      slashMenuOpen.value = false
+      fileSearchOpen.value = false
+      return
+    }
+    chatStore.stopGeneration(activeTabId.value)
+    return
+  }
   if (!text && (!attachments.value.length && !hasWorkspaceReferences.value) || isMemberSession.value) return
 
   // Slash UI action: panel
@@ -1490,21 +1503,25 @@ watch(input, (v) => {
               />
             </template>
 
-            <!-- Send / Stop button -->
+            <!-- Send / Stop / Steer button -->
             <Tooltip
               :label="
                 !isMemberSession && isActive
-                  ? t('chat.stopTitle')
+                  ? (input.trim() ? 'Steer — 注入中途指引（不中断）' : t('chat.stopTitle'))
                   : (isMemberSession ? t('common.send') : t('common.run'))
               "
             >
               <button
                 :disabled="!isMemberSession && isActive ? false : !canSubmit"
                 @click="handleSubmit" 
-                :aria-label="(!isMemberSession && isActive) ? t('common.stop') : (isMemberSession ? t('common.send') : t('common.run'))"
+                :aria-label="
+                  !isMemberSession && isActive
+                    ? (input.trim() ? 'Steer' : t('common.stop'))
+                    : (isMemberSession ? t('common.send') : t('common.run'))
+                "
                 :title="
                   !isMemberSession && isActive
-                    ? t('chat.stopTitle')
+                    ? (input.trim() ? 'Steer — 注入中途指引' : t('chat.stopTitle'))
                     : iconOnlyAction
                       ? (isMemberSession ? t('common.send') : t('common.run'))
                       : undefined
@@ -1514,16 +1531,26 @@ watch(input, (v) => {
                   iconOnlyAction
                     ? `${isMobileViewport() ? 'h-11 w-11 rounded-xl px-0 py-0' : 'h-8 w-8 px-0 py-0'}`
                     : 'w-[112px] px-3 py-1.5',
-                  !isMemberSession && isActive
-                    ? 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
-                    : 'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)]',
+                  !isMemberSession && isActive && input.trim()
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : !isMemberSession && isActive
+                      ? 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
+                      : 'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)]',
                 ]"
               >
                 <span class="material-symbols-outlined text-[14px]">
-                  {{ !isMemberSession && isActive ? 'stop' : 'arrow_forward' }}
+                  {{
+                    !isMemberSession && isActive
+                      ? (input.trim() ? 'directions' : 'stop')
+                      : 'arrow_forward'
+                  }}
                 </span>
                 <span v-if="!iconOnlyAction">
-                  {{ !isMemberSession && isActive ? t('common.stop') : (isMemberSession ? t('common.send') : t('common.run')) }}
+                  {{
+                    !isMemberSession && isActive
+                      ? (input.trim() ? 'Steer' : t('common.stop'))
+                      : (isMemberSession ? t('common.send') : t('common.run'))
+                  }}
                 </span>
               </button>
             </Tooltip>

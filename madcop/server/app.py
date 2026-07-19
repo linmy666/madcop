@@ -1989,6 +1989,9 @@ def create_app() -> FastAPI:
                 try:
                     if _agent_mode == "quick":
                         # Direct single-shot LLM call (full messages incl. attachments).
+                        # If the user steers mid-call, we cannot interrupt the token
+                        # stream safely — after the first answer, drain steers and
+                        # do one cooperative follow-up turn (Codex-style continue).
                         _resp = await _loop.run_in_executor(
                             None,
                             lambda: _am_client.chat(
@@ -2006,6 +2009,46 @@ def create_app() -> FastAPI:
                         if _pe:
                             yield f"data: {_pe}\n\n"
                         yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
+                        try:
+                            from madcop.server.steer_queue import (
+                                drain_steers as _q_drain,
+                                format_steer_block as _q_fmt,
+                            )
+                            _q_steers = _q_drain(_sse_sid)
+                        except Exception:
+                            _q_steers = []
+                        if _q_steers:
+                            _steer_block = _q_fmt(_q_steers)
+                            yield f"data: {json.dumps({'type': 'reasoning', 'content': f'收到中途指引，继续调整…'}, ensure_ascii=False)}\n\n"
+                            _follow = list(messages) + [
+                                Message(role="assistant", content=_answer),
+                                Message(
+                                    role="user",
+                                    content=(
+                                        f"{_steer_block}\n\n"
+                                        "请根据上述指引修改/补充你刚才的回答，直接给出完整更新版。"
+                                    ),
+                                ),
+                            ]
+                            try:
+                                _resp2 = await _loop.run_in_executor(
+                                    None,
+                                    lambda: _am_client.chat(
+                                        _follow,
+                                        model=_am_model,
+                                        temperature=0.5,
+                                        max_tokens=4096,
+                                        effort=_eff,
+                                    ),
+                                )
+                                _answer2 = getattr(_resp2, "content", "") or str(_resp2)
+                                if _answer2:
+                                    _pe2 = _extract_and_emit_html_preview(_answer2)
+                                    if _pe2:
+                                        yield f"data: {_pe2}\n\n"
+                                    yield f"data: {json.dumps({'type': 'text', 'content': _answer2}, ensure_ascii=False)}\n\n"
+                            except Exception as _q_e:
+                                logger.warning("quick steer follow-up failed: %s", _q_e)
                     elif _agent_mode == "standard":
                         # ReAct loop. Stream each step as tool/tool_result
                         # so the existing UI surfaces Thought/Action/Observation.
@@ -2123,6 +2166,7 @@ def create_app() -> FastAPI:
                                     _task_text,
                                     work_dir=_effective_wd,
                                     context=_react_ctx,
+                                    session_id=_sse_sid,
                                 ):
                                     _react_q.put({"step": _st})
                                     if (getattr(_st, "action", "") or "").upper() == "FINAL_ANSWER":
@@ -2448,6 +2492,7 @@ def create_app() -> FastAPI:
                                     user_input=_deep_user_input,
                                     on_token=_on_token,
                                     work_dir=_ws,
+                                    session_id=_sse_sid,
                                 )
                                 _evq.put_nowait({"_result": res})
                             except Exception as exc:

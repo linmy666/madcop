@@ -924,12 +924,66 @@ export const useChatStore = defineStore('chat', {
     stopGeneration(sessionId: string) {
       const session = this.sessions[sessionId]
       if (!session) return
+      // Abort the in-flight SSE so backend work can stop promptly.
+      if (session._abortCtrl) {
+        try {
+          session._abortCtrl.abort()
+        } catch {
+          /* ignore */
+        }
+      }
       session.chatState = 'stopped'
       session.streamingText = ''
       session.streamingToolInput = ''
       session.activeToolUseId = null
       session.activeToolName = null
       session.activeThinkingId = null
+    },
+
+    /**
+     * Codex-style mid-run steer: inject guidance into the active turn
+     * without aborting (backend drains between ReAct steps / deep waves;
+     * quick does one follow-up after the first answer).
+     */
+    async steerMessage(sessionId: string, text: string): Promise<boolean> {
+      const body = (text || '').trim()
+      if (!sessionId || !body) return false
+      const session = this.getSession(sessionId)
+      try {
+        const res = await fetch(
+          getApiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/steer`),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: body }),
+          },
+        )
+        if (!res.ok) {
+          const err = await res.text().catch(() => '')
+          throw new Error(err || `HTTP ${res.status}`)
+        }
+        // Visible marker in the timeline so the user sees the steer landed.
+        const id = nextId()
+        session.messages.push({
+          type: 'user_text',
+          content: `🎯 Steer: ${body}`,
+          id,
+          transcriptMessageId: id,
+          timestamp: Date.now(),
+        } as any)
+        this._persistSession(sessionId)
+        return true
+      } catch (e: any) {
+        const errId = nextId()
+        session.messages.push({
+          type: 'assistant_text',
+          content: `Steer 失败: ${e?.message || e}`,
+          id: errId,
+          transcriptMessageId: errId,
+          timestamp: Date.now(),
+        } as any)
+        return false
+      }
     },
 
     respondToPermission(_sessionId: string, _requestId: string, _allowed: boolean, _options?: any) {

@@ -90,8 +90,12 @@ class AgentEngine:
         user_input: str = "",
         on_token: Any = None,
         work_dir: str | None = None,
+        session_id: str | None = None,
     ) -> ExecutionResult:
-        """Execute a network and return all node outputs."""
+        """Execute a network and return all node outputs.
+
+        ``session_id`` enables mid-run steers (injected between waves).
+        """
         nodes: list[dict] = network.get("nodes", [])
         edges: list[dict] = network.get("edges", [])
         name = network.get("name", "Untitled")
@@ -126,11 +130,26 @@ class AgentEngine:
         # Per-run workspace (chat session work_dir overrides constructor).
         run_work_dir = work_dir if work_dir is not None else self.work_dir
 
+        # Mutable task text so steers can append between waves
+        live_input = user_input or ""
+
         for wave in waves:
+            if session_id:
+                try:
+                    from madcop.server.steer_queue import (
+                        drain_steers,
+                        format_steer_block,
+                    )
+                    steers = drain_steers(session_id)
+                    if steers:
+                        block = format_steer_block(steers)
+                        live_input = f"{live_input}\n\n{block}" if live_input else block
+                except Exception:
+                    pass
             tasks = [
                 self._execute_node(
                     nid, nodes, upstream_map,
-                    results, outputs, user_input, on_token,
+                    results, outputs, live_input, on_token,
                     work_dir=run_work_dir,
                 )
                 for nid in wave
