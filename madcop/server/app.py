@@ -1879,6 +1879,33 @@ def create_app() -> FastAPI:
         except Exception as _mh_e:
             logger.debug("meta-harness tool filter: %s", _mh_e)
 
+        # Event-id injector — wraps the inner event_stream so every
+        # `data: {...}` line gets a monotonically increasing `id` field
+        # injected. This is the foundation opencode uses for live
+        # debugging ("did the client receive event 47?"), reconnect
+        # resume, and event-replay if we ever add it. Mirrors opencode's
+        # EventV2 `id: "evt_<monotonic>"` pattern. The id lives in the
+        # event payload itself, so a vanilla EventSource consumer that
+        # ignores it is unaffected.
+        _event_seq = [0]  # list for closure-mutability
+        def _next_event_id() -> int:
+            _event_seq[0] += 1
+            return _event_seq[0]
+
+        async def _with_event_ids(inner):
+            # Drain the inner stream and inject 'id' into each data line.
+            async for _line in inner:
+                if _line.startswith("data: "):
+                    try:
+                        _payload = json.loads(_line[len("data: "):])
+                        if isinstance(_payload, dict) and "id" not in _payload:
+                            _payload["id"] = _next_event_id()
+                            yield f"data: {json.dumps(_payload, ensure_ascii=False)}\n\n"
+                            continue
+                    except Exception:
+                        pass
+                yield _line
+
         async def event_stream() -> AsyncIterator[str]:
             # -- Create trace root node ------------------------------ #
             from madcop.agent.trace import get_trace_store, TraceStatus
@@ -3152,7 +3179,7 @@ def create_app() -> FastAPI:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e), 'kind': _cls.get('kind','unknown'), 'retryable': _cls.get('retryable', False), 'hint': _cls.get('hint','')}, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(
-            event_stream(),
+            _with_event_ids(event_stream()),
             media_type="text/event-stream",
             headers={
                 # OpenCode's pattern: triple-defense against buffering
