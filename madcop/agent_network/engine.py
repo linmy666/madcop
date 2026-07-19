@@ -265,6 +265,15 @@ class AgentEngine:
                 f"请根据上游 agent 的输出和用户请求，完成你负责的部分。\n"
                 f"只输出你的工作结果，不要重复上游的内容。"
             )
+        # Session history is injected into user_input by the chat handler
+        # (see wrap_task_with_history). Agents must use it when present.
+        system_prompt = (
+            system_prompt
+            + "\n\n"
+            + "上下文规则：若用户消息含「本会话对话历史」或「当前用户请求」，"
+            "说明你可以看到本 session 上文。禁止声称无法访问历史/没有上下文。"
+            "短跟进（如「?」「继续」「上下文」）必须结合历史回答。"
+        )
         # Always append the shared design constraints so every deep-mode agent
         # has them in context — UI-writing agents need them to produce
         # minimal output; reviewer uses them as the quality bar.
@@ -274,7 +283,7 @@ class AgentEngine:
         # Build user message
         if upstream_context:
             user_msg = (
-                f"用户原始请求:\n{user_input}\n\n"
+                f"用户请求（含会话历史，如有）:\n{user_input}\n\n"
                 f"上游 agent 的输出:\n{upstream_context}"
             )
         else:
@@ -526,7 +535,8 @@ _SYNTH_PROMPT = (
     "内部讨论、规划草稿）。\n"
     "- 用清晰的标题、列表、段落组织内容，使用 Markdown 格式。\n"
     "- 如果上游专家之间存在矛盾，给出你的综合判断并说明理由。\n"
-    "- 不要添加上游没有的事实信息；可以重新组织表达，但不可杜撰。"
+    "- 不要添加上游没有的事实信息；可以重新组织表达，但不可杜撰。\n"
+    "- 若输入含「本会话对话历史」，你可以看到上文；禁止声称没有上下文。"
 )
 
 # HTML/CSS design constraints shared across the whole app. Injected

@@ -1940,10 +1940,20 @@ def create_app() -> FastAPI:
                         break
                 if not _task_text and body.messages:
                     _task_text = body.messages[-1].content or ""
+                # Session prior turns for standard ReAct + deep DAG.
+                # Without this, deep specialists only see the last user line
+                # and claim「无法访问之前的对话」on follow-ups like「?」.
+                from madcop.agent_network.session_context import (
+                    build_session_context as _build_sess_ctx,
+                    wrap_task_with_history as _wrap_task_hist,
+                )
+                _session_ctx = _build_sess_ctx(messages)
                 logger.info(
-                    "chat: agent_mode=%s task_chars=%s has_attachment_block=%s work_dir=%s",
+                    "chat: agent_mode=%s task_chars=%s history_chars=%s "
+                    "has_attachment_block=%s work_dir=%s",
                     _agent_mode,
                     len(_task_text or ""),
+                    len(_session_ctx or ""),
                     "ATTACHMENT:" in (_task_text or ""),
                     _effective_wd,
                 )
@@ -1986,24 +1996,7 @@ def create_app() -> FastAPI:
                         # like「改简历放到下载目录」lost the prior attachment/analysis
                         # and the model called ask_user as if starting from zero.
                         from madcop.agent_network.react_engine import ReActEngine
-                        _ctx_parts: list[str] = []
-                        _ua = [
-                            m for m in messages
-                            if getattr(m, "role", None) in ("user", "assistant")
-                            and (getattr(m, "content", None) or "").strip()
-                        ]
-                        # Drop the last user turn (that's the current task).
-                        _prior = _ua[:-1] if _ua and getattr(_ua[-1], "role", None) == "user" else _ua
-                        for _m in _prior[-16:]:
-                            _role = "用户" if _m.role == "user" else "助手"
-                            _c = (_m.content or "").strip()
-                            # Cap each turn so context stays usable
-                            if len(_c) > 12_000:
-                                _c = _c[:12_000] + "\n…(截断)"
-                            _ctx_parts.append(f"[{_role}]\n{_c}")
-                        _react_ctx = "\n\n---\n\n".join(_ctx_parts)
-                        if len(_react_ctx) > 80_000:
-                            _react_ctx = _react_ctx[-80_000:]
+                        _react_ctx = _session_ctx
                         try:
                             _home = str(Path.home())
                         except Exception:
@@ -2017,6 +2010,7 @@ def create_app() -> FastAPI:
                             f"（如 {_home}/Downloads/文件名.md），禁止用 ask_user 反复确认。\n"
                             "3. 需要落盘时必须调用 write_file/edit_file；不要只口头说「已保存」。\n"
                             "4. 仅当目的地或改动内容真正缺失且历史里也没有时，才 ask_user。\n"
+                            "5. 禁止声称「无法访问之前的对话」——历史已在下方注入。\n"
                         )
                         _eng = ReActEngine(
                             client=_am_client,
@@ -2273,9 +2267,15 @@ def create_app() -> FastAPI:
 
                         async def _run_dag():
                             try:
+                                # Inject session history into every specialist's
+                                # user_input (classification still used bare
+                                # _task_text above so "?" does not re-route oddly).
+                                _deep_user_input = _wrap_task_hist(
+                                    _task_text, _session_ctx,
+                                )
                                 res = await _dag.run(
                                     _net,
-                                    user_input=_task_text,
+                                    user_input=_deep_user_input,
                                     on_token=_on_token,
                                     work_dir=_ws,
                                 )
