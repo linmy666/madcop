@@ -1995,7 +1995,13 @@ def create_app() -> FastAPI:
                         # Previously only the last user line was sent, so follow-ups
                         # like「改简历放到下载目录」lost the prior attachment/analysis
                         # and the model called ask_user as if starting from zero.
+                        #
+                        # Also emit plan / plan_step so the right-side 任务监控
+                        # panel is not empty (deep mode already did this; standard
+                        # only streamed tools and left session.plan = null).
                         from madcop.agent_network.react_engine import ReActEngine
+                        import queue as _std_queue
+                        import threading as _react_thr
                         _react_ctx = _session_ctx
                         try:
                             _home = str(Path.home())
@@ -2019,21 +2025,130 @@ def create_app() -> FastAPI:
                             model=_am_model,
                             system_prefix=_react_prefix,
                         )
-                        _result = await _loop.run_in_executor(
-                            None,
-                            lambda: _eng.run(
-                                _task_text,
-                                work_dir=_effective_wd,
-                                context=_react_ctx,
-                            ),
-                        )
+                        # Seed plan panel immediately (before first ReAct step).
+                        _react_plan_steps: list[dict] = [{
+                            "step": 1,
+                            "action": "ReAct 思考中…",
+                            "tool": None,
+                            "input_hint": "标准模式 · 单 Agent 工具循环",
+                            "expected_result": "",
+                            "status": "in_progress",
+                            "result": None,
+                            "error": None,
+                            "retry_count": 0,
+                        }]
+                        _react_plan: dict[str, Any] = {
+                            "goal": (_task_text or "")[:80],
+                            "steps": _react_plan_steps,
+                            "current_step": 1,
+                            "total_steps": 1,
+                            "completed_steps": 0,
+                            "failed_steps": 0,
+                            "status": "running",
+                            "mode": "standard",
+                            "category": "react",
+                            "category_label": "标准 · ReAct",
+                            "category_label_en": "Standard · ReAct",
+                            "specialists": [],
+                            "roster_labels": ["思考", "行动", "观察"],
+                            "classification_reason": "单 Agent Thought→Action→Observation 循环",
+                            "matched_signals": ["agent_mode=standard"],
+                        }
+                        yield f"data: {json.dumps({'type': 'plan', 'plan': _react_plan}, ensure_ascii=False)}\n\n"
+
+                        def _plan_step_from_react(_st: Any) -> dict:
+                            _act = (getattr(_st, "action", None) or "").strip()
+                            _thought = (getattr(_st, "thought", None) or "").strip()
+                            _err = getattr(_st, "error", None)
+                            if _act.upper() == "FINAL_ANSWER":
+                                _label = "输出最终回答"
+                                _tool = None
+                            elif _act:
+                                _label = f"调用 {_act}"
+                                _tool = _act
+                            elif _thought:
+                                _label = _thought[:48]
+                                _tool = None
+                            else:
+                                _label = "ReAct 步骤"
+                                _tool = None
+                            _status = "failed" if _err else "completed"
+                            _res = None
+                            if _status == "completed":
+                                if _act.upper() == "FINAL_ANSWER":
+                                    _res = (getattr(_st, "action_input", None) or "")[:400]
+                                else:
+                                    _res = (getattr(_st, "observation", None) or "")[:400]
+                            return {
+                                "step": int(getattr(_st, "step_num", 0) or 0),
+                                "action": _label[:80],
+                                "tool": _tool,
+                                "input_hint": _thought[:80] if _thought else "",
+                                "expected_result": "",
+                                "status": _status,
+                                "result": _res,
+                                "error": str(_err) if _err else None,
+                                "retry_count": 0,
+                            }
+
+                        # Thread-safe queue: ReAct is sync and runs off the event loop.
+                        _react_q: _std_queue.SimpleQueue = _std_queue.SimpleQueue()
+                        _react_sentinel = object()
+                        _react_answer_holder: dict[str, str] = {"final": ""}
+
+                        def _react_worker() -> None:
+                            try:
+                                for _st in _eng.run_stream(
+                                    _task_text,
+                                    work_dir=_effective_wd,
+                                    context=_react_ctx,
+                                ):
+                                    _react_q.put({"step": _st})
+                                    if (getattr(_st, "action", "") or "").upper() == "FINAL_ANSWER":
+                                        from madcop.agent_network.react_engine import (
+                                            normalize_final_answer as _nfa,
+                                        )
+                                        _react_answer_holder["final"] = _nfa(
+                                            getattr(_st, "action_input", "") or ""
+                                        )
+                            except Exception as _exc:
+                                _react_q.put({"error": str(_exc)})
+                            finally:
+                                _react_q.put(_react_sentinel)
+
+                        _react_thr.Thread(
+                            target=_react_worker, daemon=True, name="madcop-react",
+                        ).start()
+
                         _clarify_emitted = False
-                        for _st in _result.steps:
-                            if _st.thought:
+                        _react_failed = 0
+                        while True:
+                            # Poll so we can send SSE keepalives during long tool calls.
+                            try:
+                                _item = await _loop.run_in_executor(
+                                    None,
+                                    lambda: _react_q.get(timeout=15.0),
+                                )
+                            except _std_queue.Empty:
+                                yield ": keepalive\n\n"
+                                continue
+                            if _item is _react_sentinel:
+                                break
+                            if isinstance(_item, dict) and "error" in _item:
+                                _react_err = f"ReAct 失败: {_item['error']}"
+                                yield f"data: {json.dumps({'type': 'error', 'message': _react_err}, ensure_ascii=False)}\n\n"
+                                _react_plan["status"] = "failed"
+                                yield f"data: {json.dumps({'type': 'plan', 'plan': _react_plan}, ensure_ascii=False)}\n\n"
+                                break
+                            _st = _item.get("step") if isinstance(_item, dict) else None
+                            if _st is None:
+                                continue
+                            # reasoning + tools for chat timeline
+                            if getattr(_st, "thought", None):
                                 yield f"data: {json.dumps({'type': 'reasoning', 'content': _st.thought}, ensure_ascii=False)}\n\n"
-                            if _st.action and _st.action != "FINAL_ANSWER":
+                            _act_u = (getattr(_st, "action", None) or "").upper()
+                            if getattr(_st, "action", None) and _act_u != "FINAL_ANSWER":
                                 _tid = f"react-{_st.step_num}"
-                                # Parse action input for tool args (string or JSON)
                                 _args_obj: Any = _st.action_input
                                 try:
                                     if isinstance(_st.action_input, str) and _st.action_input.strip().startswith("{"):
@@ -2042,8 +2157,6 @@ def create_app() -> FastAPI:
                                     _args_obj = {"raw": _st.action_input}
                                 yield f"data: {json.dumps({'type': 'tool', 'name': _st.action, 'args': _args_obj, 'tool_use_id': _tid}, ensure_ascii=False)}\n\n"
                                 yield f"data: {json.dumps({'type': 'tool_result', 'name': _st.action, 'result': _st.observation, 'tool_use_id': _tid}, ensure_ascii=False)}\n\n"
-                                # ask_user / clarify must surface a UI card — ReAct cannot
-                                # pause HTTP SSE, so emit clarification_request + text.
                                 _aname = (_st.action or "").lower()
                                 if _aname in ("ask_user", "clarify") and not _clarify_emitted:
                                     _q, _opts = "", []
@@ -2056,7 +2169,6 @@ def create_app() -> FastAPI:
                                             if isinstance(_obs, dict):
                                                 _q = _q or str(_obs.get("question") or "")
                                                 _opts = _opts or (_obs.get("options") or [])
-                                                # Nested output from ToolResult
                                                 _inner = _obs.get("output")
                                                 if isinstance(_inner, str) and "__clarify" in _inner:
                                                     _inner_j = json.loads(_inner)
@@ -2070,13 +2182,50 @@ def create_app() -> FastAPI:
                                         _opts = []
                                     _opts = [str(o) for o in _opts][:6]
                                     yield f"data: {json.dumps({'type': 'clarification_request', 'question': _q, 'options': _opts, 'allowFreeText': True, 'tool_use_id': _tid}, ensure_ascii=False)}\n\n"
-                                    # Always also stream a visible assistant bubble
                                     _clarify_text = _q
                                     if _opts:
                                         _clarify_text += "\n\n" + "\n".join(f"- {o}" for o in _opts)
                                     yield f"data: {json.dumps({'type': 'text', 'content': _clarify_text}, ensure_ascii=False)}\n\n"
                                     _clarify_emitted = True
-                        _answer = _result.final_answer or ""
+                            # Update plan panel step list
+                            _ps = _plan_step_from_react(_st)
+                            # Replace seed step 1 if still the placeholder
+                            if (
+                                len(_react_plan_steps) == 1
+                                and _react_plan_steps[0].get("action") == "ReAct 思考中…"
+                            ):
+                                _react_plan_steps[0] = _ps
+                            else:
+                                # ensure step index unique / ordered
+                                _idx = next(
+                                    (i for i, s in enumerate(_react_plan_steps) if s.get("step") == _ps["step"]),
+                                    None,
+                                )
+                                if _idx is not None:
+                                    _react_plan_steps[_idx] = _ps
+                                else:
+                                    _react_plan_steps.append(_ps)
+                            if _ps["status"] == "failed":
+                                _react_failed += 1
+                            _react_plan["steps"] = list(_react_plan_steps)
+                            _react_plan["total_steps"] = len(_react_plan_steps)
+                            _react_plan["completed_steps"] = sum(
+                                1 for s in _react_plan_steps if s.get("status") == "completed"
+                            )
+                            _react_plan["failed_steps"] = sum(
+                                1 for s in _react_plan_steps if s.get("status") == "failed"
+                            )
+                            _react_plan["current_step"] = _ps["step"]
+                            yield f"data: {json.dumps({'type': 'plan_step', 'step': _ps}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'plan', 'plan': _react_plan}, ensure_ascii=False)}\n\n"
+
+                        _react_plan["status"] = (
+                            "completed_with_errors" if _react_failed else "completed"
+                        )
+                        yield f"data: {json.dumps({'type': 'plan', 'plan': _react_plan}, ensure_ascii=False)}\n\n"
+                        yield f"data: {json.dumps({'type': 'plan_done'}, ensure_ascii=False)}\n\n"
+
+                        _answer = _react_answer_holder.get("final") or ""
                         # Don't re-stream empty FINAL_ANSWER after clarify (already texted).
                         if _answer and not _clarify_emitted:
                             _pe = _extract_and_emit_html_preview(_answer)

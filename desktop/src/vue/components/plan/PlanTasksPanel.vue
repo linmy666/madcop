@@ -104,7 +104,7 @@ function truncate(s: string | null, max = 36): string {
       <div class="tp__idle">
         <span class="material-symbols-outlined tp__idle-icon">task_alt</span>
         <div class="tp__idle-title">暂无执行计划</div>
-        <div class="tp__idle-desc">普通对话不会生成步骤计划。深度模式或多步任务时会显示在这里。</div>
+        <div class="tp__idle-desc">快速模式不会生成步骤。标准（ReAct）与深度模式运行时会显示在这里。</div>
       </div>
     </div>
 
