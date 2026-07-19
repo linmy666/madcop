@@ -684,6 +684,13 @@ export const useChatStore = defineStore('chat', {
                       assistantMsgObj.content = assistantMsg
                       assistantMsgObj.isStreaming = false
                     }
+                    // The ReAct loop ended without the user answering
+                    // a pending ask_user question (the loop bails on
+                    // context_overflow, network error, or just a model
+                    // that stopped emitting). Clear the pending question
+                    // so the ClarificationPanel doesn't sit stuck above
+                    // the composer with no way to dismiss it.
+                    session.clarificationPending = null
                   } else if (event.type === 'skill_distilled' && (event.skillName || event.skill_name)) {
                     const skillName = event.skillName || event.skill_name
                     try {

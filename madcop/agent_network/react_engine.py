@@ -291,22 +291,55 @@ class ReActEngine:
                 content=f"Observation: {observation}",
             ))
 
-            # Check max steps
-            if step_num >= self.max_steps:
-                status = "max_steps"
-                # Ask for final answer with one more call
+            # Check max steps OR a "stuck" heuristic: if the model has been
+            # calling tools without ever emitting a final answer, inject
+            # the opencode-style "MAX_STEPS_PROMPT" early (on step 3+)
+            # so the user doesn't have to wait for max_steps to hit. The
+            # standard ReAct prompt's instruction "If you have enough
+            # information, action = FINAL_ANSWER" should make this one
+            # extra turn do the trick.
+            if step_num >= self.max_steps or (
+                step_num >= 3
+                and final_answer == ""
+                and not any(s.action.upper() == "FINAL_ANSWER" for s in steps)
+            ):
+                status = "max_steps" if step_num >= self.max_steps else "summary_forced"
+                # Borrow opencode's MAX_STEPS_PROMPT pattern: inject a
+                # synthetic user message asking the model to consolidate
+                # what it knows and emit FINAL_ANSWER. One extra LLM
+                # call; if it still won't answer, fall through to the
+                # existing "max steps" message below.
                 messages.append(Message(
                     role="user",
-                    content="已达到最大步数。请用已有信息给出 FINAL_ANSWER。",
+                    content=(
+                        "你已调用了多个工具但还没有给出 FINAL_ANSWER。"
+                        "请用以上工具的 Observation 总结你的结论并以"
+                        "Thought: ... / Action: FINAL_ANSWER / Action Input: <总结> "
+                        "格式回复。"
+                    ),
                 ))
                 try:
                     resp = self.client.chat(messages, model=self.model, temperature=0.1)
-                    _, _, action_input = parse_react_response(
+                    _, f_action, f_input = parse_react_response(
                         getattr(resp, "content", "") or str(resp)
                     )
-                    final_answer = action_input
+                    if f_action.upper() == "FINAL_ANSWER":
+                        final_answer = normalize_final_answer(f_input)
+                    else:
+                        # Model still wanted to call a tool — just take
+                        # the text content as the answer (it's all we have).
+                        final_answer = (f_input or "").strip() or getattr(
+                            resp, "content", ""
+                        ) or str(resp)
                 except Exception:
                     final_answer = "[达到最大步数，未能给出最终答案]"
+                steps.append(ReActStep(
+                    step_num=step_num,
+                    thought="auto-summary after tool loop",
+                    action="FINAL_ANSWER",
+                    action_input=final_answer,
+                    elapsed_ms=round((time.time() - step_start) * 1000, 1),
+                ))
                 break
 
         total_ms = round((time.time() - started) * 1000, 1)
@@ -409,6 +442,15 @@ class ReActEngine:
             except Exception as e:
                 error = str(e)
                 observation = f"Error: {e}"
+            # Tools return a dict — many wrap failures inside
+            # {"error": "..."} without raising, so we have to fish
+            # the error out explicitly. Without this, plan_step status
+            # would always be "completed" even when the file write
+            # actually failed.
+            if error is None and isinstance(observation, dict):
+                _obs_err = observation.get("error")
+                if _obs_err:
+                    error = str(_obs_err)
 
             step = ReActStep(
                 step_num=step_num, thought=thought,

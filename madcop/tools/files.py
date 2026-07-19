@@ -370,6 +370,13 @@ class WriteFileTool(Tool):
 
         if not path_str:
             return {"error": "missing 'path'"}
+        # LLM sometimes hallucinates a dict where a string is expected
+        # (e.g. {"path": "x.md", ...} leaking out as the path). Bail
+        # explicitly with a clear error so the model can retry with a
+        # string instead of triggering a confusing 'File name too long'
+        # OSError from a 2 KB "path".
+        if not isinstance(path_str, str):
+            return {"error": f"'path' must be a string, got {type(path_str).__name__}: {str(path_str)[:80]!r}"}
         if len(content) > _MAX_WRITE_BYTES:
             return {"error": f"content too large ({len(content)} > {_MAX_WRITE_BYTES} bytes)"}
 
