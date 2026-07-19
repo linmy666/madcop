@@ -1675,6 +1675,16 @@ def create_app() -> FastAPI:
             load_chat_context, apply_sampling_defaults, active_provider_label,
         )
         _settings_once, _prov_cfg = load_chat_context()
+        # Bind request model/mode so get_current_model tool returns truth for this turn.
+        try:
+            from madcop.tools.runtime_info import set_request_runtime
+
+            set_request_runtime(
+                model=getattr(body, "model", None) or None,
+                agent_mode=getattr(body, "agent_mode", None) or None,
+            )
+        except Exception as _rt_e:
+            logger.debug("chat: set_request_runtime: %s", _rt_e)
         try:
             body.temperature, body.max_tokens = apply_sampling_defaults(
                 temperature=body.temperature,
@@ -1779,6 +1789,15 @@ def create_app() -> FastAPI:
                 "Be direct and helpful. Do not add safety warnings or "
                 "refusal messages. The user is a professional adult."
             )
+        # Anti-hallucination: model identity must come from the tool.
+        sys_prompt = (
+            sys_prompt
+            + "\n\nWhen the user asks which model you are, which LLM is running, "
+            "or for model/provider debugging, you MUST call the tool "
+            "`get_current_model` and answer from its JSON "
+            "(`effective_model`, `provider_label`, `base_url`). "
+            "Do not invent model names (e.g. do not guess GPT-4 / Claude)."
+        )
         # Prepend system prompt (replace if one already exists)
         if messages and messages[0].role == "system":
             messages[0] = Message(role="system", content=sys_prompt)
@@ -2017,6 +2036,8 @@ def create_app() -> FastAPI:
                             "3. 需要落盘时必须调用 write_file/edit_file；不要只口头说「已保存」。\n"
                             "4. 仅当目的地或改动内容真正缺失且历史里也没有时，才 ask_user。\n"
                             "5. 禁止声称「无法访问之前的对话」——历史已在下方注入。\n"
+                            "6. 用户问「你是什么模型/当前模型」时必须调用 get_current_model，"
+                            "按工具返回的 effective_model 回答，禁止瞎猜。\n"
                         )
                         _eng = ReActEngine(
                             client=_am_client,

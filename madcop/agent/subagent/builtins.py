@@ -106,6 +106,7 @@ GUSHEN = SubagentSpec(
         "read_file",
         "write_file",
         "get_current_time",
+        "get_current_model",
     ),
     disallowed_tools=("task", "bash", "computer_use", "docker"),
     max_turns=24,

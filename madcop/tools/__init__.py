@@ -44,6 +44,7 @@ from .eventbus import (
 # v2.1.0 — weather tool for chat
 from .weather import WeatherTool
 from .clarify import ClarifyTool
+from .runtime_info import GetCurrentModelTool
 # v3.x — Gushen (股神) research quant tools (no live trading)
 from .market import MarketQuoteTool, MarketHistoryTool
 from .quant import QuantFactorsTool, QuantBacktestSimpleTool
@@ -59,6 +60,7 @@ def default_registry(store: MemoryStore | None = None, workspace_dir: str | None
     reg = ToolRegistry()
     reg.register(EchoTool())
     reg.register(GetTimeTool())
+    reg.register(GetCurrentModelTool())
     reg.register(WebSearchTool())
     reg.register(WebFetchTool())
     reg.register(WeatherTool())
@@ -165,6 +167,7 @@ __all__ = [
     "WeatherTool",
     # v2.6.3.3
     "ClarifyTool",
+    "GetCurrentModelTool",
     # Gushen research quant
     "MarketQuoteTool",
     "MarketHistoryTool",

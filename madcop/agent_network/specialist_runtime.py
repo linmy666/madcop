@@ -21,21 +21,28 @@ from typing import Any
 # Role → tool names the specialist is allowed to call.
 # Keep lists short so mini-ReAct stays cheap and focused.
 ROLE_TOOL_ALLOWLIST: dict[str, list[str]] = {
+    # get_current_model: answer “你是什么模型” with settings truth, no hallucination.
+    # get_current_time is the real tool name (legacy alias "get_time" kept if present).
     # Planner: ground the plan in real files when a workspace exists.
-    "planner": ["read_file", "get_time"],
+    "planner": ["read_file", "get_current_time", "get_current_model"],
     # Coder: read/write/edit in workspace (the real differentiator).
     "coder": [
         "read_file", "write_file", "edit_file", "write_xlsx",
-        "get_time",
+        "get_current_time", "get_current_model",
     ],
     # Designer: may sketch HTML/CSS to preview dir via write_file.
-    "designer": ["read_file", "write_file", "get_time"],
+    "designer": ["read_file", "write_file", "get_current_time", "get_current_model"],
     # Researcher: search + fetch (not code writes).
-    "researcher": ["web_search", "web_fetch", "read_file", "get_time"],
+    "researcher": [
+        "web_search", "web_fetch", "read_file",
+        "get_current_time", "get_current_model",
+    ],
     # Reviewer: read-only inspection.
-    "reviewer": ["read_file", "get_time"],
+    "reviewer": ["read_file", "get_current_time", "get_current_model"],
     # Writing / generic assistant specialists: light research only.
-    "assistant": ["web_search", "web_fetch", "get_time"],
+    "assistant": [
+        "web_search", "web_fetch", "get_current_time", "get_current_model",
+    ],
     # Synthesizer intentionally omitted → no tools.
 }
 
