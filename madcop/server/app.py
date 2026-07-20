@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from madcop.server.events import make_event as _ev  # SSE event builder
 import re
 import threading
 import time
@@ -364,6 +365,71 @@ def _classify_llm_error(exc: BaseException) -> dict[str, Any]:
         return {"kind": "server", "retryable": True, "message": msg}
 
     return {"kind": "unknown", "retryable": False, "message": msg}
+
+
+# Retry policy — classifies an LLM/transport exception and decides whether
+# to retry, and if so, how long to wait. Reads the upstream response's
+# Retry-After header if the SDK surfaces it; falls back to exponential
+# backoff. Mirrors the *shape* of opencode's retry.ts (classification
+# + typed Schedule) without copying any of its code — MadCop's own
+# design.
+_RETRY_BACKOFF_SECONDS = [1.0, 2.0, 4.0, 8.0]
+_RETRY_MAX_ATTEMPTS = 4
+
+
+def _extract_retry_after(exc: BaseException) -> float | None:
+    """Read the Retry-After hint from the underlying response, if any.
+
+    Looks first at the SDK-specific attribute (OpenAI's APIError sets
+    `retry_after` on the response object), then at any custom
+    `__retry_after__` attribute a caller may have attached.
+    """
+    # OpenAI SDK path
+    response = getattr(exc, "response", None)
+    if response is not None:
+        # 1) Attribute on the response
+        ra = getattr(response, "retry_after", None)
+        if isinstance(ra, (int, float)) and ra > 0:
+            return float(ra)
+        # 2) HTTP-header form
+        try:
+            headers = getattr(response, "headers", None) or {}
+            val = headers.get("retry-after") if hasattr(headers, "get") else None
+            if val is not None:
+                # Delta-seconds or HTTP-date; only the former is
+                # worth parsing server-side (we have a clock).
+                f = float(val)
+                if f > 0:
+                    return f
+        except (TypeError, ValueError):
+            pass
+    # Custom hook
+    custom = getattr(exc, "__retry_after__", None)
+    if isinstance(custom, (int, float)) and custom > 0:
+        return float(custom)
+    return None
+
+
+def _should_retry(exc: BaseException, attempt: int) -> float | None:
+    """Return seconds-to-wait before retrying, or None to give up.
+
+    `attempt` is 1-indexed (1 = first retry, after the original
+    failed call). Looks at the upstream Retry-After header if the
+    SDK surfaces it; falls back to exponential backoff capped at 4
+    attempts. Non-retryable conditions (auth, context overflow, model
+    not found, aborts) raise immediately.
+    """
+    if attempt > _RETRY_MAX_ATTEMPTS:
+        return None
+    cls = _classify_llm_error(exc)
+    if not cls.get("retryable", False):
+        return None
+    # Honor the upstream Retry-After when present (capped at 60s
+    # so a hostile header can't stall the run forever).
+    explicit = _extract_retry_after(exc)
+    if explicit is not None:
+        return min(float(explicit), 60.0)
+    return _RETRY_BACKOFF_SECONDS[attempt - 1]
 
 
 def _estimate_tokens(text: str) -> int:
@@ -1539,7 +1605,7 @@ def create_app() -> FastAPI:
                         q.put_nowait(f"data: {json.dumps({'type': 'reasoning', 'content': chunk.reasoning}, ensure_ascii=False)}\n\n")
                     if chunk.text:
                         acc_text.append(chunk.text)
-                        q.put_nowait(f"data: {json.dumps({'type': 'text', 'content': chunk.text}, ensure_ascii=False)}\n\n")
+                        q.put_nowait(f"data: {json.dumps(_ev('text', content=chunk.text), ensure_ascii=False)}\n\n")
                     if chunk.model and not emitted_model:
                         emitted_model = chunk.model
                     for d in chunk.tool_call_deltas:
@@ -2247,7 +2313,12 @@ def create_app() -> FastAPI:
                                         _args_obj = json.loads(_st.action_input)
                                 except Exception:
                                     _args_obj = {"raw": _st.action_input}
-                                yield f"data: {json.dumps({'type': 'tool', 'name': _st.action, 'args': _args_obj, 'tool_use_id': _tid}, ensure_ascii=False)}\n\n"
+                                # Bump the per-agent tool-call counter so
+                                # SubAgentPanel can show "tool N of M" and
+                                # we can surface "stuck because of model
+                                # choosing yet another tool" warnings.
+                                _ev_token_counts[_tid] = _ev_token_counts.get(_tid, 0) + 1
+                                yield f"data: {json.dumps({'type': 'tool', 'name': _st.action, 'args': _args_obj, 'tool_use_id': _tid, 'tool_calls': _ev_token_counts[_tid]}, ensure_ascii=False)}\n\n"
                                 yield f"data: {json.dumps({'type': 'tool_result', 'name': _st.action, 'result': _st.observation, 'tool_use_id': _tid}, ensure_ascii=False)}\n\n"
                                 _aname = (_st.action or "").lower()
                                 if _aname in ("ask_user", "clarify") and not _clarify_emitted:
@@ -2416,6 +2487,11 @@ def create_app() -> FastAPI:
                         _evq: asyncio.Queue = asyncio.Queue()
                         _sentinel = object()
                         _started_agents: set[str] = set()
+                        _ev_token_counts: dict[str, int] = {}
+                        # Hoisted helper for SubAgentPanel long-running
+                        # visibility — see started_at / ts fields below.
+                        def _now_ms() -> int:
+                            return int(_time.time() * 1000)
                         # Per-agent text buffer for coalescing small chunks.
                         # Chinese LLMs in particular fire 1-2 chars per token,
                         # producing 100+ SSE events for a 200-char reply.
@@ -2442,6 +2518,10 @@ def create_app() -> FastAPI:
                                     "n": agent_name or node_id,
                                     "o": node_id,
                                     "c": _agent_colors.get(agent_id, "#7C3AED"),
+                                    # SubAgentPanel long-running visibility:
+                                    # startedAt drives the elapsed counter and
+                                    # "stuck for N seconds" indicator.
+                                    "started_at": _now_ms(),
                                 })
                                 # Flip the matching plan step to in_progress so
                                 # the right panel shows it as the active task.
@@ -2504,6 +2584,13 @@ def create_app() -> FastAPI:
                                         "t": 2,
                                         "id": aid,
                                         "x": payload,
+                                        # SubAgentPanel visibility —
+                                        # lastActiveAt drives "stuck for N
+                                        # seconds" indicator; tool_calls is
+                                        # bumped on each tool call so the UI
+                                        # can show "tool N of M" progress.
+                                        "ts": _now_ms(),
+                                        "tc": _ev_token_counts.get(aid, 0),
                                     })
 
                         async def _run_dag():
@@ -2577,9 +2664,11 @@ def create_app() -> FastAPI:
                                 with _buf_lock:
                                     _tail = _text_buf.pop(_ns.agent_id or _ns.node_id, "")
                                 if _tail:
-                                    yield f"data: {json.dumps({'t': 2, 'id': _ns.agent_id or _ns.node_id, 'x': _tail}, ensure_ascii=False)}\n\n"
+                                    yield f"data: {json.dumps({'t': 2, 'id': _ns.agent_id or _ns.node_id, 'x': _tail, 'ts': _now_ms()}, ensure_ascii=False)}\n\n"
                                 _status = "failed" if _ns.status == "error" else "completed"
-                                yield f"data: {json.dumps({'type': 'agent_done', 'agent_id': _ns.agent_id or _ns.node_id, 'status': _ns.status, 'elapsed_ms': _ns.elapsed_ms}, ensure_ascii=False)}\n\n"
+                                _agent_aid = _ns.agent_id or _ns.node_id
+                                _ev_token_counts.pop(_agent_aid, None)
+                                yield f"data: {json.dumps({'type': 'agent_done', 'agent_id': _agent_aid, 'status': _ns.status, 'elapsed_ms': _ns.elapsed_ms}, ensure_ascii=False)}\n\n"
                                 # Update the matching plan step in BOTH
                                 # _plan_steps (so the final summary count is
                                 # correct) and the frontend (so the panel

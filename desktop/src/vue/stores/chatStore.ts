@@ -633,9 +633,15 @@ export const useChatStore = defineStore('chat', {
             
             for (const line of lines) {
               if (line.startsWith('data: ')) {
+                let event: any
                 try {
-                  const event = JSON.parse(line.slice(6))
-                                    if (event.type === 'text' && event.content) {
+                  event = JSON.parse(line.slice(6))
+                } catch {
+                  // Skip malformed event line; keep the SSE stream
+                  // alive so a single bad line doesn't drop the run.
+                  continue
+                }
+                if (event.type === 'text' && event.content) {
                     // Push the assistant placeholder NOW (after any tool_use
                     // messages have already been pushed) so the timeline is
                     // tool → assistant instead of assistant → tool.
@@ -908,7 +914,6 @@ export const useChatStore = defineStore('chat', {
                     // Backend error (API error, rate limit, etc.)
                     pushChatError(event.message)
                   }
-                } catch {}
               }
             }
           }
