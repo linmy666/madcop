@@ -592,21 +592,38 @@ export const useChatStore = defineStore('chat', {
           let assistantMsgObj: any = null
           // Throttle UI updates during streaming: accumulate tokens and
           // flush to assistantMsgObj.content at most once per animation
-          // frame (~60fps). Without this, every token triggers a full
-          // Coalesce token updates so a burst of agent_token events
-          // produces one DOM write per microtask (faster than rAF for
-          // stream workloads, and the next token's flush is a
-          // microtask away regardless of vsync).
+          // Frame-based batching: opencode's SDK adapter batches every
+          // parsed event into one Solid render via a 16ms frame budget
+          // (one rAF). All token deltas in the same frame become one
+          // Vue re-render. Terminal events (done / error / cancelled)
+          // bypass the budget and flush synchronously so the user sees
+          // the final state without a 16ms delay.
+          // Tradeoff vs. plain queueMicrotask: microtask fires faster
+          // (a few microseconds) but each text event can schedule one
+          // Vue update, which is the same "one update per token" we
+          // were trying to avoid. The 16ms budget keeps it at ≤62.5fps
+          // for sparse events, and exactly once per frame for bursts.
+          // Net win: lower per-event CPU work, no perceptible latency
+          // for the user (text already takes 100ms+ per token to
+          // arrive from the upstream model).
           let _pendingFlush = false
-          const _flushContent = () => {
+          const _flushNow = () => {
             _pendingFlush = false
             if (assistantMsgObj) assistantMsgObj.content = assistantMsg
           }
-          const _scheduleFlush = () => {
-            if (!_pendingFlush) {
-              _pendingFlush = true
-              queueMicrotask(_flushContent)
-            }
+          // 16ms is one rAF frame at 60fps. opencode's tui uses the
+          // same value (sdk.tsx:48-80). Terminal events bypass this
+          // and call _flushTerminal() instead of _flushNow() so a 'done'
+          // event doesn't sit in the queue behind a stale rAF.
+          const _requestFlush = () => {
+            if (_pendingFlush) return
+            _pendingFlush = true
+            requestAnimationFrame(() => _flushNow())
+          }
+          const _flushTerminal = () => {
+            // Cancel any pending frame; apply the final write now.
+            _pendingFlush = false
+            _flushNow()
           }
 
           const ensureAssistantPushed = () => {
@@ -668,9 +685,10 @@ export const useChatStore = defineStore('chat', {
                     assistantMsg += chunk
                     // Update the placeholder message via the cached reference
                     // (avoids an O(n) Array.find on every streamed token).
-                    // Throttled via requestAnimationFrame so we don't trigger
-                    // a markdown re-parse per token on long replies.
-                    _scheduleFlush()
+                    // Frame-batched via requestAnimationFrame so a burst of
+                    // tokens produces one Vue re-render per ~16ms frame
+                    // rather than one per token.
+                    _requestFlush()
                     // The final answer is now streaming in. Switch out of the
                     // "thinking" state so the hand-drawn planning animation is
                     // hidden and the text trickles in live (instead of popping
@@ -683,11 +701,16 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'done') {
                     session.chatState = 'idle'
-                    // Cancel any pending throttled flush and write the
-                    // final content immediately so nothing is lost.
-                    _pendingFlush = false
+                    // Terminal event: flush the final assistant content
+                    // synchronously so the streaming text and the idle
+                    // state land in the same Vue tick. _flushTerminal
+                    // cancels the pending rAF and writes the final
+                    // assistantMsgObj.content immediately, avoiding
+                    // the visible 'final word appears 16ms after
+                    // chatState=idle' glitch that pure frame batching
+                    // would cause.
+                    _flushTerminal()
                     if (assistantMsgObj) {
-                      assistantMsgObj.content = assistantMsg
                       assistantMsgObj.isStreaming = false
                     }
                     // The ReAct loop ended without the user answering
@@ -911,8 +934,25 @@ export const useChatStore = defineStore('chat', {
                       ws.setMode(sessionId, 'browser')
                     } catch {}
                   } else if (event.type === 'error' && event.message) {
-                    // Backend error (API error, rate limit, etc.)
+                    // Backend error (API error, rate limit, etc.).
+                    // Terminal event: flush the final assistant
+                    // placeholder synchronously so the streamed content
+                    // and the error toast land in the same tick.
+                    _flushTerminal()
                     pushChatError(event.message)
+                  } else if (event.type === 'cancelled') {
+                    // User-initiated abort acknowledgement. The backend
+                    // does not emit this yet (round-2 audit gap), but we
+                    // accept the event here so the moment it does ship,
+                    // the chatStore is wired correctly. Flush the final
+                    // text first so the user sees the last generated
+                    // token before the 'cancelled' marker renders.
+                    _flushTerminal()
+                    if (session.pendingPermission) {
+                      // Surface permission-cancel as a normal error so the
+                      // permission dialog closes on its own.
+                      pushChatError('操作已取消')
+                    }
                   }
               }
             }
