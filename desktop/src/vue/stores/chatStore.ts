@@ -806,6 +806,14 @@ export const useChatStore = defineStore('chat', {
                     } catch { /* toast optional */ }
                   } else if (event.type === 'reasoning' && event.content) {
                     session.reasoningContent = (session.reasoningContent || '') + event.content
+                  } else if (event.type === 'reasoning_clear') {
+                    // v3.7.2 — the backend finished forming the
+                    // FINAL_ANSWER via token streaming; the same
+                    // text will arrive next as a 'text' event. Drop
+                    // the accumulated reasoning so the UI doesn't
+                    // show the answer twice (once in thinking, once
+                    // in the reply bubble).
+                    session.reasoningContent = null
                   } else if (
                     // Short form: t=1 (agent_start) with id / n / c / o
                     // Long form (legacy): type='agent_start' + agent_id +

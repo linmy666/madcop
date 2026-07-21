@@ -2351,6 +2351,20 @@ def create_app() -> FastAPI:
                             _st = _item.get("step") if isinstance(_item, dict) else None
                             if _st is None:
                                 continue
+                            # v3.7.2 — token-level streaming from the
+                            # ReAct engine. Each token is forwarded as
+                            # a 'reasoning' event so the user sees live
+                            # text while the LLM is still generating,
+                            # instead of waiting for the whole step to
+                            # complete. When the turn resolves to
+                            # FINAL_ANSWER, the final assembled text is
+                            # also emitted as a regular 'text' event
+                            # below (so the message persists in history).
+                            if getattr(_st, "is_token", False):
+                                _tok = getattr(_st, "token", "") or ""
+                                if _tok:
+                                    yield f"data: {json.dumps({'type': 'reasoning', 'content': _tok, 'is_token': True}, ensure_ascii=False)}\n\n"
+                                continue
                             # reasoning + tools for chat timeline
                             if getattr(_st, "thought", None):
                                 yield f"data: {json.dumps({'type': 'reasoning', 'content': _st.thought}, ensure_ascii=False)}\n\n"
@@ -2441,6 +2455,12 @@ def create_app() -> FastAPI:
                         _answer = _react_answer_holder.get("final") or ""
                         # Don't re-stream empty FINAL_ANSWER after clarify (already texted).
                         if _answer and not _clarify_emitted:
+                            # v3.7.2 — token-level streaming already
+                            # showed this answer forming in the
+                            # 'reasoning' panel. Clear that panel now
+                            # so the FINAL_ANSWER lives only in the
+                            # main reply bubble (no duplicate text).
+                            yield f"data: {json.dumps({'type': 'reasoning_clear'}, ensure_ascii=False)}\n\n"
                             _pe = _extract_and_emit_html_preview(_answer)
                             if _pe:
                                 yield f"data: {_pe}\n\n"
