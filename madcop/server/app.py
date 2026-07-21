@@ -2223,12 +2223,16 @@ def create_app() -> FastAPI:
                             model=_am_model,
                             system_prefix=_react_prefix,
                         )
-                        # Seed plan panel immediately (before first ReAct step).
+                        # Seed plan panel immediately (before first step).
+                        # v3.7.3 — user-facing copy intentionally avoids
+                        # the word "ReAct" (an internal term). The user
+                        # only sees product-level names: 快速 / 标准 /
+                        # 深度. Standard = 智能体 (agent), Deep = 多专家团.
                         _react_plan_steps: list[dict] = [{
                             "step": 1,
-                            "action": "ReAct 思考中…",
+                            "action": "智能体思考中…",
                             "tool": None,
-                            "input_hint": "标准模式 · 单 Agent 工具循环",
+                            "input_hint": "标准模式 · 智能体",
                             "expected_result": "",
                             "status": "in_progress",
                             "result": None,
@@ -2244,12 +2248,12 @@ def create_app() -> FastAPI:
                             "failed_steps": 0,
                             "status": "running",
                             "mode": "standard",
-                            "category": "react",
-                            "category_label": "标准 · ReAct",
-                            "category_label_en": "Standard · ReAct",
+                            "category": "standard",
+                            "category_label": "标准 · 智能体",
+                            "category_label_en": "Standard · Agent",
                             "specialists": [],
                             "roster_labels": ["思考", "行动", "观察"],
-                            "classification_reason": "单 Agent Thought→Action→Observation 循环",
+                            "classification_reason": "单智能体 · 思考 → 行动 → 观察",
                             "matched_signals": ["agent_mode=standard"],
                         }
                         yield f"data: {json.dumps({'type': 'plan', 'plan': _react_plan}, ensure_ascii=False)}\n\n"
@@ -2259,16 +2263,16 @@ def create_app() -> FastAPI:
                             _thought = (getattr(_st, "thought", None) or "").strip()
                             _err = getattr(_st, "error", None)
                             if _act.upper() == "FINAL_ANSWER":
-                                _label = "输出最终回答"
+                                _label = "组织最终回答"
                                 _tool = None
                             elif _act:
-                                _label = f"调用 {_act}"
+                                _label = f"调用工具 · {_act}"
                                 _tool = _act
                             elif _thought:
                                 _label = _thought[:48]
                                 _tool = None
                             else:
-                                _label = "ReAct 步骤"
+                                _label = "智能体思考中…"
                                 _tool = None
                             _status = "failed" if _err else "completed"
                             _res = None
@@ -2330,6 +2334,11 @@ def create_app() -> FastAPI:
                         # UnboundLocalError: cannot access local variable
                         # '_ev_token_counts'.
                         _ev_token_counts: dict[str, int] = {}
+                        # v3.7.3 — tracks whether the FINAL_ANSWER
+                        # body was already streamed token-by-token
+                        # (so the post-loop emit can skip the
+                        # duplicate full-text 'text' event).
+                        _fa_streamed = False
                         while True:
                             # Poll so we can send SSE keepalives during long tool calls.
                             try:
@@ -2362,7 +2371,22 @@ def create_app() -> FastAPI:
                             # below (so the message persists in history).
                             if getattr(_st, "is_token", False):
                                 _tok = getattr(_st, "token", "") or ""
-                                if _tok:
+                                if not _tok:
+                                    continue
+                                if getattr(_st, "is_final_answer_token", False):
+                                    # v3.7.3 — this token is part of
+                                    # the FINAL_ANSWER body. Route it
+                                    # straight to the assistant message
+                                    # bubble as a 'text' event so the
+                                    # user watches the reply form live.
+                                    # The post-loop _answer emit is
+                                    # skipped for FINAL_ANSWER turns
+                                    # (tracked via _fa_streamed).
+                                    _fa_streamed = True
+                                    yield f"data: {json.dumps({'type': 'text', 'content': _tok, 'is_token': True}, ensure_ascii=False)}\n\n"
+                                else:
+                                    # Reasoning token — live thinking
+                                    # panel. Cleared on done.
                                     yield f"data: {json.dumps({'type': 'reasoning', 'content': _tok, 'is_token': True}, ensure_ascii=False)}\n\n"
                                 continue
                             # reasoning + tools for chat timeline
@@ -2449,22 +2473,45 @@ def create_app() -> FastAPI:
                         _react_plan["status"] = (
                             "completed_with_errors" if _react_failed else "completed"
                         )
+                        # v3.7.3 — fix "stuck on step 1 forever" bug:
+                        # if the placeholder seed step never got
+                        # replaced (e.g. model emitted FINAL_ANSWER
+                        # in turn 1 without any tool call, and the
+                        # seed step's 'action' field still says the
+                        # placeholder text), force-flip all remaining
+                        # in_progress steps to completed so the right-
+                        # side task panel doesn't keep spinning.
+                        for _ps in _react_plan_steps:
+                            if _ps.get("status") == "in_progress":
+                                _ps["status"] = "completed"
+                                if not _ps.get("action") or "思考中" in (_ps.get("action") or ""):
+                                    _ps["action"] = "完成"
+                        _react_plan["completed_steps"] = sum(
+                            1 for s in _react_plan_steps if s.get("status") == "completed"
+                        )
                         yield f"data: {json.dumps({'type': 'plan', 'plan': _react_plan}, ensure_ascii=False)}\n\n"
                         yield f"data: {json.dumps({'type': 'plan_done'}, ensure_ascii=False)}\n\n"
 
                         _answer = _react_answer_holder.get("final") or ""
                         # Don't re-stream empty FINAL_ANSWER after clarify (already texted).
                         if _answer and not _clarify_emitted:
-                            # v3.7.2 — token-level streaming already
-                            # showed this answer forming in the
-                            # 'reasoning' panel. Clear that panel now
-                            # so the FINAL_ANSWER lives only in the
-                            # main reply bubble (no duplicate text).
-                            yield f"data: {json.dumps({'type': 'reasoning_clear'}, ensure_ascii=False)}\n\n"
-                            _pe = _extract_and_emit_html_preview(_answer)
-                            if _pe:
-                                yield f"data: {_pe}\n\n"
-                            yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
+                            if _fa_streamed:
+                                # v3.7.3 — FINAL_ANSWER body was already
+                                # streamed token-by-token to the reply
+                                # bubble via 'text' events with
+                                # is_token=true. Don't re-emit the whole
+                                # thing; just clear the thinking panel.
+                                yield f"data: {json.dumps({'type': 'reasoning_clear'}, ensure_ascii=False)}\n\n"
+                            else:
+                                # Non-streamed path (stub client) or
+                                # model didn't emit FINAL_ANSWER marker
+                                # in a detectable way — emit the full
+                                # assembled text now.
+                                yield f"data: {json.dumps({'type': 'reasoning_clear'}, ensure_ascii=False)}\n\n"
+                                _pe = _extract_and_emit_html_preview(_answer)
+                                if _pe:
+                                    yield f"data: {_pe}\n\n"
+                                yield f"data: {json.dumps({'type': 'text', 'content': _answer}, ensure_ascii=False)}\n\n"
                         elif not _answer and not _clarify_emitted:
                             # Model finished with no text and no clarify — avoid blank UI
                             yield f"data: {json.dumps({'type': 'text', 'content': '（本轮未产生可见回复。请再描述一下你的需求，或换用「自动」模式重试。）'}, ensure_ascii=False)}\n\n"

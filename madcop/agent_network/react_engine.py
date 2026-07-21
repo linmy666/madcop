@@ -409,25 +409,27 @@ class ReActEngine:
 
             step_start = time.time()
 
-            # v3.7.2 — Token-level streaming. Previously this used
-            # self.client.chat(...) which blocks until the whole
-            # response is ready, then yields a single ReActStep at
-            # the end. opencode-style UX needs the user to see the
-            # answer forming token-by-token, so we use the streaming
-            # API and yield ReActStep(is_token=True, ...) per chunk.
-            #
-            # Strategy: stream the response, accumulate into `raw`,
-            # and for each text delta emit a token step. We don't yet
-            # know whether this turn is FINAL_ANSWER (only the full
-            # text reveals that), so tokens are emitted with
-            # is_final_answer_token=False and only the final assembled
-            # text is parsed to decide Thought/Action/ActionInput.
+            # v3.7.2 — Token-level streaming with live FINAL_ANSWER
+            # detection. As tokens stream in we watch for the
+            # 'Action: FINAL_ANSWER' marker. Once we see it, every
+            # subsequent token (after the 'Action Input:' line) is
+            # flagged is_final_answer_token=True so the chat handler
+            # can route them straight to the assistant message bubble
+            # instead of the thinking panel — the user watches the
+            # final reply form token-by-token, opencode-style.
             raw = ""
             saw_stream_error = False
             stream_error_msg = ""
+            # Streaming parse state:
+            #   0 = haven't seen 'Action:' yet (token goes to reasoning)
+            #   1 = saw 'Action: FINAL_ANSWER' but not 'Action Input:'
+            #       yet (still reasoning — usually whitespace/newline)
+            #   2 = past 'Action Input:' — token is final-answer text
+            _stream_state = 0
+            _FA_MARKER = re.compile(r"Action\s*[:：]\s*FINAL_ANSWER", re.IGNORECASE)
+            _AI_MARKER = re.compile(r"Action\s*Input\s*[:：]", re.IGNORECASE)
+
             try:
-                # Prefer stream(); fall back to chat() if the client
-                # doesn't expose it (some test stubs only have chat).
                 if hasattr(self.client, "stream"):
                     for chunk in self.client.stream(
                         messages,
@@ -438,21 +440,57 @@ class ReActEngine:
                         text = getattr(chunk, "text", "") or ""
                         if text:
                             raw += text
-                            # Yield the token to the UI immediately.
-                            # We mark is_final_answer_token=False
-                            # because we don't know yet — the chat
-                            # handler will treat these as 'reasoning'
-                            # for live feedback during the LLM call.
-                            yield ReActStep(
-                                step_num=step_num,
-                                is_token=True,
-                                token=text,
-                                is_final_answer_token=False,
-                            )
-                        # Finish reason is fine; we just stop reading.
+                            if _stream_state == 0:
+                                # Check if the marker just appeared in
+                                # the accumulated text. Use search() on
+                                # the tail so we catch it across chunk
+                                # boundaries (the marker may be split).
+                                if _FA_MARKER.search(raw):
+                                    _stream_state = 1
+                                    # Token still goes to reasoning —
+                                    # the marker line itself isn't user-
+                                    # facing answer text.
+                                    yield ReActStep(
+                                        step_num=step_num, is_token=True,
+                                        token=text, is_final_answer_token=False,
+                                    )
+                                else:
+                                    yield ReActStep(
+                                        step_num=step_num, is_token=True,
+                                        token=text, is_final_answer_token=False,
+                                    )
+                            elif _stream_state == 1:
+                                # Looking for 'Action Input:' marker.
+                                if _AI_MARKER.search(raw):
+                                    _stream_state = 2
+                                    # Discard this chunk — it contains
+                                    # the marker text, not answer text.
+                                else:
+                                    # Still in between; route to reasoning.
+                                    yield ReActStep(
+                                        step_num=step_num, is_token=True,
+                                        token=text, is_final_answer_token=False,
+                                    )
+                            else:  # _stream_state == 2
+                                # Past the marker — this is live final-
+                                # answer text. Strip a leading space /
+                                # newline that the model often emits
+                                # right after 'Action Input:'.
+                                _clean = text
+                                if not getattr(self, "_fa_leading_trimmed", False):
+                                    _clean = _clean.lstrip(" \t\n")
+                                    if _clean:
+                                        self._fa_leading_trimmed = True
+                                if _clean:
+                                    yield ReActStep(
+                                        step_num=step_num, is_token=True,
+                                        token=_clean, is_final_answer_token=True,
+                                    )
                         fr = getattr(chunk, "finish_reason", None)
                         if fr:
                             break
+                    # Reset the per-turn trim flag for the next step.
+                    self._fa_leading_trimmed = False
                 else:
                     resp = self.client.chat(
                         messages, model=self.model,

@@ -72,9 +72,16 @@
     <!-- Phase label + hand-written hint + progress bar (all black) -->
     <div class="flex-1 min-w-0 pt-0.5">
       <div class="flex items-baseline gap-2">
-        <span class="text-[12px] font-semibold text-[var(--color-text-primary)]">
-          {{ statusLabel }}
-        </span>
+        <!-- v3.7.3 — opencode/codex-style shimmer sweep on the status
+             label. Cosine 'spotlight' travels across the text every
+             2s; characters near the spotlight brighten + bold.
+             Fades to a static label under prefers-reduced-motion. -->
+        <ThinkingDots
+          variant="shimmer"
+          :label="statusLabel"
+          color="var(--color-text-primary)"
+          class="thinking-shimmer"
+        />
         <span class="text-[10px] text-[var(--color-text-tertiary)] tabular-nums ml-auto">
           {{ elapsedText }}
         </span>
@@ -110,6 +117,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import ThinkingDots from './ThinkingDots.vue'
 
 const props = defineProps<{
   reasoningContent?: string | null
