@@ -77,12 +77,12 @@ class QueryRagTool(Tool):
 
     name = "query_rag"
     description = (
-        "Search long-term memory using the modular RAG pipeline "
-        "(episodic + semantic + reflective, with query rewriting "
-        "and confidence-gated web fallback). Returns structured "
-        "context the assistant can cite. Use this when answering "
-        "a question that may depend on prior conversations, the "
-        "user's profile, or stored reflections."
+        "Search the user's long-term memory / past conversations. "
+        "ONLY use this when the user explicitly asks about prior "
+        "chats, their profile, or stored reflections (e.g. '你记不记得"
+        "我上次说的', '我之前告诉过你什么'). For general knowledge "
+        "questions ('什么是 RAG', '帮我写代码'), do NOT call this — "
+        "answer directly. Returns structured memory hits if any."
     )
 
     def __init__(self, ctx: RagToolContext):
