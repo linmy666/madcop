@@ -1603,3 +1603,92 @@ html[data-touch-h5] * {
 html[data-touch-h5] body {
   overscroll-behavior-y: none;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+ * v3.7.6 — ZCode-aligned design tokens & streaming animations.
+ * These mirror ZCode's theme tokens (extracted from its app.asar)
+ * so our chat reasoning / tool-call / diff UI matches the visual
+ * language users see in ZCode. Values fall back gracefully when
+ * the host app doesn't define the source color.
+ * ────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Diff colors (ZCode theme-zai-light) */
+  --zcode-diff-added: #1e8a3e;
+  --zcode-diff-removed: #e03131;
+  /* Animated gradient text (reasoning "Thinking..." label) */
+  --zcode-gradient-text-strong: #0d0d0d;
+  --zcode-gradient-text-soft: rgba(13, 13, 13, 0.22);
+  /* Foreground scale (subtle / subtlest) */
+  --zcode-fg-subtle: rgba(38, 38, 38, 0.60);
+  --zcode-fg-subtlest: rgba(38, 38, 38, 0.40);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --zcode-diff-added: #46bf72;
+    --zcode-diff-removed: #ff5c5c;
+    --zcode-gradient-text-strong: #ffffff;
+    --zcode-gradient-text-soft: rgba(255, 255, 255, 0.22);
+    --zcode-fg-subtle: rgba(212, 212, 212, 0.60);
+    --zcode-fg-subtlest: rgba(212, 212, 212, 0.40);
+  }
+}
+
+/* ZCode's signature gradient-flow text. Used for the "Thinking..."
+   label while the model is streaming reasoning tokens. */
+.zcode-gradient-text {
+  background: linear-gradient(90deg,
+    var(--zcode-gradient-text-strong) 0%,
+    var(--zcode-gradient-text-strong) 34%,
+    var(--zcode-gradient-text-soft) 50%,
+    var(--zcode-gradient-text-strong) 66%,
+    var(--zcode-gradient-text-strong) 100%);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: zcode-gradient-flow 4s linear infinite;
+  display: inline-block;
+  transform: translateZ(0);
+}
+@keyframes zcode-gradient-flow {
+  0%   { background-position: 100% 0; }
+  50%  { background-position: 0 0; }
+  to   { background-position: 0 0; }
+}
+
+/* Stream-in animation. ZCode attaches this to every newly-arrived
+   chunk (thought / text / tool). The cubic-bezier is ZCode's
+   unified ease-out-expo. */
+.zcode-stream-in {
+  animation: zcode-stream-text-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity;
+}
+@keyframes zcode-stream-text-in {
+  0% { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ZCode's CSS border-ring spinner. A 14px circle with one missing
+   quadrant, rotating at 1s linear infinite. Used for in-progress
+   tool calls and loading states. */
+.zcode-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: zcode-spin 1s linear infinite;
+}
+@keyframes zcode-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zcode-gradient-text { animation: none; color: var(--zcode-fg-subtle); -webkit-text-fill-color: var(--zcode-fg-subtle); }
+  .zcode-stream-in { animation: none; opacity: 1; }
+  .zcode-spinner { animation-duration: 2.5s; }
+}

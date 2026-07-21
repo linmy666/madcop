@@ -1164,14 +1164,15 @@ function renderItemContent(item: RenderItem) {
           :compact="compact"
         />
 
-        <!-- Thinking indicator: shown at the END of the list when AI is busy.
-             User messages are at the top, AI messages follow, and the indicator
-             shows at the end so it's always near the user's last action. -->
+        <!-- v3.7.6 — ZCode-style reasoning panel. Stays visible
+             for the whole turn (busy / streaming) so the gradient
+             "正在思考" label + streaming body are actually seen. -->
         <ThinkingIndicator
           v-if="isAIThinking"
           :reasoning-content="reasoningContent"
           :active-tool-name="liveToolName"
           :plan-step="planStep"
+          :is-streaming="chatState !== 'idle' && chatState !== 'error'"
         />
 
         <!-- Streaming indicator (tool_executing or thinking with no active block) -->

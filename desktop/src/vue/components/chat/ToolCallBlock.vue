@@ -411,11 +411,14 @@ function renderStatusIndicators(): VNode[] | null {
   const nodes: VNode[] = []
 
   if (pendingSummary.value) {
+    // v3.7.6 — ZCode-style: CSS border-ring spinner instead of the
+    // sparkly auto_awesome icon. The spinner uses currentColor so
+    // it inherits the surrounding outline tint.
     nodes.push(h('span', {
-      class: 'inline-flex min-w-0 max-w-[58%] shrink-0 items-center gap-1 text-[10px] text-[var(--color-outline)]',
+      class: 'inline-flex min-w-0 max-w-[58%] shrink-0 items-center gap-1.5 text-[10px] text-[var(--color-outline)]',
       title: liveStatsSummary.value ? `${pendingSummary.value} · ${liveStatsSummary.value}` : pendingSummary.value,
     }, [
-      h('span', { class: 'material-symbols-outlined', style: { fontSize: '12px' } }, 'auto_awesome'),
+      h('span', { class: 'zcode-spinner', style: { width: '10px', height: '10px', borderWidth: '1.5px' } }),
       h('span', { class: 'truncate' }, pendingSummary.value),
       liveStatsSummary.value ? h('span', { class: 'shrink-0 text-[var(--color-text-tertiary)]' }, '·') : null,
       liveStatsSummary.value ? h('span', {
@@ -439,10 +442,23 @@ function renderStatusIndicators(): VNode[] | null {
     }, liveStatsSummary.value))
   }
 
+  // v3.7.6 — ZCode-style +N -M diff stats for Edit/Write when we
+  // can compute them from the input. Falls back to line count
+  // (treated as 'added') for Write.
+  const diffNode = renderDiffStats()
+  if (diffNode) nodes.push(diffNode)
+
   if (props.result?.isError) {
     nodes.push(h('span', {
       class: 'material-symbols-outlined shrink-0 text-[14px] text-[var(--color-error)]',
     }, 'error'))
+  } else if (props.result && !props.result.isError) {
+    // Completed successfully — show a small green check, ZCode pattern.
+    nodes.push(h('span', {
+      class: 'material-symbols-outlined shrink-0 text-[14px]',
+      style: { color: 'var(--zcode-diff-added, #1e8a3e)' },
+      title: '完成',
+    }, 'check_circle'))
   }
 
   if (expandable.value) {
@@ -631,6 +647,55 @@ const hasRawResult = computed(() => {
 })
 
 const statusNodes = computed(() => renderStatusIndicators() || [])
+
+/**
+ * v3.7.6 — ZCode-style +N -M diff stats. Computes added/removed
+ * line counts for Edit (old_string vs new_string) and Write (all
+ * lines counted as added). Returns null when not applicable.
+ */
+function renderDiffStats(): VNode | null {
+  // Only show after the tool has produced a result (not while pending).
+  if (!props.result || props.result.isError) return null
+  const o = obj.value || {}
+  try {
+    if (props.toolName === 'Edit' || props.toolName === 'MultiEdit') {
+      let oldStr = ''
+      let newStr = ''
+      if (typeof o.old_string === 'string') oldStr = o.old_string
+      if (typeof o.new_string === 'string') newStr = o.new_string
+      // MultiEdit: aggregate across the edits array.
+      if (Array.isArray(o.edits)) {
+        for (const e of o.edits as Array<Record<string, unknown>>) {
+          if (typeof e.old_string === 'string') oldStr += '\n' + e.old_string
+          if (typeof e.new_string === 'string') newStr += '\n' + e.new_string
+        }
+      }
+      if (!oldStr && !newStr) return null
+      const removed = oldStr ? oldStr.split('\n').filter(Boolean).length : 0
+      const added = newStr ? newStr.split('\n').filter(Boolean).length : 0
+      if (!added && !removed) return null
+      return h('span', {
+        class: 'shrink-0 tabular-nums text-[11px] font-[var(--font-mono)]',
+      }, [
+        added > 0 ? h('span', { style: { color: 'var(--zcode-diff-added, #1e8a3e)' } }, `+${added}`) : null,
+        added > 0 && removed > 0 ? h('span', { class: 'mx-0.5' }, ' ') : null,
+        removed > 0 ? h('span', { style: { color: 'var(--zcode-diff-removed, #e03131)' } }, `-${removed}`) : null,
+      ])
+    }
+    if (props.toolName === 'Write') {
+      const content = typeof o.content === 'string' ? o.content : ''
+      if (!content) return null
+      const added = content.split('\n').filter(Boolean).length
+      if (!added) return null
+      return h('span', {
+        class: 'shrink-0 tabular-nums text-[11px] font-[var(--font-mono)]',
+      }, [
+        h('span', { style: { color: 'var(--zcode-diff-added, #1e8a3e)' } }, `+${added}`),
+      ])
+    }
+  } catch { /* fall through */ }
+  return null
+}
 
 const previewContent = computed(() => renderPreviewContent())
 
