@@ -2321,6 +2321,15 @@ def create_app() -> FastAPI:
 
                         _clarify_emitted = False
                         _react_failed = 0
+                        # Per-tool-call counter for the 'tool_calls' SSE field.
+                        # The deep branch initialises this at app.py:2531,
+                        # but standard ReAct references it at app.py:2361
+                        # when a step emits a tool call. Without this init,
+                        # any standard-mode turn that calls a tool (i.e.
+                        # every non-trivial question) dies with
+                        # UnboundLocalError: cannot access local variable
+                        # '_ev_token_counts'.
+                        _ev_token_counts: dict[str, int] = {}
                         while True:
                             # Poll so we can send SSE keepalives during long tool calls.
                             try:
