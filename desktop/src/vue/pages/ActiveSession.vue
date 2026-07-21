@@ -39,6 +39,7 @@ import SessionTaskBar from '../components/chat/SessionTaskBar.vue'
 import MadCopLoader from '../components/common/MadCopLoader.vue'
 import WorkbenchPanel from '../components/workbench/WorkbenchPanel.vue'
 import RagDebugPanel from '../components/chat/RagDebugPanel.vue'
+import SseDebugOverlay from '../components/chat/SseDebugOverlay.vue'
 import WorkspacePanel from '../components/workspace/WorkspacePanel.vue'
 import PreviewPanel from '../components/design/PreviewPanel.vue'
 import TeamStatusBar from '../components/teams/TeamStatusBar.vue'
@@ -782,6 +783,13 @@ function openTerminalInTab() {
           <template v-else>
             <div class="flex-1 min-h-0 w-full overflow-y-auto pt-6">
               <div class="mx-auto max-w-[860px] px-5">
+                <!-- v3.7.1 — SSE debug overlay. Visible only when
+                     session.debugSSELog has entries, so casual users
+                     never see it. Replace this with a proper DevTools
+                     integration once we ship one. -->
+                <div v-if="activeTabId" class="mb-2">
+                  <SseDebugOverlay :session-id="activeTabId" />
+                </div>
                 <MessageList :compact="showRightPanel" />
               </div>
             </div>

@@ -137,6 +137,9 @@ export type PerSessionState = {
   historyStatus?: 'idle' | 'loading' | 'ready' | 'error'
   historyError?: string | null
   streamingText: string
+  /** Temporary SSE event log for in-UI debugging (no DevTools needed).
+   *  Each entry is { t, type, id, preview }. Capped at 200 entries. */
+  debugSSELog?: { t: number; type: string; id?: number; preview?: string }[]
   streamingToolInput: string
   activeToolUseId: string | null
   activeToolName: string | null
@@ -571,12 +574,19 @@ export const useChatStore = defineStore('chat', {
               }
             } catch {}
             pushChatError(reason || `请求失败 (HTTP ${res.status})`)
+            if (!session.debugSSELog) session.debugSSELog = []
+            session.debugSSELog.push({
+              t: Date.now(), type: 'HTTP_ERROR',
+              preview: `status=${res.status} ${reason.slice(0, 100)}`,
+            })
             return
           }
           // Read the SSE stream
           const reader = res.body?.getReader()
           if (!reader) {
             pushChatError('无法读取服务器返回的数据流')
+            if (!session.debugSSELog) session.debugSSELog = []
+            session.debugSSELog.push({ t: Date.now(), type: 'NO_READER', preview: 'res.body null' })
             return
           }
           session.reasoningContent = null
@@ -669,6 +679,27 @@ export const useChatStore = defineStore('chat', {
                   if (w.__madcopSSE.length < 500) {
                     w.__madcopSSE.push({ t: Date.now(), type: event.type, id: event.id })
                   }
+                }
+                // In-UI mirror so users without DevTools can still see
+                // what events arrived. Capped at 200 to bound memory.
+                if (!session.debugSSELog) session.debugSSELog = []
+                if (session.debugSSELog.length < 200) {
+                  let preview = ''
+                  if (event.type === 'text' && event.content) {
+                    preview = String(event.content).slice(0, 60)
+                  } else if (event.type === 'error' && event.message) {
+                    preview = String(event.message).slice(0, 120)
+                  } else if (event.type === 'plan' && event.plan) {
+                    preview = `steps=${event.plan.steps?.length ?? 0} status=${event.plan.status}`
+                  } else if (event.type === 'tool' && event.name) {
+                    preview = event.name
+                  }
+                  session.debugSSELog.push({
+                    t: Date.now(),
+                    type: event.type,
+                    id: event.id,
+                    preview,
+                  })
                 }
                 if (event.type === 'text' && event.content) {
                     // Push the assistant placeholder NOW (after any tool_use
@@ -984,13 +1015,19 @@ export const useChatStore = defineStore('chat', {
         .catch((err: any) => {
           // A new message aborts the previous in-flight request via
           // session._abortCtrl — that's expected, not an error.
-          if (err && err.name === 'AbortError') return
+          if (err && err.name === 'AbortError') {
+            if (!session.debugSSELog) session.debugSSELog = []
+            session.debugSSELog.push({ t: Date.now(), type: 'ABORT', preview: 'fetch aborted' })
+            return
+          }
           // Network-level failure (backend down, connection refused, etc.).
           // Surface a concrete reason instead of a blank red state.
           const reason =
             err && err.message
               ? `无法连接到后端服务 (${err.message})`
               : '无法连接到后端服务，请确认服务已启动'
+          if (!session.debugSSELog) session.debugSSELog = []
+          session.debugSSELog.push({ t: Date.now(), type: 'NETWORK_ERROR', preview: reason })
           pushChatError(reason)
         })
     },
