@@ -2079,6 +2079,14 @@ def create_app() -> FastAPI:
                 # of this handler relies on).
                 _am_client = client
                 _am_model = body.model or None
+                # Pre-declare so the post-loop `_sse_save_assistant(_answer, ...)`
+                # is safe even if no agent-mode branch assigned it (e.g. the
+                # chain fell through to an `else` we don't have, or a branch
+                # returned early without setting _answer). Without this,
+                # UnboundLocalError fired inside the `except Exception as e`
+                # below — which is exactly why the chat stream died silently
+                # at "ReAct 思考中…" with no tokens delivered.
+                _answer = ""
                 try:
                     if _agent_mode == "quick":
                         # Direct single-shot LLM call (full messages incl. attachments).
