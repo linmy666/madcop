@@ -90,19 +90,27 @@
         {{ statusHint }}
       </div>
 
-      <!-- Live reasoning chain (model's real thinking) — collapsible -->
+      <!-- Live reasoning chain (model's real thinking).
+           v3.7.5 — defaults to EXPANDED while the agent is working
+           so the user sees the streaming narrative form live
+           (opencode/ZCode parity). Adds a blinking caret at the
+           end while new tokens are arriving, and a subtle fade-in
+           on newly appended text. Auto-collapses when the turn
+           finishes (parent hides the whole indicator on idle). -->
       <div v-if="reasoningContent && reasoningContent.trim()" class="mt-1.5">
         <button
           type="button"
-          class="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] underline-offset-2 hover:underline"
+          class="td-toggle"
           @click="showReasoning = !showReasoning"
         >
-          {{ showReasoning ? '收起思考过程' : '查看思考过程' }}
+          <span class="td-toggle__icon">{{ showReasoning ? '▾' : '▸' }}</span>
+          <span>{{ showReasoning ? '收起思考过程' : '查看思考过程' }}</span>
         </button>
-        <pre
-          v-if="showReasoning"
-          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[var(--color-surface-2,#f5f5f4)] px-2 py-1.5 text-[11px] leading-[1.6] text-[var(--color-text-secondary)]"
-        >{{ reasoningContent.trim() }}</pre>
+        <div v-if="showReasoning" class="td-stream-wrap">
+          <pre
+            class="td-stream"
+          ><span class="td-stream__text">{{ reasoningContent.trim() }}</span><span class="td-stream__caret" aria-hidden="true">▍</span></pre>
+        </div>
       </div>
 
       <div class="relative mt-1.5 h-[2px] overflow-hidden rounded-full bg-[var(--color-border)]/40">
@@ -133,7 +141,10 @@ const props = defineProps<{
   } | null
 }>()
 
-const showReasoning = ref(false)
+// v3.7.5 — default to EXPANDED so the user sees streaming thinking
+// without needing to click. The parent hides the whole indicator
+// when the turn finishes, so we don't need to auto-collapse.
+const showReasoning = ref(true)
 
 const elapsedMs = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
@@ -275,5 +286,68 @@ const elapsedText = computed(() => {
   font-family: var(--font-body);
   font-style: italic;
   letter-spacing: 0.2px;
+}
+
+/* v3.7.5 — streaming reasoning display.
+ * Borrowed from opencode (markdown streaming cursor) and codex
+ * (caret blink on live text). The caret ▍ is appended after the
+ * accumulated text and blinks at 1s; the wrapper has a subtle
+ * background tint so the user can tell it's 'live' content. */
+.td-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 120ms, background 120ms;
+}
+.td-toggle:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-hover, rgba(0,0,0,0.04));
+}
+.td-toggle__icon {
+  font-size: 9px;
+  width: 8px;
+  display: inline-block;
+}
+.td-stream-wrap {
+  margin-top: 4px;
+  position: relative;
+}
+.td-stream {
+  margin: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  word-break: break-word;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-brand, #7c3aed) 6%, var(--color-surface, #fff));
+  border: 1px solid color-mix(in srgb, var(--color-brand, #7c3aed) 18%, var(--color-border, #e5e5e7));
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--color-text-secondary, #555);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+}
+.td-stream__caret {
+  display: inline-block;
+  width: 6px;
+  margin-left: 1px;
+  color: var(--color-brand, #7c3aed);
+  font-weight: 700;
+  animation: td-caret-blink 1s steps(2, start) infinite;
+}
+@keyframes td-caret-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .td-stream__caret { animation: none; opacity: 0.6; }
 }
 </style>
