@@ -428,6 +428,29 @@ export const useChatStore = defineStore('chat', {
       session.agentStreams = {}
       session.clarificationPending = null
 
+      // Diagnostic: count how many times sendMessage is called for this
+      // session within a short window. If the count climbs while a fetch
+      // is in-flight, the new call will abort the old one — that's the
+      // root cause of "ABORT fetch aborted" appearing immediately after
+      // the user sends a single message.
+      const _now = Date.now()
+      const _lastSendAt = (session as any)._lastSendAt || 0
+      const _sendCount = (session as any)._sendCount || 0
+      ;(session as any)._lastSendAt = _now
+      ;(session as any)._sendCount = _sendCount + 1
+      if (_now - _lastSendAt < 5000) {
+        // Rapid double-send within 5s — this is almost certainly a bug
+        // (duplicate event binding, watcher firing, etc.). Record the
+        // stack so we can identify the caller without DevTools.
+        const stack = new Error('sendMessage rapid-call').stack || ''
+        if (!session.debugSSELog) session.debugSSELog = []
+        session.debugSSELog.push({
+          t: _now,
+          type: 'RAPID_SEND',
+          preview: `count=${_sendCount + 1} within 5s; stack=${stack.split('\n').slice(2, 6).join(' | ')}`,
+        })
+      }
+
       // Abort any in-flight request for this session so stale SSE events
       // from the old message can't overwrite the new plan / messages.
       if (session._abortCtrl) { try { session._abortCtrl.abort() } catch {} }

@@ -792,6 +792,15 @@ const handleSubmit = async () => {
 // ─── Key handler ───────────────────────────────────────────────
 
 function handleKeydown(event: KeyboardEvent) {
+  // Deduplicate: when the textarea is focused, the same Enter key
+  // fires on both the local @keydown handler and the global
+  // document-level listener registered in onMounted(). Without this
+  // guard, handleSubmit() runs twice — first call sends the message
+  // + sets chatState='busy', second call sees isActive=true + empty
+  // input and treats it as a Stop gesture, aborting the in-flight
+  // fetch. That's the root cause of "ABORT fetch aborted" showing
+  // up immediately after a single Enter press.
+  if (event.defaultPrevented) return
   // Ignore during IME composition
   if (composingRef.value || (event as any).nativeEvent?.isComposing || (event as any).keyCode === 229) return
 
