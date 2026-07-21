@@ -136,6 +136,11 @@ function clear() {
   padding: 8px 12px;
   font-size: 13px;
   color: var(--color-text-primary);
+  /* v3.7.3 — explicit caret-color so it never inherits the brand
+   *  purple from a parent. The flashing purple caret was reported
+   *  as a visual bug; this pins it to the same colour as the
+   *  typed text. */
+  caret-color: var(--color-text-primary, #111);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   outline: none;

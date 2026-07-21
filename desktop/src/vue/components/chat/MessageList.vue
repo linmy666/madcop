@@ -178,6 +178,20 @@ const spriteRoster = computed<SpriteAgent[]>(() =>
     chatState: sessionState.value?.chatState,
   }),
 )
+/**
+ * v3.7.3 — only show the sprite island when there's a genuine
+ * multi-agent roster (deep mode with specialists, or multiple
+ * concurrent agent streams). Standard mode has a single agent that
+ * is already represented by ThinkingIndicator; rendering a second
+ * floating mascot for it was redundant.
+ */
+const hasDeepRoster = computed(() => {
+  const streams = sessionState.value?.agentStreams
+  const streamCount = streams ? Object.keys(streams).length : 0
+  const specialists = sessionState.value?.deepRoute?.specialists
+  const specialistCount = Array.isArray(specialists) ? specialists.length : 0
+  return streamCount >= 2 || specialistCount >= 2
+})
 const selectedSpriteId = ref<string | null>(null)
 const selectedSpriteDetail = computed<SpriteDetail | null>(() =>
   selectSpriteDetail(spriteRoster.value, selectedSpriteId.value),
@@ -1116,8 +1130,13 @@ function renderItemContent(item: RenderItem) {
           :agents="agentStreams"
         />
 
-        <!-- P0 Sprite Island: compact mascot dock bound to session roster -->
+        <!-- P0 Sprite Island: compact mascot dock bound to session roster.
+             v3.7.3 — only render in deep mode (multi-specialist roster).
+             In standard / quick mode the single agent is already
+             represented by ThinkingIndicator, so the island was
+             redundant visual noise. -->
         <SpriteIsland
+          v-if="hasDeepRoster"
           :roster="spriteRoster"
           :selected-id="selectedSpriteId"
           @select="onSpriteSelect"
