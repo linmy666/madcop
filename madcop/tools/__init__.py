@@ -1,5 +1,7 @@
 """L7 — Tool registry for agent tool use."""
 
+from typing import Any
+
 from ..memory import MemoryStore
 from ..llm import ToolCall
 from .registry import (
@@ -49,13 +51,30 @@ from .runtime_info import GetCurrentModelTool
 from .market import MarketQuoteTool, MarketHistoryTool
 from .quant import QuantFactorsTool, QuantBacktestSimpleTool
 from .paper import PaperAccountTool, PaperOrderTool, PaperResetTool
+# v3.7 — modular RAG tools (query_rag / remember / route)
+from .rag_tools import (
+    QueryRagTool,
+    RememberTool,
+    RouteTool,
+    RagToolContext,
+    default_rag_tools,
+)
 
 
-def default_registry(store: MemoryStore | None = None, workspace_dir: str | None = None) -> ToolRegistry:
+def default_registry(
+    store: MemoryStore | None = None,
+    workspace_dir: str | None = None,
+    rag_context: Any | None = None,
+) -> ToolRegistry:
     """Build a ToolRegistry pre-loaded with the built-in chat tools.
 
     If `store` is provided, the LLM-managed memory tools (store/recall/forget)
     are also registered so the agent can write to its own long-term memory.
+
+    If `rag_context` (a `RagToolContext` from `.rag_tools`) is provided, the
+    modular RAG tools (query_rag, remember, route) are also registered so the
+    agent can pull structured context from memory and dispatch to the 3-tier
+    router.
     """
     reg = ToolRegistry()
     reg.register(EchoTool())
@@ -112,6 +131,16 @@ def default_registry(store: MemoryStore | None = None, workspace_dir: str | None
         from .memory import default_memory_tools
         for tool in default_memory_tools(store):
             reg.register(tool)
+    if rag_context is not None:
+        # v3.7 — modular RAG tools: query_rag / remember / route
+        try:
+            from .rag_tools import default_rag_tools
+            for tool in default_rag_tools(rag_context):
+                reg.register(tool)
+        except Exception:  # noqa: BLE001 — best-effort, no hard failure
+            # If the modular RAG subsystem isn't wired yet (e.g. during a
+            # partial install), keep the rest of the registry intact.
+            pass
     return reg
 
 
@@ -176,5 +205,11 @@ __all__ = [
     "PaperAccountTool",
     "PaperOrderTool",
     "PaperResetTool",
+    # v3.7 — modular RAG
+    "QueryRagTool",
+    "RememberTool",
+    "RouteTool",
+    "RagToolContext",
+    "default_rag_tools",
     "default_registry",
 ]

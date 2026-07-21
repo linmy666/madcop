@@ -38,6 +38,7 @@ import ClarificationPanel from '../components/chat/ClarificationPanel.vue'
 import SessionTaskBar from '../components/chat/SessionTaskBar.vue'
 import MadCopLoader from '../components/common/MadCopLoader.vue'
 import WorkbenchPanel from '../components/workbench/WorkbenchPanel.vue'
+import RagDebugPanel from '../components/chat/RagDebugPanel.vue'
 import WorkspacePanel from '../components/workspace/WorkspacePanel.vue'
 import PreviewPanel from '../components/design/PreviewPanel.vue'
 import TeamStatusBar from '../components/teams/TeamStatusBar.vue'
@@ -50,7 +51,11 @@ import { isDesktopRuntime } from '../lib/desktopRuntime'
 import { formatTokenCount } from '../lib/formatTokenCount'
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const TASK_POLL_INTERVAL_MS = 1000
+// 30s polling is plenty for human perception (you can see task status
+// update within 30s). Was 1s and saturated the backend with hundreds
+// of list_tasks calls per minute, which made the SSE /api/chat handler
+// queue back up and froze the UI.
+const TASK_POLL_INTERVAL_MS = 30000
 const WORKSPACE_RESIZE_STEP = 32
 const TERMINAL_RESIZE_STEP = 24
 const CHAT_COLUMN_WITH_WORKSPACE_CLASS =
@@ -314,6 +319,20 @@ onBeforeUnmount(() => {
 const messages = computed(() => sessionState.value?.messages ?? [])
 const streamingText = computed(() => sessionState.value?.streamingText ?? '')
 const activeGoal = computed(() => sessionState.value?.activeGoal ?? null)
+
+// RAG debug panel: extract the latest user message for inspection.
+const lastUserQuery = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+    const m: any = messages.value[i]
+    if (m?.role === 'user' && (m.content || m.text)) {
+      return String(m.content || m.text || '')
+    }
+  }
+  return ''
+})
+// Persist panel state across sessions; default off so casual users
+// don't see it.
+const ragDebugOpen = ref(false)
 
 const isEmpty = computed(() =>
   messages.value.length === 0 &&
@@ -775,6 +794,25 @@ function openTerminalInTab() {
         <!-- Team status bar -->
         <TeamStatusBar />
 
+        <!-- v3.7 — RAG debug toggle (only visible for non-member sessions). -->
+        <div
+          v-if="!isMemberSession && activeTabId"
+          class="relative z-10 w-full shrink-0 px-4 pt-1"
+        >
+          <div class="mx-auto max-w-[860px] flex justify-end">
+            <button
+              type="button"
+              class="rag-debug-toggle"
+              :class="{ 'rag-debug-toggle--active': ragDebugOpen }"
+              :title="ragDebugOpen ? '关闭 RAG 调试面板' : '打开 RAG 调试面板'"
+              @click="ragDebugOpen = !ragDebugOpen"
+            >
+              <span class="material-symbols-outlined text-[16px]">psychology</span>
+              <span>RAG 调试</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Clarification sits above composer so it never overlays message history -->
         <div
           v-if="!isMemberSession && activeTabId"
@@ -782,6 +820,22 @@ function openTerminalInTab() {
         >
           <div class="mx-auto max-w-[860px]">
             <ClarificationPanel :session-id="activeTabId" />
+          </div>
+        </div>
+
+        <!-- v3.7 — RAG debug inspector. Toggle with the gear button
+             next to the session task bar; the panel itself refreshes
+             whenever the latest user message changes. -->
+        <div
+          v-if="!isMemberSession && activeTabId && ragDebugOpen"
+          class="relative z-10 w-full shrink-0 border-t border-[var(--color-border)]/60 bg-[var(--color-surface)] px-4 pt-2 pb-3"
+        >
+          <div class="mx-auto max-w-[860px]">
+            <RagDebugPanel
+              :query="lastUserQuery"
+              :visible="ragDebugOpen"
+              @close="ragDebugOpen = false"
+            />
           </div>
         </div>
 
@@ -900,3 +954,28 @@ function openTerminalInTab() {
 </template>
 
 
+
+<style>
+.rag-debug-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, #e5e5e7);
+  background: var(--color-surface, #fff);
+  color: var(--color-text-secondary, #555);
+  cursor: pointer;
+  transition: background 140ms, color 140ms;
+}
+.rag-debug-toggle:hover {
+  background: var(--color-surface-hover, #f0f0f2);
+  color: var(--color-text-primary, #111);
+}
+.rag-debug-toggle--active {
+  background: color-mix(in srgb, var(--color-brand, #7c3aed) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-brand, #7c3aed) 40%, transparent);
+  color: var(--color-brand, #7c3aed);
+}
+</style>

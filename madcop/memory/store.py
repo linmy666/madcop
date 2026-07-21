@@ -279,7 +279,17 @@ class MemoryStore:
         """FTS5 search across title/content/tags. Optional kind filter.
 
         The query uses FTS5 query syntax: 'oms AND spike', 'cancel*' for prefix.
+
+        Defensively strips any FTS5 reserved punctuation (`?`, `(`, `)`,
+        `:`, `"`, `+`, `^`) from the input so that free-form natural
+        language queries don't blow up the FTS5 parser. Prefix `*` and
+        `AND`/`OR`/`NOT` keywords are preserved by design.
         """
+        import re as _re
+        cleaned = _re.sub(r"[?()\":+^\-]", " ", query or "").strip()
+        if not cleaned:
+            return []
+        query = cleaned
         # Always use a kind filter when specified; otherwise match all
         if kinds is not None and len(kinds) > 0:
             placeholders = ",".join("?" for _ in kinds)

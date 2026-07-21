@@ -2162,6 +2162,34 @@ def create_app() -> FastAPI:
                             _home = str(Path.home())
                         except Exception:
                             _home = "~"
+                        # v3.7 — wire the modular RAG tools (query_rag /
+                        # remember / route) into the standard ReAct tool
+                        # registry. Built lazily so we don't pay the cost
+                        # for quick-mode or unsupported configs.
+                        _rag_ctx = None
+                        try:
+                            from madcop.server.deps import get_memory_store
+                            from madcop.memory.retriever import (
+                                Retriever as _RAGRetriever,
+                                ModularRetriever as _RAGModular,
+                            )
+                            from madcop.memory.episodic import EpisodicMemory as _RAGEpi
+                            from madcop.memory.semantic import SemanticMemory as _RAGSem
+                            from madcop.memory.reflective import ReflectiveMemory as _RAGRef
+                            from madcop.memory.router import RouterConfig as _RAGRC
+                            from madcop.tools.rag_tools import RagToolContext as _RAGCtx
+                            _store = get_memory_store()
+                            _epi = _RAGEpi(_store); _sem = _RAGSem(_store); _ref = _RAGRef(_store)
+                            _raw_ret = _RAGRetriever(_epi, _sem, _ref)
+                            _mod_ret = _RAGModular(_raw_ret, web_fallback=None)
+                            _rag_ctx = _RAGCtx(
+                                store=_store,
+                                retriever=_mod_ret,
+                                router_config=_RAGRC(),
+                                call_llm=None,
+                            )
+                        except Exception as _rag_e:
+                            logger.debug("chat: RAG context build failed: %s", _rag_e)
                         _react_prefix = (
                             "你是 MadCop 标准模式助手。你可以看到下方「对话历史」。\n"
                             "规则：\n"
@@ -2174,10 +2202,15 @@ def create_app() -> FastAPI:
                             "5. 禁止声称「无法访问之前的对话」——历史已在下方注入。\n"
                             "6. 用户问「你是什么模型/当前模型」时必须调用 get_current_model，"
                             "按工具返回的 effective_model 回答，禁止瞎猜。\n"
+                            "7. 当用户问题依赖历史/用户资料/已存储的反思时，优先调用 query_rag 取结构化"
+                            "上下文，再写答案；学到用户新偏好/事实时调用 remember 落地。\n"
                         )
                         _eng = ReActEngine(
                             client=_am_client,
-                            tools=default_registry(workspace_dir=_effective_wd).openai_schemas(),
+                            tools=default_registry(
+                                workspace_dir=_effective_wd,
+                                rag_context=_rag_ctx,
+                            ).openai_schemas(),
                             max_steps=12,
                             model=_am_model,
                             system_prefix=_react_prefix,
