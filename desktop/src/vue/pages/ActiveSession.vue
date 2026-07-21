@@ -334,6 +334,12 @@ const lastUserQuery = computed(() => {
 // Persist panel state across sessions; default off so casual users
 // don't see it.
 const ragDebugOpen = ref(false)
+// v3.7.5 — debug panels (SSE overlay, RAG toggle) are hidden by
+// default. Set window.__madcopShowDebug = true in DevTools to bring
+// them back. This keeps casual users from seeing internal tooling.
+const showDebugPanels = ref(
+  typeof window !== 'undefined' && (window as any).__madcopShowDebug === true
+)
 
 const isEmpty = computed(() =>
   messages.value.length === 0 &&
@@ -783,11 +789,10 @@ function openTerminalInTab() {
           <template v-else>
             <div class="flex-1 min-h-0 w-full overflow-y-auto pt-6">
               <div class="mx-auto max-w-[860px] px-5">
-                <!-- v3.7.1 — SSE debug overlay. Visible only when
-                     session.debugSSELog has entries, so casual users
-                     never see it. Replace this with a proper DevTools
-                     integration once we ship one. -->
-                <div v-if="activeTabId" class="mb-2">
+                <!-- v3.7.1 — SSE debug overlay. Hidden by default from v3.7.5:
+                     this is internal-only debugging. Re-enable by
+                     setting window.__madcopShowDebug = true. -->
+                <div v-if="activeTabId && showDebugPanels" class="mb-2">
                   <SseDebugOverlay :session-id="activeTabId" />
                 </div>
                 <MessageList :compact="showRightPanel" />
@@ -802,9 +807,11 @@ function openTerminalInTab() {
         <!-- Team status bar -->
         <TeamStatusBar />
 
-        <!-- v3.7 — RAG debug toggle (only visible for non-member sessions). -->
+        <!-- v3.7 — RAG debug toggle. Hidden by default from v3.7.5:
+             this is internal-only. Re-enable by setting
+             window.__madcopShowDebug = true in DevTools. -->
         <div
-          v-if="!isMemberSession && activeTabId"
+          v-if="!isMemberSession && activeTabId && showDebugPanels"
           class="relative z-10 w-full shrink-0 px-4 pt-1"
         >
           <div class="mx-auto max-w-[860px] flex justify-end">

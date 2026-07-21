@@ -150,12 +150,15 @@ const sessionState = computed(() => {
 const messages = computed(() => sessionState.value?.messages ?? EMPTY_MESSAGES)
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
 const isAIThinking = computed(() => {
-  // Show the indicator while AI is preparing a response and hasn't
-  // started streaming visible text yet. Once text starts flowing, the
-  // AssistantMessage itself shows.
+  // v3.7.5 — the indicator should stay visible as long as the
+  // agent is producing output (busy / thinking / tool_executing /
+  // streaming). Previously it was hidden the moment streamingText
+  // became non-empty, which meant the streaming reasoning panel
+  // disappeared the instant the first answer token arrived — so
+  // the user never saw the 'thinking' animation we added.
   const s = chatState.value
-  if (s === 'busy' || s === 'thinking' || s === 'tool_executing') {
-    return !streamingText.value.trim()
+  if (s === 'busy' || s === 'thinking' || s === 'tool_executing' || s === 'streaming') {
+    return true
   }
   // If a clarification JSON is pending, the AI is "thinking about"
   // what to ask — show the indicator too.
