@@ -745,6 +745,17 @@ export const useChatStore = defineStore('chat', {
                         }
                       } catch { /* keep raw */ }
                     }
+                    // v3.7.6 — defense in depth: strip any ReAct protocol
+                    // markers that slipped through (e.g. older backend
+                    // builds, or a turn where the streaming FINAL_ANSWER
+                    // detector didn't fire). The user should never see
+                    // 'Thought:' / 'Action:' / 'FINAL_ANSWER:' in the
+                    // reply bubble.
+                    chunk = chunk
+                      .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
+                      // Bare 'FINAL_ANSWER:' without prefix word-boundary
+                      .replace(/(FINAL_ANSWER)\s*[:：]/gi, '')
+                      .replace(/\n{3,}/g, '\n\n')
                     if (chunk.includes('\\n') && (chunk.match(/\n/g) || []).length < (chunk.match(/\\n/g) || []).length) {
                       chunk = chunk.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
                     }
@@ -1228,12 +1239,27 @@ export const useChatStore = defineStore('chat', {
           }
           const role = m.role || m.type || 'assistant'
           const type = m.type || (role === 'user' || role === 'user_text' ? 'user_text' : 'assistant_text')
+          // v3.7.6 — sanitize historical assistant messages: older
+          // backend builds (before the streaming FINAL_ANSWER
+          // detector) could persist the raw ReAct protocol text
+          // ('Thought:', 'Action:', 'FINAL_ANSWER:') into the
+          // stored assistant_text content. Strip those on load so
+          // the user doesn't see protocol noise from prior buggy
+          // turns. We only touch assistant_text; user_text is
+          // preserved verbatim.
+          let content = m.content || m.text || ''
+          if (type === 'assistant_text' && content) {
+            content = content
+              .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
+              .replace(/\n{3,}/g, '\n\n')
+              .replace(/^\s+/, '')
+          }
           return {
             id,
             transcriptMessageId: id,
             role,
             type,
-            content: m.content || m.text || '',
+            content,
             createdAt: m.createdAt || m.timestamp || new Date().toISOString(),
             timestamp: typeof m.timestamp === 'number' ? m.timestamp : Date.now(),
             toolCalls: m.toolCalls || [],
