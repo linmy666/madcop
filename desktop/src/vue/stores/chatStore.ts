@@ -658,6 +658,18 @@ export const useChatStore = defineStore('chat', {
                   // alive so a single bad line doesn't drop the run.
                   continue
                 }
+                // Debug telemetry — mirrors opencode's stream.ts which
+                // logs every event id/type at 'debug' level. Without
+                // this, a silently-dropped event leaves no trace and
+                // "the chat just didn't reply" becomes impossible to
+                // triage from the client side.
+                if (typeof window !== 'undefined') {
+                  const w = window as any
+                  if (!w.__madcopSSE) w.__madcopSSE = []
+                  if (w.__madcopSSE.length < 500) {
+                    w.__madcopSSE.push({ t: Date.now(), type: event.type, id: event.id })
+                  }
+                }
                 if (event.type === 'text' && event.content) {
                     // Push the assistant placeholder NOW (after any tool_use
                     // messages have already been pushed) so the timeline is
@@ -712,6 +724,16 @@ export const useChatStore = defineStore('chat', {
                     _flushTerminal()
                     if (assistantMsgObj) {
                       assistantMsgObj.isStreaming = false
+                    } else if (assistantMsg) {
+                      // Defensive: if we somehow accumulated text
+                      // without ever calling ensureAssistantPushed
+                      // (e.g. an upstream event-ordering bug), make
+                      // sure the user sees the reply instead of an
+                      // empty bubble. This matches opencode's
+                      // invariant that 'done' always leaves an
+                      // assistant turn on screen.
+                      ensureAssistantPushed()
+                      if (assistantMsgObj) assistantMsgObj.isStreaming = false
                     }
                     // The ReAct loop ended without the user answering
                     // a pending ask_user question (the loop bails on
