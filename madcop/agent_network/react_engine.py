@@ -99,6 +99,12 @@ Action Input: <工具参数，JSON格式；如果是 FINAL_ANSWER 则直接输�
    不需要查记忆库。
 10. 大多数问题不需要任何工具调用 — 第一次 Thought 之后就能直接 FINAL_ANSWER。
     只有真正需要外部信息（时间、文件、网页、用户记忆）时才调用工具。
+11. **写文件优先一次性写完**。调用 write_file 时把完整内容一次性写入；
+    禁止对同一文件连续调用 write_file 两次（第二次会覆盖第一次）。如需修改
+    已有文件，改用 edit_file。
+12. **思考用自然语言，不要带协议标记**。你的 Thought 字段会被实时展示给
+    用户看，所以要像跟用户说话一样写（例如"让我看看这个问题..."），不要
+    出现 "Action:" / "Action Input:" 这种格式词（系统会自动剥离）。
 """
 
 
@@ -466,6 +472,22 @@ class ReActEngine:
 
             try:
                 if hasattr(self.client, "stream"):
+                    # v3.7.4 — protocol-marker filter for reasoning.
+                    # The raw model output contains 'Thought:',
+                    # 'Action:', 'Action Input:' markers that are
+                    # internal protocol — the user should see only
+                    # the natural-language thinking. We strip them
+                    # at the regex level after each chunk: any of
+                    # these markers (with optional spaces around the
+                    # colon) is removed from the emitted text. The
+                    # accumulated `raw` is left untouched so the
+                    # parser at the end still sees the full structure.
+                    _PROTOCOL_RE = re.compile(
+                        r"(Thought|Action\s*Input|Action|Observation)"
+                        r"\s*[:：]\s*",
+                        re.IGNORECASE,
+                    )
+
                     for chunk in self.client.stream(
                         messages,
                         model=self.model,
@@ -476,41 +498,29 @@ class ReActEngine:
                         if text:
                             raw += text
                             if _stream_state == 0:
-                                # Check if the marker just appeared in
-                                # the accumulated text. Use search() on
-                                # the tail so we catch it across chunk
-                                # boundaries (the marker may be split).
                                 if _FA_MARKER.search(raw):
                                     _stream_state = 1
-                                    # Token still goes to reasoning —
-                                    # the marker line itself isn't user-
-                                    # facing answer text.
+                                # Strip any protocol markers from
+                                # the user-facing reasoning text.
+                                emit = _PROTOCOL_RE.sub("", text)
+                                if emit:
                                     yield ReActStep(
                                         step_num=step_num, is_token=True,
-                                        token=text, is_final_answer_token=False,
-                                    )
-                                else:
-                                    yield ReActStep(
-                                        step_num=step_num, is_token=True,
-                                        token=text, is_final_answer_token=False,
+                                        token=emit,
+                                        is_final_answer_token=False,
                                     )
                             elif _stream_state == 1:
-                                # Looking for 'Action Input:' marker.
                                 if _AI_MARKER.search(raw):
                                     _stream_state = 2
-                                    # Discard this chunk — it contains
-                                    # the marker text, not answer text.
                                 else:
-                                    # Still in between; route to reasoning.
-                                    yield ReActStep(
-                                        step_num=step_num, is_token=True,
-                                        token=text, is_final_answer_token=False,
-                                    )
+                                    emit = _PROTOCOL_RE.sub("", text)
+                                    if emit:
+                                        yield ReActStep(
+                                            step_num=step_num, is_token=True,
+                                            token=emit,
+                                            is_final_answer_token=False,
+                                        )
                             else:  # _stream_state == 2
-                                # Past the marker — this is live final-
-                                # answer text. Strip a leading space /
-                                # newline that the model often emits
-                                # right after 'Action Input:'.
                                 _clean = text
                                 if not getattr(self, "_fa_leading_trimmed", False):
                                     _clean = _clean.lstrip(" \t\n")
@@ -519,12 +529,12 @@ class ReActEngine:
                                 if _clean:
                                     yield ReActStep(
                                         step_num=step_num, is_token=True,
-                                        token=_clean, is_final_answer_token=True,
+                                        token=_clean,
+                                        is_final_answer_token=True,
                                     )
                         fr = getattr(chunk, "finish_reason", None)
                         if fr:
                             break
-                    # Reset the per-turn trim flag for the next step.
                     self._fa_leading_trimmed = False
                 else:
                     resp = self.client.chat(

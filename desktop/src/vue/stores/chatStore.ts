@@ -805,7 +805,31 @@ export const useChatStore = defineStore('chat', {
                       })
                     } catch { /* toast optional */ }
                   } else if (event.type === 'reasoning' && event.content) {
-                    session.reasoningContent = (session.reasoningContent || '') + event.content
+                    // v3.7.4 — strip ReAct protocol markers so the
+                    // user sees natural-language thinking only.
+                    // 'Thought:', 'Action:', 'Action Input:',
+                    // 'Observation:' are internal protocol — they
+                    // should never leak to the UI.
+                    //
+                    // Token streaming means a marker can be split
+                    // across chunks (e.g. 'Though' in chunk1, 'd:'
+                    // in chunk2), so per-chunk filtering would miss
+                    // it. Instead we accumulate the RAW reasoning
+                    // on a private field and re-filter on every
+                    // token — the user-facing reasoningContent is
+                    // always the filtered version of the full text.
+                    const sess: any = session
+                    sess._rawReasoning = (sess._rawReasoning || '') + (event.content as string)
+                    let filtered = sess._rawReasoning as string
+                    // Drop protocol markers (allow newlines between word and colon).
+                    filtered = filtered
+                      .replace(/\b(Thought|Action\s*Input|Action|Observation)\b\s*[:：]\s*/gi, '')
+                      // Drop inline tool-arg JSON blobs.
+                      .replace(/\{"[a-z_]+"\s*:[^}]{0,400}\}/g, '')
+                      // Collapse runs of blank lines.
+                      .replace(/\n{3,}/g, '\n\n')
+                      .replace(/^\s+/, '')
+                    session.reasoningContent = filtered
                   } else if (event.type === 'reasoning_clear') {
                     // v3.7.2 — the backend finished forming the
                     // FINAL_ANSWER via token streaming; the same
@@ -814,6 +838,7 @@ export const useChatStore = defineStore('chat', {
                     // show the answer twice (once in thinking, once
                     // in the reply bubble).
                     session.reasoningContent = null
+                    ;(session as any)._rawReasoning = ''
                   } else if (
                     // Short form: t=1 (agent_start) with id / n / c / o
                     // Long form (legacy): type='agent_start' + agent_id +
