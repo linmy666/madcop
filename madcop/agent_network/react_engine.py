@@ -460,8 +460,12 @@ class ReActEngine:
             # Match either 'Action: FINAL_ANSWER' (canonical) or a
             # bare 'FINAL_ANSWER:' that some models emit without the
             # 'Action:' prefix when they want to skip the tool step.
+            # v3.7.8 — also match 'FINAL_ANSWER' followed by newline
+            # or end-of-text (no colon), because many models write
+            # 'Action: FINAL_ANSWER\nAction Input:' — the FINAL_ANSWER
+            # token is followed by \n, not ':'.
             _FA_MARKER = re.compile(
-                r"(?:Action\s*[:：]\s*FINAL_ANSWER|FINAL_ANSWER)\s*[:：]",
+                r"(?:Action\s*[:：]\s*)?FINAL_ANSWER\b\s*[:：\n]",
                 re.IGNORECASE,
             )
             # The 'Action Input:' marker is only used in the canonical
@@ -499,18 +503,51 @@ class ReActEngine:
                             raw += text
                             if _stream_state == 0:
                                 if _FA_MARKER.search(raw):
-                                    _stream_state = 1
-                                # Strip any protocol markers from
-                                # the user-facing reasoning text.
-                                emit = _PROTOCOL_RE.sub("", text)
-                                if emit:
-                                    yield ReActStep(
-                                        step_num=step_num, is_token=True,
-                                        token=emit,
-                                        is_final_answer_token=False,
-                                    )
+                                    # v3.7.8 — FINAL_ANSWER detected.
+                                    # Jump straight to state 2 so the
+                                    # answer body streams into the
+                                    # reply bubble. Skip emitting this
+                                    # chunk to reasoning — it only
+                                    # contained the marker text.
+                                    _stream_state = 2
+                                    # If this chunk also has answer
+                                    # text past the marker (model put
+                                    # it on the same line), emit the
+                                    # post-marker tail as a final-
+                                    # answer token.
+                                    _m = _FA_MARKER.search(raw)
+                                    if _m:
+                                        _tail = raw[_m.end():]
+                                        _tail = _tail.lstrip(" \t\n")
+                                        if _tail:
+                                            yield ReActStep(
+                                                step_num=step_num, is_token=True,
+                                                token=_tail,
+                                                is_final_answer_token=True,
+                                            )
+                                            self._fa_leading_trimmed = True
+                                else:
+                                    # Strip any protocol markers from
+                                    # the user-facing reasoning text.
+                                    emit = _PROTOCOL_RE.sub("", text)
+                                    if emit:
+                                        yield ReActStep(
+                                            step_num=step_num, is_token=True,
+                                            token=emit,
+                                            is_final_answer_token=False,
+                                        )
                             elif _stream_state == 1:
                                 if _AI_MARKER.search(raw):
+                                    _stream_state = 2
+                                elif _FA_MARKER.search(raw):
+                                    # v3.7.8 — bare FINAL_ANSWER without
+                                    # an 'Action Input:' line. The model
+                                    # wrote 'FINAL_ANSWER: <answer>' or
+                                    # 'Action: FINAL_ANSWER\n<answer>'
+                                    # directly. Switch to final-answer
+                                    # streaming so subsequent tokens
+                                    # route to the reply bubble, not
+                                    # the reasoning panel.
                                     _stream_state = 2
                                 else:
                                     emit = _PROTOCOL_RE.sub("", text)

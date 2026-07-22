@@ -755,6 +755,12 @@ export const useChatStore = defineStore('chat', {
                       .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
                       // Bare 'FINAL_ANSWER:' without prefix word-boundary
                       .replace(/(FINAL_ANSWER)\s*[:：]/gi, '')
+                      // v3.7.8 — strip 'Action Input:' marker that
+                      // sometimes leaks into the streamed FINAL_ANSWER
+                      // body (the engine's state machine can emit a
+                      // chunk containing both the marker and answer
+                      // text when they arrive in the same chunk).
+                      .replace(/\bAction\s*Input\b\s*[:：]\s*/gi, '')
                       .replace(/\n{3,}/g, '\n\n')
                     if (chunk.includes('\\n') && (chunk.match(/\n/g) || []).length < (chunk.match(/\\n/g) || []).length) {
                       chunk = chunk.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
@@ -833,8 +839,14 @@ export const useChatStore = defineStore('chat', {
                     sess._rawReasoning = (sess._rawReasoning || '') + (event.content as string)
                     let filtered = sess._rawReasoning as string
                     // Drop protocol markers (allow newlines between word and colon).
+                    // v3.7.8 — added FINAL_ANSWER. The previous filter
+                    // listed only Thought/Action/Observation, so
+                    // FINAL_ANSWER (and the answer body that follows
+                    // its colon) leaked into the reasoning panel.
                     filtered = filtered
-                      .replace(/\b(Thought|Action\s*Input|Action|Observation)\b\s*[:：]\s*/gi, '')
+                      .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
+                      // Bare 'FINAL_ANSWER:' without prefix word-boundary
+                      .replace(/(FINAL_ANSWER)\s*[:：]/gi, '')
                       // Drop inline tool-arg JSON blobs.
                       .replace(/\{"[a-z_]+"\s*:[^}]{0,400}\}/g, '')
                       // Collapse runs of blank lines.
