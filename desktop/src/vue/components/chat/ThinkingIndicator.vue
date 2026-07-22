@@ -83,8 +83,10 @@
         {{ statusHint }}
       </div>
 
-      <!-- Live reasoning chain (model's real thinking) — collapsible.
-           v3.8 — default EXPANDED so streaming is visible immediately. -->
+      <!-- Live reasoning chain — v3.8.1 no frame, no background.
+           Plain inline text that flows like the rest of the chat.
+           A pulsing dot at the end signals 'still thinking'.
+           Collapsible via the small toggle above. -->
       <div v-if="reasoningContent && reasoningContent.trim()" class="mt-1.5">
         <button
           type="button"
@@ -93,18 +95,14 @@
         >
           {{ showReasoning ? '收起思考过程' : '查看思考过程' }}
         </button>
-        <pre
-          v-if="showReasoning"
-          class="zcode-stream-in mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[var(--color-surface-2,#f5f5f4)] px-2 py-1.5 text-[11px] leading-[1.6] text-[var(--color-text-secondary)]"
-        >{{ reasoningContent.trim() }}</pre>
+        <div v-if="showReasoning" class="zcode-stream-in mt-1 text-[12px] leading-[1.7] text-[var(--color-text-secondary)]">
+          <span class="whitespace-pre-wrap break-words">{{ reasoningContent.trim() }}</span><span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
       </div>
 
-      <div class="relative mt-1.5 h-[2px] overflow-hidden rounded-full bg-[var(--color-border)]/40">
-        <div
-          class="h-full rounded-full transition-all duration-700 ease-out bg-[var(--color-text-primary)]"
-          :style="{ width: progressPercent + '%' }"
-        />
-      </div>
+      <!-- v3.8.1 — removed the static progress bar. It didn't convey
+           real progress and broke the 'flowing' feel. The pulsing
+           dots above now carry the 'working' signal. -->
     </div>
   </div>
 </template>
@@ -268,5 +266,43 @@ const elapsedText = computed(() => {
   font-family: var(--font-body);
   font-style: italic;
   letter-spacing: 0.2px;
+}
+
+/* v3.8.1 — pulsing dots at the end of streaming reasoning.
+ * Three dots that pulse in sequence, signaling 'still thinking'.
+ * Defined here (scoped) with unhashed @keyframes name won't work,
+ * so we use a vendor-prefixed name that Vue won't rewrite. */
+.thinking-dots {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  margin-left: 4px;
+  vertical-align: baseline;
+}
+.thinking-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--color-text-secondary, #555);
+  opacity: 0.3;
+  animation: thinking-dot-pulse 1.2s ease-in-out infinite;
+}
+.thinking-dots i:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots i:nth-child(3) { animation-delay: 0.30s; }
+
+/* Note: Vue scoped rewriter hashes @keyframes names. We work around
+ * this by NOT using scoped for this keyframe — define it in the
+ * global stylesheet instead. The class .thinking-dots stays scoped
+ * (it's just element styling), only the animation name is global. */
+</style>
+
+<!-- Global keyframe (not scoped) so Vue doesn't hash the name -->
+<style>
+@keyframes thinking-dot-pulse {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50%      { opacity: 0.9;  transform: translateY(-1px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dots i { animation: none; opacity: 0.5; }
 }
 </style>
