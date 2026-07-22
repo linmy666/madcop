@@ -643,7 +643,19 @@ export const useChatStore = defineStore('chat', {
           let _pendingFlush = false
           const _flushNow = () => {
             _pendingFlush = false
-            if (assistantMsgObj) assistantMsgObj.content = assistantMsg
+            if (assistantMsgObj) {
+              // v3.8.7 — force Vue reactivity by splicing the element.
+              // Just setting .content doesn't reliably trigger the
+              // `messages` computed in MessageList (which feeds
+              // buildRenderModel) because the array reference stays
+              // the same. Splicing the same index with an updated
+              // object forces Vue to detect a change.
+              const idx = session.messages.indexOf(assistantMsgObj)
+              assistantMsgObj.content = assistantMsg
+              if (idx >= 0) {
+                session.messages.splice(idx, 1, assistantMsgObj)
+              }
+            }
           }
           // 16ms is one rAF frame at 60fps. opencode's tui uses the
           // same value (sdk.tsx:48-80). Terminal events bypass this
@@ -665,7 +677,18 @@ export const useChatStore = defineStore('chat', {
             assistantPushed = true
             assistantMsgObj = {
               type: 'assistant_text',
-              content: assistantMsg,
+              // v3.8.7 — use a space placeholder instead of empty string.
+              // buildRenderModel (messageListUtils.ts:509) skips
+              // assistant_text messages whose content.trim() is empty.
+              // When this object is first pushed, assistantMsg is usually
+              // empty (the first text token hasn't arrived yet), so the
+              // message gets filtered out and never appears even after
+              // content is updated later — because Vue's computed cache
+              // for `messages` doesn't re-evaluate when only a nested
+              // object property changes (the array reference is stable).
+              // A space placeholder ensures trim() returns non-empty,
+              // so the message is never skipped.
+              content: assistantMsg || ' ',
               id: assistantId,
               transcriptMessageId: assistantId,
               timestamp: Date.now(),
@@ -733,14 +756,18 @@ export const useChatStore = defineStore('chat', {
                   })
                 }
                 if (event.type === 'text' && event.content) {
-                    // v3.8.6 — diagnostic logging. Remove once white-screen
-                    // issue is resolved.
-                    console.log('[DIAG] text event', {
-                      content: (event.content as string).slice(0, 40),
-                      isToken: event.is_token,
-                      assistantPushed,
-                      hasMsgObj: !!assistantMsgObj,
-                    })
+                    // v3.8.6 — diagnostic: write to DOM AND console.
+                    const _diag = (msg: string) => {
+                      console.log('[DIAG]', msg)
+                      try {
+                        let el = document.getElementById('__diag__')
+                        if (!el) { el = document.createElement('div'); el.id = '__diag__'; el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:200px;overflow:auto;background:#fff;border-top:2px solid red;z-index:99999;font:11px monospace;padding:4px;'
+                        document.body.appendChild(el) }
+                        el.textContent += msg + '\n'
+                      } catch {}
+                    }
+                    ;(window as any).__diag = _diag
+                    _diag(`text: c="${(event.content as string).slice(0,20)}" pushed=${assistantPushed} obj=${!!assistantMsgObj}`)
                     // Push the assistant placeholder NOW (after any tool_use
                     // messages have already been pushed) so the timeline is
                     // tool → assistant instead of assistant → tool.
@@ -786,13 +813,7 @@ export const useChatStore = defineStore('chat', {
                     }
                     _requestFlush()
                     // v3.8.6 — diagnostic: log state after flush
-                    console.log('[DIAG] after text flush', {
-                      assistantMsgLen: assistantMsg.length,
-                      assistantMsgPreview: assistantMsg.slice(0, 60),
-                      msgObjContent: assistantMsgObj?.content?.slice(0, 60),
-                      msgObjInMessages: assistantMsgObj ? session.messages.includes(assistantMsgObj) : false,
-                      messagesCount: session.messages.length,
-                    })
+                    ;(window as any).__diag?.(`flush: len=${assistantMsg.length} preview="${assistantMsg.slice(0,30)}" objContent="${assistantMsgObj?.content?.slice(0,30)}" inMsgs=${assistantMsgObj ? session.messages.includes(assistantMsgObj) : false} msgCount=${session.messages.length}`)
                     // The final answer is now streaming in. Switch out of the
                     // "thinking" state so the hand-drawn planning animation is
                     // hidden and the text trickles in live (instead of popping
@@ -805,14 +826,7 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'done') {
                     // v3.8.6 — diagnostic
-                    console.log('[DIAG] done event', {
-                      assistantMsgLen: assistantMsg.length,
-                      assistantMsgPreview: assistantMsg.slice(0, 80),
-                      hasMsgObj: !!assistantMsgObj,
-                      msgObjInMessages: assistantMsgObj ? session.messages.includes(assistantMsgObj) : false,
-                      messagesCount: session.messages.length,
-                      messagesTypes: session.messages.map((m: any) => m.type),
-                    })
+                    ;(window as any).__diag?.(`DONE: len=${assistantMsg.length} preview="${assistantMsg.slice(0,40)}" obj=${!!assistantMsgObj} inMsgs=${assistantMsgObj ? session.messages.includes(assistantMsgObj) : false} msgCount=${session.messages.length} types=${session.messages.map((m:any)=>m.type).join(',')}`)
                     session.chatState = 'idle'
                     // v3.8.2 — reset the raw-text accumulator so the
                     // next turn starts clean.
