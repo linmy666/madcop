@@ -1739,3 +1739,17 @@ html[data-touch-h5] body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* v3.8.4 — force ALL text inputs to use dark caret, not brand purple.
+ * Applied globally with !important so no scoped style can override.
+ * The purple caret was a persistent user-reported issue across
+ * multiple rounds of fixes; this nukes it everywhere at once. */
+input[type="text"],
+input[type="search"],
+input[type="url"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea {
+  caret-color: var(--color-text-primary, #111) !important;
+}

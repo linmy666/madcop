@@ -969,11 +969,25 @@ const VirtualSpacer = defineComponent({
 // ─── Render item content ──────────────────────────────────────
 function renderItemContent(item: RenderItem) {
   if (item.kind === 'tool_group') {
-    return h(ToolCallGroup, {
-      toolCalls: item.toolCalls,
-      toolResultMap: toolResultMap.value,
-      childToolCallsByParent: childToolCallsByParent.value,
-    })
+    // v3.8.4 — render tool groups as inline indicators too.
+    // Previously this used ToolCallGroup (heavy bordered cards).
+    // Now each tool call in the group renders as a lightweight
+    // gray inline line, matching the single tool_use path.
+    const toolResultMap = new Map<string, any>()
+    // Build result lookup from the group's toolCalls
+    for (const tc of item.toolCalls) {
+      const result = (tc as any).result
+      if (result) toolResultMap.set(tc.toolUseId, result)
+    }
+    return h('div', { class: 'tool-inline-group' }, item.toolCalls.map(tc => {
+      const result = toolResultMap.get(tc.toolUseId)
+      return h(ToolCallInline, {
+        toolName: tc.toolName,
+        input: tc.input,
+        isPending: tc.isPending,
+        result: result ? { content: result.content, isError: result.isError } : null,
+      })
+    }))
   }
 
   const msg = item.message
