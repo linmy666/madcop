@@ -1,207 +1,272 @@
-<script setup lang="ts">
-/**
- * ThinkingIndicator — ZCode-style streaming reasoning panel.
- *
- * v3.7.6 — completely rewritten to match ZCode's visual language:
- *   - Collapsible row with a gradient-flow "Thinking..." label
- *     while tokens are arriving; flips to a static dim "Thought · Ns"
- *     when done.
- *   - Reasoning body is plain inline black text on the page
- *     background — NO frame, NO colored box. Reads as part of the
- *     chat narrative.
- *   - The live streaming is indicated only by the gradient label
- *     and a 3-dot pulse at the end of the body.
- *
- * Props:
- *   reasoningContent — the accumulated text (already filtered for
- *     ReAct protocol markers upstream in chatStore).
- *   activeToolName   — optional, shows a "using <tool>" suffix on
- *     the label.
- *   planStep         — optional, unused but kept for backward compat.
- */
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-
-const props = defineProps<{
-  reasoningContent?: string | null
-  activeToolName?: string | null
-  planStep?: { label: string; tool: string | null; index: number; total: number; status: string } | null
-  /** When false, the parent tells us the turn finished — we flip
-   *  from "Thinking..." to "Thought · Ns". */
-  isStreaming?: boolean
-}>()
-
-// Default expanded so streaming narrative is visible immediately.
-const showReasoning = ref(true)
-
-// Elapsed timer for the "Thought · Ns" label after completion.
-const elapsedMs = ref(0)
-let timer: ReturnType<typeof setInterval> | null = null
-
-onMounted(() => {
-  timer = setInterval(() => { elapsedMs.value += 100 }, 100)
-})
-onUnmounted(() => { if (timer) clearInterval(timer) })
-
-const elapsedSeconds = computed(() => Math.max(1, Math.round(elapsedMs.value / 1000)))
-
-// Whether the model is still emitting reasoning. If the parent
-// doesn't tell us (isStreaming undefined), infer from content
-// growth — but the parent should pass it explicitly.
-const streaming = computed(() => props.isStreaming !== false)
-
-const labelText = computed(() =>
-  streaming.value ? '正在思考' : `已思考 · ${elapsedSeconds.value}s`
-)
-
-const hasContent = computed(() => !!(props.reasoningContent || '').trim())
-const trimmedContent = computed(() => (props.reasoningContent || '').trim())
-
-// Tool suffix on the label ("正在思考 · write_file")
-const toolSuffix = computed(() => {
-  const t = (props.activeToolName || '').trim()
-  if (!t) return ''
-  return ` · ${t}`
-})
-</script>
-
 <template>
-  <div class="zreasoning" role="region" aria-label="AI 思考过程">
-    <!-- Trigger row: icon + gradient label + chevron -->
-    <button
-      type="button"
-      class="zreasoning__trigger"
-      :aria-expanded="showReasoning"
-      @click="showReasoning = !showReasoning"
-    >
-      <!-- Brain icon (inline SVG so no extra dep) -->
-      <svg class="zreasoning__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
-        <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
-      </svg>
-
-      <!-- Gradient-flow label while streaming; dim static when done -->
-      <span v-if="streaming" class="zcode-gradient-text zreasoning__label">{{ labelText }}{{ toolSuffix }}</span>
-      <span v-else class="zreasoning__label zreasoning__label--done">{{ labelText }}</span>
-
-      <!-- Chevron (only visible on hover, ZCode pattern) -->
+  <div class="thinking-indicator flex items-center gap-3 py-2.5">
+    <!-- Hand-drawn MadCop mascot — simple black line art, pose per phase -->
+    <div class="thinking-mascot" :class="`thinking-mascot--${currentPhase}`">
       <svg
-        class="zreasoning__chevron"
-        :class="{ 'zreasoning__chevron--open': showReasoning }"
-        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+        viewBox="0 0 64 64"
+        width="48"
+        height="48"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="1.8"
+        class="mascot-svg"
       >
-        <path d="m9 18 6-6-6-6" />
-      </svg>
-    </button>
+        <!-- Body: waterdrop shape -->
+        <path
+          d="M 32 10
+             C 18 16, 14 32, 14 42
+             C 14 52, 22 58, 32 58
+             C 42 58, 50 52, 50 42
+             C 50 32, 46 16, 32 10 Z"
+        />
 
-    <!-- Body: plain inline black text, no frame, no background -->
-    <div v-if="showReasoning && hasContent" class="zreasoning__body zcode-stream-in">
-      <span class="zreasoning__text">{{ trimmedContent }}</span>
-      <!-- 3-dot pulse while streaming; hidden when done -->
-      <span v-if="streaming" class="zreasoning__dots" aria-hidden="true">
-        <i></i><i></i><i></i>
-      </span>
+        <!-- Phase A: analyzing — pupils move around -->
+        <g v-if="currentPhase === 'analyzing'">
+          <circle cx="26" cy="34" r="2" fill="currentColor" stroke="none">
+            <animate attributeName="cx" values="24;28;24" dur="1.2s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="38" cy="34" r="2" fill="currentColor" stroke="none">
+            <animate attributeName="cx" values="40;36;40" dur="1.2s" repeatCount="indefinite" />
+          </circle>
+          <!-- neutral mouth -->
+          <line x1="28" y1="44" x2="36" y2="44" />
+        </g>
+
+        <!-- Phase B: reasoning — eyes closed, thinking bubble -->
+        <g v-else-if="currentPhase === 'reasoning'">
+          <!-- closed eyes: gentle arcs -->
+          <path d="M 22 34 Q 26 31, 30 34" />
+          <path d="M 34 34 Q 38 31, 42 34" />
+          <!-- small thinking bubble dots -->
+          <circle cx="54" cy="22" r="1.2" fill="currentColor" stroke="none">
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="58" cy="16" r="1.8" fill="currentColor" stroke="none">
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" begin="0.3s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="60" cy="8" r="2.4" fill="currentColor" stroke="none">
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" begin="0.6s" repeatCount="indefinite" />
+          </circle>
+        </g>
+
+        <!-- Phase C: generating — eyes bright, writing -->
+        <g v-else>
+          <!-- wide open eyes -->
+          <circle cx="26" cy="34" r="3.5" fill="none" />
+          <circle cx="38" cy="34" r="3.5" fill="none" />
+          <circle cx="26" cy="34" r="1.5" fill="currentColor" stroke="none" />
+          <circle cx="38" cy="34" r="1.5" fill="currentColor" stroke="none" />
+          <!-- excited smile -->
+          <path d="M 28 44 Q 32 48, 36 44" />
+          <!-- small pencil mark next to body -->
+          <g class="pencil">
+            <line x1="54" y1="44" x2="60" y2="50" />
+            <line x1="60" y1="50" x2="62" y2="52" />
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Phase label + hand-written hint + progress bar (all black) -->
+    <div class="flex-1 min-w-0 pt-0.5">
+      <div class="flex items-baseline gap-2">
+        <span class="text-[12px] font-semibold text-[var(--color-text-primary)]">
+          {{ statusLabel }}
+        </span>
+        <span class="text-[10px] text-[var(--color-text-tertiary)] tabular-nums ml-auto">
+          {{ elapsedText }}
+        </span>
+      </div>
+      <div class="text-[11px] text-[var(--color-text-secondary)] mt-0.5 italic font-hand">
+        {{ statusHint }}
+      </div>
+
+      <!-- Live reasoning chain (model's real thinking) — collapsible.
+           v3.8 — default EXPANDED so streaming is visible immediately. -->
+      <div v-if="reasoningContent && reasoningContent.trim()" class="mt-1.5">
+        <button
+          type="button"
+          class="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] underline-offset-2 hover:underline"
+          @click="showReasoning = !showReasoning"
+        >
+          {{ showReasoning ? '收起思考过程' : '查看思考过程' }}
+        </button>
+        <pre
+          v-if="showReasoning"
+          class="zcode-stream-in mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-[var(--color-surface-2,#f5f5f4)] px-2 py-1.5 text-[11px] leading-[1.6] text-[var(--color-text-secondary)]"
+        >{{ reasoningContent.trim() }}</pre>
+      </div>
+
+      <div class="relative mt-1.5 h-[2px] overflow-hidden rounded-full bg-[var(--color-border)]/40">
+        <div
+          class="h-full rounded-full transition-all duration-700 ease-out bg-[var(--color-text-primary)]"
+          :style="{ width: progressPercent + '%' }"
+        />
+      </div>
     </div>
   </div>
 </template>
 
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+
+const props = defineProps<{
+  reasoningContent?: string | null
+  hasText?: boolean
+  activeToolName?: string | null
+  /** Current plan step context: { label, tool, index, total, status } */
+  planStep?: {
+    label: string
+    tool: string | null
+    index: number
+    total: number
+    status: string
+  } | null
+}>()
+
+const showReasoning = ref(true)
+
+const elapsedMs = ref(0)
+let timer: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  timer = setInterval(() => {
+    elapsedMs.value += 100
+  }, 100)
+})
+
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+})
+
+// A tool call is the most concrete "what's happening" signal.
+const isToolPhase = computed(() => Boolean(props.activeToolName))
+// Plan steps being generated/executed.
+const isPlanPhase = computed(() => Boolean(props.planStep))
+
+const currentPhase = computed<'analyzing' | 'reasoning' | 'generating'>(() => {
+  if (isToolPhase.value) return 'generating'
+  if (isPlanPhase.value) return 'reasoning'
+  const t = elapsedMs.value
+  if (t < 2500) return 'analyzing'
+  if (t < 5500) return 'reasoning'
+  return 'generating'
+})
+
+// Real, data-driven status line instead of fake rotating hints.
+const statusLabel = computed(() => {
+  if (isToolPhase.value) return `正在调用工具 · ${props.activeToolName}`
+  if (isPlanPhase.value) {
+    return `正在规划 · 第 ${props.planStep!.index}/${props.planStep!.total} 步`
+  }
+  return phaseLabel.value
+})
+
+const statusHint = computed(() => {
+  if (isToolPhase.value) return `执行 ${props.activeToolName} 工具，请稍候…`
+  if (isPlanPhase.value) {
+    const step = props.planStep!
+    const toolNote = step.tool ? `（工具：${step.tool}）` : ''
+    return `${step.label}${toolNote}`
+  }
+  return phaseHint.value
+})
+
+const phaseLabel = computed(() => {
+  switch (currentPhase.value) {
+    case 'analyzing': return '正在分析'
+    case 'reasoning': return '正在推理'
+    case 'generating': return '正在生成'
+  }
+})
+
+const hintIndex = ref(0)
+const hints = {
+  analyzing: [
+    '翻看笔记，整理上下文…',
+    '在问题里找关键信号…',
+    '拆解需求，列要点…',
+  ],
+  reasoning: [
+    '在脑子里过一遍逻辑…',
+    '比对可能的路径…',
+    '从几个角度推演…',
+  ],
+  generating: [
+    '把想法写成字…',
+    '斟酌措辞…',
+    '组织最终答案…',
+  ],
+}
+const phaseHint = computed(() => hints[currentPhase.value][hintIndex.value])
+
+// Progress: plan step completion, else a gentle decorative pulse.
+const progressPercent = computed(() => {
+  if (isPlanPhase.value && props.planStep) {
+    return Math.round((props.planStep.index / props.planStep.total) * 100)
+  }
+  const t = elapsedMs.value
+  if (t < 2500) return (t / 2500) * 100
+  if (t < 5500) return ((t - 2500) / 3000) * 100
+  const phaseT = (t - 5500) / 1000
+  return 80 + Math.sin(phaseT * 0.5) * 7.5
+})
+
+const elapsedText = computed(() => {
+  const secs = elapsedMs.value / 1000
+  if (secs < 60) return `${secs.toFixed(1)}s`
+  return `${Math.floor(secs / 60)}m ${(secs % 60).toFixed(0)}s`
+})
+</script>
+
 <style scoped>
-.zreasoning {
+.thinking-mascot {
+  position: relative;
+  width: 48px;
+  height: 48px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px 0;
-  /* No background, no border — blends into the chat surface. */
-}
-
-.zreasoning__trigger {
-  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 2px 0;
-  font-size: 14px;
-  line-height: 20px;
-  align-self: flex-start;
-  border-radius: 6px;
-  transition: opacity 120ms;
-}
-.zreasoning__trigger:hover {
-  opacity: 0.75;
-}
-
-.zreasoning__icon {
-  width: 16px;
-  height: 16px;
+  justify-content: center;
   flex-shrink: 0;
-  color: var(--zcode-fg-subtlest, rgba(38, 38, 38, 0.40));
+  color: var(--color-text-primary, #1f2937);
 }
 
-.zreasoning__label {
-  font-size: 14px;
-  font-weight: 500;
-}
-.zreasoning__label--done {
-  color: var(--zcode-fg-subtlest, rgba(38, 38, 38, 0.40));
+.mascot-svg {
+  display: block;
 }
 
-.zreasoning__chevron {
-  width: 14px;
-  height: 14px;
-  color: var(--zcode-fg-subtlest, rgba(38, 38, 38, 0.40));
-  opacity: 0;
-  transform: rotate(0deg);
-  transition: opacity 120ms, transform 120ms;
+/* Body sway per phase — gentle, hand-drawn feel */
+.thinking-mascot--analyzing .mascot-svg {
+  animation: sway-analyzing 2.4s ease-in-out infinite;
+  transform-origin: center;
 }
-.zreasoning__trigger:hover .zreasoning__chevron {
-  opacity: 1;
+.thinking-mascot--reasoning .mascot-svg {
+  animation: sway-reasoning 1.8s ease-in-out infinite;
+  transform-origin: center bottom;
 }
-.zreasoning__chevron--open {
-  transform: rotate(90deg);
-}
-
-.zreasoning__body {
-  /* Inline narrative text, not a code block. */
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--color-text-primary, #0d0d0d);
-  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
-  white-space: pre-wrap;
-  word-break: break-word;
-  /* Indent slightly so it reads as 'under' the trigger. */
-  padding-left: 24px;
-  max-width: 100%;
+.thinking-mascot--generating .mascot-svg {
+  animation: sway-generating 1.4s ease-in-out infinite;
+  transform-origin: center top;
 }
 
-.zreasoning__text {
-  /* No special styling — inherits body color. */
+@keyframes sway-analyzing {
+  0%, 100% { transform: rotate(-2.5deg); }
+  50%      { transform: rotate(2.5deg); }
+}
+@keyframes sway-reasoning {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-1px) rotate(-1deg); }
+}
+@keyframes sway-generating {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(1.5px); }
 }
 
-/* 3-dot pulse at the end of streaming reasoning. Discreet. */
-.zreasoning__dots {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 3px;
-  margin-left: 4px;
-  vertical-align: baseline;
-}
-.zreasoning__dots i {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--color-text-primary, #0d0d0d);
-  opacity: 0.4;
-  animation: zreasoning-dot 1.2s ease-in-out infinite;
-}
-.zreasoning__dots i:nth-child(2) { animation-delay: 0.15s; }
-.zreasoning__dots i:nth-child(3) { animation-delay: 0.30s; }
-@keyframes zreasoning-dot {
-  0%, 100% { opacity: 0.25; transform: translateY(0); }
-  50%      { opacity: 0.9; transform: translateY(-1px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .zreasoning__dots i { animation: none; opacity: 0.6; }
+.font-hand {
+  font-family: var(--font-body);
+  font-style: italic;
+  letter-spacing: 0.2px;
 }
 </style>
