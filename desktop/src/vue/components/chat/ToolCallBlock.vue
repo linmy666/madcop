@@ -785,8 +785,8 @@ function toggleExpanded() {
       <SpriteToolIcon
         :name="toolName"
         :spinning="isPending && !result"
-        :size="14"
-        class="text-[var(--color-outline)]"
+        :size="16"
+        :color="isPending && !result ? 'var(--color-brand, #7c3aed)' : undefined"
       />
       <span class="text-[11px] font-semibold text-[var(--color-text-secondary)]">{{ toolName }}</span>
       <span

@@ -60,7 +60,7 @@ const kind = computed(() => {
   return k || 'generic'
 })
 
-const strokeWidth = 1.6
+const strokeWidth = 2.0
 </script>
 
 <template>
@@ -68,8 +68,8 @@ const strokeWidth = 1.6
     class="sprite-icon"
     :class="{ 'sprite-icon--spin': spinning }"
     :style="{
-      width: `${size}px`,
-      height: `${size}px`,
+      width: `${size + (spinning ? 4 : 0)}px`,
+      height: `${size + (spinning ? 4 : 0)}px`,
       color: color || 'currentColor',
     }"
     role="img"
@@ -184,7 +184,10 @@ const strokeWidth = 1.6
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--color-outline, #999);
+  /* v3.7.10 — use text-secondary (darker) instead of outline so the
+   * hand-drawn line art is actually visible. The previous outline
+   * tint was too light to read on a white background. */
+  color: var(--color-text-secondary, #555);
 }
 .sprite-icon svg {
   width: 100%;
