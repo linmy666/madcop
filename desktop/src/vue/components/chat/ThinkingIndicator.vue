@@ -34,21 +34,19 @@
           <line x1="28" y1="44" x2="36" y2="44" />
         </g>
 
-        <!-- Phase B: reasoning — eyes closed, thinking bubble -->
+        <!-- Phase B: reasoning — eyes closed.
+             v3.8.2 — removed the 3 animated thinking-bubble circles.
+             They pulsed at 1.5s while the text dots pulse at 1.2s,
+             creating a visually jarring mismatch. The mascot stays
+             static now; the 'thinking' motion is carried solely by
+             the .thinking-dots at the end of the reasoning text. -->
         <g v-else-if="currentPhase === 'reasoning'">
           <!-- closed eyes: gentle arcs -->
           <path d="M 22 34 Q 26 31, 30 34" />
           <path d="M 34 34 Q 38 31, 42 34" />
-          <!-- small thinking bubble dots -->
-          <circle cx="54" cy="22" r="1.2" fill="currentColor" stroke="none">
-            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="58" cy="16" r="1.8" fill="currentColor" stroke="none">
-            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" begin="0.3s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="60" cy="8" r="2.4" fill="currentColor" stroke="none">
-            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" begin="0.6s" repeatCount="indefinite" />
-          </circle>
+          <!-- static small thinking bubble (no animation) -->
+          <circle cx="56" cy="18" r="1.5" fill="currentColor" stroke="none" opacity="0.5" />
+          <circle cx="60" cy="10" r="2.2" fill="currentColor" stroke="none" opacity="0.5" />
         </g>
 
         <!-- Phase C: generating — eyes bright, writing -->

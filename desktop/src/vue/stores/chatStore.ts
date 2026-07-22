@@ -745,23 +745,24 @@ export const useChatStore = defineStore('chat', {
                         }
                       } catch { /* keep raw */ }
                     }
-                    // v3.7.6 — defense in depth: strip any ReAct protocol
-                    // markers that slipped through (e.g. older backend
-                    // builds, or a turn where the streaming FINAL_ANSWER
-                    // detector didn't fire). The user should never see
-                    // 'Thought:' / 'Action:' / 'FINAL_ANSWER:' in the
-                    // reply bubble.
-                    chunk = chunk
+                    // v3.8.2 — accumulate raw text and re-filter on every
+                    // token, exactly like reasoning. Per-chunk filtering
+                    // can't match 'Action Input:' when it's split across
+                    // chunks ('Action' + ' Input:'), so the protocol marker
+                    // leaks into the reply bubble.
+                    const sess2: any = session
+                    sess2._rawText = (sess2._rawText || '') + chunk
+                    let filtered = sess2._rawText as string
+                    filtered = filtered
                       .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
-                      // Bare 'FINAL_ANSWER:' without prefix word-boundary
                       .replace(/(FINAL_ANSWER)\s*[:：]/gi, '')
-                      // v3.7.8 — strip 'Action Input:' marker that
-                      // sometimes leaks into the streamed FINAL_ANSWER
-                      // body (the engine's state machine can emit a
-                      // chunk containing both the marker and answer
-                      // text when they arrive in the same chunk).
                       .replace(/\bAction\s*Input\b\s*[:：]\s*/gi, '')
                       .replace(/\n{3,}/g, '\n\n')
+                    // Compute the delta (what's new since last flush)
+                    // so _requestFlush can update assistantMsgObj.content.
+                    const prevLen = assistantMsg.length
+                    assistantMsg = filtered
+                    chunk = filtered.slice(prevLen) // delta only
                     if (chunk.includes('\\n') && (chunk.match(/\n/g) || []).length < (chunk.match(/\\n/g) || []).length) {
                       chunk = chunk.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
                     }
@@ -784,6 +785,9 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'done') {
                     session.chatState = 'idle'
+                    // v3.8.2 — reset the raw-text accumulator so the
+                    // next turn starts clean.
+                    ;(session as any)._rawText = ''
                     // Terminal event: flush the final assistant content
                     // synchronously so the streaming text and the idle
                     // state land in the same Vue tick. _flushTerminal
