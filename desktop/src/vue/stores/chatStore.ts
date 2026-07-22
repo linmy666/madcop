@@ -847,8 +847,25 @@ export const useChatStore = defineStore('chat', {
                       .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
                       // Bare 'FINAL_ANSWER:' without prefix word-boundary
                       .replace(/(FINAL_ANSWER)\s*[:：]/gi, '')
-                      // Drop inline tool-arg JSON blobs.
-                      .replace(/\{"[a-z_]+"\s*:[^}]{0,400}\}/g, '')
+                      // v3.7.9 — drop nested JSON objects in reasoning.
+                    // Tool args like ask_user emit nested JSON
+                    // {"question":"...","options":[...]} that the old
+                    // flat regex didn't catch. New regex matches balanced
+                    // braces (1 level of nesting) with optional array
+                    // values inside.
+                    filtered = filtered.replace(
+                      /\{[^{}]*(?:\[[^\[\]]*\][^{}]*)*\}/g,
+                      ''
+                    )
+                    // v3.7.9 — strip lone tool-name markers that sit
+                    // on their own line between the protocol and
+                    // the JSON block (e.g. the bare 'ask_user' in
+                    // an ask_user tool call). Match a line that
+                    // contains only a tool name + whitespace.
+                    filtered = filtered.replace(
+                      /\n\s*(ask_user|read_file|write_file|edit_file|bash|web_search|web_fetch|query_rag|remember|route|get_current_time|get_weather)\s*\n/gi,
+                      '\n'
+                    )
                       // Collapse runs of blank lines.
                       .replace(/\n{3,}/g, '\n\n')
                       .replace(/^\s+/, '')
