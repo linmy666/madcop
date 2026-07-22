@@ -725,7 +725,11 @@ function handleClick(event: MouseEvent): void {
           :code="part.block.code"
         />
         <div v-else class="my-4">
-          <CodeViewer :code="part.block.code" :language="part.block.language" />
+          <!-- v3.7.7 — collapse code aggressively by default (5 lines
+               + ellipsis + expand button). Showing the full code up
+               front makes programming-task replies feel walls-of-text;
+               the user can click to expand when they care. -->
+          <CodeViewer :code="part.block.code" :language="part.block.language" :max-lines="5" />
         </div>
       </template>
     </div>

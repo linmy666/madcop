@@ -9,6 +9,7 @@ import CopyButton from '../shared/CopyButton.vue'
 import InlineImageGallery from './InlineImageGallery.vue'
 import type { AgentTaskNotification } from '../../types/chat'
 import PlanPreviewCard from './PlanModePreview.vue'
+import SpriteToolIcon from './SpriteToolIcons.vue'
 import { extractPlanPreview, isExitPlanModeTool } from './planModePreviewHelpers'
 
 // ─── Props ────────────────────────────────────────────────────
@@ -779,7 +780,14 @@ function toggleExpanded() {
       class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--color-surface-hover)]/50"
       @click="toggleExpanded"
     >
-      <span class="material-symbols-outlined text-[14px] text-[var(--color-outline)]">{{ icon }}</span>
+      <!-- v3.7.7 — hand-drawn sprite icon. Pulses/wobbles while the
+           tool is in progress (isPending && no result yet). -->
+      <SpriteToolIcon
+        :name="toolName"
+        :spinning="isPending && !result"
+        :size="14"
+        class="text-[var(--color-outline)]"
+      />
       <span class="text-[11px] font-semibold text-[var(--color-text-secondary)]">{{ toolName }}</span>
       <span
         v-if="filePathLabel"

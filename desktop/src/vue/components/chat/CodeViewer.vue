@@ -202,6 +202,11 @@ function toggleExpanded() {
       :wrap-long-lines="props.wrapLongLines"
     />
 
+    <!-- v3.7.7 — ellipsis hint while collapsed. Three centered dots
+         make it obvious there's hidden content without needing to
+         read the button text. -->
+    <div v-if="isTruncated" class="code-ellipsis" aria-hidden="true">···</div>
+
     <!-- Expand/collapse toggle -->
     <button
       v-if="showExpandToggle"
@@ -211,14 +216,29 @@ function toggleExpanded() {
     >
       {{
         expanded
-          ? 'Collapse'
-          : `Show ${allLines.length - props.maxLines} more lines`
+          ? '收起代码'
+          : `展开剩余 ${allLines.length - props.maxLines} 行`
       }}
     </button>
   </div>
 </template>
 
 <style scoped>
+/* v3.7.7 — collapsed-code ellipsis. Centered three middle-dot
+ * glyphs that read as 'more below'; subtle so it doesn't fight
+ * the code itself for attention. */
+.code-ellipsis {
+  text-align: center;
+  font-size: 16px;
+  letter-spacing: 4px;
+  color: var(--color-text-tertiary, #999);
+  background: var(--color-surface-container, #f5f5f7);
+  padding: 2px 0;
+  user-select: none;
+  line-height: 1;
+}
+.code-ellipsis::before { content: '· · ·'; }
+
 /* shiki emits <pre class="shiki"><code>...; neutralize its defaults so our
    container/padding/win govern and the code fills the block. */
 .code-viewer-shiki :deep(.shiki) {
