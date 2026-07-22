@@ -191,28 +191,16 @@ const strokeWidth = 1.6
   height: 100%;
 }
 
-/* v3.7.7 — pulse while spinning. Subtle opacity wave, NOT a full
- * spin (a tiny icon spinning looks chaotic). 1.6s ease-in-out
- * matches the thinking-dots cadence. */
+/* v3.7.9 — pulse + wobble animations are defined in globals.css
+ * as .madcop-sprite-pulse / .madcop-sprite-wobble so they aren't
+ * hashed by Vue's <style scoped> rewriter (which renames
+ * @keyframes and breaks the animation reference). */
 .sprite-icon--spin {
-  animation: sprite-pulse 1.6s ease-in-out infinite;
+  animation: madcop-sprite-pulse 1.6s ease-in-out infinite;
 }
-@keyframes sprite-pulse {
-  0%, 100% { opacity: 0.45; transform: scale(0.96); }
-  50%      { opacity: 1;    transform: scale(1.04); }
-}
-
-/* While spinning, also wobble the icon a few degrees to suggest
- * 'activity'. This layers on top of the pulse. */
 .sprite-icon--spin svg {
-  animation: sprite-wobble 2.4s ease-in-out infinite;
+  animation: madcop-sprite-wobble 2.4s ease-in-out infinite;
   transform-origin: 50% 50%;
-}
-@keyframes sprite-wobble {
-  0%, 100% { transform: rotate(-4deg); }
-  25%      { transform: rotate(3deg); }
-  50%      { transform: rotate(-2deg); }
-  75%      { transform: rotate(4deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {

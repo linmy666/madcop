@@ -1692,3 +1692,23 @@ html[data-touch-h5] body {
   .zcode-stream-in { animation: none; opacity: 1; }
   .zcode-spinner { animation-duration: 2.5s; }
 }
+
+/* ──────────────────────────────────────────────────────────────────
+ * v3.7.9 — Sprite tool-icon animations.
+ * Defined globally (not inside a <style scoped> block) so Vue's
+ * scoping rewriter doesn't hash the @keyframes names and break
+ * the animation reference. Classes .madcop-sprite-pulse and
+ * .madcop-sprite-wobble are referenced from SpriteToolIcons.vue.
+ * ────────────────────────────────────────────────────────────────── */
+
+@keyframes madcop-sprite-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.96); }
+  50%      { opacity: 1;    transform: scale(1.04); }
+}
+
+@keyframes madcop-sprite-wobble {
+  0%, 100% { transform: rotate(-4deg); }
+  25%      { transform: rotate(3deg); }
+  50%      { transform: rotate(-2deg); }
+  75%      { transform: rotate(4deg); }
+}
