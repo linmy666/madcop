@@ -107,6 +107,7 @@ import {
 import { sanitizeAgentDisplayText } from '../../lib/agentDisplayText'
 import ThinkingBlock from './ThinkingBlock.vue'
 import ToolCallBlock from './ToolCallBlock.vue'
+import ToolCallInline from './ToolCallInline.vue'
 import ToolCallGroup from './ToolCallGroup.vue'
 import ToolResultBlock from './ToolResultBlock.vue'
 import PermissionDialog from './PermissionDialog.vue'
@@ -1013,7 +1014,10 @@ function renderItemContent(item: RenderItem) {
     return h(ThinkingBlock, { message: msg })
   }
   if (msg.type === 'tool_use') {
-    // result is attached on the same tool_use message when SSE tool_result pairs
+    // v3.8.3 — render as lightweight inline indicator instead of
+    // a heavy bordered card. Reads as 'process metadata' in the
+    // streaming narrative, not as 'content'. AskUserQuestion still
+    // gets the special clarification treatment above.
     const rawResult = (msg as any).result
     const resultProp =
       rawResult == null
@@ -1021,22 +1025,18 @@ function renderItemContent(item: RenderItem) {
         : typeof rawResult === 'object' && rawResult !== null && 'content' in (rawResult as object)
           ? (rawResult as { content: unknown; isError?: boolean })
           : { content: rawResult, isError: !!(msg as any).isError }
-    return h(ToolCallBlock, {
+    return h(ToolCallInline, {
       toolName: msg.toolName,
       input: msg.input,
       isPending: msg.isPending,
       result: resultProp,
-      partialInput: msg.partialInput,
-      compact: props.compact,
     })
   }
+  // v3.8.3 — tool_result messages are now absorbed by the
+  // inline ToolCallInline component (which shows ✓/✗ based on
+  // the result prop). Don't render them as separate blocks.
   if (msg.type === 'tool_result') {
-    return h(ToolResultBlock, {
-      toolName: msg.toolName,
-      result: msg.result,
-      isError: msg.isError,
-      compact: props.compact,
-    })
+    return null
   }
   if (msg.type === 'goal_event') {
     return h(GoalEventCard, { message: msg })
