@@ -758,20 +758,16 @@ export const useChatStore = defineStore('chat', {
                       .replace(/(FINAL_ANSWER)\s*[:：]/gi, '')
                       .replace(/\bAction\s*Input\b\s*[:：]\s*/gi, '')
                       .replace(/\n{3,}/g, '\n\n')
-                    // Compute the delta (what's new since last flush)
-                    // so _requestFlush can update assistantMsgObj.content.
-                    const prevLen = assistantMsg.length
+                    // v3.8.5 — assistantMsg is the FULL filtered text.
+                    // Do NOT += a delta on top — that was the white-screen
+                    // bug: line 764 set assistantMsg = filtered, then line
+                    // 769 did assistantMsg += chunk (the delta), producing
+                    // garbage doubled content that Markdown couldn't render.
                     assistantMsg = filtered
-                    chunk = filtered.slice(prevLen) // delta only
-                    if (chunk.includes('\\n') && (chunk.match(/\n/g) || []).length < (chunk.match(/\\n/g) || []).length) {
-                      chunk = chunk.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+                    // Handle literal \n escapes some models emit.
+                    if (assistantMsg.includes('\\n') && (assistantMsg.match(/\n/g) || []).length < (assistantMsg.match(/\\n/g) || []).length) {
+                      assistantMsg = assistantMsg.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
                     }
-                    assistantMsg += chunk
-                    // Update the placeholder message via the cached reference
-                    // (avoids an O(n) Array.find on every streamed token).
-                    // Frame-batched via requestAnimationFrame so a burst of
-                    // tokens produces one Vue re-render per ~16ms frame
-                    // rather than one per token.
                     _requestFlush()
                     // The final answer is now streaming in. Switch out of the
                     // "thinking" state so the hand-drawn planning animation is

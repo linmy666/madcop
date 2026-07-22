@@ -69,7 +69,7 @@
           </template>
           <span
             v-else
-            class="inline-block h-[18px] w-[3px] rounded-full bg-[var(--color-brand)] align-text-bottom animate-caret-breathe"
+            class="inline-block h-[18px] w-[3px] rounded-full bg-[var(--color-text-tertiary)] align-text-bottom animate-caret-breathe"
           />
         </div>
       </template>
