@@ -696,7 +696,31 @@ class ReActEngine:
 
             observation = ""
             error = None
+            # v3.9.3 — Human-in-the-Loop gate for destructive tools.
+            # Instead of executing directly, return a 'wait for human
+            # confirmation' Observation. The model will see this and
+            # either: (a) wait for the user's reply via ask_user, or
+            # (b) back off and use a safer tool. This keeps the loop
+            # safe without requiring frontend HITL infrastructure.
             try:
+                from madcop.tools.safety import danger_level, validate_tool_input
+                level = danger_level(action)
+                if level == "destructive":
+                    # Don't execute. Tell the model to ask the user
+                    # first via ask_user, or pick a safer tool.
+                    observation = (
+                        f"工具 {action!r} 被标记为 'destructive' (高危操作)，"
+                        "需要用户确认后才能执行。\n"
+                        "请改用 ask_user 工具向用户确认是否真的要执行，"
+                        "或者改用更安全的工具（如 read_file、web_search）。\n"
+                        "如果你认为这个操作很必要，请调用 ask_user 并提供："
+                        "\n  question: \"要执行 <具体操作> 吗？\""
+                        "\n  options: [\"是，执行\", \"否，换其他方式\"]"
+                    )
+                    error = "destructive_tool_needs_human_confirmation"
+                else:
+                    observation = self._execute_tool(action, action_input, work_dir)
+            except ImportError:
                 observation = self._execute_tool(action, action_input, work_dir)
             except Exception as e:
                 error = str(e)
