@@ -907,6 +907,35 @@ export const useChatStore = defineStore('chat', {
                       /\{[^{}]*(?:\[[^\[\]]*\][^{}]*)*\}/g,
                       ''
                     )
+                    // v3.8.11 — strip code-like content from reasoning.
+                    // Models often dump HTML/JS/Python into the Thought
+                    // field despite system prompt rules. Strip common
+                    // patterns so the reasoning panel stays short
+                    // natural-language:
+                    //   - Multiline key=value or path strings
+                    //     (e.g. "path": "/Users/.../x.html")
+                    //   - Lines that look like JSON-ish key:value pairs
+                    //     following tool args
+                    //   - Trailing file paths / URL-like strings
+                    filtered = filtered.replace(
+                      /"[a-z_]+"\s*:\s*"[^"\n]{8,}"\.?(\n|$)/gi,
+                      ''
+                    )
+                    // Drop lines that are just an HTML/JS/JSON key:
+                    // value (long values, suggest code).
+                    filtered = filtered.split('\n').filter((line) => {
+                      const trimmed = line.trim()
+                      // Pure code line: starts with optional whitespace,
+                      // then "key": "long value" or path-like
+                      if (/^"[^"]{1,30}"\s*:\s*"/.test(trimmed)) return false
+                      if (/^"path"\s*:/.test(trimmed)) return false
+                      if (/^"content"\s*:/.test(trimmed)) return false
+                      // HTML tag-only lines
+                      if (/^<[a-z!\/][^>]*>$/.test(trimmed)) return false
+                      // CSS property lines
+                      if (/^\s*[a-z-]+\s*:\s*[^;]+;$/.test(trimmed)) return false
+                      return true
+                    }).join('\n')
                     // v3.7.9 — strip lone tool-name markers that sit
                     // on their own line between the protocol and
                     // the JSON block (e.g. the bare 'ask_user' in
