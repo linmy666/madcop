@@ -81,11 +81,23 @@
         {{ statusHint }}
       </div>
 
-      <!-- Live reasoning chain — v3.8.1 no frame, no background.
-           Plain inline text that flows like the rest of the chat.
-           A pulsing dot at the end signals 'still thinking'.
-           Collapsible via the small toggle above. -->
-      <div v-if="reasoningContent && reasoningContent.trim()" class="mt-1.5">
+      <!-- v3.10 — Grok-Build-style thought blocks. Each segment is
+           rendered independently — no frame, no background, plain
+           gray text that flows inline. Tool calls between segments
+           create natural boundaries. -->
+      <template v-if="thoughtBlocks && thoughtBlocks.length > 0">
+        <div
+          v-for="(block, i) in thoughtBlocks"
+          :key="block.id"
+          class="zcode-stream-in mt-1 text-[12px] leading-[1.7] text-[var(--color-text-secondary)]"
+        >
+          <span class="whitespace-pre-wrap break-words">{{ block.text.trim() }}</span>
+          <!-- Pulse dots only on the last (active) block -->
+          <span v-if="i === thoughtBlocks.length - 1 && !block.done" class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
+      </template>
+      <!-- Fallback: single reasoningContent (backward compat) -->
+      <div v-else-if="reasoningContent && reasoningContent.trim()" class="mt-1.5">
         <button
           type="button"
           class="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] underline-offset-2 hover:underline"
@@ -112,6 +124,8 @@ const props = defineProps<{
   reasoningContent?: string | null
   hasText?: boolean
   activeToolName?: string | null
+  /** v3.10 — Grok-Build-style independent thought blocks. */
+  thoughtBlocks?: { id: string; text: string; done: boolean }[] | null
   /** Current plan step context: { label, tool, index, total, status } */
   planStep?: {
     label: string

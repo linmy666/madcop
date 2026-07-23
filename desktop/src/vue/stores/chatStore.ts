@@ -137,9 +137,14 @@ export type PerSessionState = {
   historyStatus?: 'idle' | 'loading' | 'ready' | 'error'
   historyError?: string | null
   streamingText: string
+  /** v3.10 — Grok-Build-style thought blocks. Each segment of
+   *  reasoning is an independent block (not one big accumulated
+   *  string). Tool calls between thoughts create natural
+   *  boundaries. Rendered as gray inline text without frames. */
+  thoughtBlocks?: { id: string; text: string; done: boolean }[]
   /** Temporary SSE event log for in-UI debugging (no DevTools needed).
    *  Each entry is { t, type, id, preview }. Capped at 200 entries. */
-  debugSSELog?: { t: number; type: string; id?: number; preview?: string }[]
+  debugSSELog?: { t: number; type, string; id?: number; preview?: string }[]
   streamingToolInput: string
   activeToolUseId: string | null
   activeToolName: string | null
@@ -845,97 +850,58 @@ export const useChatStore = defineStore('chat', {
                       })
                     } catch { /* toast optional */ }
                   } else if (event.type === 'reasoning' && event.content) {
-                    // v3.7.4 — strip ReAct protocol markers so the
-                    // user sees natural-language thinking only.
-                    // 'Thought:', 'Action:', 'Action Input:',
-                    // 'Observation:' are internal protocol — they
-                    // should never leak to the UI.
-                    //
-                    // Token streaming means a marker can be split
-                    // across chunks (e.g. 'Though' in chunk1, 'd:'
-                    // in chunk2), so per-chunk filtering would miss
-                    // it. Instead we accumulate the RAW reasoning
-                    // on a private field and re-filter on every
-                    // token — the user-facing reasoningContent is
-                    // always the filtered version of the full text.
+                    // v3.10 — Grok-Build-style thought blocks.
+                    // Each segment of reasoning is an independent block.
+                    // thought_event tells us whether to start a new block,
+                    // append to existing, or the thought_end event closes it.
                     const sess: any = session
-                    sess._rawReasoning = (sess._rawReasoning || '') + (event.content as string)
-                    let filtered = sess._rawReasoning as string
-                    // Drop protocol markers (allow newlines between word and colon).
-                    // v3.7.8 — added FINAL_ANSWER. The previous filter
-                    // listed only Thought/Action/Observation, so
-                    // FINAL_ANSWER (and the answer body that follows
-                    // its colon) leaked into the reasoning panel.
-                    filtered = filtered
+                    const tev = (event as any).thought_event || ''
+                    const tid = (event as any).thought_id || ''
+                    let chunk = event.content as string
+
+                    // Apply protocol-marker filtering per-chunk (best effort).
+                    chunk = chunk
                       .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
-                      // Bare 'FINAL_ANSWER:' without prefix word-boundary
-                      .replace(/(FINAL_ANSWER)\s*[:：]/gi, '')
-                      // v3.8.10 — also strip a bare 'FINAL_ANSWER' on its
-                      // own line (no colon) that some models emit at
-                      // the end of a turn. Without this, the marker
-                      // leaks into the reasoning panel as a single word.
                       .replace(/\bFINAL_ANSWER\b\s*/gi, '')
-                      // v3.7.9 — drop nested JSON objects in reasoning.
-                    // Tool args like ask_user emit nested JSON
-                    // {"question":"...","options":[...]} that the old
-                    // flat regex didn't catch. New regex matches balanced
-                    // braces (1 level of nesting) with optional array
-                    // values inside.
-                    filtered = filtered.replace(
-                      /\{[^{}]*(?:\[[^\[\]]*\][^{}]*)*\}/g,
-                      ''
-                    )
-                    // v3.8.11 — strip code-like content from reasoning.
-                    // Models often dump HTML/JS/Python into the Thought
-                    // field despite system prompt rules. Strip common
-                    // patterns so the reasoning panel stays short
-                    // natural-language:
-                    //   - Multiline key=value or path strings
-                    //     (e.g. "path": "/Users/.../x.html")
-                    //   - Lines that look like JSON-ish key:value pairs
-                    //     following tool args
-                    //   - Trailing file paths / URL-like strings
-                    filtered = filtered.replace(
-                      /"[a-z_]+"\s*:\s*"[^"\n]{8,}"\.?(\n|$)/gi,
-                      ''
-                    )
-                    // Drop lines that are just an HTML/JS/JSON key:
-                    // value (long values, suggest code).
-                    filtered = filtered.split('\n').filter((line) => {
-                      const trimmed = line.trim()
-                      // Pure code line: starts with optional whitespace,
-                      // then "key": "long value" or path-like
-                      if (/^"[^"]{1,30}"\s*:\s*"/.test(trimmed)) return false
-                      if (/^"path"\s*:/.test(trimmed)) return false
-                      if (/^"content"\s*:/.test(trimmed)) return false
-                      // HTML tag-only lines
-                      if (/^<[a-z!\/][^>]*>$/.test(trimmed)) return false
-                      // CSS property lines
-                      if (/^\s*[a-z-]+\s*:\s*[^;]+;$/.test(trimmed)) return false
-                      return true
-                    }).join('\n')
-                    // v3.7.9 — strip lone tool-name markers that sit
-                    // on their own line between the protocol and
-                    // the JSON block (e.g. the bare 'ask_user' in
-                    // an ask_user tool call). Match a line that
-                    // contains only a tool name + whitespace.
-                    filtered = filtered.replace(
-                      /\n\s*(ask_user|read_file|write_file|edit_file|bash|web_search|web_fetch|query_rag|remember|route|get_current_time|get_weather)\s*\n/gi,
-                      '\n'
-                    )
-                      // Collapse runs of blank lines.
-                      .replace(/\n{3,}/g, '\n\n')
-                      .replace(/^\s+/, '')
-                    session.reasoningContent = filtered
+                      .replace(/\{[^{}]*(?:\[[^\[\]]*\][^{}]*)*\}/g, '')
+
+                    if (!chunk.trim() && tev !== 'thought_start') {
+                      // skip empty chunks
+                    } else if (tev === 'thought_start' || (!tev && !sess._curThoughtId)) {
+                      // Start a new thought block
+                      sess._curThoughtId = tid || `t-${Date.now()}`
+                      if (!session.thoughtBlocks) session.thoughtBlocks = []
+                      session.thoughtBlocks.push({
+                        id: sess._curThoughtId,
+                        text: chunk,
+                        done: false,
+                      })
+                    } else {
+                      // Append to current thought block
+                      if (!session.thoughtBlocks) session.thoughtBlocks = []
+                      const block = session.thoughtBlocks[session.thoughtBlocks.length - 1]
+                      if (block) block.text += chunk
+                    }
+                    // Force Vue reactivity
+                    session.thoughtBlocks = [...(session.thoughtBlocks || [])]
+                    // Keep reasoningContent for backward compat
+                    session.reasoningContent = (session.thoughtBlocks || [])
+                      .map((b: any) => b.text).join('\n\n')
+                  } else if (event.type === 'thought_end') {
+                    // v3.10 — close the current thought block
+                    const sess: any = session
+                    if (session.thoughtBlocks && session.thoughtBlocks.length > 0) {
+                      const block = session.thoughtBlocks[session.thoughtBlocks.length - 1]
+                      if (block) block.done = true
+                    }
+                    sess._curThoughtId = null
+                    session.thoughtBlocks = [...(session.thoughtBlocks || [])]
                   } else if (event.type === 'reasoning_clear') {
-                    // v3.7.2 — the backend finished forming the
-                    // FINAL_ANSWER via token streaming; the same
-                    // text will arrive next as a 'text' event. Drop
-                    // the accumulated reasoning so the UI doesn't
-                    // show the answer twice (once in thinking, once
-                    // in the reply bubble).
+                    // v3.10 — clear thought blocks + reasoningContent
                     session.reasoningContent = null
+                    session.thoughtBlocks = []
                     ;(session as any)._rawReasoning = ''
+                    ;(session as any)._curThoughtId = null
                   } else if (
                     // Short form: t=1 (agent_start) with id / n / c / o
                     // Long form (legacy): type='agent_start' + agent_id +

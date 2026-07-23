@@ -2374,20 +2374,22 @@ def create_app() -> FastAPI:
                                 if not _tok:
                                     continue
                                 if getattr(_st, "is_final_answer_token", False):
-                                    # v3.7.3 — this token is part of
-                                    # the FINAL_ANSWER body. Route it
-                                    # straight to the assistant message
-                                    # bubble as a 'text' event so the
-                                    # user watches the reply form live.
-                                    # The post-loop _answer emit is
-                                    # skipped for FINAL_ANSWER turns
-                                    # (tracked via _fa_streamed).
                                     _fa_streamed = True
                                     yield f"data: {json.dumps({'type': 'text', 'content': _tok, 'is_token': True}, ensure_ascii=False)}\n\n"
                                 else:
-                                    # Reasoning token — live thinking
-                                    # panel. Cleared on done.
-                                    yield f"data: {json.dumps({'type': 'reasoning', 'content': _tok, 'is_token': True}, ensure_ascii=False)}\n\n"
+                                    # v3.10 — reasoning token with Grok-Build-style
+                                    # thought block lifecycle. thought_event tells
+                                    # the frontend whether to start a new block,
+                                    # append to existing, or close it.
+                                    _tev = getattr(_st, "thought_event", "") or ""
+                                    _tid = getattr(_st, "thought_id", "") or ""
+                                    yield f"data: {json.dumps({'type': 'reasoning', 'content': _tok, 'is_token': True, 'thought_event': _tev, 'thought_id': _tid}, ensure_ascii=False)}\n\n"
+                                continue
+                            # v3.10 — thought_end event (non-token, closes block).
+                            _tev = getattr(_st, "thought_event", "") or ""
+                            if _tev == "thought_end":
+                                _tid = getattr(_st, "thought_id", "") or ""
+                                yield f"data: {json.dumps({'type': 'thought_end', 'thought_id': _tid}, ensure_ascii=False)}\n\n"
                                 continue
                             # v3.8.10 — skip non-token thought emit. The streaming
                             # _tok events above already delivered the full

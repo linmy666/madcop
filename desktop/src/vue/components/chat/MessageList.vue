@@ -1184,6 +1184,7 @@ function renderItemContent(item: RenderItem) {
         <ThinkingIndicator
           v-if="isAIThinking"
           :reasoning-content="reasoningContent"
+          :thought-blocks="sessionState?.thoughtBlocks"
           :active-tool-name="liveToolName"
           :plan-step="planStep"
           :is-streaming="chatState !== 'idle' && chatState !== 'error'"
