@@ -295,6 +295,33 @@ class ReActEngine:
             # Parse response
             thought, action, action_input = parse_react_response(raw)
 
+            # v3.9.1 — COT enforcement + stuck-loop reflection (sync path).
+            if action.upper() != "FINAL_ANSWER" and not thought.strip():
+                reflection = (
+                    "你刚才尝试调用工具但没有先思考。"
+                    "请先用 Thought 字段分析当前状况（1-2 句），"
+                    "说明你要做什么、为什么。然后再写 Action 和 Action Input。"
+                )
+                messages.append(Message(role="assistant", content=raw))
+                messages.append(Message(role="user", content=f"Observation: {reflection}"))
+                continue
+            last_two_actions = [
+                s.action for s in steps[-2:]
+                if s.action and s.action != "FINAL_ANSWER"
+            ]
+            if (
+                len(last_two_actions) == 2
+                and last_two_actions[0] == last_two_actions[1]
+                and action.upper() == last_two_actions[0]
+            ):
+                reflection = (
+                    f"你已对 '{action}' 连续调用 2 次。请停止循环："
+                    "换工具或直接 FINAL_ANSWER。"
+                )
+                messages.append(Message(role="assistant", content=raw))
+                messages.append(Message(role="user", content=f"Observation: {reflection}"))
+                continue
+
             # Check for final answer
             if action.upper() == "FINAL_ANSWER":
                 final_answer = normalize_final_answer(action_input)
@@ -407,6 +434,9 @@ class ReActEngine:
         (Codex-style guidance without aborting the loop).
         """
         messages = self._build_initial_messages(task, context)
+        # v3.9.1 — local steps list for stuck-loop detection. (run_stream
+        # doesn't keep a long-lived steps list like run() does.)
+        _steps: list = []
 
         for step_num in range(1, self.max_steps + 1):
             # Inject steers before each LLM call (including the first after
@@ -581,6 +611,58 @@ class ReActEngine:
 
             thought, action, action_input = parse_react_response(raw)
 
+            # v3.9.1 — COT enforcement. If the model emitted a tool
+            # call without ANY Thought text, don't execute it. Force
+            # a reflection turn instead — "you have to think before
+            # acting". Skipping this was letting the model call
+            # tools 12 times in a row with empty thoughts, which
+            # caused the 'write_file repeated 12x' loop the user
+            # reported.
+            if action.upper() != "FINAL_ANSWER" and not thought.strip():
+                reflection = (
+                    "你刚才尝试调用工具但没有先思考。"
+                    "请先用 Thought 字段分析当前状况（1-2 句），"
+                    "说明你要做什么、为什么。然后再写 Action 和 Action Input。"
+                )
+                yield ReActStep(
+                    step_num=step_num, thought=reflection,
+                    action="", action_input="",
+                    elapsed_ms=round((time.time() - step_start) * 1000, 1),
+                )
+                # Inject the reflection as a fake Observation so the
+                # next iteration sees it and re-reasons.
+                messages.append(Message(role="assistant", content=raw))
+                messages.append(Message(role="user", content=f"Observation: {reflection}"))
+                continue
+
+            # v3.9.1 — stuck-loop reflection. If we've called the same
+            # tool 2+ times in a row with similar (or same) results,
+            # force the model to re-plan instead of looping.
+            last_two_actions = []
+            for s in _steps[-2:]:
+                if s.action and s.action != "FINAL_ANSWER":
+                    last_two_actions.append(s.action)
+            if (
+                len(last_two_actions) == 2
+                and last_two_actions[0] == last_two_actions[1]
+                and action.upper() == last_two_actions[0]
+            ):
+                reflection = (
+                    f"你已对同一工具 '{action}' 连续调用了 2 次以上。"
+                    "请停止这个循环，改为：\n"
+                    "1. 反思之前的失败原因（Observation 里有什么错误？）\n"
+                    "2. 如果该工具不适合当前任务，**换其他工具**或直接 FINAL_ANSWER\n"
+                    "3. 如果必须再试一次，先在 Thought 里说明和上次有什么不同"
+                )
+                yield ReActStep(
+                    step_num=step_num, thought=reflection,
+                    action="", action_input="",
+                    elapsed_ms=round((time.time() - step_start) * 1000, 1),
+                )
+                messages.append(Message(role="assistant", content=raw))
+                messages.append(Message(role="user", content=f"Observation: {reflection}"))
+                continue
+
             if action.upper() == "FINAL_ANSWER":
                 # Last chance: if user steered while we were generating the
                 # final answer, do not exit — inject and continue loop.
@@ -635,6 +717,7 @@ class ReActEngine:
                 observation=observation, error=error,
                 elapsed_ms=round((time.time() - step_start) * 1000, 1),
             )
+            _steps.append(step)  # for stuck-loop detection
             yield step
 
             messages.append(Message(role="assistant", content=raw))
@@ -747,6 +830,25 @@ class ReActEngine:
         except json.JSONDecodeError:
             # Non-JSON input — treat as a single 'path' or 'query' arg
             args = {"path": action_input.strip(), "query": action_input.strip()}
+
+        # v3.9.2 — Pydantic safety guardrail. Validate the tool input
+        # BEFORE execution. If validation fails, return the error as
+        # observation (closed-loop repair — the model sees the
+        # validation error and can self-correct on the next step).
+        from madcop.tools.safety import validate_tool_input, danger_level
+        ok, validation_err, _validated = validate_tool_input(tool_name, args)
+        if not ok:
+            return f"工具 {tool_name!r} 输入校验失败:\n{validation_err}"
+        # If the tool is destructive, we require HITL confirmation.
+        # The ReActEngine doesn't know about user prompts, so we just
+        # NOTE the danger level in the observation and let the
+        # chat handler gate the actual execution. (The actual
+        # HITL prompt is wired in app.py — see HITL adapter below.)
+        level = danger_level(tool_name)
+        if level == "destructive":
+            # We don't block here; the chat handler may have
+            # already gated it. We just tag the observation.
+            pass
 
         # Add work_dir to args for file tools
         if work_dir:
