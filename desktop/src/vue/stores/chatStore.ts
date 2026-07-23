@@ -644,17 +644,15 @@ export const useChatStore = defineStore('chat', {
           const _flushNow = () => {
             _pendingFlush = false
             if (assistantMsgObj) {
-              // v3.8.7 — force Vue reactivity by splicing the element.
-              // Just setting .content doesn't reliably trigger the
-              // `messages` computed in MessageList (which feeds
-              // buildRenderModel) because the array reference stays
-              // the same. Splicing the same index with an updated
-              // object forces Vue to detect a change.
-              const idx = session.messages.indexOf(assistantMsgObj)
               assistantMsgObj.content = assistantMsg
-              if (idx >= 0) {
-                session.messages.splice(idx, 1, assistantMsgObj)
-              }
+              // v3.8.9 — ULTIMATE reactivity fix. Assign a brand-new
+              // array to session.messages so Vue MUST re-evaluate
+              // every computed that depends on it. push/splice weren't
+              // enough — Pinia's proxy may have lost track of the
+              // messages array if it was hydrated from localStorage
+              // (a plain JSON-parsed array, not reactive-wrapped).
+              // A fresh array reference forces re-evaluation unconditionally.
+              session.messages = [...session.messages]
             }
           }
           // 16ms is one rAF frame at 60fps. opencode's tui uses the
@@ -894,6 +892,11 @@ export const useChatStore = defineStore('chat', {
                       .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
                       // Bare 'FINAL_ANSWER:' without prefix word-boundary
                       .replace(/(FINAL_ANSWER)\s*[:：]/gi, '')
+                      // v3.8.10 — also strip a bare 'FINAL_ANSWER' on its
+                      // own line (no colon) that some models emit at
+                      // the end of a turn. Without this, the marker
+                      // leaks into the reasoning panel as a single word.
+                      .replace(/\bFINAL_ANSWER\b\s*/gi, '')
                       // v3.7.9 — drop nested JSON objects in reasoning.
                     // Tool args like ask_user emit nested JSON
                     // {"question":"...","options":[...]} that the old

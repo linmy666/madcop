@@ -2389,9 +2389,15 @@ def create_app() -> FastAPI:
                                     # panel. Cleared on done.
                                     yield f"data: {json.dumps({'type': 'reasoning', 'content': _tok, 'is_token': True}, ensure_ascii=False)}\n\n"
                                 continue
-                            # reasoning + tools for chat timeline
-                            if getattr(_st, "thought", None):
-                                yield f"data: {json.dumps({'type': 'reasoning', 'content': _st.thought}, ensure_ascii=False)}\n\n"
+                            # v3.8.10 — skip non-token thought emit. The streaming
+                            # _tok events above already delivered the full
+                            # thought to the client token-by-token. Emitting
+                            # _st.thought again as a non-token event would
+                            # duplicate the content. Also remove the
+                            # orphan 'Action:' / 'Action Input:' markers
+                            # that the per-step thought contains.
+                            # (The token filter in chatStore strips these
+                            # already; this just prevents the duplicate.)
                             _act_u = (getattr(_st, "action", None) or "").upper()
                             if getattr(_st, "action", None) and _act_u != "FINAL_ANSWER":
                                 _tid = f"react-{_st.step_num}"
