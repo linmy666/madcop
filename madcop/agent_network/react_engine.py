@@ -305,19 +305,40 @@ class ReActEngine:
                 messages.append(Message(role="assistant", content=raw))
                 messages.append(Message(role="user", content=f"Observation: {reflection}"))
                 continue
-            last_two_actions = [
+            # v3.9.4 — loop detection includes the CURRENT step's
+            # action. The previous version checked only the last
+            # 2 completed steps, which meant the loop was only
+            # detected at step 3+, allowing step 2 to be a
+            # duplicate. Now we include the action the model is
+            # about to take.
+            last_actions = [
                 s.action for s in steps[-2:]
                 if s.action and s.action != "FINAL_ANSWER"
             ]
-            if (
-                len(last_two_actions) == 2
-                and last_two_actions[0] == last_two_actions[1]
-                and action.upper() == last_two_actions[0]
-            ):
-                reflection = (
-                    f"你已对 '{action}' 连续调用 2 次。请停止循环："
-                    "换工具或直接 FINAL_ANSWER。"
-                )
+            # If the current step is non-final, the sequence of
+            # recent actions is: last_actions + [action]
+            recent = last_actions + ([action] if action.upper() != "FINAL_ANSWER" else [])
+            is_same_tool_loop = (
+                len(recent) >= 2
+                and all(a == recent[0] for a in recent[-2:])
+            )
+            is_research_loop = (
+                len(recent) >= 2
+                and all(a in ("web_search", "web_fetch", "query_rag", "recall_memory")
+                       for a in recent)
+            )
+            if is_same_tool_loop or is_research_loop:
+                if is_research_loop:
+                    reflection = (
+                        "你已经连续调用了 2+ 次搜索类工具，"
+                        "但还没有写代码或给答案。请停止搜索，"
+                        "直接 FINAL_ANSWER 或 write_file。"
+                    )
+                else:
+                    reflection = (
+                        f"你已对 '{action}' 连续调用 2 次。"
+                        "请停止循环：换工具或直接 FINAL_ANSWER。"
+                    )
                 messages.append(Message(role="assistant", content=raw))
                 messages.append(Message(role="user", content=f"Observation: {reflection}"))
                 continue
@@ -635,25 +656,49 @@ class ReActEngine:
                 messages.append(Message(role="user", content=f"Observation: {reflection}"))
                 continue
 
-            # v3.9.1 — stuck-loop reflection. If we've called the same
-            # tool 2+ times in a row with similar (or same) results,
-            # force the model to re-plan instead of looping.
-            last_two_actions = []
-            for s in _steps[-2:]:
-                if s.action and s.action != "FINAL_ANSWER":
-                    last_two_actions.append(s.action)
-            if (
-                len(last_two_actions) == 2
-                and last_two_actions[0] == last_two_actions[1]
-                and action.upper() == last_two_actions[0]
-            ):
-                reflection = (
-                    f"你已对同一工具 '{action}' 连续调用了 2 次以上。"
-                    "请停止这个循环，改为：\n"
-                    "1. 反思之前的失败原因（Observation 里有什么错误？）\n"
-                    "2. 如果该工具不适合当前任务，**换其他工具**或直接 FINAL_ANSWER\n"
-                    "3. 如果必须再试一次，先在 Thought 里说明和上次有什么不同"
-                )
+            # v3.9.1 — stuck-loop reflection. Detect two patterns:
+            # (a) the same tool called 2+ times in a row
+            # (b) two "research" tools (web_search / web_fetch / query_rag)
+            #     called in sequence, suggesting the model is stuck
+            #     in a "search more" loop without writing anything.
+            # In both cases inject a reflection forcing re-planning.
+            # v3.9.4 — include the CURRENT step's action. Previously we
+            # only checked the last 2 completed steps, so step 2 of
+            # a loop (when only step 1 was completed) was never
+            # caught. Now we project the upcoming action into the
+            # history before checking.
+            last_actions = [
+                s.action for s in _steps[-2:]
+                if s.action and s.action != "FINAL_ANSWER"
+            ]
+            recent = last_actions + ([action] if action.upper() != "FINAL_ANSWER" else [])
+            is_same_tool_loop = (
+                len(recent) >= 2
+                and all(a == recent[0] for a in recent[-2:])
+            )
+            is_research_loop = (
+                len(recent) >= 2
+                and all(a in ("web_search", "web_fetch", "query_rag", "recall_memory")
+                       for a in recent)
+            )
+            if is_same_tool_loop or is_research_loop:
+                if is_research_loop:
+                    reflection = (
+                        "你已经连续调用了 2+ 次搜索类工具（web_search / web_fetch），"
+                        "但还没有尝试写代码或直接给答案。\n"
+                        "请停止搜索，直接：\n"
+                        "1. 基于已知信息给出最佳答案（用 FINAL_ANSWER）\n"
+                        "2. 或调用 write_file 直接写代码\n"
+                        "3. 不要再调用任何搜索工具"
+                    )
+                else:
+                    reflection = (
+                        f"你已对同一工具 '{action}' 连续调用了 2 次以上。"
+                        "请停止这个循环，改为：\n"
+                        "1. 反思之前的失败原因（Observation 里有什么错误？）\n"
+                        "2. 如果该工具不适合当前任务，**换其他工具**或直接 FINAL_ANSWER\n"
+                        "3. 如果必须再试一次，先在 Thought 里说明和上次有什么不同"
+                    )
                 yield ReActStep(
                     step_num=step_num, thought=reflection,
                     action="", action_input="",
