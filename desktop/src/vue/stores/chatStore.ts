@@ -612,7 +612,6 @@ export const useChatStore = defineStore('chat', {
             session.debugSSELog.push({ t: Date.now(), type: 'NO_READER', preview: 'res.body null' })
             return
           }
-          console.log('[DIAG] SSE reader started', { sessionId, hasAbort: !!session._abortCtrl })
           session.reasoningContent = null
           session.agentStreams = {}
           const decoder = new TextDecoder()
@@ -697,11 +696,6 @@ export const useChatStore = defineStore('chat', {
           while (true) {
             const { done, value } = await reader.read()
             if (done) {
-              console.log('[DIAG] reader done (stream ended)', {
-                sessionId,
-                assistantMsgLen: assistantMsg.length,
-                hasMsgObj: !!assistantMsgObj,
-              })
               break
             }
             buffer += decoder.decode(value, { stream: true })
@@ -754,18 +748,6 @@ export const useChatStore = defineStore('chat', {
                   })
                 }
                 if (event.type === 'text' && event.content) {
-                    // v3.8.6 — diagnostic: write to DOM AND console.
-                    const _diag = (msg: string) => {
-                      console.log('[DIAG]', msg)
-                      try {
-                        let el = document.getElementById('__diag__')
-                        if (!el) { el = document.createElement('div'); el.id = '__diag__'; el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:200px;overflow:auto;background:#fff;border-top:2px solid red;z-index:99999;font:11px monospace;padding:4px;'
-                        document.body.appendChild(el) }
-                        el.textContent += msg + '\n'
-                      } catch {}
-                    }
-                    ;(window as any).__diag = _diag
-                    _diag(`text: c="${(event.content as string).slice(0,20)}" pushed=${assistantPushed} obj=${!!assistantMsgObj}`)
                     // Push the assistant placeholder NOW (after any tool_use
                     // messages have already been pushed) so the timeline is
                     // tool → assistant instead of assistant → tool.
@@ -810,8 +792,6 @@ export const useChatStore = defineStore('chat', {
                       assistantMsg = assistantMsg.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
                     }
                     _requestFlush()
-                    // v3.8.6 — diagnostic: log state after flush
-                    ;(window as any).__diag?.(`flush: len=${assistantMsg.length} preview="${assistantMsg.slice(0,30)}" objContent="${assistantMsgObj?.content?.slice(0,30)}" inMsgs=${assistantMsgObj ? session.messages.includes(assistantMsgObj) : false} msgCount=${session.messages.length}`)
                     // The final answer is now streaming in. Switch out of the
                     // "thinking" state so the hand-drawn planning animation is
                     // hidden and the text trickles in live (instead of popping
@@ -823,8 +803,6 @@ export const useChatStore = defineStore('chat', {
                       if (assistantMsgObj) assistantMsgObj.isStreaming = true
                     }
                   } else if (event.type === 'done') {
-                    // v3.8.6 — diagnostic
-                    ;(window as any).__diag?.(`DONE: len=${assistantMsg.length} preview="${assistantMsg.slice(0,40)}" obj=${!!assistantMsgObj} inMsgs=${assistantMsgObj ? session.messages.includes(assistantMsgObj) : false} msgCount=${session.messages.length} types=${session.messages.map((m:any)=>m.type).join(',')}`)
                     session.chatState = 'idle'
                     // v3.8.2 — reset the raw-text accumulator so the
                     // next turn starts clean.
@@ -1191,12 +1169,10 @@ export const useChatStore = defineStore('chat', {
           // A new message aborts the previous in-flight request via
           // session._abortCtrl — that's expected, not an error.
           if (err && err.name === 'AbortError') {
-            console.log('[DIAG] fetch ABORTED', { sessionId })
             if (!session.debugSSELog) session.debugSSELog = []
             session.debugSSELog.push({ t: Date.now(), type: 'ABORT', preview: 'fetch aborted' })
             return
           }
-          console.log('[DIAG] fetch NETWORK ERROR', { sessionId, err: String(err) })
           // Network-level failure (backend down, connection refused, etc.).
           // Surface a concrete reason instead of a blank red state.
           const reason =
