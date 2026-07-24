@@ -115,8 +115,10 @@ class WebSearchTool(Tool):
         return [{"error": "All search engines failed. Network may be blocked."}]
 
     def _search_bing(self, query: str, max_results: int) -> list[dict[str, str]]:
-        """Search Bing HTML endpoint (reachable in China without VPN)."""
-        url = f"https://www.bing.com/search?q={urllib.parse.quote(query)}&count={max_results}"
+        """Search Bing China HTML endpoint (reachable without VPN)."""
+        # www.bing.com redirects to cn.bing.com in China (returns only
+        # 173 bytes redirect). Use cn.bing.com directly.
+        url = f"https://cn.bing.com/search?q={urllib.parse.quote(query)}&count={max_results}"
         html = _http_get(url).decode("utf-8", errors="replace")
 
         results: list[dict[str, str]] = []

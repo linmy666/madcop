@@ -91,10 +91,13 @@ Action Input: <工具参数JSON；FINAL_ANSWER 时直接写答案>
 3. 信息足够时直接 FINAL_ANSWER，不要过度思考
 4. Action Input 调用工具时用合法 JSON；FINAL_ANSWER 时直接写 Markdown 纯文本
 5. 连续 3 次工具调用失败就用已有信息 FINAL_ANSWER
-6. 禁止对同一工具连续调用超过 2 次
+6. 禁止对同一工具连续调用超过 3 次
 7. 大多数问题不需要工具调用，第一次 Thought 后直接 FINAL_ANSWER
 8. 用户问"你是什么模型"时调用 get_current_model
 9. 写文件优先一次性写完，禁止对同一文件连续 write_file 两次。修改已有文件用 edit_file。
+10. web_search 搜索时**用简短英文关键词**（3-5 个词），不要用长中文句子。
+    例如搜 "semiconductor supply chain AI" 而不是 "人工智能供应链最新进展"。
+    每次搜索只搜一个方向，不要一次搜太多内容。
 """
 
 
