@@ -1054,6 +1054,15 @@ def create_app() -> FastAPI:
     )
     include_all_routers(app)
 
+    # v4.0 — Register the new unified chat route BEFORE the catch-all
+    # (madcop_compat installs a catch-all that would intercept it)
+    try:
+        from madcop.server.routes.chat_v4 import router as chat_v4_router
+        app.include_router(chat_v4_router)
+        logger.info("v4 chat route registered at /api/v4/chat")
+    except Exception as e:
+        logger.warning("v4 chat route registration failed: %s", e)
+
     # ------------------------------------------------------------------- #
     # Load MCP servers from user config and register their tools globally
     # ------------------------------------------------------------------- #
