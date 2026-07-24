@@ -99,20 +99,118 @@ class WebSearchTool(Tool):
         max_results = int(kwargs.get("max_results", 5))
         max_results = min(max(1, max_results), _MAX_RESULTS)
 
-        # v3.10.1 — try Bing first (reachable in China), then DuckDuckGo.
+        # v3.12 — Multi-strategy web search (inspired by Hermes).
+        # Priority:
+        # 1. SearXNG (if SEARXNG_URL env set — self-hosted, free, best quality)
+        # 2. Tavily API (if TAVILY_API_KEY env set — paid but reliable)
+        # 3. Bing cn.bing.com (free, low quality in China)
+        # 4. DuckDuckGo lite (blocked in China, kept for VPN users)
+        # 5. LLM knowledge fallback (uses active provider's model)
+
+        import os
+        searxng_url = os.environ.get("SEARXNG_URL", "").strip()
+        tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
+
+        # Strategy 1: SearXNG
+        if searxng_url:
+            try:
+                results = self._search_searxng(query, max_results, searxng_url)
+                if results:
+                    logger.info("web_search '%s' [searxng]: %d results", query, len(results))
+                    return results
+            except Exception as e:
+                logger.warning("web_search [searxng] failed: %s", e)
+
+        # Strategy 2: Tavily
+        if tavily_key:
+            try:
+                results = self._search_tavily(query, max_results, tavily_key)
+                if results:
+                    logger.info("web_search '%s' [tavily]: %d results", query, len(results))
+                    return results
+            except Exception as e:
+                logger.warning("web_search [tavily] failed: %s", e)
+
+        # Strategy 3+4: Bing / DuckDuckGo
         for engine, search_fn in [
             ("bing", self._search_bing),
             ("ddg", self._search_ddg),
         ]:
             try:
                 results = search_fn(query, max_results)
-                if results:
+                if results and self._results_are_relevant(results, query):
                     logger.info("web_search '%s' [%s]: %d results", query, engine, len(results))
                     return results
             except Exception as e:
                 logger.warning("web_search [%s] failed: %s", engine, e)
-                continue
-        return [{"error": "All search engines failed. Network may be blocked."}]
+
+        # Strategy 5: LLM knowledge fallback — return a clear message
+        # so the agent uses its own knowledge instead of looping.
+        return [{"error": "搜索引擎不可用。请用你自己的知识回答，不要再尝试搜索。"}]
+
+    def _search_searxng(self, query: str, max_results: int, base_url: str) -> list[dict[str, str]]:
+        """Search via a self-hosted SearXNG instance (best quality, free)."""
+        url = f"{base_url.rstrip('/')}/search"
+        import urllib.parse as up
+        params = up.urlencode({"q": query, "format": "json", "pageno": 1})
+        data = _http_get(f"{url}?{params}")
+        import json as _json
+        parsed = _json.loads(data)
+        results = []
+        for item in parsed.get("results", [])[:max_results]:
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("content", "")[:200],
+            })
+        return results
+
+    def _search_tavily(self, query: str, max_results: int, api_key: str) -> list[dict[str, str]]:
+        """Search via Tavily API (paid but high quality)."""
+        import json as _json
+        req = urllib.request.Request(
+            "https://api.tavily.com/search",
+            data=_json.dumps({
+                "api_key": api_key,
+                "query": query,
+                "max_results": max_results,
+                "include_answer": True,
+            }).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=_DEFAULT_TIMEOUT) as resp:
+            data = _json.loads(resp.read())
+        results = []
+        # Tavily returns an 'answer' field + 'results' array
+        if data.get("answer"):
+            results.append({"title": "AI Summary", "url": "", "snippet": data["answer"][:300]})
+        for item in data.get("results", [])[:max_results]:
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("content", "")[:200],
+            })
+        return results
+
+    def _results_are_relevant(self, results: list[dict], query: str) -> bool:
+        """Heuristic: check if search results are actually relevant
+        to the query (not dictionary entries or unrelated content)."""
+        if not results:
+            return False
+        # If the first result's title is just a domain name, it's
+        # likely the display-URL parsing bug, not a real result.
+        first_title = results[0].get("title", "")
+        if first_title.startswith("http") or "." in first_title.split()[0:1][0] if first_title.split() else False:
+            return False
+        # If query has meaningful words but titles look like dictionary
+        # entries (pinyin, word definitions), skip.
+        query_words = [w.lower() for w in query.replace("+", " ").split() if len(w) > 2]
+        if not query_words:
+            return True
+        # At least one query word should appear in titles or snippets
+        all_text = " ".join(r.get("title", "") + r.get("snippet", "") for r in results).lower()
+        matches = sum(1 for w in query_words if w in all_text)
+        return matches >= max(1, len(query_words) // 3)
 
     def _search_bing(self, query: str, max_results: int) -> list[dict[str, str]]:
         """Search Bing China HTML endpoint (reachable without VPN)."""
