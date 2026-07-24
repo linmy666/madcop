@@ -131,8 +131,9 @@ class WebSearchTool(Tool):
             except Exception as e:
                 logger.warning("web_search [tavily] failed: %s", e)
 
-        # Strategy 3+4: Bing / DuckDuckGo
+        # Strategy 3+4: Playwright Baidu (best free option in China), then Bing, DDG
         for engine, search_fn in [
+            ("baidu_pw", self._search_baidu_playwright),
             ("bing", self._search_bing),
             ("ddg", self._search_ddg),
         ]:
@@ -147,6 +148,66 @@ class WebSearchTool(Tool):
         # Strategy 5: LLM knowledge fallback — return a clear message
         # so the agent uses its own knowledge instead of looping.
         return [{"error": "搜索引擎不可用。请用你自己的知识回答，不要再尝试搜索。"}]
+
+    def _search_baidu_playwright(self, query: str, max_results: int) -> list[dict[str, str]]:
+        """Search Baidu using Playwright (real browser, bypasses anti-bot).
+
+        This is the most reliable free search method in China. Uses
+        headless Chromium with stealth flags + direct URL access.
+        """
+        from playwright.sync_api import sync_playwright
+        import time as _time
+
+        results: list[dict[str, str]] = []
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1920, "height": 1080},
+                locale="zh-CN",
+            )
+            page = context.new_page()
+            page.goto(
+                f"https://www.baidu.com/s?wd={urllib.parse.quote(query)}",
+                timeout=15000,
+            )
+            _time.sleep(3)
+
+            # Check for captcha
+            content = page.content()
+            if "wappass.baidu.com" in content or "captcha" in content.lower():
+                browser.close()
+                return []
+
+            # Extract results: Baidu uses [class*="result"] h3 a
+            items = page.query_selector_all(
+                '[class*="result"] h3 a, .c-container h3 a, h3.t a'
+            )
+            for item in items[:max_results]:
+                title = item.inner_text().strip()
+                href = item.get_attribute("href") or ""
+                if title and href:
+                    results.append({"title": title[:120], "url": href, "snippet": ""})
+
+            # Try to get snippets from sibling elements
+            if results:
+                containers = page.query_selector_all('[class*="result"], .c-container')
+                for i, container in enumerate(containers[:len(results)]):
+                    snippet_el = container.query_selector(
+                        '[class*="content"], [class*="abstract"], span.content-right_8Zs40'
+                    )
+                    if snippet_el:
+                        snippet = snippet_el.inner_text().strip()[:200]
+                        if i < len(results):
+                            results[i]["snippet"] = snippet
+
+            browser.close()
+        return results
 
     def _search_searxng(self, query: str, max_results: int, base_url: str) -> list[dict[str, str]]:
         """Search via a self-hosted SearXNG instance (best quality, free)."""
