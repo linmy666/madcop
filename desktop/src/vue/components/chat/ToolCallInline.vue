@@ -79,8 +79,17 @@ function shortenPath(p: string): string {
   return '…/' + parts.slice(-2).join('/')
 }
 
+const isFailed = computed(() => {
+  if (props.result?.isError) return true
+  if (!props.result) return false
+  const content = typeof props.result.content === 'string'
+    ? props.result.content
+    : JSON.stringify(props.result.content || '')
+  return content.includes('"error"') || content.startsWith('Error') || content.includes('failed')
+})
+
 const statusIcon = computed(() => {
-  if (props.result?.isError) return 'close'
+  if (isFailed.value) return 'close'
   if (props.result) return 'check'
   return ''
 })
@@ -89,7 +98,7 @@ const statusIcon = computed(() => {
 <template>
   <div class="tool-inline">
     <span v-if="isPending" class="zcode-spinner tool-inline__spinner" aria-hidden="true"></span>
-    <span v-else class="material-symbols-outlined tool-inline__status" aria-hidden="true">{{ statusIcon }}</span>
+    <span v-else class="material-symbols-outlined tool-inline__status" :class="{ 'tool-inline__status--failed': isFailed }" aria-hidden="true">{{ statusIcon }}</span>
     <span class="material-symbols-outlined tool-inline__icon" aria-hidden="true">{{ meta.icon }}</span>
     <span class="tool-inline__verb">{{ meta.verb }}</span>
     <span v-if="target" class="tool-inline__target">{{ target }}</span>
@@ -123,6 +132,11 @@ const statusIcon = computed(() => {
   /* Same gray as the rest — no green/red */
   color: inherit;
   opacity: 0.6;
+}
+/* v3.10.1 — failed tool calls show a red ✗ */
+.tool-inline__status--failed {
+  color: #e03131;
+  opacity: 0.8;
 }
 
 .tool-inline__icon {

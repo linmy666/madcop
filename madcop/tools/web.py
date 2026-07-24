@@ -99,13 +99,55 @@ class WebSearchTool(Tool):
         max_results = int(kwargs.get("max_results", 5))
         max_results = min(max(1, max_results), _MAX_RESULTS)
 
-        try:
-            results = self._search_ddg(query, max_results)
-            logger.info("web_search '%s': %d results", query, len(results))
-            return results
-        except Exception as e:
-            logger.warning("web_search failed: %s", e)
-            return [{"error": f"{type(e).__name__}: {e}"}]
+        # v3.10.1 — try Bing first (reachable in China), then DuckDuckGo.
+        for engine, search_fn in [
+            ("bing", self._search_bing),
+            ("ddg", self._search_ddg),
+        ]:
+            try:
+                results = search_fn(query, max_results)
+                if results:
+                    logger.info("web_search '%s' [%s]: %d results", query, engine, len(results))
+                    return results
+            except Exception as e:
+                logger.warning("web_search [%s] failed: %s", engine, e)
+                continue
+        return [{"error": "All search engines failed. Network may be blocked."}]
+
+    def _search_bing(self, query: str, max_results: int) -> list[dict[str, str]]:
+        """Search Bing HTML endpoint (reachable in China without VPN)."""
+        url = f"https://www.bing.com/search?q={urllib.parse.quote(query)}&count={max_results}"
+        html = _http_get(url).decode("utf-8", errors="replace")
+
+        results: list[dict[str, str]] = []
+        # Bing search results:
+        #   <li class="b_algo">
+        #     <h2><a href="...">Title</a></h2>
+        #     <p class="b_lineclamp...">Snippet</p>
+        #   </li>
+        block_pattern = re.compile(
+            r'<li[^>]*class="b_algo"[^>]*>(.*?)</li>',
+            re.DOTALL,
+        )
+        blocks = block_pattern.findall(html)
+        for block in blocks[:max_results]:
+            # Extract title + url
+            link_m = re.search(r'<a[^>]*href="(https?://[^"]+)"[^>]*>(.*?)</a>', block, re.DOTALL)
+            if not link_m:
+                continue
+            raw_url = link_m.group(1)
+            raw_title = re.sub(r"<[^>]+>", "", link_m.group(2)).strip()
+            # Extract snippet
+            snippet_m = re.search(r'<p[^>]*>(.*?)</p>', block, re.DOTALL)
+            snippet = re.sub(r"<[^>]+>", "", snippet_m.group(1)).strip() if snippet_m else ""
+
+            if raw_title and raw_url:
+                results.append({
+                    "title": raw_title,
+                    "url": raw_url,
+                    "snippet": snippet,
+                })
+        return results
 
     def _search_ddg(self, query: str, max_results: int) -> list[dict[str, str]]:
         """Search DuckDuckGo lite endpoint (more bot-resistant than html)."""
