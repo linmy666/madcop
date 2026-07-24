@@ -28,6 +28,7 @@ import {
   useTerminalPanelStore,
 } from '../stores/terminalPanelStore'
 import MessageList from '../components/chat/MessageList.vue'
+import V4ChatPanel from '../components/chat/V4ChatPanel.vue'
 import PlanPanel from '../components/plan/PlanPanel.vue'
 import PlanTasksPanel from '../components/plan/PlanTasksPanel.vue'
 import PlanArtifactsPanel from '../components/plan/PlanArtifactsPanel.vue'
@@ -339,6 +340,14 @@ const ragDebugOpen = ref(false)
 // them back. This keeps casual users from seeing internal tooling.
 const showDebugPanels = ref(
   typeof window !== 'undefined' && (window as any).__madcopShowDebug === true
+)
+// v4.0 — use V4ChatPanel (unified architecture) instead of old
+// MessageList + chatStore SSE chain. Toggle via localStorage or
+// window.__madcopV4 = true.
+const useV4 = ref(
+  typeof window !== 'undefined' &&
+  ((window as any).__madcopV4 === true ||
+   localStorage.getItem('madcop_v4') === 'true')
 )
 
 const isEmpty = computed(() =>
@@ -785,8 +794,16 @@ function openTerminalInTab() {
             {{ historyError }}
           </div>
 
-          <!-- Message list -->
+          <!-- Message list / V4 Chat Panel -->
           <template v-else>
+            <!-- V4 unified chat panel -->
+            <V4ChatPanel
+              v-if="useV4 && activeTabId"
+              :session-id="activeTabId"
+              class="flex-1 min-h-0"
+            />
+            <!-- Legacy message list -->
+            <template v-else>
             <div class="flex-1 min-h-0 w-full overflow-y-auto pt-6">
               <div class="mx-auto max-w-[860px] px-5">
                 <!-- v3.7.1 — SSE debug overlay. Hidden by default from v3.7.5:
@@ -798,6 +815,7 @@ function openTerminalInTab() {
                 <MessageList :compact="showRightPanel" />
               </div>
             </div>
+            </template>
           </template>
         </template>
 
