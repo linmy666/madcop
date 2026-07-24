@@ -122,26 +122,47 @@ class WebSearchTool(Tool):
         html = _http_get(url).decode("utf-8", errors="replace")
 
         results: list[dict[str, str]] = []
-        # Bing search results:
-        #   <li class="b_algo">
-        #     <h2><a href="...">Title</a></h2>
-        #     <p class="b_lineclamp...">Snippet</p>
-        #   </li>
         block_pattern = re.compile(
             r'<li[^>]*class="b_algo"[^>]*>(.*?)</li>',
             re.DOTALL,
         )
         blocks = block_pattern.findall(html)
         for block in blocks[:max_results]:
-            # Extract title + url
-            link_m = re.search(r'<a[^>]*href="(https?://[^"]+)"[^>]*>(.*?)</a>', block, re.DOTALL)
-            if not link_m:
+            # Remove CSS/JS link tags that pollute the block
+            clean_block = re.sub(r'<link[^>]*/?>', '', block)
+            # v3.10.3 — Bing has TWO <a> tags per result:
+            #   1st: display URL (domain + url concatenated, garbage title)
+            #   2nd: actual title text
+            # Find ALL external links, pick the one with a real title
+            all_links = re.findall(
+                r'<a[^>]*href="(https?://[^"]+)"[^>]*>(.*?)</a>',
+                clean_block, re.DOTALL,
+            )
+            raw_url = ""
+            raw_title = ""
+            for url, title_html in all_links:
+                title_text = re.sub(r"<[^>]+>", "", title_html).strip()
+                # Skip bing.com internal links
+                if "bing.com" in url:
+                    continue
+                # Skip links where title is just a domain name (display URL)
+                if title_text and not title_text.startswith("http") and "." not in title_text.split()[0] if title_text else True:
+                    raw_url = url
+                    raw_title = title_text
+                    break
+                # Fallback: use any non-bing link even if title looks like domain
+                if not raw_url:
+                    raw_url = url
+                    raw_title = title_text
+            if not raw_url:
                 continue
-            raw_url = link_m.group(1)
-            raw_title = re.sub(r"<[^>]+>", "", link_m.group(2)).strip()
             # Extract snippet
-            snippet_m = re.search(r'<p[^>]*>(.*?)</p>', block, re.DOTALL)
+            snippet_m = re.search(r'<p[^>]*>(.*?)</p>', clean_block, re.DOTALL)
             snippet = re.sub(r"<[^>]+>", "", snippet_m.group(1)).strip() if snippet_m else ""
+            # Clean HTML entities
+            for ent, char in [("&amp;", "&"), ("&ensp;", " "), ("&#0183;", "·"), ("&lt;", "<"), ("&gt;", ">")]:
+                raw_title = raw_title.replace(ent, char)
+                snippet = snippet.replace(ent, char)
 
             if raw_title and raw_url:
                 results.append({
