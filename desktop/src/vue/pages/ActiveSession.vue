@@ -341,13 +341,11 @@ const ragDebugOpen = ref(false)
 const showDebugPanels = ref(
   typeof window !== 'undefined' && (window as any).__madcopShowDebug === true
 )
-// v4.0 — use V4ChatPanel (unified architecture) instead of old
-// MessageList + chatStore SSE chain. Toggle via localStorage or
-// window.__madcopV4 = true.
+// v4.0 — use V4ChatPanel by default (unified architecture).
+// Set localStorage 'madcop_v4' = 'false' to revert to legacy.
 const useV4 = ref(
   typeof window !== 'undefined' &&
-  ((window as any).__madcopV4 === true ||
-   localStorage.getItem('madcop_v4') === 'true')
+  localStorage.getItem('madcop_v4') !== 'false'
 )
 
 const isEmpty = computed(() =>

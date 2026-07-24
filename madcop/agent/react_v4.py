@@ -20,12 +20,12 @@ from typing import Iterator
 from .runtime import AgentEngine, AgentStep, RunContext, StepKind
 
 # Reuse existing parsers (battle-tested)
-from ..agent_network.react_engine import (
+from madcop.agent_network.react_engine import (
     REACT_SYSTEM_PROMPT,
     parse_react_response,
     normalize_final_answer,
 )
-from ..llm.client import Message
+from madcop.llm.client import Message
 
 
 # Protocol markers to strip from reasoning text

@@ -203,13 +203,11 @@ class EngineFactory:
         if mode == "quick":
             return QuickEngine()
         elif mode == "standard":
-            # Lazy import to avoid circular deps
             from .react_v4 import ReActEngineV4
             return ReActEngineV4()
         elif mode == "deep":
-            # TODO: implement DeepEngineV4
-            from .react_v4 import ReActEngineV4
-            return ReActEngineV4()  # fallback to standard for now
+            from .deep_v4 import DeepEngineV4
+            return DeepEngineV4()
         else:
             return QuickEngine()
 

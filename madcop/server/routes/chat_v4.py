@@ -75,11 +75,26 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     work_dir = body.get("work_dir")
     session_id = body.get("conversation_id") or ""
 
-    # Build tool registry
-    _, tool_executor = build_default_registry(
+    # Build tool registry with memory store
+    try:
+        from madcop.server.deps import get_memory_store
+        mem_store = get_memory_store()
+    except Exception:
+        mem_store = None
+
+    reg, tool_executor = build_default_registry(
         workspace_dir=work_dir,
-        store=None,  # TODO: pass memory store
+        store=mem_store,
     )
+
+    # Build system prefix from memory (same as old handler)
+    sys_prefix = ""
+    if mem_store:
+        try:
+            from madcop.server.app import _build_memory_system_prompt
+            sys_prefix = _build_memory_system_prompt(mem_store) or ""
+        except Exception:
+            pass
 
     # Build run context
     ctx = RunContext(
@@ -89,7 +104,8 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         work_dir=work_dir,
         session_id=session_id,
         client=_get_client(),
-        tool_schemas=[],  # filled by executor
+        tool_schemas=reg.get_all_schemas(),
+        system_prefix=sys_prefix,
     )
 
     # Set up tool executor as a callable for ReActEngineV4
