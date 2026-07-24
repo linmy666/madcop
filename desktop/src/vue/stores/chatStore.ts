@@ -859,28 +859,38 @@ export const useChatStore = defineStore('chat', {
                     const tid = (event as any).thought_id || ''
                     let chunk = event.content as string
 
-                    // Apply protocol-marker filtering per-chunk (best effort).
-                    chunk = chunk
+                    // v3.10.2 — accumulate raw per-block and re-filter,
+                    // same pattern as the old reasoningContent logic.
+                    // Per-chunk filtering misses markers split across
+                    // chunks (e.g. 'Action' + ' Input:').
+                    if (tev === 'thought_start' || (!tev && !sess._curThoughtId)) {
+                      sess._curThoughtId = tid || `t-${Date.now()}`
+                      sess._curRawBlock = chunk
+                    } else {
+                      sess._curRawBlock = (sess._curRawBlock || '') + chunk
+                    }
+                    // Filter the accumulated block text
+                    let filtered = (sess._curRawBlock || '') as string
+                    filtered = filtered
                       .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
                       .replace(/\bFINAL_ANSWER\b\s*/gi, '')
                       .replace(/\{[^{}]*(?:\[[^\[\]]*\][^{}]*)*\}/g, '')
+                      .replace(/\n{3,}/g, '\n\n')
+                      .trim()
 
-                    if (!chunk.trim() && tev !== 'thought_start') {
-                      // skip empty chunks
+                    if (!filtered && tev !== 'thought_start') {
+                      // skip empty
                     } else if (tev === 'thought_start' || (!tev && !sess._curThoughtId)) {
-                      // Start a new thought block
-                      sess._curThoughtId = tid || `t-${Date.now()}`
                       if (!session.thoughtBlocks) session.thoughtBlocks = []
                       session.thoughtBlocks.push({
                         id: sess._curThoughtId,
-                        text: chunk,
+                        text: filtered,
                         done: false,
                       })
                     } else {
-                      // Append to current thought block
                       if (!session.thoughtBlocks) session.thoughtBlocks = []
                       const block = session.thoughtBlocks[session.thoughtBlocks.length - 1]
-                      if (block) block.text += chunk
+                      if (block) block.text = filtered
                     }
                     // Force Vue reactivity
                     session.thoughtBlocks = [...(session.thoughtBlocks || [])]
@@ -895,6 +905,7 @@ export const useChatStore = defineStore('chat', {
                       if (block) block.done = true
                     }
                     sess._curThoughtId = null
+                    sess._curRawBlock = ''  // v3.10.2 — reset for next block
                     session.thoughtBlocks = [...(session.thoughtBlocks || [])]
                   } else if (event.type === 'reasoning_clear') {
                     // v3.10 — clear thought blocks + reasoningContent

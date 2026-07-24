@@ -313,25 +313,23 @@ class ReActEngine:
             # duplicate. Now we include the action the model is
             # about to take.
             last_actions = [
-                s.action for s in steps[-2:]
+                s.action for s in steps[-4:]
                 if s.action and s.action != "FINAL_ANSWER"
             ]
-            # If the current step is non-final, the sequence of
-            # recent actions is: last_actions + [action]
             recent = last_actions + ([action] if action.upper() != "FINAL_ANSWER" else [])
             is_same_tool_loop = (
-                len(recent) >= 2
-                and all(a == recent[0] for a in recent[-2:])
+                len(recent) >= 3
+                and all(a == recent[0] for a in recent[-3:])
             )
             is_research_loop = (
-                len(recent) >= 2
+                len(recent) >= 4
                 and all(a in ("web_search", "web_fetch", "query_rag", "recall_memory")
                        for a in recent)
             )
             if is_same_tool_loop or is_research_loop:
                 if is_research_loop:
                     reflection = (
-                        "你已经连续调用了 2+ 次搜索类工具，"
+                        "你已经连续调用了 4+ 次搜索类工具，"
                         "但还没有写代码或给答案。请停止搜索，"
                         "直接 FINAL_ANSWER 或 write_file。"
                     )
@@ -709,27 +707,24 @@ class ReActEngine:
                 continue
 
             # v3.9.1 — stuck-loop reflection. Detect two patterns:
-            # (a) the same tool called 2+ times in a row
-            # (b) two "research" tools (web_search / web_fetch / query_rag)
-            #     called in sequence, suggesting the model is stuck
-            #     in a "search more" loop without writing anything.
-            # In both cases inject a reflection forcing re-planning.
-            # v3.9.4 — include the CURRENT step's action. Previously we
-            # only checked the last 2 completed steps, so step 2 of
-            # a loop (when only step 1 was completed) was never
-            # caught. Now we project the upcoming action into the
-            # history before checking.
+            # (a) the SAME tool called 3+ times in a row (same query)
+            # (b) "research" tools (web_search / web_fetch) called 4+
+            #     times in sequence without writing anything.
+            # v3.10.2 — raised thresholds: 2 was too aggressive for
+            # research tasks that legitimately need 3-4 searches.
             last_actions = [
-                s.action for s in _steps[-2:]
+                s.action for s in _steps[-4:]
                 if s.action and s.action != "FINAL_ANSWER"
             ]
             recent = last_actions + ([action] if action.upper() != "FINAL_ANSWER" else [])
+            # Same-tool loop: 3+ identical tool calls
             is_same_tool_loop = (
-                len(recent) >= 2
-                and all(a == recent[0] for a in recent[-2:])
+                len(recent) >= 3
+                and all(a == recent[0] for a in recent[-3:])
             )
+            # Research loop: 4+ consecutive search tools
             is_research_loop = (
-                len(recent) >= 2
+                len(recent) >= 4
                 and all(a in ("web_search", "web_fetch", "query_rag", "recall_memory")
                        for a in recent)
             )
