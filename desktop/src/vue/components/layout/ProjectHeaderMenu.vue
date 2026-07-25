@@ -20,6 +20,7 @@
 -->
 <script setup lang="ts">
 import { computed, h } from 'vue'
+import { useTranslation } from '../../i18n'
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -48,9 +49,17 @@ const emit = defineEmits<{
   (e: 'restore-hidden-projects'): void
 }>()
 
+// i18n helper. We use the module-level `t` from `useTranslation` which
+// reads the active `translations` ref shared across the app. The label
+// values (`sidebar.sortBy`, `sidebar.organizeByProject`, etc.) live in
+// desktop/src/i18n/locales/{zh,en,jp,zh-TW}.ts.
+const t = useTranslation()
+
 // ─── Static item lists (per-type) ─────────────────────────────────────
 //
-// Hardcoded labels for now. The locale tables
+// Labels sourced from i18n (sidebar.* keys). The values are localized
+// via `t()` below in the template; if any key is missing, the key
+// string itself is shown — easy to spot & fix.
 // (desktop/src/i18n/locales/{zh,en}.ts) don't yet have entries for
 // the org/sort/create strings, so calling t() would surface the
 // raw key instead of the translated value. Re-introduce a t()
@@ -58,15 +67,15 @@ const emit = defineEmits<{
 
 // ─── Static item lists (per-type) ─────────────────────────────────────
 
-const orgs: ReadonlyArray<{ value: Organization; label: string }> = [
-  { value: 'project', label: 'By project' },
-  { value: 'recentProject', label: 'By recent project' },
-  { value: 'time', label: 'By time' },
+const orgs: ReadonlyArray<{ value: Organization; labelKey: string }> = [
+  { value: 'project', labelKey: 'sidebar.organizeByProject' },
+  { value: 'recentProject', labelKey: 'sidebar.organizeByRecentProject' },
+  { value: 'time', labelKey: 'sidebar.organizeByTime' },
 ]
 
-const sorts: ReadonlyArray<{ value: SortBy; label: string }> = [
-  { value: 'updatedAt', label: 'Updated at' },
-  { value: 'createdAt', label: 'Created at' },
+const sorts: ReadonlyArray<{ value: SortBy; labelKey: string }> = [
+  { value: 'updatedAt', labelKey: 'sidebar.sortByUpdatedAt' },
+  { value: 'createdAt', labelKey: 'sidebar.sortByCreatedAt' },
 ]
 
 // ─── Inline SVG icons (kept here so the .vue file is self-contained
@@ -158,7 +167,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
         @mouseenter="openSortSubmenu"
       >
         <SortIcon />
-        <span class="flex-1 text-left">Sort by</span>
+        <span class="flex-1 text-left">{{ t('sidebar.sortBy') }}</span>
         <ChevronRightIcon />
       </button>
       <button
@@ -169,7 +178,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
         @mouseenter="openOrganizeSubmenu"
       >
         <OrganizationIcon />
-        <span class="flex-1 text-left">Organize by</span>
+        <span class="flex-1 text-left">{{ t('sidebar.organizeBy') }}</span>
         <ChevronRightIcon />
       </button>
       <div class="my-1 h-px bg-[var(--color-border-separator)]" role="separator" />
@@ -179,7 +188,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
         @click="triggerCreateBlank"
       >
         <PlusIcon />
-        <span class="flex-1 text-left">Create blank session</span>
+        <span class="flex-1 text-left">{{ t('sidebar.createBlankSession') }}</span>
       </button>
     </template>
 
@@ -194,7 +203,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
         @click="setOrganization(o.value)"
       >
         <OrganizationIcon />
-        <span class="flex-1 text-left">{{ o.label }}</span>
+        <span class="flex-1 text-left">{{ t(o.labelKey) }}</span>
         <span
           v-if="organization === o.value"
           class="material-symbols-outlined text-[17px] text-[var(--color-text-secondary)]"
@@ -214,7 +223,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
         @click="setSortBy(s.value)"
       >
         <SortIcon />
-        <span class="flex-1 text-left">{{ s.label }}</span>
+        <span class="flex-1 text-left">{{ t(s.labelKey) }}</span>
         <span
           v-if="sortBy === s.value"
           class="material-symbols-outlined text-[17px] text-[var(--color-text-secondary)]"
@@ -231,7 +240,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
         @click="triggerCreateBlank"
       >
         <PlusIcon />
-        <span class="flex-1 text-left">Create blank session</span>
+        <span class="flex-1 text-left">{{ t('sidebar.createBlankSession') }}</span>
       </button>
       <button
         type="button"
@@ -239,7 +248,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
         @click="triggerUseExistingFolder"
       >
         <GitHubIcon />
-        <span class="flex-1 text-left">Use existing folder</span>
+        <span class="flex-1 text-left">{{ t('sidebar.useExistingFolder') }}</span>
       </button>
     </template>
   </div>
