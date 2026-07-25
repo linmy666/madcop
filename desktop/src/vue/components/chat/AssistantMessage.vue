@@ -111,6 +111,26 @@
       </div>
     </div>
   </div>
+  <!--
+    v4 — Empty-content assistant turn. Previously this branch returned
+    nothing, so a persisted-but-empty assistant_text (e.g. mid-stream
+    snapshot from a previous race) silently vanished from the thread.
+    Now we render a small "no content" placeholder so the user still
+    sees the assistant turn exists. Has its own v-else sibling so the
+    v-if above doesn't grow into conditional spaghetti.
+  -->
+  <div
+    v-else
+    data-message-shell="assistant"
+    data-layout="document"
+    class="assistant-message group flex items-start gap-3 py-3"
+  >
+    <MascotAvatar :size="28" class="mt-0.5 shrink-0" />
+    <div class="assistant-message__body min-w-0 flex-1 text-[12px] italic text-[var(--color-text-tertiary)]">
+      <span class="material-symbols-outlined mr-1 align-middle text-[14px]">subagent</span>
+      （本轮 assistant 回复为空 — 多发生在会话切换竞态时。已通过 chatStore.loadHistory 的 AbortController 修复。）
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">

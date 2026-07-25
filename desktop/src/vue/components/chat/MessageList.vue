@@ -1001,7 +1001,13 @@ function renderItemContent(item: RenderItem) {
   }
 
   // Message types
-  if (msg.type === 'user_text') {
+  // v4 — accept both 'user_text' and the legacy 'user' alias. The
+  // /api/sessions/{id}/messages endpoint returns messages with type
+  // 'user' / 'assistant' (no _text suffix), so without this alias the
+  // legacy rows would silently fall through to the [Unknown] catch-all.
+  const userishType = msg.type === 'user_text' || msg.type === 'user'
+  const assistantishType = msg.type === 'assistant_text' || msg.type === 'assistant'
+  if (userishType) {
     return h(UserMessage, {
       content: msg.content || '',
       attachments: (msg as any).attachments,
@@ -1009,7 +1015,7 @@ function renderItemContent(item: RenderItem) {
       compact: props.compact,
     })
   }
-  if (msg.type === 'assistant_text') {
+  if (assistantishType) {
     const branchTarget = branchableMessageTargets.value.get(msg.id)
     const canBranch = Boolean(branchTarget) && !branchActionsDisabled.value
     return h(AssistantMessage, {

@@ -506,17 +506,18 @@ export function buildRenderModel(
   })
 
   for (const msg of messages) {
-    // v3.8.8 — diagnostic: log what buildRenderModel sees
-    if (msg.type === 'assistant_text') {
-      console.log('[DIAG-RM] assistant_text', JSON.stringify({
-        id: msg.id,
-        contentLen: (msg.content || '').length,
-        contentTrimmed: !!(msg.content || '').trim(),
-        preview: (msg.content || '').slice(0, 30),
-      }))
-    }
     if (msg.type === 'assistant_text' && !msg.content.trim()) {
-      console.log('[DIAG-RM] SKIP assistant_text (empty content)')
+      // v3.8.x had a silent skip here, which dropped messages when
+      // they were persisted mid-stream (empty content saved to disk
+      // before the stream finalized). Don't skip — fall through and
+      // push the message into `items` so MessageList renders *something*
+      // for the assistant turn (an "(empty response)" inline note will
+      // be shown by MessageList's render path). The user's thread shape
+      // is preserved and we never silently lose an assistant turn.
+      // The actual root cause (race-induced partial writes) is fixed
+      // separately in chatStore.loadHistory and ActiveSession.vue.
+      flushGroup()
+      items.push({ kind: 'message', message: msg })
       continue
     }
     if (isAgentBackgroundTaskMessage(msg)) continue

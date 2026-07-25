@@ -13,6 +13,16 @@ import { getApiUrl } from '../api/client'
 // key per session is fine.
 const MESSAGES_STORAGE_KEY = 'madcop_chat_messages'
 
+// v4 — per-session in-flight fetch registry. When the user jumps
+// A → B → A faster than the backend can respond, two concurrent
+// loadHistory() calls for the same session race to write the same
+// `sessions[sessionId]` slot, producing a torn / partial history
+// (most visibly: assistant_text rows become "[Unknown: assistant]"
+// because their concatenated stream never finished). The
+// AbortController cancels the previous fetch on re-entry, so the
+// newer write is the only one that lands.
+const _inflightLoadHistory = new Map<string, AbortController>()
+
 function loadMessagesFromStorage(): Record<string, { messages: any[]; title?: string }> {
   try {
     const raw = localStorage.getItem(MESSAGES_STORAGE_KEY)
@@ -1252,6 +1262,17 @@ export const useChatStore = defineStore('chat', {
       // locally-cached threads (from a previous session) take
       // precedence over the backend's (likely empty) list, and we
       // don't clobber them with an empty array.
+      //
+      // v4 — cancel any in-flight load for this same session before
+      // starting a new one. Without this guard the user jumping
+      // A→B→A produces two concurrent fetches that race to write the
+      // shared `sessions[sessionId]` slot. The trailing write wins
+      // and the messages get torn.
+      const previous = _inflightLoadHistory.get(sessionId)
+      if (previous) previous.abort()
+      const controller = new AbortController()
+      _inflightLoadHistory.set(sessionId, controller)
+
       const existing = this.sessions[sessionId]
       if (!existing) {
         // No in-memory state yet — hydrate from localStorage so the
@@ -1284,7 +1305,10 @@ export const useChatStore = defineStore('chat', {
         }
       }
       try {
-        const res = await fetch(getApiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/messages`))
+        const res = await fetch(
+          getApiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/messages`),
+          { signal: controller.signal },
+        )
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
         const list = Array.isArray(data?.messages) ? data.messages : []
@@ -1301,7 +1325,15 @@ export const useChatStore = defineStore('chat', {
             }
           }
           const role = m.role || m.type || 'assistant'
-          const type = m.type || (role === 'user' || role === 'user_text' ? 'user_text' : 'assistant_text')
+          // v4 — normalize legacy aliases. Server may persist with the
+          // bare shape `type: 'user'` (no _text suffix). Coerce to the
+          // canonical 'user_text' / 'assistant_text' so the rest of the
+          // code (MessageList dispatch, messageListUtils, buildRenderModel)
+          // only has to think about one spelling. This also unblocks the
+          // MessageList type-alias I added so it accepts both.
+          let type = m.type || (role === 'user' || role === 'user_text' ? 'user_text' : 'assistant_text')
+          if (type === 'user') type = 'user_text'
+          else if (type === 'assistant') type = 'assistant_text'
           // v3.7.6 — sanitize historical assistant messages: older
           // backend builds (before the streaming FINAL_ANSWER
           // detector) could persist the raw ReAct protocol text
@@ -1338,7 +1370,20 @@ export const useChatStore = defineStore('chat', {
           historyStatus: 'ready',
           historyError: undefined,
         }
+        // Only clear the in-flight slot if WE are still the latest
+        // registration — another loadHistory() may have replaced us
+        // and is still flying.
+        if (_inflightLoadHistory.get(sessionId) === controller) {
+          _inflightLoadHistory.delete(sessionId)
+        }
       } catch (err) {
+        // Cancelled by a newer loadHistory() call — keep whatever
+        // messages state the newer call set, don't surface an error.
+        if (controller.signal.aborted) return
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        if (_inflightLoadHistory.get(sessionId) === controller) {
+          _inflightLoadHistory.delete(sessionId)
+        }
         this.sessions[sessionId] = {
           ...(this.sessions[sessionId] ?? {}),
           historyStatus: 'error',

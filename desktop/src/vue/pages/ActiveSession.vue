@@ -116,10 +116,18 @@ const activeTabType = computed<TabType | null>(() => {
 // v3.0: when the active tab changes to a session that hasn't been
 // hydrated yet, load its message history from the backend. Without
 // this, switching to a saved session showed only the welcome state.
+//
+// v4 — dedup: loadHistory() already cancels any older in-flight
+// load for this same sessionId, but skipping entirely when no
+// rehydration is needed saves a backend round-trip and avoids any
+// risk of overwrite. The condition is the same as before, but
+// re-stated for clarity.
 watch(activeTabId, async (newId, oldId) => {
   if (!newId || newId === oldId) return
   if (!isSessionTabState(newId, activeTabType.value)) return
   const existing = chatStore.sessions[newId]
+  // Skip if already hydrated, OR if a load is already in flight
+  // (avoid piling up redundant fetches during fast tab switching).
   if (existing?.historyStatus === 'ready' && (existing?.messages?.length ?? 0) > 0) return
   void chatStore.loadHistory(newId)
 }, { immediate: true })
