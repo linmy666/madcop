@@ -343,6 +343,14 @@ class ReActEngine:
                     )
                 messages.append(Message(role="assistant", content=raw))
                 messages.append(Message(role="user", content=f"Observation: {reflection}"))
+                # v4.0.2 — mark the run as max_steps so callers (and tests)
+                # can distinguish a stuck-loop exit from a real answer.
+                # Without this, runs that hit the reflection branch
+                # silently return status="completed" with empty
+                # final_answer, which is indistinguishable from a
+                # runaway agent that produced nothing useful.
+                status = "max_steps"
+                break
                 continue
 
             # Check for final answer

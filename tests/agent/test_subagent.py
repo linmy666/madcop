@@ -194,7 +194,10 @@ def test_duration_s_computed_when_started():
 
 
 def test_builtin_registry_has_expected_agents():
-    assert set(BUILTIN_SUBAGENTS.keys()) == {"general-purpose", "bash"}
+    # v3.5.0 — gushen (quant research) was added in commit
+    # 3b2f8ad. The expected registry covers all built-in subagent
+    # types. Add to the set when introducing a new agent.
+    assert set(BUILTIN_SUBAGENTS.keys()) == {"general-purpose", "bash", "gushen"}
 
 
 def test_get_builtin_returns_spec():

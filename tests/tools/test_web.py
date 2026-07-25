@@ -44,7 +44,14 @@ class TestWebSearchTool:
 
     def test_search_error_returns_error_dict(self):
         tool = WebSearchTool()
-        with patch("madcop.tools.web._http_get", side_effect=Exception("Network down")):
+        # v3.12 — patch all engines so _http_get exception bubbles
+        # through and triggers the LLM-knowledge fallback (which
+        # returns the single {"error": "..."} dict).
+        with patch("madcop.tools.web._http_get", side_effect=Exception("Network down")), \
+             patch("madcop.tools.web.WebSearchTool._search_baidu_playwright",
+                   side_effect=Exception("playwright not installed in test env")), \
+             patch("madcop.tools.web.WebSearchTool._search_bing",
+                   side_effect=Exception("bing not mocked in test env")):
             results = tool(query="test")
         assert len(results) == 1
         assert "error" in results[0]
@@ -53,9 +60,31 @@ class TestWebSearchTool:
         """Build 10 fake results, ask for 3."""
         blocks = ""
         for i in range(10):
-            blocks += f'''<a rel="nofollow" href="//duckduckgo.com/l/?uddg=https://r{i}.com" class='result-link'>Result {i}</a><td class='result-snippet'>Snippet {i}</td>'''
+            # v3.12 — the relevance check (added later) requires
+            # at least one query word in titles or snippets. Embed
+            # 'test' so the mock results pass the heuristic. Use
+            # single quotes for class names to match DDG's actual
+            # HTML format (the parser's regex looks for class='…').
+            # We avoid f-strings here because in f"..." the escape
+            # sequence \' renders as a literal backslash + apostrophe,
+            # which breaks the regex match.
+            blocks += (
+                '<a rel="nofollow" href="//duckduckgo.com/l/?uddg=https://r'
+                + str(i) + '.com" class=\'result-link\'>test result '
+                + str(i) + '</a><td class=\'result-snippet\'>Snippet '
+                + str(i) + ' about test</td>'
+            )
         tool = WebSearchTool()
-        with patch("madcop.tools.web._http_get", return_value=blocks.encode()):
+        # v3.12 — WebSearchTool now runs Baidu (Playwright) → Bing
+        # → DDG in order. The test was originally written against
+        # the DDG-only path, so force the upstream engines to raise
+        # and fall through to the only strategy that uses
+        # _http_get (DDG). This keeps the test fast and offline.
+        with patch("madcop.tools.web._http_get", return_value=blocks.encode()), \
+             patch("madcop.tools.web.WebSearchTool._search_baidu_playwright",
+                   side_effect=Exception("playwright not installed in test env")), \
+             patch("madcop.tools.web.WebSearchTool._search_bing",
+                   side_effect=Exception("bing not mocked in test env")):
             results = tool(query="test", max_results=3)
         assert len(results) == 3
 

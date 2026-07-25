@@ -198,14 +198,25 @@ def test_tool_use_flow_with_mock_web_search(client: TestClient):
     from madcop.tools.web import WebSearchTool
 
     t = WebSearchTool()
-    fake_html = """
-    <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https://example.com" class='result-link'>Example Result</a>
-    <td class='result-snippet'>A great example.</td>
-    """
-    with patch.object(t, "_search_ddg", return_value=fake_html):
+    # v3.12 — _search_ddg now returns list[dict], not the raw HTML.
+    # The pre-v3.12 test patched _search_ddg with a string and
+    # expected the tool() result to be the parsed result of that
+    # string. The current API is: _search_ddg returns a list of
+    # result dicts directly. Mock the upstream engines to raise so
+    # the tool falls through to DDG, but also mock _search_ddg
+    # itself to return ready-to-go dicts.
+    fake_results = [
+        {"title": "Example Result", "url": "https://example.com",
+         "snippet": "A great example."}
+    ]
+    with patch.object(t, "_search_baidu_playwright",
+                      side_effect=Exception("not installed")), \
+         patch.object(t, "_search_bing",
+                      side_effect=Exception("not accessible")), \
+         patch.object(t, "_search_ddg", return_value=fake_results):
         result = t(query="example")
-    assert "Example Result" in result
-    assert "example.com" in result
+    assert "Example Result" in result[0]["title"]
+    assert "example.com" in result[0]["url"]
 
 
 # --------------------------------------------------------------------------- #
