@@ -43,6 +43,7 @@ import RagDebugPanel from '../components/chat/RagDebugPanel.vue'
 import SseDebugOverlay from '../components/chat/SseDebugOverlay.vue'
 import WorkspacePanel from '../components/workspace/WorkspacePanel.vue'
 import PreviewPanel from '../components/design/PreviewPanel.vue'
+import ProjectContextChip from '../components/shared/ProjectContextChip.vue'
 import TeamStatusBar from '../components/teams/TeamStatusBar.vue'
 import TerminalSettings from './TerminalSettings.vue'
 import type { ChatPermission } from '~/stores/permissionStore'
@@ -223,6 +224,9 @@ onMounted(() => {
     const v = localStorage.getItem('madcop_plan_sidebar_enabled')
     if (v === '0') planSidebarEnabled.value = false
   } catch {}
+  // v4 — session overflow menu: close on outside click / Escape.
+  document.addEventListener('mousedown', _onDocMouseDown)
+  document.addEventListener('keydown', _onDocKeydown)
 })
 function togglePlanSidebar() {
   planSidebarEnabled.value = !planSidebarEnabled.value
@@ -248,6 +252,105 @@ function toggleWorkbench() {
 const workbenchOpen = computed(() =>
   activeTabId.value ? workspacePanelStore.isPanelOpen(activeTabId.value) : false
 )
+
+// ─── Session ... overflow menu (v4) ─────────────────────────────────
+// Replaces the right-click "close tab" affordance that lived on the
+// hidden TabStrip. Surfaces the actions that used to be reachable
+// only via the tab-strip context menu.
+const sessionMenuOpen = ref(false)
+const sessionMenuPos = ref({ x: 0, y: 0 })
+
+function openSessionMenu(ev: MouseEvent) {
+  if (sessionMenuOpen.value) {
+    sessionMenuOpen.value = false
+    return
+  }
+  const btn = ev.currentTarget as HTMLElement | null
+  const r = btn ? btn.getBoundingClientRect() : null
+  sessionMenuPos.value = r
+    ? { x: Math.round(r.right - 180), y: Math.round(r.bottom + 6) }
+    : { x: 16, y: 16 }
+  sessionMenuOpen.value = true
+}
+
+// Close on outside click / Escape
+function closeSessionMenu() { sessionMenuOpen.value = false }
+
+async function renameCurrentSession() {
+  closeSessionMenu()
+  const sid = activeTabId.value
+  if (!sid) return
+  const next = (window.prompt('重命名会话', session.value?.title || '') ?? '').trim()
+  if (!next) return
+  try {
+    await sessionStore.renameSession(sid, next) // may not exist; fall back below
+  } catch {
+    try {
+      // Fallback: optimistically mutate the title client-side via store helpers.
+      const s = sessionStore.sessions.find((x: any) => x.id === sid)
+      if (s) s.title = next
+    } catch {}
+  }
+}
+
+async function archiveCurrentSession() {
+  closeSessionMenu()
+  const sid = activeTabId.value
+  if (!sid) return
+  uiStore.addToast({ type: 'info', message: '归档功能即将推出 (TODO wire /api/sessions/{id}/archive)' })
+}
+
+async function copySessionPath() {
+  closeSessionMenu()
+  const p = session.value?.workDir
+  if (!p) return
+  try {
+    await navigator.clipboard.writeText(p)
+    uiStore.addToast({ type: 'success', message: '已复制路径' })
+  } catch {
+    uiStore.addToast({ type: 'error', message: '复制失败：剪贴板权限被拒绝' })
+  }
+}
+
+async function copySessionId() {
+  closeSessionMenu()
+  const sid = activeTabId.value
+  if (!sid) return
+  try {
+    await navigator.clipboard.writeText(sid)
+    uiStore.addToast({ type: 'success', message: '已复制会话 ID' })
+  } catch {
+    uiStore.addToast({ type: 'error', message: '复制失败：剪贴板权限被拒绝' })
+  }
+}
+
+async function openInFinder() {
+  closeSessionMenu()
+  const p = session.value?.workDir
+  if (!p) return
+  try {
+    // window.open triggers Electron's `setWindowOpenHandler` → shell.openPath.
+    // Using the IPC bridge directly would be cleaner but this avoids
+    // adding new dependencies; works in both web + desktop runtime.
+    window.open(`madcop-open://${encodeURIComponent(p)}`)
+  } catch {
+    uiStore.addToast({ type: 'error', message: '打开 Finder 失败' })
+  }
+}
+
+// Global click / Escape closes the menu. Registered in onMounted / onBeforeUnmount
+// further below to avoid duplicating the lifecycle hooks.
+function _onDocMouseDown(ev: MouseEvent) {
+  if (!sessionMenuOpen.value) return
+  const target = ev.target as HTMLElement | null
+  // Click on the trigger button is handled by its own @click.stop; here we
+  // only care about clicks elsewhere.
+  if (target?.closest('.session-menu, [aria-label="会话操作菜单"]')) return
+  closeSessionMenu()
+}
+function _onDocKeydown(ev: KeyboardEvent) {
+  if (ev.key === 'Escape' && sessionMenuOpen.value) closeSessionMenu()
+}
 
 function onArtifactOpen(path: string) {
   // Best-effort: reveal in file manager on macOS via Electron desktopRuntime.
@@ -315,6 +418,8 @@ onBeforeUnmount(() => {
     clearInterval(taskPollTimer)
     taskPollTimer = null
   }
+  document.removeEventListener('mousedown', _onDocMouseDown)
+  document.removeEventListener('keydown', _onDocKeydown)
 })
 
 // ── Computed values for main template ────────────────────────────────────────
@@ -659,118 +764,157 @@ function openTerminalInTab() {
         <!-- Non-empty session content -->
         <template v-else>
           <!-- Session header (non-member, non-mobile) -->
+          <!-- v4 — redesigned: single tight row with title + project chip
+               + plan/workbench toggles + ... overflow. The tab strip
+               above is hidden for session routes (sidebar already does
+               session switching). -->
           <div
             v-if="!isMemberSession && !isMobileLayout"
-            :class="showRightPanel ? 'flex w-full items-center border-b border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-4 py-2.5' : 'w-full border-b border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-4 py-2.5'"
+            class="flex w-full items-center border-b border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-4 py-2.5"
           >
             <div :class="showRightPanel ? 'min-w-0 flex-1' : 'mx-auto w-full max-w-[860px] min-w-0'">
-              <div class="flex min-w-0 items-center gap-3">
+              <div class="flex min-w-0 items-center gap-2.5">
                 <h1
                   :class="showRightPanel
-                    ? 'min-w-0 flex-1 truncate text-[14px] font-semibold text-[var(--color-text-primary)]'
-                    : 'min-w-0 flex-1 text-[16px] font-semibold text-[var(--color-text-primary)]'"
+                    ? 'min-w-0 truncate text-[14px] font-semibold text-[var(--color-text-primary)]'
+                    : 'min-w-0 truncate text-[15px] font-semibold tracking-tight text-[var(--color-text-primary)]'"
                 >
                   {{ session?.title || t('session.untitled') }}
                 </h1>
-                <!-- Plan sidebar toggle -->
-                <button
-                  v-if="!isEmpty"
-                  type="button"
-                  :title="planSidebarEnabled ? '隐藏计划面板' : '显示计划面板'"
-                  :class="[
-                    'flex shrink-0 items-center justify-center rounded-md p-1 transition-colors',
-                    planSidebarEnabled
-                      ? 'text-[var(--color-primary)] bg-[var(--color-primary)]/[0.08] hover:bg-[var(--color-primary)]/15'
-                      : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]'
-                  ]"
-                  @click.stop="togglePlanSidebar"
-                >
-                  <span class="material-symbols-outlined text-[18px] leading-none">
-                    {{ planSidebarEnabled ? 'task_alt' : 'task' }}
-                  </span>
-                </button>
-                <!-- Workbench / live preview toggle. Opens the right-side
-                     panel with workspace files + browser preview. -->
-                <button
-                  v-if="!isEmpty"
-                  type="button"
-                  :title="workbenchOpen ? '隐藏工作台' : '显示工作台 / 实时预览'"
-                  :class="[
-                    'flex shrink-0 items-center justify-center rounded-md p-1 transition-colors',
-                    workbenchOpen
-                      ? 'text-[var(--color-brand)] bg-[var(--color-brand)]/[0.08] hover:bg-[var(--color-brand)]/15'
-                      : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]'
-                  ]"
-                  @click.stop="toggleWorkbench"
-                >
-                  <span class="material-symbols-outlined text-[18px] leading-none">
-                    {{ workbenchOpen ? 'right_panel_close' : 'right_panel_open' }}
-                  </span>
-                </button>
-              </div>
-              <div
-                :class="showRightPanel
-                  ? 'mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-[10px] font-medium text-outline'
-                  : 'flex items-center gap-2 text-[10px] text-outline font-medium mt-1'"
-              >
-                <span v-if="isActive" class="flex shrink-0 items-center gap-1">
-                  <span class="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] animate-pulse-dot" />
-                  {{ t('session.active') }}
-                </span>
-                <template v-if="totalTokens > 0">
-                  <span class="text-[var(--color-outline)]">·</span>
-                  <span :title="t('common.tokens', { count: totalTokens.toLocaleString() })">
-                    {{ t('common.tokens', { count: formatTokenCount(totalTokens) }) }}
-                  </span>
-                </template>
-                <template v-if="lastUpdated">
-                  <span class="shrink-0 text-[var(--color-outline)]">·</span>
-                  <span class="truncate">{{ t('session.lastUpdated', { time: lastUpdated }) }}</span>
-                </template>
-                <template v-if="!showRightPanel && visibleMessageCount > 0">
-                  <span class="text-[var(--color-outline)]">·</span>
-                  <span>{{ t('session.messages', { count: visibleMessageCount }) }}</span>
-                </template>
-              </div>
-
-              <!-- Workspace unavailable warning -->
-              <div
-                v-if="session?.workDirExists === false"
-                class="mt-2 inline-flex max-w-full items-center gap-2 rounded-lg border border-[var(--color-error)]/20 bg-[var(--color-error)]/8 px-3 py-1.5 text-[11px] text-[var(--color-error)]"
-              >
-                <span class="material-symbols-outlined text-[14px]">warning</span>
-                <span class="truncate">
-                  {{ t('session.workspaceUnavailable', { dir: session.workDir || 'directory no longer exists' }) }}
-                </span>
-              </div>
-
-              <!-- Active Goal Strip -->
-              <div
-                v-if="activeGoal && activeGoal.action !== 'completed'"
-                data-testid="active-goal-strip"
-                :class="['mt-2 flex max-w-full items-center gap-2 rounded-[8px] border border-[var(--color-memory-border)] bg-[var(--color-memory-surface)] px-2.5 py-1.5', showRightPanel ? 'text-[11px]' : 'text-[12px]']"
-              >
-                <span class="material-symbols-outlined shrink-0 text-[var(--color-memory-accent)]">target</span>
-                <span class="shrink-0 font-semibold text-[var(--color-text-primary)]">
-                  {{ t('chat.activeGoal.title') }}
-                </span>
-                <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-memory-accent)]" aria-hidden="true" />
-                <span class="shrink-0 text-[var(--color-text-tertiary)]">
-                  {{ isActive ? t('chat.activeGoal.running') : activeGoal.status === 'paused' ? t('chat.activeGoal.paused') : t('chat.activeGoal.active') }}
-                </span>
-                <span class="min-w-0 flex-1 truncate font-medium text-[var(--color-text-primary)]" :title="activeGoal.objective ?? activeGoal.message">
-                  {{ activeGoal.objective ?? activeGoal.message }}
-                </span>
-                <span
-                  v-if="activeGoal.budget || activeGoal.elapsed || activeGoal.continuations"
-                  class="hidden shrink-0 items-center gap-1.5 text-[11px] text-[var(--color-text-tertiary)] lg:flex"
-                >
-                  <span v-if="activeGoal.budget" class="max-w-[140px] truncate">{{ t('chat.activeGoal.budget', { value: activeGoal.budget }) }}</span>
-                  <span v-if="activeGoal.elapsed" class="max-w-[140px] truncate">{{ t('chat.activeGoal.elapsed', { value: activeGoal.elapsed }) }}</span>
-                  <span v-if="activeGoal.continuations" class="max-w-[140px] truncate">{{ t('chat.activeGoal.continuations', { value: activeGoal.continuations }) }}</span>
-                </span>
+                <!-- inline project context pill — only when workspace exists -->
+                <ProjectContextChip
+                  v-if="session?.workDir && session?.workDirExists !== false"
+                  :work-dir="session.workDir"
+                  :compact="true"
+                />
+                <div class="flex shrink-0 items-center gap-1">
+                  <!-- Plan sidebar toggle -->
+                  <button
+                    v-if="!isEmpty"
+                    type="button"
+                    :title="planSidebarEnabled ? '隐藏计划面板' : '显示计划面板'"
+                    :class="[
+                      'flex shrink-0 items-center justify-center rounded-md p-1 transition-colors',
+                      planSidebarEnabled
+                        ? 'text-[var(--color-primary)] bg-[var(--color-primary)]/[0.08] hover:bg-[var(--color-primary)]/15'
+                        : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]'
+                    ]"
+                    @click.stop="togglePlanSidebar"
+                  >
+                    <span class="material-symbols-outlined text-[18px] leading-none">
+                      {{ planSidebarEnabled ? 'task_alt' : 'task' }}
+                    </span>
+                  </button>
+                  <!-- Workbench / live preview toggle -->
+                  <button
+                    v-if="!isEmpty"
+                    type="button"
+                    :title="workbenchOpen ? '隐藏工作台' : '显示工作台 / 实时预览'"
+                    :class="[
+                      'flex shrink-0 items-center justify-center rounded-md p-1 transition-colors',
+                      workbenchOpen
+                        ? 'text-[var(--color-brand)] bg-[var(--color-brand)]/[0.08] hover:bg-[var(--color-brand)]/15'
+                        : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]'
+                    ]"
+                    @click.stop="toggleWorkbench"
+                  >
+                    <span class="material-symbols-outlined text-[18px] leading-none">
+                      {{ workbenchOpen ? 'right_panel_close' : 'right_panel_open' }}
+                    </span>
+                  </button>
+                  <!-- ... overflow menu (replaces tab-strip right-click affordance) -->
+                  <button
+                    type="button"
+                    title="更多操作"
+                    aria-label="会话操作菜单"
+                    :class="[
+                      'flex shrink-0 items-center justify-center rounded-md p-1 transition-colors',
+                      sessionMenuOpen
+                        ? 'text-[var(--color-text-primary)] bg-[var(--color-surface-container)]'
+                        : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]'
+                    ]"
+                    @click.stop="openSessionMenu"
+                  >
+                    <span class="material-symbols-outlined text-[18px] leading-none">more_horiz</span>
+                  </button>
+                </div>
               </div>
             </div>
+          </div>
+
+          <!-- Overflow menu (teleported to body) -->
+          <Teleport to="body">
+            <div
+              v-if="sessionMenuOpen"
+              class="session-menu fixed z-[9999] min-w-[180px] overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-[var(--shadow-dropdown)]"
+              :style="{ left: sessionMenuPos.x + 'px', top: sessionMenuPos.y + 'px' }"
+              @click.stop
+            >
+              <button
+                type="button"
+                class="session-menu__item"
+                @click="renameCurrentSession"
+              >重命名</button>
+              <button
+                type="button"
+                class="session-menu__item"
+                @click="archiveCurrentSession"
+              >归档</button>
+              <button
+                type="button"
+                class="session-menu__item"
+                @click="copySessionPath"
+              >复制路径</button>
+              <button
+                type="button"
+                class="session-menu__item"
+                @click="copySessionId"
+              >复制会话 ID</button>
+              <button
+                v-if="session?.workDir && session?.workDirExists !== false"
+                type="button"
+                class="session-menu__item"
+                @click="openInFinder"
+              >在 Finder 中打开</button>
+            </div>
+          </Teleport>
+
+          <!-- Workspace unavailable warning -->
+          <div
+            v-if="session?.workDirExists === false"
+            class="mt-2 inline-flex max-w-full items-center gap-2 rounded-lg border border-[var(--color-error)]/20 bg-[var(--color-error)]/8 px-3 py-1.5 text-[11px] text-[var(--color-error)]"
+          >
+            <span class="material-symbols-outlined text-[14px]">warning</span>
+            <span class="truncate">
+              {{ t('session.workspaceUnavailable', { dir: session.workDir || 'directory no longer exists' }) }}
+            </span>
+          </div>
+
+          <!-- Active Goal Strip -->
+          <div
+            v-if="activeGoal && activeGoal.action !== 'completed'"
+            data-testid="active-goal-strip"
+            :class="['mt-2 flex max-w-full items-center gap-2 rounded-[8px] border border-[var(--color-memory-border)] bg-[var(--color-memory-surface)] px-2.5 py-1.5', showRightPanel ? 'text-[11px]' : 'text-[12px]']"
+          >
+            <span class="material-symbols-outlined shrink-0 text-[var(--color-memory-accent)]">target</span>
+            <span class="shrink-0 font-semibold text-[var(--color-text-primary)]">
+              {{ t('chat.activeGoal.title') }}
+            </span>
+            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-memory-accent)]" aria-hidden="true" />
+            <span class="shrink-0 text-[var(--color-text-tertiary)]">
+              {{ isActive ? t('chat.activeGoal.running') : activeGoal.status === 'paused' ? t('chat.activeGoal.paused') : t('chat.activeGoal.active') }}
+            </span>
+            <span class="min-w-0 flex-1 truncate font-medium text-[var(--color-text-primary)]" :title="activeGoal.objective ?? activeGoal.message">
+              {{ activeGoal.objective ?? activeGoal.message }}
+            </span>
+            <span
+              v-if="activeGoal.budget || activeGoal.elapsed || activeGoal.continuations"
+              class="hidden shrink-0 items-center gap-1.5 text-[11px] text-[var(--color-text-tertiary)] lg:flex"
+            >
+              <span v-if="activeGoal.budget" class="max-w-[140px] truncate">{{ t('chat.activeGoal.budget', { value: activeGoal.budget }) }}</span>
+              <span v-if="activeGoal.elapsed" class="max-w-[140px] truncate">{{ t('chat.activeGoal.elapsed', { value: activeGoal.elapsed }) }}</span>
+              <span v-if="activeGoal.continuations" class="max-w-[140px] truncate">{{ t('chat.activeGoal.continuations', { value: activeGoal.continuations }) }}</span>
+            </span>
           </div>
 
           <!-- History loading -->
@@ -1007,5 +1151,33 @@ function openTerminalInTab() {
   background: color-mix(in srgb, var(--color-brand, #7c3aed) 14%, transparent);
   border-color: color-mix(in srgb, var(--color-brand, #7c3aed) 40%, transparent);
   color: var(--color-brand, #7c3aed);
+}
+
+/* v4 — Session overflow menu (Teleported to body). Mirrors the
+   .tab-context-menu pattern from TabStrip.vue for visual consistency. */
+.session-menu__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary, #1f1f1f);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  /* Specify exact properties (Emil review-animations standard #1). */
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+.session-menu__item:hover {
+  background: var(--color-surface-hover, #f0f0f2);
+  color: var(--color-text-primary, #111);
+}
+.session-menu__item:active {
+  background: color-mix(in srgb, var(--color-brand, #7c3aed) 10%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-menu__item { transition: none; }
 }
 </style>

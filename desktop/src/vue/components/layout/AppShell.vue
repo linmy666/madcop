@@ -22,6 +22,19 @@ import { watch } from 'vue'
 const ready = ref(false)
 const paletteOpen = ref(false)
 const uiStore = useUIStore()
+const tabStore = useTabStore()
+
+// v4 — Hide the horizontal tab strip when the active route is a chat
+// session. The sidebar's session list is the single source of truth
+// for switching between sessions; on a session page the strip was
+// duplicating that. Special/non-session tabs (settings, workflows,
+// knowledge, etc.) still get the strip because the sidebar doesn't
+// expose them as session entries.
+const showTabStrip = computed(() => {
+  if (!tabStore.activeTabId) return false
+  const tab = tabStore.tabs.find((tb: any) => tb.sessionId === tabStore.activeTabId)
+  return tab?.type !== 'session'
+})
 
 // Listen for ⌘K toggle event from CommandPalette
 onMounted(() => {
@@ -171,9 +184,9 @@ function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
         <Sidebar />
       </aside>
 
-      <!-- Right side: TabStrip (top) + Main (bottom) -->
+      <!-- Right side: TabStrip (top, non-session routes only) + Main (bottom) -->
       <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TabStrip style="width: 100%; flex-shrink: 0;" />
+        <TabStrip v-if="showTabStrip" style="width: 100%; flex-shrink: 0;" />
         <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
           <ContentRouter />
         </main>
