@@ -242,13 +242,37 @@ class ReActEngineV4(AgentEngine):
         yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")
 
     def _build_messages(self, ctx: RunContext) -> list:
-        """Build initial [system, user] messages."""
+        """Build initial [system, user] messages.
+
+        Supports multi-turn history: the full ctx.messages list is
+        included as a conversation block in the user prompt so the
+        LLM sees prior turns.
+        """
         sys_text = REACT_SYSTEM_PROMPT.format(
             tools_desc=self._format_tools(ctx.tool_schemas)
         )
         if ctx.system_prefix:
             sys_text = f"{ctx.system_prefix}\n\n{sys_text}"
-        user_text = ctx.messages[-1].content if ctx.messages else ""
+
+        # Build user_text: include full multi-turn history so the
+        # LLM can recall prior turns. Last message is the current
+        # query; all prior messages are context.
+        msgs = ctx.messages or []
+        if len(msgs) > 1:
+            history_lines = []
+            for m in msgs[:-1]:
+                role = m.role or "user"
+                content = m.content or ""
+                history_lines.append(f"[{role}] {content}")
+            history_block = "\n".join(history_lines)
+            current_query = msgs[-1].content or ""
+            user_text = (
+                f"--- 对话历史 ---\n{history_block}\n\n"
+                f"--- 当前问题 ---\n{current_query}"
+            )
+        else:
+            user_text = msgs[-1].content if msgs else ""
+
         if ctx.context:
             user_text = f"{user_text}\n\n--- 上下文 ---\n{ctx.context}"
         return [

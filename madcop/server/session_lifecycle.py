@@ -312,11 +312,33 @@ def _now() -> float:
 
 @contextlib.asynccontextmanager
 async def _asyncio_unlocked_attr(obj, attr):
-    """A no-op async ctx manager for places that don't need a per-Session
-    lock. We rely on `dict` operations on the registry being atomic at
-    the GIL level; the only state mutation that needs serialization is
-    the Session object's own fields, and Python's GIL gives us that
-    for free for simple attribute reads/writes. If we ever need true
-    atomicity, swap this for `asyncio.Lock()`.
+    """Per-Session async lock. Each Session has its own asyncio.Lock
+    stored in `_locks[obj]`. The comment previously claimed GIL atomicity
+    was enough, but reads like
+      `s = registry[id]; if s.state == Running: ... async with _lock(s): s.state = Cancelling; ...`
+    are NOT atomic across event-loop ticks under cooperative
+    scheduling — another coroutine can run between the read and the
+    write. The audit caught this. Now real serialization.
     """
-    yield
+    lock = _locks.setdefault(obj, asyncio.Lock())
+    async with lock:
+        yield
+
+
+# Per-Session locks — one per Session instance, kept weak so the GC
+# can collect the Session + its lock together when the registry is
+# pruned. asyncio.Lock is the right primitive for an event-loop-bound
+# coordinator: cheap to create, coroutine-safe, no thread-safety needed.
+_locks: weakref.WeakValueDictionary[Session, asyncio.Lock] = weakref.WeakValueDictionary()
+
+
+def _register_session_lock(sess: Session) -> None:
+    """Called when a new Session is created in get_or_create so its
+    lock exists before any concurrent code path could miss it. Re-creating
+    the lock under contention would be fine (asyncio.Lock is cheap) but
+    ensures the contract is: every Session has a lock from the moment
+    it exists.
+    """
+    lock = asyncio.Lock()
+    _locks[sess] = lock
+    sess._lock = lock

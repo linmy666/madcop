@@ -797,23 +797,22 @@ function openTerminalInTab() {
             <!-- V4 unified chat panel -->
             <V4ChatPanel
               v-if="useV4 && activeTabId"
+              :key="activeTabId"
               :session-id="activeTabId"
-              class="flex-1 min-h-0"
+              class="v4-chat-wrap"
             />
-            <!-- Legacy message list -->
-            <template v-else>
-            <div class="flex-1 min-h-0 w-full overflow-y-auto pt-6">
+            <!-- Legacy message list (only when v4 explicitly disabled via localStorage) -->
+            <div
+              v-else-if="activeTabId"
+              class="flex-1 min-h-0 w-full overflow-y-auto pt-6"
+            >
               <div class="mx-auto max-w-[860px] px-5">
-                <!-- v3.7.1 — SSE debug overlay. Hidden by default from v3.7.5:
-                     this is internal-only debugging. Re-enable by
-                     setting window.__madcopShowDebug = true. -->
-                <div v-if="activeTabId && showDebugPanels" class="mb-2">
+                <div v-if="showDebugPanels" class="mb-2">
                   <SseDebugOverlay :session-id="activeTabId" />
                 </div>
                 <MessageList :compact="showRightPanel" />
               </div>
             </div>
-            </template>
           </template>
         </template>
 

@@ -506,7 +506,19 @@ export function buildRenderModel(
   })
 
   for (const msg of messages) {
-    if (msg.type === 'assistant_text' && !msg.content.trim()) continue
+    // v3.8.8 — diagnostic: log what buildRenderModel sees
+    if (msg.type === 'assistant_text') {
+      console.log('[DIAG-RM] assistant_text', JSON.stringify({
+        id: msg.id,
+        contentLen: (msg.content || '').length,
+        contentTrimmed: !!(msg.content || '').trim(),
+        preview: (msg.content || '').slice(0, 30),
+      }))
+    }
+    if (msg.type === 'assistant_text' && !msg.content.trim()) {
+      console.log('[DIAG-RM] SKIP assistant_text (empty content)')
+      continue
+    }
     if (isAgentBackgroundTaskMessage(msg)) continue
     if (msg.type === 'tool_result' && toolUseIds.has(msg.toolUseId)) continue
     if (msg.type === 'tool_result' && msg.parentToolUseId && toolUseIds.has(msg.parentToolUseId)) continue

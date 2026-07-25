@@ -1712,7 +1712,9 @@ def create_app() -> FastAPI:
 
     @app.post("/api/chat")
     async def chat(body: ChatRequest) -> StreamingResponse:
-        """Stream chat completion as SSE events.
+        """[DEPRECATED v4] Use /api/v4/chat instead.
+
+        Stream chat completion as SSE events.
 
         Memory integration:
         1. Before the LLM call: build a system prompt with relevant
