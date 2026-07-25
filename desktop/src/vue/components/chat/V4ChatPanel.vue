@@ -297,336 +297,91 @@ watch([thoughtBlocks, toolCalls, answer], () => {
 </template>
 
 <style scoped>
-/* ── Emil Kowalski design tokens (interpolated into the existing system).
-   Strong ease-out for UI, on-screen morphs use ease-in-out, both custom. ──*/
 .v4-chat-wrap {
-  /* Custom easing curves — stronger than built-ins. */
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease: cubic-bezier(0.4, 0, 0.2, 1);
-  /* Typography scale — locked at 12/13/14 for consistency. */
-  --fs-xs: 12px;
-  --fs-sm: 13px;
-  --fs-md: 14px;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
   min-height: 0;
-  /* Slightly higher z than legacy chat so it sits on top during transitions. */
-  position: relative;
 }
-
-/* ── Scroll area ─────────────────────────────────────────────────── */
 .v4-chat__scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 16px 16px;
-  /* momentum scrolling on touch devices. */
-  -webkit-overflow-scrolling: touch;
+  padding: 16px;
 }
 .v4-chat__inner { max-width: 860px; margin: 0 auto; }
-
-/* ── Turn ─────────────────────────────────────────────────────────── */
 .v4-turn { margin-bottom: 24px; }
-/* Stagger entering turns. Each turn fades+slides 8px. */
-.v4-turn { animation: turn-in 320ms var(--ease-out) both; }
-@keyframes turn-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* User bubble — speech-bubble shape, brand background. */
 .v4-turn__user { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .v4-turn__user span {
-  max-width: 70%;
-  padding: 9px 14px;
-  background: var(--color-brand, #7c3aed);
-  color: #fff;
-  border-radius: 16px 16px 4px 16px;
-  font-size: var(--fs-md);
-  line-height: 1.55;
-  letter-spacing: -0.005em;
-  /* Crisp text on translucent brand bg. */
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
+  max-width: 70%; padding: 8px 14px;
+  background: var(--color-brand, #7c3aed); color: #fff;
+  border-radius: 14px 14px 4px 14px; font-size: 14px; line-height: 1.5;
 }
-
-/* AI column. */
-.v4-turn__ai { display: flex; flex-direction: column; gap: 8px; }
-
-/* Thought blocks — secondary, subdued but not gray-on-gray. */
-.v4-thought {
-  font-size: var(--fs-sm);
-  line-height: 1.7;
-  /* mix-on-secondary so it reads as inline reasoning, not noise. */
-  color: var(--color-text-secondary, #5b5b66);
-  padding: 2px 0;
-}
-.v4-thought__text {
-  white-space: pre-wrap;
-  word-break: break-word;
-  /* Slight opacity lets the "thinking" read as ambient, not assertive. */
-  opacity: 0.78;
-}
-
-/* Thinking dots — stagger pulse, ease-in-out (continuous motion = linear-ish). */
-.thinking-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 6px;
-  /* Anchor dots to text baseline instead of arbitrary baseline. */
-  transform: translateY(-1px);
-}
+.v4-turn__ai { display: flex; flex-direction: column; gap: 6px; }
+.v4-thought { font-size: 13px; line-height: 1.7; color: var(--color-text-secondary, #555); padding: 2px 0; }
+.v4-thought__text { white-space: pre-wrap; word-break: break-word; }
+.thinking-dots { display: inline-flex; align-items: baseline; gap: 2px; margin-left: 4px; }
 .thinking-dots i {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.3;
-  animation: thinking-dot-pulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  width: 3px; height: 3px; border-radius: 50%;
+  background: var(--color-text-secondary, #555); opacity: 0.3;
+  animation: thinking-dot-pulse 1.2s ease-in-out infinite;
 }
-.thinking-dots i:nth-child(2) { animation-delay: 0.18s; }
-.thinking-dots i:nth-child(3) { animation-delay: 0.36s; }
+.thinking-dots i:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots i:nth-child(3) { animation-delay: 0.30s; }
 @keyframes thinking-dot-pulse {
   0%, 100% { opacity: 0.25; transform: translateY(0); }
-  50%      { opacity: 0.85; transform: translateY(-2px); }
+  50%      { opacity: 0.9;  transform: translateY(-1px); }
 }
-
-/* Tool calls — pill-like, quiet by default. */
-.v4-tool {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  font-size: var(--fs-xs);
-  line-height: 1.5;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--color-text-tertiary, #6b7280);
-  background: color-mix(in srgb, var(--color-text-tertiary, #6b7280) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-text-tertiary, #6b7280) 14%, transparent);
-  border-radius: 999px;
-  align-self: flex-start;
-  /* Width change animates so the ✓/✗ swap doesn't feel jumpy. */
-  transition: background-color 200ms var(--ease), border-color 200ms var(--ease), color 200ms var(--ease);
-}
-.v4-tool--error {
-  color: #b91c1c;
-  background: color-mix(in srgb, #ef4444 10%, transparent);
-  border-color: color-mix(in srgb, #ef4444 22%, transparent);
-}
-.v4-tool__icon { font-size: 13px; line-height: 1; color: var(--zcode-diff-added, #16a34a); font-weight: 600; }
+.v4-tool { display: flex; align-items: center; gap: 5px; padding: 2px 0; font-size: 12px; line-height: 1.5; color: var(--color-text-tertiary, #999); }
 .v4-tool--error .v4-tool__icon { color: #e03131; }
-.v4-tool__name { font-weight: 500; }
-
-/* Tool spinner — slow enough to feel deliberate. */
+.v4-tool__icon { font-size: 13px; color: var(--zcode-diff-added, #1e8a3e); }
+.v4-tool__name { font-weight: 400; }
 .v4-tool__spinner {
-  width: 10px;
-  height: 10px;
-  border: 1.5px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: zcode-spin 0.9s linear infinite;
+  width: 10px; height: 10px; border: 1.5px solid currentColor;
+  border-top-color: transparent; border-radius: 50%;
+  animation: zcode-spin 1s linear infinite;
 }
 @keyframes zcode-spin { to { transform: rotate(360deg); } }
-
-/* Answer body — generous line-height for reading. */
-.v4-answer {
-  padding: 4px 0;
-  font-size: var(--fs-md);
-  line-height: 1.75;
-  color: var(--color-text-primary, #111);
-  /* Slight letter-spacing tightens the body copy. */
-  letter-spacing: -0.003em;
-}
-
-/* Error chip. */
-.v4-error {
-  padding: 10px 12px;
-  background: color-mix(in srgb, #ef4444 10%, transparent);
-  color: #b91c1c;
-  border-radius: 10px;
-  font-size: var(--fs-sm);
-  border: 1px solid color-mix(in srgb, #ef4444 18%, transparent);
-}
-
-/* ── Clarification popover ─────────────────────────────────────────
-   Origin-aware: scales from the question, not center. ── */
-.v4-clarify {
-  padding: 14px 16px;
-  background: var(--color-surface, #fff);
-  border: 1px solid color-mix(in srgb, var(--color-brand, #7c3aed) 22%, var(--color-border, #e5e5e7));
-  border-radius: 14px;
-  margin: 8px 0;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  /* Anchor near the top so transform-origin feels right. */
-  transform-origin: top left;
-  animation: clarify-in 240ms var(--ease-out) both;
-}
-@keyframes clarify-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
-}
-.v4-clarify__q {
-  font-size: var(--fs-md);
-  font-weight: 600;
-  margin-bottom: 12px;
-  letter-spacing: -0.005em;
-}
+.v4-answer { padding: 8px 0; font-size: 14px; line-height: 1.7; color: var(--color-text-primary, #111); }
+.v4-error { padding: 8px 12px; background: color-mix(in srgb, #ef4444 12%, transparent); color: #b91c1c; border-radius: 8px; font-size: 13px; }
+.v4-clarify { padding: 14px 16px; background: var(--color-surface, #fff); border: 1px solid color-mix(in srgb, var(--color-brand, #7c3aed) 28%, var(--color-border)); border-radius: 14px; margin: 8px 0; }
+.v4-clarify__q { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
 .v4-clarify__opts { display: flex; flex-wrap: wrap; gap: 8px; }
 .v4-clarify__opt {
-  padding: 7px 14px;
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  letter-spacing: 0.005em;
-  cursor: pointer;
+  padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
   background: var(--color-surface-container-low, #f5f5f7);
   color: var(--color-text-secondary, #555);
   border: 1px solid var(--color-border, #e5e5e7);
-  border-radius: 999px;
-  /* Specify exact properties: never `transition: all`. */
-  transition: background-color 160ms var(--ease-out),
-              color 160ms var(--ease-out),
-              transform 120ms var(--ease-out),
-              border-color 160ms var(--ease-out);
-  /* Hide hover scale on touch devices per Emil. */
-  will-change: transform;
+  border-radius: 999px; transition: all 140ms;
 }
-.v4-clarify__opt:hover {
-  background: var(--color-brand, #7c3aed);
-  color: #fff;
-  border-color: var(--color-brand, #7c3aed);
-}
-.v4-clarify__opt:active { transform: scale(0.97); }
-
-@media (hover: none) {
-  .v4-clarify__opt:hover { background: var(--color-surface-container-low, #f5f5f7); color: var(--color-text-secondary, #555); border-color: var(--color-border, #e5e5e7); }
-}
-
-/* ── Input column ────────────────────────────────────────────────── */
-.v4-input {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 16px 14px;
-  border-top: 1px solid var(--color-border, #e5e5e7);
-  background: var(--color-surface, #fff);
-}
+.v4-clarify__opt:hover { background: var(--color-brand, #7c3aed); color: #fff; }
+.v4-input { display: flex; flex-direction: column; gap: 6px; padding: 8px 16px 12px; border-top: 1px solid var(--color-border, #e5e5e7); background: var(--color-surface, #fff); }
 .v4-input__toolbar { display: flex; align-items: center; gap: 8px; }
-
-/* Mode pill — segmented style, but a single select. */
 .v4-input__mode {
-  padding: 4px 10px;
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  border: 1px solid var(--color-border, #e5e5e7);
-  border-radius: 8px;
+  padding: 3px 8px; font-size: 12px;
+  border: 1px solid var(--color-border, #e5e5e7); border-radius: 6px;
   background: var(--color-surface, #fff);
   color: var(--color-text-secondary, #555);
-  cursor: pointer;
-  outline: none;
-  transition: border-color 160ms var(--ease-out), background-color 160ms var(--ease-out), transform 120ms var(--ease-out);
+  cursor: pointer; outline: none;
 }
-.v4-input__mode:hover { border-color: var(--color-brand, #7c3aed); }
-.v4-input__mode:active { transform: scale(0.97); }
-.v4-input__mode:focus-visible { border-color: var(--color-brand, #7c3aed); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand, #7c3aed) 18%, transparent); }
-
-.v4-input__row { display: flex; gap: 8px; align-items: flex-end; }
+.v4-input__row { display: flex; gap: 8px; }
 .v4-input__textarea {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 56px;
-  max-height: 200px;
-  padding: 11px 14px;
-  font-size: var(--fs-md);
-  line-height: 1.55;
-  letter-spacing: -0.005em;
-  border: 1px solid var(--color-border, #e5e5e7);
-  border-radius: 14px;
-  outline: none;
-  font-family: inherit;
+  flex: 1 1 auto; min-width: 0;
+  min-height: 56px; max-height: 200px;
+  padding: 10px 14px; font-size: 14px; line-height: 1.5;
+  border: 1px solid var(--color-border, #e5e5e7); border-radius: 12px;
+  outline: none; font-family: inherit;
   caret-color: var(--color-text-primary, #111) !important;
   background: var(--color-surface, #fff);
   color: var(--color-text-primary, #111);
-  /* Animate border so focus feels intentional, not jarring. */
-  transition: border-color 180ms var(--ease-out), box-shadow 180ms var(--ease-out), background-color 180ms var(--ease-out);
-  resize: none;
 }
-.v4-input__textarea::placeholder { color: var(--color-text-tertiary, #9ca3af); }
-.v4-input__textarea:hover:not(:focus) { border-color: color-mix(in srgb, var(--color-border, #e5e5e7) 70%, var(--color-brand, #7c3aed)); }
-.v4-input__textarea:focus {
-  border-color: var(--color-brand, #7c3aed);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand, #7c3aed) 18%, transparent);
+.v4-input__send, .v4-input__stop {
+  padding: 10px 20px; font-size: 14px; font-weight: 500;
+  cursor: pointer; border: none; border-radius: 12px;
+  transition: opacity 120ms;
 }
-
-/* Send / stop buttons. */
-.v4-input__send,
-.v4-input__stop {
-  padding: 11px 20px;
-  font-size: var(--fs-md);
-  font-weight: 500;
-  letter-spacing: 0.005em;
-  cursor: pointer;
-  border: none;
-  border-radius: 14px;
-  min-height: 44px;
-  /* Specify exact properties — never `transition: all`. */
-  transition: transform 120ms var(--ease-out), filter 160ms var(--ease-out), background-color 160ms var(--ease-out);
-}
-.v4-input__send {
-  background: var(--color-brand, #7c3aed);
-  color: #fff;
-}
-.v4-input__send:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  filter: none;
-}
-.v4-input__send:not(:disabled):hover { filter: brightness(1.08); }
-.v4-input__send:not(:disabled):active { transform: scale(0.97); }
-
-.v4-input__stop {
-  background: var(--color-error, #ef4444);
-  color: #fff;
-}
-.v4-input__stop:hover { filter: brightness(1.05); }
-.v4-input__stop:active { transform: scale(0.97); }
-
-/* ── Streaming transitions ───────────────────────────────────────── */
-.zcode-stream-in { animation: stream-fade 220ms var(--ease-out) both; }
-@keyframes stream-fade {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* ── Accessibility ─────────────────────────────────────────────────
-   Respect prefers-reduced-motion: kill movement, keep opacity. */
-@media (prefers-reduced-motion: reduce) {
-  .v4-turn,
-  .v4-clarify,
-  .zcode-stream-in {
-    animation: none;
-  }
-  .thinking-dots i,
-  .v4-tool__spinner {
-    animation-duration: 4s;
-  }
-  /* Disable transform on press when reduced motion. */
-  .v4-clarify__opt:active,
-  .v4-input__send:active,
-  .v4-input__stop:active,
-  .v4-input__mode:active {
-    transform: none;
-  }
-}
-
-/* ── Mobile-tight spacing — slightly compress vertical rhythm. */
-@media (max-width: 640px) {
-  .v4-chat__scroll { padding: 16px 12px 12px; }
-  .v4-input { padding: 8px 12px 12px; }
-}
+.v4-input__send { background: var(--color-brand, #7c3aed); color: #fff; }
+.v4-input__send:disabled { opacity: 0.4; cursor: not-allowed; }
+.v4-input__stop { background: var(--color-error, #ef4444); color: #fff; }
 </style>

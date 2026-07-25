@@ -869,9 +869,8 @@ function openTerminalInTab() {
           </div>
         </div>
 
-        <!-- Chat input: legacy when V4 is disabled, hidden when V4 owns the composer -->
+        <!-- Chat input -->
         <ChatInput
-          v-if="!useV4"
           :variant="isEmpty && !isMemberSession && !showRightPanel ? 'hero' : 'default'"
           :compact="showRightPanel"
         />
