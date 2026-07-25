@@ -29,6 +29,7 @@ const {
   events,
   isStreaming,
   errorMessage,
+  model,
   clarifyQuestion,
   clarifyOptions,
   connect,
