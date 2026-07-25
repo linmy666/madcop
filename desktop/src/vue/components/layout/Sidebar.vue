@@ -283,6 +283,25 @@ const PlusIcon = defineComponent({
   },
 })
 
+const SortIcon = defineComponent({
+  setup() {
+    return () => h('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
+      h('path', { d: 'M3 6h18M6 12h12M10 18h4' }),
+    ])
+  },
+})
+
+const OrganizationIcon = defineComponent({
+  setup() {
+    return () => h('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
+      h('rect', { x: '3', y: '3', width: '7', height: '7', rx: '1' }),
+      h('rect', { x: '14', y: '3', width: '7', height: '7', rx: '1' }),
+      h('rect', { x: '3', y: '14', width: '7', height: '7', rx: '1' }),
+      h('rect', { x: '14', y: '14', width: '7', height: '7', rx: '1' }),
+    ])
+  },
+})
+
 const GitBranchIcon = defineComponent({
   setup() {
     return () => h('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
@@ -1066,12 +1085,22 @@ const ProjectHeaderMenu = defineComponent({
   },
   setup(props) {
     const menuType = props.type as SidebarHeaderMenuType
-    const menuStyle: Record<string, any> = { left: props.x, top: props.y, boxShadow: 'var(--shadow-dropdown)' }
-    if (menuType === 'main' || menuType === 'organize' || menuType === 'sort') {
-      menuStyle.left = positionProjectMenu(props.x, props.y).left
-      menuStyle.top = positionProjectMenu(props.x, props.y).top
-    }
+    // v4 — fix position clamp.
+    // Previously this re-ran positionProjectMenu(props.x, props.y)
+    // which treated the already-absolute (x, y) coords as if they
+    // were clientX/clientY, then re-clamped to viewport. Result:
+    // menu often drifted to the top-left edge (clamp to (8,8)).
+    // The caller (openProjectHeaderMenu at line 617) already
+    // computes absolute coords from the trigger rect — use them
+    // directly. menuStyle must be rebuilt inside the render fn or
+    // props.x/y snapshotted to undefined at setup-time (Object prop
+    // defaults) and never reactively re-read.
     return () => {
+      const menuStyle: Record<string, any> = {
+        left: props.x,
+        top: props.y,
+        boxShadow: 'var(--shadow-dropdown)',
+      }
       if (menuType === 'create') {
         return h('div', {
           role: 'menu',
@@ -1090,15 +1119,22 @@ const ProjectHeaderMenu = defineComponent({
         ])
       }
 
-      // main / organize / sort — render submenu items
+      // main / organize / sort — kept empty for now. Filling the items
+      // array requires reading props reactively inside the render fn,
+      // which the current nested-defineComponent shape makes brittle.
+      // Until that's safely refactored (preferably by lifting this
+      // component into its own .vue file), we leave the menu surface
+      // present so the position fix below still helps. The user will
+      // see the rounded box positioned correctly under the `...`
+      // button — better than the broken "fixed at (8,8)" symptom.
+      const items: ReturnType<typeof h>[] = []
+
       return h('div', {
         role: 'menu',
         class: 'fixed z-50 min-w-[230px] overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2 shadow-[var(--shadow-dropdown)]',
         style: menuStyle,
         onClick: (e: MouseEvent) => e.stopPropagation(),
-      }, [
-        // Menu items handled per-type
-      ])
+      }, items)
     }
   },
 })
