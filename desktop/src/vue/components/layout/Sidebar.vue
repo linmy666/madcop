@@ -511,19 +511,26 @@ watch(() => sidebarOpen.value, () => {
   }
 })
 
-// Watch any open menu — close on document click
+// Watch any open menu — close on document click OR mousedown.
+// v4 — also listen on mousedown because some sibling components
+// (e.g. ActiveSession.vue's header `...` button) call `event.stopPropagation()`
+// on their click handler, which blocks click events from bubbling to
+// document. Mousedown happens before click, and the menu shouldn't
+// care which event closes it as long as the dismissal feels instant.
 watch(
   () => [contextMenu.value, projectContextMenu.value, projectHeaderMenu.value, projectHeaderSubmenu.value],
   ([cm, pcm, phm, phsm], [prevCm, prevPcm, prevPhm, prevPhsm]) => {
     const hasAny = cm || pcm || phm || phsm
     const hadAny = prevCm || prevPcm || prevPhm || prevPhsm
     if (!hasAny || hadAny) return // only react when a menu first opens
-    document.addEventListener('click', () => {
+    const dismiss = () => {
       contextMenu.value = null
       projectContextMenu.value = null
       projectHeaderMenu.value = null
       projectHeaderSubmenu.value = null
-    }, { once: true })
+    }
+    document.addEventListener('click', dismiss, { once: true })
+    document.addEventListener('mousedown', dismiss, { once: true })
   },
   { immediate: false },
 )
