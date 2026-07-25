@@ -101,15 +101,32 @@ class WebSearchTool(Tool):
 
         # v3.12 — Multi-strategy web search (inspired by Hermes).
         # Priority:
-        # 1. SearXNG (if SEARXNG_URL env set — self-hosted, free, best quality)
+        # 0. visitproject (if VISITPROJECT_BIN env set — agentic MCP
+        #    server, best quality: dedup + rerank + content extraction.
+        #    See https://github.com/linmy666/visitproject for the source.)
+        # 1. SearXNG (if SEARXNG_URL env set — self-hosted, free, good quality)
         # 2. Tavily API (if TAVILY_API_KEY env set — paid but reliable)
         # 3. Bing cn.bing.com (free, low quality in China)
         # 4. DuckDuckGo lite (blocked in China, kept for VPN users)
         # 5. LLM knowledge fallback (uses active provider's model)
 
         import os
+        visitproject_bin = os.environ.get("VISITPROJECT_BIN", "").strip()
         searxng_url = os.environ.get("SEARXNG_URL", "").strip()
         tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
+
+        # Strategy 0: visitproject (highest priority — best quality)
+        if visitproject_bin:
+            try:
+                results = self._search_visitproject(query, max_results)
+                if results:
+                    logger.info(
+                        "web_search '%s' [visitproject]: %d results",
+                        query, len(results),
+                    )
+                    return results
+            except Exception as e:
+                logger.warning("web_search [visitproject] failed: %s", e)
 
         # Strategy 1: SearXNG
         if searxng_url:
@@ -208,6 +225,123 @@ class WebSearchTool(Tool):
 
             browser.close()
         return results
+
+    def _search_visitproject(self, query: str, max_results: int) -> list[dict[str, str]]:
+        """Search via visitproject (agentic MCP server — best quality).
+
+        visitproject is an open-source (https://github.com/linmy666)
+        MCP server that wraps SearXNG with dedup, embedding-based
+        rerank, LLM content extraction, and caching. We invoke it as
+        a subprocess speaking the stdio MCP protocol via the existing
+        ``MCPClient``.
+
+        Env vars (all forwarded to the subprocess):
+          VISITPROJECT_BIN          — required; path to dist/index.js
+          VISITPROJECT_SEARXNG_URL  — forwarded as SEARXNG_URL
+          VISITPROJECT_LLM_PROVIDER — forwarded as LLM_PROVIDER (openai|ollama)
+          VISITPROJECT_LLM_BASE_URL — forwarded as LLM_BASE_URL
+          VISITPROJECT_LLM_API_KEY  — forwarded as LLM_API_KEY
+          VISITPROJECT_LLM_MODEL    — forwarded as LLM_MODEL
+          VISITPROJECT_EMBEDDING_MODEL — forwarded as EMBEDDING_MODEL
+          (any other VISITPROJECT_* env var is also forwarded with
+          the prefix stripped — useful for HTTPS_PROXY etc.)
+
+        A single subprocess is shared across calls (singleton on the
+        ``WebSearchTool`` class) so the browser warm-up cost is paid
+        once. The subprocess is killed automatically at process exit
+        via ``atexit``.
+        """
+        import atexit
+        import os
+        from .mcp import MCPClient
+
+        bin_path = os.environ.get("VISITPROJECT_BIN", "").strip()
+        if not bin_path:
+            return []
+
+        # Build subprocess env: inherit current env, then forward any
+        # VISITPROJECT_* vars with the prefix stripped (so users can
+        # configure SEARXNG_URL etc. without polluting MadCop's env).
+        sub_env = dict(os.environ)
+        for k, v in os.environ.items():
+            if k.startswith("VISITPROJECT_") and k != "VISITPROJECT_BIN":
+                sub_env[k[len("VISITPROJECT_"):]] = v
+
+        # Singleton MCP client (one visitproject subprocess per process).
+        client = self.__class__._visitproject_client
+        if client is None:
+            client = MCPClient(
+                command=["node", bin_path],
+                env=sub_env,
+                timeout_s=60.0,
+            )
+            client.connect()
+            # Kill on process exit so we don't leave zombies.
+            atexit.register(client.close)
+            self.__class__._visitproject_client = client
+
+        # Call the `search` MCP tool. visitproject returns content as
+        # a list of text blocks; the first block's text is the JSON
+        # payload: `{"results": [{"title","url","snippet","score"}, ...]}`.
+        result = client.call_tool("search", {
+            "query": query,
+            "max_results": max_results,
+            # Default depth is "deep" (agentic). For web_search use
+            # we want "quick" to keep latency low — agent can re-call
+            # if it needs deeper research.
+            "depth": os.environ.get("VISITPROJECT_DEPTH", "quick"),
+        })
+        if not result:
+            return []
+
+        import json as _json
+        content_blocks = result.get("content") if isinstance(result, dict) else None
+        if not content_blocks and isinstance(result, list):
+            content_blocks = result
+        if not content_blocks:
+            return []
+
+        text = ""
+        for block in content_blocks:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text += block.get("text", "")
+        if not text:
+            return []
+
+        try:
+            parsed = _json.loads(text)
+        except Exception:
+            # visitproject may return non-JSON text in error cases.
+            logger.warning(
+                "visitproject returned non-JSON text: %s",
+                text[:200],
+            )
+            return []
+
+        items = parsed.get("results") if isinstance(parsed, dict) else None
+        if not items:
+            return []
+
+        out: list[dict[str, str]] = []
+        for item in items[:max_results]:
+            if not isinstance(item, dict):
+                continue
+            title = (item.get("title") or "").strip()
+            url = (item.get("url") or "").strip()
+            snippet = (item.get("snippet") or item.get("content") or "").strip()
+            if not (title and url):
+                continue
+            out.append({
+                "title": title[:300],
+                "url": url[:500],
+                "snippet": snippet[:400],
+            })
+        return out
+
+    # Class-level singleton for the visitproject subprocess. Lazily
+    # initialized on first call to _search_visitproject(); killed at
+    # interpreter exit via atexit.
+    _visitproject_client: Any = None
 
     def _search_searxng(self, query: str, max_results: int, base_url: str) -> list[dict[str, str]]:
         """Search via a self-hosted SearXNG instance (best quality, free)."""

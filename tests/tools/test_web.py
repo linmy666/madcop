@@ -94,6 +94,90 @@ class TestWebSearchTool:
         assert schema["type"] == "function"
         assert schema["function"]["name"] == "web_search"
 
+    def test_visitproject_strategy_when_bin_env_set(self, monkeypatch):
+        """If VISITPROJECT_BIN is set, WebSearchTool should route the
+        query through visitproject (an MCP subprocess) instead of
+        the bing/ddg path. Mock MCPClient so the test doesn't need
+        the real binary."""
+        import json as _json
+
+        # Reset the class-level singleton so the test starts clean.
+        WebSearchTool._visitproject_client = None
+
+        monkeypatch.setenv("VISITPROJECT_BIN", "/fake/path/to/visitproject/dist/index.js")
+        # Disable upstream engines so the test never hits the network.
+        monkeypatch.delenv("SEARXNG_URL", raising=False)
+        monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+
+        # Stub MCPClient: every instance returns the same fake
+        # search result list. Use a small fake response matching
+        # visitproject's actual JSON shape.
+        call_log = []
+        class FakeClient:
+            def __init__(self, *args, **kwargs): pass
+            def connect(self): pass
+            def close(self): pass
+            def call_tool(self, name, arguments):
+                call_log.append((name, arguments))
+                assert name == "search"
+                assert arguments["query"] == "real query"
+                # visitproject's response shape: dict with content
+                # list of {type: text, text: JSON-string}.
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": _json.dumps({
+                                "results": [
+                                    {"title": "Result 1",
+                                     "url": "https://r1.com",
+                                     "snippet": "snippet one"},
+                                    {"title": "Result 2",
+                                     "url": "https://r2.com",
+                                     "snippet": "snippet two"},
+                                ],
+                            }),
+                        }
+                    ]
+                }
+
+        tool = WebSearchTool()
+        # The _search_visitproject method imports MCPClient from
+        # madcop.tools.mcp lazily; patching that module attribute
+        # replaces it for the import.
+        with patch("madcop.tools.mcp.MCPClient", FakeClient):
+            results = tool(query="real query", max_results=5)
+
+        # Verify MCPClient.call_tool was actually invoked.
+        assert len(call_log) == 1
+        # The visitproject response had 2 items; both should be
+        # returned (and the upstream engines never called).
+        assert len(results) == 2
+        assert results[0]["title"] == "Result 1"
+        assert results[1]["url"] == "https://r2.com"
+        # Clean up the singleton so other tests start fresh.
+        WebSearchTool._visitproject_client = None
+
+    def test_visitproject_strategy_skipped_when_bin_unset(self, monkeypatch):
+        """If VISITPROJECT_BIN is not set, the strategy must be
+        skipped and the tool falls through to its normal pipeline."""
+        WebSearchTool._visitproject_client = None
+        monkeypatch.delenv("VISITPROJECT_BIN", raising=False)
+
+        tool = WebSearchTool()
+        # The upstream engines will all raise (because we mock them),
+        # so the tool falls all the way to the LLM-knowledge fallback.
+        with patch("madcop.tools.web.WebSearchTool._search_baidu_playwright",
+                   side_effect=Exception("no playwright")), \
+             patch("madcop.tools.web.WebSearchTool._search_bing",
+                   side_effect=Exception("no bing")), \
+             patch("madcop.tools.web.WebSearchTool._search_ddg",
+                   side_effect=Exception("no ddg")):
+            results = tool(query="anything")
+        assert len(results) == 1
+        assert "error" in results[0]
+        WebSearchTool._visitproject_client = None
+
 
 # --------------------------------------------------------------------------- #
 # WebFetchTool
