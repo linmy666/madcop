@@ -42,7 +42,10 @@ const title = computed(() => [
     v-if="label"
     :title="title"
     :class="[
-      'inline-flex max-w-full items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] text-[var(--color-text-secondary)]',
+      // Subtle hover lift so the chip reads as 'live, clickable-ish'
+      // info rather than dead text. 150ms ease-out matches the rest
+      // of the app's interactive cadence.
+      'inline-flex max-w-full cursor-default items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] text-[var(--color-text-secondary)] transition-[background-color,border-color,color] duration-150 ease-out hover:border-[var(--color-brand)] hover:bg-[var(--color-primary-fixed)] hover:text-[var(--color-text-primary)] motion-reduce:transition-none',
       compact ? 'gap-1.5 px-3 py-1.5 text-xs' : 'gap-2 px-4 py-2 text-sm',
     ]"
   >

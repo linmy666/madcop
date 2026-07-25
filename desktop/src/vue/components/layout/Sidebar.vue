@@ -1317,7 +1317,7 @@ const projectMenuData = computed(() => {
           <button
             type="button"
             @click="uiStore.openModal('globalSearch')"
-            class="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[14px] border border-[var(--color-sidebar-search-border)] bg-[var(--color-sidebar-search-bg)] pl-3 pr-2 text-left text-[13px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-sidebar-item-hover)] focus-visible:border-[var(--color-border-focus)] focus-visible:outline-none"
+            class="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[14px] border border-[var(--color-sidebar-search-border)] bg-[var(--color-sidebar-search-bg)] pl-3 pr-2 text-left text-[13px] text-[var(--color-text-tertiary)] transition-colors duration-150 ease-out hover:bg-[var(--color-sidebar-item-hover)] hover:text-[var(--color-text-secondary)] active:scale-[0.985] focus-visible:border-[var(--color-border-focus)] focus-visible:outline-none motion-reduce:transition-none motion-reduce:active:scale-100"
             :aria-label="t('search.global.trigger')"
             :title="t('search.global.trigger')"
           >
@@ -1332,7 +1332,7 @@ const projectMenuData = computed(() => {
             type="button"
             @click="refreshSessionsNow"
             :disabled="sessionStore.isLoading"
-            class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px] border border-[var(--color-sidebar-search-border)] bg-[var(--color-sidebar-search-bg)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-sidebar-item-hover)] hover:text-[var(--color-text-primary)] disabled:cursor-default disabled:opacity-65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-focus)]"
+            class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px] border border-[var(--color-sidebar-search-border)] bg-[var(--color-sidebar-search-bg)] text-[var(--color-text-secondary)] transition-colors duration-150 ease-out hover:bg-[var(--color-sidebar-item-hover)] hover:text-[var(--color-text-primary)] active:scale-[0.92] disabled:cursor-default disabled:opacity-65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
             :aria-label="t('sidebar.refreshSessions')"
             :title="t('sidebar.refreshSessions')"
           >
@@ -1345,7 +1345,7 @@ const projectMenuData = computed(() => {
           <button
             type="button"
             @click="sessionStore.isBatchMode ? handleExitBatchMode() : sessionStore.enterBatchMode()"
-            :class="`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px] border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-focus)] ${
+            :class="`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px] border transition-colors duration-150 ease-out active:scale-[0.92] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 ${
               sessionStore.isBatchMode
                 ? 'border-[var(--color-brand)] bg-[var(--color-sidebar-item-active)] text-[var(--color-brand)]'
                 : 'border-[var(--color-sidebar-search-border)] bg-[var(--color-sidebar-search-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-sidebar-item-hover)] hover:text-[var(--color-text-primary)]'

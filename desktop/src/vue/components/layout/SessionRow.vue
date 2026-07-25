@@ -52,7 +52,7 @@ const rowClass = computed(() => {
     <button
       v-else
       type="button"
-      :class="`group/session w-full rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-[background,filter,color] duration-200 ${rowClass}`"
+      :class="`group/session w-full rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-[background-color,color,box-shadow] duration-150 ease-out active:scale-[0.985] motion-reduce:transition-none ${rowClass}`"
       :aria-pressed="batchMode ? selected : undefined"
       @click="emit('click', $event)"
       @contextmenu="emit('contextmenu', $event)"
@@ -69,8 +69,12 @@ const rowClass = computed(() => {
         >
           <span v-if="selected" class="material-symbols-outlined text-[12px]">check</span>
         </span>
-        <span class="min-w-0 flex-1 truncate font-medium tracking-normal">
-          {{ session.title || 'Untitled' }}
+        <span
+          :class="`min-w-0 flex-1 truncate font-medium tracking-normal ${
+            session.title ? '' : 'italic text-[var(--color-text-tertiary)]'
+          }`"
+        >
+          {{ session.title || '新对话' }}
         </span>
         <span
           v-if="!session.workDirExists"
@@ -101,9 +105,25 @@ const rowClass = computed(() => {
 .sidebar-session-row {
   content-visibility: auto;
   contain-intrinsic-size: auto 36px;
+  /* Make room for the left accent bar on selected/active rows. */
+  padding-left: 4px;
 }
 .sidebar-session-row--active,
 .sidebar-session-row--selected {
   box-shadow: inset 0 0 0 1px var(--color-brand);
+  /* 3px brand bar on the left edge — gives selected state a clear
+     visual anchor distinct from background-only selection. */
+  position: relative;
+}
+.sidebar-session-row--active::before,
+.sidebar-session-row--selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--color-brand);
 }
 </style>

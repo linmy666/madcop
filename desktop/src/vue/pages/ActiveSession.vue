@@ -661,7 +661,7 @@ function openTerminalInTab() {
           <!-- Session header (non-member, non-mobile) -->
           <div
             v-if="!isMemberSession && !isMobileLayout"
-            :class="showRightPanel ? 'flex w-full items-center border-b border-[var(--color-border)]/60 bg-[var(--color-surface-container-lowest)]/50 px-4 py-2.5' : 'w-full border-b border-[var(--color-border)]/60 bg-[var(--color-surface-container-lowest)]/50 px-4 py-2.5'"
+            :class="showRightPanel ? 'flex w-full items-center border-b border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-4 py-2.5' : 'w-full border-b border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-4 py-2.5'"
           >
             <div :class="showRightPanel ? 'min-w-0 flex-1' : 'mx-auto w-full max-w-[860px] min-w-0'">
               <div class="flex min-w-0 items-center gap-3">
@@ -804,7 +804,7 @@ function openTerminalInTab() {
             <!-- Legacy message list (only when v4 explicitly disabled via localStorage) -->
             <div
               v-else-if="activeTabId"
-              class="flex-1 min-h-0 w-full overflow-y-auto pt-6"
+              class="flex-1 min-h-0 w-full overflow-y-auto pt-8"
             >
               <div class="mx-auto max-w-[860px] px-5">
                 <div v-if="showDebugPanels" class="mb-2">

@@ -363,19 +363,34 @@ onBeforeUnmount(() => window.removeEventListener('click', closeContextMenu))
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  padding: 0 12px;
+  height: 70%;
+  align-self: center;
+  padding: 0 10px;
+  margin: 0 4px;
+  border-radius: 6px;
   background: transparent;
-  border: none;
-  border-right: 1px solid var(--color-border-separator);
+  border: 1px dashed var(--color-border-separator);
   color: var(--color-text-tertiary);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 0.1s;
+  /* Match the rest of the app's 150ms ease-out cadence. */
+  transition: color 150ms ease-out, background-color 150ms ease-out,
+              border-color 150ms ease-out, transform 100ms ease-out;
 }
 
 .tab-new:hover {
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-hover);
+  border-color: var(--color-border);
+}
+
+.tab-new:active {
+  transform: scale(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-new { transition: none; }
+  .tab-new:active { transform: none; }
 }
 
 /* Context menu */

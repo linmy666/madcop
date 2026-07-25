@@ -419,14 +419,23 @@ async function distillAsSkill() {
   font-size: 13px;
   color: var(--color-text-primary);
   cursor: pointer;
-  transition: all 0.12s;
+  /* Specify exact properties (Emil standard). */
+  transition: background-color 150ms ease-out, border-color 150ms ease-out,
+              color 150ms ease-out, transform 100ms ease-out;
   font-family: inherit;
   user-select: none;
 }
 .clarify-chip:hover {
-  background: var(--color-brand);
-  border-color: var(--color-brand);
-  color: white;
+  background: var(--color-primary-container);
+  border-color: var(--color-primary-container);
+  color: var(--color-on-surface, #1B1C1A);
+}
+.clarify-chip:active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .clarify-chip { transition: none; }
+  .clarify-chip:active { transform: none; }
 }
 .clarify-chip--custom {
   border-style: dashed;

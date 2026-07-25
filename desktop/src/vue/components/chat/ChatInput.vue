@@ -1541,10 +1541,6 @@ watch(input, (v) => {
                       : undefined
                 "
                 :class="[
-                  // Specify transition properties (not `transition-all`).
-                  // Adds a sub-100ms scale(0.97) on :active so the press
-                  // gives instant tactile feedback, per Emil Kowalski's
-                  // 'Buttons must feel responsive' rule.
                   'flex shrink-0 items-center justify-center gap-1 rounded-lg text-xs font-semibold transition-[transform,filter,background-color,color] duration-150 ease-out hover:brightness-105 active:scale-[0.97] disabled:opacity-30 motion-reduce:transition-none motion-reduce:active:scale-100',
                   iconOnlyAction
                     ? `${isMobileViewport() ? 'h-11 w-11 rounded-xl px-0 py-0' : 'h-8 w-8 px-0 py-0'}`
@@ -1552,7 +1548,7 @@ watch(input, (v) => {
                   !isMemberSession && isActive && input.trim()
                     ? 'bg-amber-500 text-white shadow-sm'
                     : !isMemberSession && isActive
-                      ? 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]'
+                      ? 'bg-[var(--color-error)] text-white shadow-[0_0_0_1px_color-mix(in_srgb,var(--color-error)_45%,transparent)]'
                       : 'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)]',
                 ]"
               >
@@ -1633,3 +1629,18 @@ watch(input, (v) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* v4 — Composer should not be translucent. The composer is an
+   information-dense, frequently-painted surface; backdrop-filter
+   cost is real during typing (forced paint) and the visual
+   benefit over a solid surface is negligible in this layout
+   (no scrolling content underneath the composer that the user
+   wants to read through it). Apple HIG §12: translucent
+   materials are for toolbars / sheets, not input panels. */
+.glass-panel {
+  background: var(--color-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+</style>
