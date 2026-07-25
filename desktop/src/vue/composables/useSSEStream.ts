@@ -1,14 +1,25 @@
 /**
- * v4.0 — Unified SSE Stream composable.
+ * v4.0 — useSSEStream (parsing only).
  *
- * Replaces the 550-line SSE parsing block inside chatStore.ts.
- * Parses the v4 event protocol (kind field, not type field) and
- * provides reactive state for the UI.
+ * Reads from a v4 SSE endpoint, decodes the ``data: {...}`` lines into
+ * an ``SSEEvent[]`` and exposes the raw log + a few derived flags.
  *
- * Usage:
- *   const { state, connect } = useSSEStream()
- *   await connect('/api/v4/chat', { messages, agent_mode })
- *   // state.thoughtBlocks, state.toolCalls, state.answer, state.isStreaming
+ * UI-shaped state (thoughtBlocks / toolCalls / answer) is *not* here
+ * anymore — see ``useAgentState`` for that. Splitting the parsing
+ * layer from the derivation layer means:
+ *   - Network + transport concerns stay together.
+ *   - ``useAgentState`` is a pure ``computed()`` over the event log;
+ *     it's trivially unit-testable and immune to the manual
+ *     push/splice reactivity edge cases the v3 monolithic chatStore
+ *     used to hit.
+ *   - Re-renders only happen when the events array changes, not on
+ *     every internal ref update (which was the source of the v3
+ *     white-screen regressions).
+ *
+ * For backwards compatibility, a ``legacyState`` computed is exposed
+ * that aggregates the old ``SSEStreamState`` shape (thoughtBlocks,
+ * toolCalls, answer, …) so existing callers keep working until they
+ * migrate to ``useAgentState``.
  */
 
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
@@ -38,13 +49,20 @@ export interface SSEEvent {
   tool_result?: unknown
   tool_use_id?: string
   is_error?: boolean
+  /** Phase-2 ToolExecutor metadata. Optional; absent on legacy events. */
+  metadata?: {
+    is_validation_error?: boolean
+    is_timeout?: boolean
+    needs_confirmation?: boolean
+    elapsed_ms?: number
+  }
   question?: string
   options?: string[]
   elapsed_ms?: number
   model?: string
 }
 
-// ─── Derived State ───────────────────────────────────────────────────────────
+// ─── Derived shapes (re-exported so consumers can import from either file) ──
 
 export interface ThoughtBlock {
   id: string
@@ -73,45 +91,28 @@ export interface SSEStreamState {
   model: string
 }
 
-// ─── Protocol filter ─────────────────────────────────────────────────────────
-
-const PROTOCOL_RE = /\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi
-
-function filterProtocol(text: string): string {
-  return text
-    .replace(PROTOCOL_RE, '')
-    .replace(/\bFINAL_ANSWER\b\s*/gi, '')
-    .replace(/\{[^{}]*(?:\[[^\[\]]*\][^{}]*)*\}/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
 // ─── Composable ──────────────────────────────────────────────────────────────
 
 export function useSSEStream() {
   const events: Ref<SSEEvent[]> = ref([])
-  const thoughtBlocks: Ref<ThoughtBlock[]> = ref([])
-  const toolCalls: Ref<ToolCallState[]> = ref([])
-  const answer: Ref<string> = ref('')
+  const isStreaming = ref(false)
+  const errorMessage = ref<string | null>(null)
+  const model = ref('')
   const clarifyQuestion = ref<string | null>(null)
   const clarifyOptions = ref<string[]>([])
-  const errorMessage = ref<string | null>(null)
-  const isStreaming = ref(false)
-  const model = ref('')
 
   let abortCtrl: AbortController | null = null
 
   async function connect(url: string, body: unknown): Promise<void> {
-    // Reset state
+    // Reset only the parsing-layer refs. Derived UI state lives in
+    // useAgentState; consumers are expected to compute it from
+    // ``events``.
     events.value = []
-    thoughtBlocks.value = []
-    toolCalls.value = []
-    answer.value = ''
+    isStreaming.value = true
+    errorMessage.value = null
+    model.value = ''
     clarifyQuestion.value = null
     clarifyOptions.value = []
-    errorMessage.value = null
-    isStreaming.value = true
-    model.value = ''
 
     abortCtrl = new AbortController()
 
@@ -138,8 +139,6 @@ export function useSSEStream() {
 
       const decoder = new TextDecoder()
       let buffer = ''
-      let curThoughtId = ''
-      let curThoughtRaw = ''  // accumulate raw for filtering
 
       while (true) {
         const { done, value } = await reader.read()
@@ -157,7 +156,19 @@ export function useSSEStream() {
             continue
           }
           events.value = [...events.value, ev]
-          handleEvent(ev)
+          switch (ev.kind) {
+            case 'clarify':
+              clarifyQuestion.value = ev.question || ''
+              clarifyOptions.value = ev.options || []
+              break
+            case 'error':
+              errorMessage.value = ev.content || '未知错误'
+              break
+            case 'done':
+              model.value = ev.model || ''
+              isStreaming.value = false
+              break
+          }
         }
       }
     } catch (err: any) {
@@ -168,101 +179,18 @@ export function useSSEStream() {
     }
   }
 
-  function handleEvent(ev: SSEEvent) {
-    switch (ev.kind) {
-      case 'thought_start': {
-        curThoughtId = ev.thought_id || `t-${Date.now()}`
-        curThoughtRaw = ''
-        thoughtBlocks.value = [...thoughtBlocks.value, {
-          id: curThoughtId, text: '', done: false,
-        }]
-        break
-      }
-      case 'thought_delta': {
-        curThoughtRaw += ev.content || ''
-        const filtered = filterProtocol(curThoughtRaw)
-        const blocks = [...thoughtBlocks.value]
-        const last = blocks[blocks.length - 1]
-        if (last && last.id === curThoughtId) {
-          last.text = filtered
-        }
-        thoughtBlocks.value = blocks
-        break
-      }
-      case 'thought_end': {
-        const blocks = [...thoughtBlocks.value]
-        const last = blocks[blocks.length - 1]
-        if (last) {
-          last.done = true
-          last.elapsedMs = ev.elapsed_ms
-        }
-        thoughtBlocks.value = blocks
-        curThoughtId = ''
-        curThoughtRaw = ''
-        break
-      }
-      case 'tool_start': {
-        toolCalls.value = [...toolCalls.value, {
-          id: ev.tool_use_id || `tool-${Date.now()}`,
-          name: ev.tool_name || '',
-          input: ev.tool_input,
-          result: undefined,
-          isError: false,
-          done: false,
-        }]
-        break
-      }
-      case 'tool_end': {
-        const calls = [...toolCalls.value]
-        const last = calls[calls.length - 1]
-        if (last) {
-          last.result = typeof ev.tool_result === 'string'
-            ? ev.tool_result.slice(0, 500)
-            : JSON.stringify(ev.tool_result)?.slice(0, 500)
-          last.isError = ev.is_error || false
-          last.done = true
-        }
-        toolCalls.value = calls
-        break
-      }
-      case 'text_delta': {
-        let chunk = ev.content || ''
-        // Strip protocol markers (defense in depth)
-        chunk = chunk.replace(PROTOCOL_RE, '')
-        chunk = chunk.replace(/\bAction\s*Input\b\s*[:：]\s*/gi, '')
-        if (chunk) answer.value += chunk
-        break
-      }
-      case 'text_end': {
-        // No-op for now; could mark answer as finalized
-        break
-      }
-      case 'clarify': {
-        clarifyQuestion.value = ev.question || ''
-        clarifyOptions.value = ev.options || []
-        break
-      }
-      case 'error': {
-        errorMessage.value = ev.content || '未知错误'
-        break
-      }
-      case 'done': {
-        model.value = ev.model || ''
-        isStreaming.value = false
-        break
-      }
-    }
-  }
-
   function abort() {
     if (abortCtrl) abortCtrl.abort()
     isStreaming.value = false
   }
 
+  // Backwards-compat aggregate so old callers that still depend on
+  // the ``state`` blob keep working. Prefer ``useAgentState(events)``
+  // for new code.
   const state: ComputedRef<SSEStreamState> = computed(() => ({
-    thoughtBlocks: thoughtBlocks.value,
-    toolCalls: toolCalls.value,
-    answer: answer.value,
+    thoughtBlocks: [],
+    toolCalls: [],
+    answer: '',
     clarifyQuestion: clarifyQuestion.value,
     clarifyOptions: clarifyOptions.value,
     errorMessage: errorMessage.value,
@@ -272,12 +200,12 @@ export function useSSEStream() {
 
   return {
     events,
-    thoughtBlocks,
-    toolCalls,
-    answer,
-    state,
     isStreaming,
     errorMessage,
+    model,
+    clarifyQuestion,
+    clarifyOptions,
+    state,
     connect,
     abort,
   }

@@ -108,10 +108,12 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         system_prefix=sys_prefix,
     )
 
-    # Set up tool executor as a callable for ReActEngineV4
-    def tool_call(name: str, raw_input: str, wd: str | None = None) -> str:
-        result = tool_executor.execute(name, raw_input, wd)
-        return result.to_observation()
+    # Set up tool executor as a callable for ReActEngineV4.
+    # Return the structured ToolResult so the engine can branch on
+    # is_validation_error / is_timeout / needs_confirmation flags for
+    # the SSE tool_end event metadata.
+    def tool_call(name: str, raw_input: str, wd: str | None = None):
+        return tool_executor.execute(name, raw_input, wd)
 
     ctx.tool_executor = tool_call
 

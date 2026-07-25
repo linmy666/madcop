@@ -212,13 +212,33 @@ class ReActEngineV4(AgentEngine):
             # Execute tool
             observation = ""
             is_error = False
+            tool_meta: dict[str, Any] = {}
             try:
                 if ctx.tool_executor:
-                    observation = str(ctx.tool_executor(action, action_input, ctx.work_dir))
+                    raw_result = ctx.tool_executor(action, action_input, ctx.work_dir)
+                    # Allow executors to return either a str (legacy) or a
+                    # ``ToolResult`` dataclass with structured fields. We
+                    # prefer the structured form so the frontend can show
+                    # the failure category (validation / timeout / etc).
+                    if hasattr(raw_result, "to_observation") and hasattr(raw_result, "is_error"):
+                        from madcop.agent.tool_executor import ToolResult as _TR
+                        if isinstance(raw_result, _TR):
+                            observation = raw_result.to_observation()
+                            is_error = bool(raw_result.is_error)
+                            tool_meta = {
+                                "is_validation_error": raw_result.is_validation_error,
+                                "is_timeout": raw_result.is_timeout,
+                                "needs_confirmation": raw_result.needs_confirmation,
+                                "elapsed_ms": raw_result.elapsed_ms,
+                            }
+                        else:
+                            observation = str(raw_result)
+                    else:
+                        observation = str(raw_result)
                 else:
                     observation = f"[Tool '{action}' not available]"
             except Exception as e:
-                observation = f"Error: {e}"
+                observation = f"[error] {e}"
                 is_error = True
 
             yield AgentStep(
@@ -227,6 +247,7 @@ class ReActEngineV4(AgentEngine):
                 tool_use_id=tool_use_id,
                 tool_result=observation[:2000],
                 is_error=is_error,
+                metadata=tool_meta,
             )
 
             # Feed observation back to LLM

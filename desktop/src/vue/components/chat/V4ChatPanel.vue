@@ -13,6 +13,7 @@
  */
 import { ref, computed, nextTick, watch } from 'vue'
 import { useSSEStream, type ThoughtBlock, type ToolCallState } from '../../composables/useSSEStream'
+import { useAgentState } from '../../composables/useAgentState'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
 
 const props = defineProps<{
@@ -23,10 +24,9 @@ const input = ref('')
 const isComposing = ref(false)
 const scrollRef = ref<HTMLElement | null>(null)
 
+// Parsing layer: streams SSE events from /api/v4/chat.
 const {
-  thoughtBlocks,
-  toolCalls,
-  answer,
+  events,
   isStreaming,
   errorMessage,
   clarifyQuestion,
@@ -34,6 +34,11 @@ const {
   connect,
   abort,
 } = useSSEStream()
+
+// Derivation layer: pure computed() over the event log. Splits the
+// 1464-line chatStore's manual push/splice bookkeeping into a
+// single function that's testable in isolation.
+const { thoughtBlocks, toolCalls, answer } = useAgentState(events)
 
 interface Turn {
   id: number
