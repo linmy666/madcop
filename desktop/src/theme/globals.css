@@ -1753,3 +1753,22 @@ input[type="number"],
 textarea {
   caret-color: var(--color-text-primary, #111) !important;
 }
+
+/* v4.0+ — Global reduced-motion safety net.
+ * Per Emil Kowalski's review-animations standard #8 + Apple HIG §14,
+ * when the user has reduced-motion enabled, drop our interactive motion
+ * to near-zero. Components should also gate their own animations (we
+ * use Tailwind's `motion-reduce:` and per-component prefers-reduced
+ * blocks where it matters). This global rule is a last-resort so
+ * nothing accidentally keeps full-speed animation when the user asked
+ * for less. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

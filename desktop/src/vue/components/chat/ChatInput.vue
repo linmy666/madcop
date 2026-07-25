@@ -1262,7 +1262,7 @@ watch(input, (v) => {
               @click="selectSlashCommand(command.name)"
               @mouseenter="slashSelectedIndex = index"
               :class="[
-                'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors',
+                'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out motion-reduce:transition-none',
                 index === slashSelectedIndex
                   ? 'bg-[var(--color-surface-hover)]'
                   : 'hover:bg-[var(--color-surface-hover)]',
@@ -1328,7 +1328,7 @@ watch(input, (v) => {
                 type="button"
                 @click="saveQueuedMessageEdit"
                 :disabled="!editingQueuedMessageText.trim()"
-                class="shrink-0 rounded-[6px] px-2 py-1 font-semibold text-[var(--color-brand)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
+                class="shrink-0 rounded-[6px] px-2 py-1 font-semibold text-[var(--color-brand)] transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] active:scale-[0.97] disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 {{ t('common.save') }}
               </button>
@@ -1350,7 +1350,7 @@ watch(input, (v) => {
                 @click="chatStore.sendQueuedUserMessage(activeTabId!, message.id)"
                 :aria-label="t('chat.pendingMessageGuideNow')"
                 :title="t('chat.pendingMessageGuideNow')"
-                class="inline-flex h-7 shrink-0 items-center gap-1 rounded-[6px] px-2 font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                class="inline-flex h-7 shrink-0 items-center gap-1 rounded-[6px] px-2 font-semibold text-[var(--color-text-secondary)] transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <span class="material-symbols-outlined text-[15px]" aria-hidden="true">subdirectory_arrow_right</span>
                 <span>{{ t('chat.pendingMessageGuide') }}</span>
@@ -1360,7 +1360,7 @@ watch(input, (v) => {
                 @click="startEditingQueuedMessage(message.id, message.displayContent)"
                 :aria-label="t('chat.pendingMessageEdit')"
                 :title="t('chat.pendingMessageEdit')"
-                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <span class="material-symbols-outlined text-[15px]" aria-hidden="true">edit</span>
               </button>
@@ -1369,7 +1369,7 @@ watch(input, (v) => {
                 @click="chatStore.removeQueuedUserMessage(activeTabId!, message.id)"
                 :aria-label="t('chat.pendingMessageDelete')"
                 :title="t('chat.pendingMessageDelete')"
-                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-error)]"
+                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-error)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <span class="material-symbols-outlined text-[15px]" aria-hidden="true">delete</span>
               </button>
@@ -1449,7 +1449,7 @@ watch(input, (v) => {
                   @click="plusMenuOpen = !plusMenuOpen"
                   :aria-label="'Open composer tools'"
                   :class="[
-                    'text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)]',
+                    'text-[var(--color-text-secondary)] transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] active:bg-[var(--color-surface-active,var(--color-surface-hover))] motion-reduce:transition-none',
                     isMobileViewport() ? 'inline-flex h-11 w-11 items-center justify-center rounded-xl' : 'rounded-[var(--radius-md)] p-1.5',
                   ]"
                 >
@@ -1465,14 +1465,14 @@ watch(input, (v) => {
                 >
                   <button
                     @click="openAttachmentPicker"
-                    class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--color-surface-hover)]"
+                    class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] active:bg-[var(--color-surface-active,var(--color-surface-hover))] motion-reduce:transition-none"
                   >
                     <span class="material-symbols-outlined text-[18px] text-[var(--color-text-secondary)]">attach_file</span>
                     <span class="text-sm text-[var(--color-text-primary)]">{{ addFilesLabel }}</span>
                   </button>
                   <button
                     @click="insertSlashCommand"
-                    class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--color-surface-hover)]"
+                    class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] active:bg-[var(--color-surface-active,var(--color-surface-hover))] motion-reduce:transition-none"
                   >
                     <span class="w-[24px] text-center text-[18px] font-bold text-[var(--color-text-secondary)]">/</span>
                     <span class="text-sm text-[var(--color-text-primary)]">{{ slashCommandsLabel }}</span>
@@ -1541,7 +1541,11 @@ watch(input, (v) => {
                       : undefined
                 "
                 :class="[
-                  'flex shrink-0 items-center justify-center gap-1 rounded-lg text-xs font-semibold transition-all hover:brightness-105 disabled:opacity-30',
+                  // Specify transition properties (not `transition-all`).
+                  // Adds a sub-100ms scale(0.97) on :active so the press
+                  // gives instant tactile feedback, per Emil Kowalski's
+                  // 'Buttons must feel responsive' rule.
+                  'flex shrink-0 items-center justify-center gap-1 rounded-lg text-xs font-semibold transition-[transform,filter,background-color,color] duration-150 ease-out hover:brightness-105 active:scale-[0.97] disabled:opacity-30 motion-reduce:transition-none motion-reduce:active:scale-100',
                   iconOnlyAction
                     ? `${isMobileViewport() ? 'h-11 w-11 rounded-xl px-0 py-0' : 'h-8 w-8 px-0 py-0'}`
                     : 'w-[112px] px-3 py-1.5',
