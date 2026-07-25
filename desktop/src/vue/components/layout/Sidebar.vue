@@ -15,6 +15,7 @@ import type { SessionListItem } from '../../../types/session'
 import { desktopUiPreferencesApi, type SidebarProjectPreferences } from '../../api/desktopUiPreferences'
 import { getDesktopHost } from '../../../lib/desktopHost'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
+import ProjectHeaderMenu from './ProjectHeaderMenu.vue'
 import MascotAvatar from '../common/MascotAvatar.vue'
 import WorkspacePanel from '../workspace/WorkspacePanel.vue'
 import GlobalSearchModal from '../search/GlobalSearchModal.vue'
@@ -266,41 +267,9 @@ function groupByProject(sessions: SessionListItem[], sortBy: SidebarProjectSortB
 
 // ─── SVG Icon Components ────────────────────────────────────────────────
 
-const GitHubIcon = defineComponent({
-  setup() {
-    return () => h('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'currentColor' }, [
-      h('path', { d: 'M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z' }),
-    ])
-  },
-})
-
-const PlusIcon = defineComponent({
-  setup() {
-    return () => h('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
-      h('line', { x1: '12', y1: '5', x2: '12', y2: '19' }),
-      h('line', { x1: '5', y1: '12', x2: '19', y2: '12' }),
-    ])
-  },
-})
-
-const SortIcon = defineComponent({
-  setup() {
-    return () => h('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
-      h('path', { d: 'M3 6h18M6 12h12M10 18h4' }),
-    ])
-  },
-})
-
-const OrganizationIcon = defineComponent({
-  setup() {
-    return () => h('svg', { width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' }, [
-      h('rect', { x: '3', y: '3', width: '7', height: '7', rx: '1' }),
-      h('rect', { x: '14', y: '3', width: '7', height: '7', rx: '1' }),
-      h('rect', { x: '3', y: '14', width: '7', height: '7', rx: '1' }),
-      h('rect', { x: '14', y: '14', width: '7', height: '7', rx: '1' }),
-    ])
-  },
-})
+// v4 — PlusIcon / GitHubIcon / SortIcon / OrganizationIcon moved to
+// ProjectHeaderMenu.vue. Only GitBranchIcon (used by the session
+// icon) stays here.
 
 const GitBranchIcon = defineComponent({
   setup() {
@@ -633,7 +602,7 @@ const createSessionForWorkDir = async (workDir?: string) => {
   }
 }
 
-const openProjectHeaderMenu = (event: MouseEvent, type: SidebarHeaderMenuType) => {
+const openProjectHeaderMenu = (event: MouseEvent, type: SidebarHeaderMenuType = 'main') => {
   event.stopPropagation()
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const width = type === 'create' ? 250 : 270
@@ -1066,78 +1035,16 @@ const ProjectHeaderActions = defineComponent({
   },
 })
 
-// ProjectHeaderMenu
-const ProjectHeaderMenu = defineComponent({
-  props: {
-    type: String,
-    x: Number,
-    y: Number,
-    organization: String,
-    sortBy: String,
-    onOpenSubmenu: Function,
-    onSetOrganization: Function,
-    onSetSortBy: Function,
-    onCreateBlank: Function,
-    onUseExistingFolder: Function,
-    onRestoreHiddenProjects: Function,
-    hiddenProjectCount: Number,
-    t: Function,
-  },
-  setup(props) {
-    const menuType = props.type as SidebarHeaderMenuType
-    // v4 — fix position clamp.
-    // Previously this re-ran positionProjectMenu(props.x, props.y)
-    // which treated the already-absolute (x, y) coords as if they
-    // were clientX/clientY, then re-clamped to viewport. Result:
-    // menu often drifted to the top-left edge (clamp to (8,8)).
-    // The caller (openProjectHeaderMenu at line 617) already
-    // computes absolute coords from the trigger rect — use them
-    // directly. menuStyle must be rebuilt inside the render fn or
-    // props.x/y snapshotted to undefined at setup-time (Object prop
-    // defaults) and never reactively re-read.
-    return () => {
-      const menuStyle: Record<string, any> = {
-        left: props.x,
-        top: props.y,
-        boxShadow: 'var(--shadow-dropdown)',
-      }
-      if (menuType === 'create') {
-        return h('div', {
-          role: 'menu',
-          class: 'fixed z-50 min-w-[230px] overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2 shadow-[var(--shadow-dropdown)]',
-          style: menuStyle,
-          onClick: (e: MouseEvent) => e.stopPropagation(),
-        }, [
-          h(ProjectMenuItem, {
-            icon: h(PlusIcon),
-            onClick: () => props.onCreateBlank(),
-          }, { default: () => props.t('sidebar.createBlankSession') }),
-          h(ProjectMenuItem, {
-            icon: h(GitHubIcon),
-            onClick: () => props.onUseExistingFolder(),
-          }, { default: () => props.t('sidebar.useExistingFolder') }),
-        ])
-      }
-
-      // main / organize / sort — kept empty for now. Filling the items
-      // array requires reading props reactively inside the render fn,
-      // which the current nested-defineComponent shape makes brittle.
-      // Until that's safely refactored (preferably by lifting this
-      // component into its own .vue file), we leave the menu surface
-      // present so the position fix below still helps. The user will
-      // see the rounded box positioned correctly under the `...`
-      // button — better than the broken "fixed at (8,8)" symptom.
-      const items: ReturnType<typeof h>[] = []
-
-      return h('div', {
-        role: 'menu',
-        class: 'fixed z-50 min-w-[230px] overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2 shadow-[var(--shadow-dropdown)]',
-        style: menuStyle,
-        onClick: (e: MouseEvent) => e.stopPropagation(),
-      }, items)
-    }
-  },
-})
+// ProjectHeaderMenu — v4 — extracted to ./ProjectHeaderMenu.vue.
+// The inline defineComponent() with closure-captured props.x/props.y
+// was the root cause of two bugs:
+//   1. The menu rendered at the top-left of the viewport because the
+//      props reactivity never reached the inline style attribute.
+//   2. The main/organize/sort menus were permanently empty
+//      (no template, items array was hard-coded `[]`).
+// The .vue file uses <script setup> + defineProps + emit() which
+// makes prop reactivity automatic and lets us declare the per-type
+// item lists in plain <template v-if> branches.
 
 // NavItem — handles both SVG component icons and string material-icons
 const NavItem = defineComponent({
