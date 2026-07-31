@@ -44,9 +44,58 @@ _ssl_ctx_fallback = _ssl.create_default_context()
 _ssl_ctx_fallback.check_hostname = False
 _ssl_ctx_fallback.verify_mode = _ssl.CERT_NONE
 
+# v4 — SSRF guard. Prevents the agent from being prompt-injected
+# into fetching internal resources (AWS metadata at 169.254.169.254,
+# localhost services, private network hosts). Ported from the
+# existing guard in app.py's fetch_provider_models endpoint.
+_BLOCKED_IP_HINTS = ("169.254.169.254", "metadata.google.internal")
+
+
+def _is_ssrf_url(url: str) -> bool:
+    """Return True if the URL targets a private/loopback/link-local
+    address (SSRF risk). Localhost is allowed for dev/test."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return True
+        host = parsed.hostname or ""
+        if not host:
+            return True
+        # Fast-path: block known metadata endpoints by name.
+        if host in _BLOCKED_IP_HINTS:
+            return True
+        # Resolve and check all IPs.
+        try:
+            addrs = socket.getaddrinfo(host, None)
+        except socket.gaierror:
+            addrs = []
+        for _fam, _typ, _proto, _cn, sa in addrs:
+            ip = ipaddress.ip_address(sa[0])
+            if ip.is_link_local:
+                return True
+            if (ip.is_private or ip.is_loopback or ip.is_reserved) and host not in (
+                "localhost", "127.0.0.1", "::1",
+            ):
+                return True
+    except Exception:
+        # On any parse error, block.
+        return True
+    return False
+
 
 def _http_get(url: str, timeout: int = _DEFAULT_TIMEOUT) -> bytes:
-    """Fetch a URL with a timeout. Returns raw bytes."""
+    """Fetch a URL with a timeout. Returns raw bytes.
+
+    SSRF-guarded: rejects private/loopback/link-local addresses.
+    """
+    if _is_ssrf_url(url):
+        raise ValueError(
+            f"URL blocked by SSRF guard (private/loopback/link-local): {url[:100]}"
+        )
     req = urllib.request.Request(
         url,
         headers={"User-Agent": _USER_AGENT},

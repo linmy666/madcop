@@ -1045,11 +1045,25 @@ def create_app() -> FastAPI:
         lifespan=_lifespan,
     )
 
+    # Security: restrict CORS to known local origins. The previous
+    # `allow_origins=["*"]` + `allow_credentials=True` combination is
+    # invalid per the CORS spec AND lets any website the user visits
+    # drive the agent via localhost:8765. We now allow only the
+    # Electron dev server + the Vite HMR port.
+    _allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        # Electron loads from file:// — Origin header is "null" or absent.
+        # FastAPI's CORSMiddleware handles null/absent Origin by not
+        # adding CORS headers, which is fine for same-origin requests.
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
+        allow_origins=_allowed_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
     include_all_routers(app)
@@ -3628,6 +3642,22 @@ def create_app() -> FastAPI:
     @app.websocket("/ws/{session_id}")
     async def cc_websocket_chat(ws: WebSocket, session_id: str) -> None:
         import sys
+        # Security: validate the Origin header before accepting the
+        # WebSocket. Without this, any website the user visits can
+        # open a WS to ws://localhost:8765/ws/anything and drive the
+        # agent (send messages, run tools, read files).
+        _origin = ws.headers.get("origin", "").rstrip("/")
+        _allowed_ws_origins = {
+            "http://localhost:5173", "http://127.0.0.1:5173",
+            "http://localhost:1420", "http://127.0.0.1:1420",
+            # Electron renderer: Origin is "null" (file://) or absent.
+            "null", "",
+        }
+        if _origin not in _allowed_ws_origins:
+            await ws.close(code=4003, reason="Origin not allowed")
+            print(f"[ws] rejected session_id={session_id} origin={_origin!r}", file=sys.stderr, flush=True)
+            return
+
         print(f"[ws] accepted session_id={session_id}", file=sys.stderr, flush=True)
         # Send the standard 'connected' handshake first.
         await ws.accept()

@@ -88,12 +88,23 @@ class WriteFileInput(BaseModel):
     @field_validator("path")
     @classmethod
     def _path_safe(cls, v: str) -> str:
-        # Block obvious dangerous paths
-        if v.startswith("/etc/") or v.startswith("/System/") or "/.ssh/" in v:
-            raise ValueError(
-                f"refusing to write to sensitive system path: {v!r}. "
-                "Ask the user to confirm before writing here."
-            )
+        # Block obvious dangerous paths — expanded v4 security pass.
+        # Previous version only checked /etc/, /System/, /.ssh/ —
+        # missing ~/.aws/credentials, ~/.kube/config, ~/.netrc,
+        # ~/.gnupg/, ~/.madcop/master.key (which decrypts ALL API keys).
+        _blocked_patterns = [
+            "/etc/", "/System/", "/.ssh/",
+            "/.aws/", "/.kube/", "/.netrc", "/.gnupg/",
+            "/.madcop/master.key", "/.madcop/settings.json",
+            "/.docker/config.json",
+        ]
+        v_normalized = v.replace("\\", "/")
+        for pat in _blocked_patterns:
+            if pat in v_normalized:
+                raise ValueError(
+                    f"refusing to write to sensitive path (contains {pat!r}): {v!r}. "
+                    "Ask the user to confirm before writing here."
+                )
         return v
 
 
@@ -101,6 +112,25 @@ class EditFileInput(BaseModel):
     path: str = Field(..., min_length=1, max_length=MAX_FILE_PATH_CHARS)
     old_string: str = Field(..., max_length=MAX_CONTENT_CHARS)
     new_string: str = Field(..., max_length=MAX_CONTENT_CHARS)
+
+    @field_validator("path")
+    @classmethod
+    def _path_safe(cls, v: str) -> str:
+        # Same guard as WriteFileInput — see notes there.
+        _blocked_patterns = [
+            "/etc/", "/System/", "/.ssh/",
+            "/.aws/", "/.kube/", "/.netrc", "/.gnupg/",
+            "/.madcop/master.key", "/.madcop/settings.json",
+            "/.docker/config.json",
+        ]
+        v_normalized = v.replace("\\", "/")
+        for pat in _blocked_patterns:
+            if pat in v_normalized:
+                raise ValueError(
+                    f"refusing to edit sensitive path (contains {pat!r}): {v!r}. "
+                    "Ask the user to confirm before editing here."
+                )
+        return v
 
 
 class ReadFileInput(BaseModel):

@@ -49,6 +49,22 @@ class CodeNode(NodeBase):
         if not code.strip():
             return NodeResult(success=False, error="Code field is empty")
 
+        # Security: CodeNode executes arbitrary Python as the same
+        # user / filesystem / network as the MadCop server. This is
+        # a remote code execution surface reachable via unauthenticated
+        # POST /api/workflows/{id}/run. We gate it behind an explicit
+        # environment variable — it must be set to "1" to enable.
+        import os as _os
+        if _os.environ.get("MADCOP_ALLOW_CODE_NODE", "0") != "1":
+            return NodeResult(
+                success=False,
+                error=(
+                    "CodeNode is disabled by default for security. "
+                    "Set MADCOP_ALLOW_CODE_NODE=1 to enable. "
+                    "Only do this in a sandboxed / container environment."
+                ),
+            )
+
         timeout = data.get("timeout", 10)
 
         # Build the execution context
@@ -157,15 +173,32 @@ class ConditionNode(NodeBase):
                 branch = "true" if answer.startswith("true") else "false"
             except Exception as e:
                 return NodeResult(success=False, error=f"Condition LLM error: {e}")
-        else:
-            # Simple Python expression
-            try:
-                # Evaluate the condition expression (limited, for safety)
-                allowed = {"input": context.workflow_input, "upstream": context.upstream_outputs}
-                result = eval(condition, {"__builtins__": {}}, allowed)
-                branch = "true" if result else "false"
-            except Exception as e:
-                return NodeResult(success=False, error=f"Condition eval error: {e}")
+            else:
+                # Security: eval() with __builtins__={} is NOT a sandbox.
+                # The classic escape `().__class__.__bases__[0].__subclasses__()`
+                # gives access to subprocess.Popen / os.system from the
+                # restricted globals. We now refuse to eval arbitrary
+                # expressions — force the LLM path, or use literal_eval
+                # for simple comparisons.
+                import ast as _ast
+                try:
+                    # Only allow literal comparisons (numbers, strings,
+                    # booleans, None, tuples, lists, dicts) — no attribute
+                    # access, no function calls, no comprehensions.
+                    allowed = {"input": context.workflow_input,
+                               "upstream": context.upstream_outputs}
+                    result = _ast.literal_eval(condition)
+                    # If the condition is a simple truthiness check on
+                    # a literal, evaluate it directly. Otherwise fall
+                    # through to "false" (the condition was too complex
+                    # for the safe evaluator).
+                    if isinstance(result, (bool, int, float, str, type(None))):
+                        branch = "true" if result else "false"
+                    else:
+                        branch = "false"
+                except (ValueError, SyntaxError) as e:
+                    return NodeResult(success=False,
+                                      error=f"Condition evaluation refused (use_llm=True required for complex expressions): {e}")
 
         return NodeResult(success=True, output={"branch": branch, "condition": condition}, branch=branch)
 
