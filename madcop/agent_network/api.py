@@ -24,7 +24,10 @@ _NETWORKS_FILE = _DATA_DIR / "networks.json"
 def _load(path: Path) -> list[dict]:
     if not path.exists(): return []
     try: return json.loads(path.read_text())
-    except: return []
+    except Exception as _e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("agent_network load failed: %s", _e)
+        return []
 
 def _save(path: Path, data: list[dict]):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2))

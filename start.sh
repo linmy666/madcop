@@ -69,7 +69,14 @@ echo "▸ Starting backend (port 8765)..."
 lsof -ti:8765 2>/dev/null | xargs kill -9 2>/dev/null || true
 sleep 0.3
 
-uvicorn madcop.server.app:app --host 127.0.0.1 --port 8765 --reload &
+# Reload only in dev mode — --reload watches the whole repo for file
+# changes and restarts the process, which drops in-flight requests.
+if [ "${MADCOP_DEV:-0}" = "1" ]; then
+  echo "  (dev mode: auto-reload enabled)"
+  uvicorn madcop.server.app:app --host 127.0.0.1 --port 8765 --reload &
+else
+  uvicorn madcop.server.app:app --host 127.0.0.1 --port 8765 &
+fi
 BACKEND_PID=$!
 echo "  PID: $BACKEND_PID"
 

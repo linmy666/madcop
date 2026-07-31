@@ -62,8 +62,9 @@ def _worker(messages: list[Message], hash_key: str) -> None:
             _extraction_count += 1
             if n > 0:
                 _extracted_hashes.add(hash_key)
-    except Exception:
-        pass
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("memory extraction failed: %s", e)
 
 
 def schedule_extraction(messages: list[Message]) -> bool:

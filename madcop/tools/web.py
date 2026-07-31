@@ -275,71 +275,70 @@ class WebSearchTool(Tool):
             browser.close()
         return results
 
+    # Class-level singleton for the visitproject subprocess.
+    _visitproject_client: Any = None
+    _visitproject_lock = __import__('threading').Lock()
+    _visitproject_env: dict[str, str] | None = None
+
     def _search_visitproject(self, query: str, max_results: int) -> list[dict[str, str]]:
         """Search via visitproject (agentic MCP server — best quality).
 
-        visitproject is an open-source (https://github.com/linmy666)
-        MCP server that wraps SearXNG with dedup, embedding-based
-        rerank, LLM content extraction, and caching. We invoke it as
-        a subprocess speaking the stdio MCP protocol via the existing
-        ``MCPClient``.
-
-        Env vars (all forwarded to the subprocess):
-          VISITPROJECT_BIN          — required; path to dist/index.js
-          VISITPROJECT_SEARXNG_URL  — forwarded as SEARXNG_URL
-          VISITPROJECT_LLM_PROVIDER — forwarded as LLM_PROVIDER (openai|ollama)
-          VISITPROJECT_LLM_BASE_URL — forwarded as LLM_BASE_URL
-          VISITPROJECT_LLM_API_KEY  — forwarded as LLM_API_KEY
-          VISITPROJECT_LLM_MODEL    — forwarded as LLM_MODEL
-          VISITPROJECT_EMBEDDING_MODEL — forwarded as EMBEDDING_MODEL
-          (any other VISITPROJECT_* env var is also forwarded with
-          the prefix stripped — useful for HTTPS_PROXY etc.)
-
-        A single subprocess is shared across calls (singleton on the
-        ``WebSearchTool`` class) so the browser warm-up cost is paid
-        once. The subprocess is killed automatically at process exit
-        via ``atexit``.
+        Thread-safe singleton with crash recovery: if the subprocess
+        dies or a call fails, the singleton is reset so the next call
+        re-spawns a fresh subprocess. A 15s timeout keeps the agent
+        loop responsive.
         """
         import atexit
         import os
+        import threading
         from .mcp import MCPClient
 
         bin_path = os.environ.get("VISITPROJECT_BIN", "").strip()
         if not bin_path:
             return []
 
-        # Build subprocess env: inherit current env, then forward any
-        # VISITPROJECT_* vars with the prefix stripped (so users can
-        # configure SEARXNG_URL etc. without polluting MadCop's env).
-        sub_env = dict(os.environ)
-        for k, v in os.environ.items():
-            if k.startswith("VISITPROJECT_") and k != "VISITPROJECT_BIN":
-                sub_env[k[len("VISITPROJECT_"):]] = v
+        cls = self.__class__
 
-        # Singleton MCP client (one visitproject subprocess per process).
-        client = self.__class__._visitproject_client
-        if client is None:
-            client = MCPClient(
-                command=["node", bin_path],
-                env=sub_env,
-                timeout_s=60.0,
-            )
-            client.connect()
-            # Kill on process exit so we don't leave zombies.
-            atexit.register(client.close)
-            self.__class__._visitproject_client = client
+        # Build subprocess env once (cached on class).
+        if cls._visitproject_env is None:
+            sub_env = dict(os.environ)
+            for k, v in os.environ.items():
+                if k.startswith("VISITPROJECT_") and k != "VISITPROJECT_BIN":
+                    sub_env[k[len("VISITPROJECT_"):]] = v
+            cls._visitproject_env = sub_env
 
-        # Call the `search` MCP tool. visitproject returns content as
-        # a list of text blocks; the first block's text is the JSON
-        # payload: `{"results": [{"title","url","snippet","score"}, ...]}`.
-        result = client.call_tool("search", {
-            "query": query,
-            "max_results": max_results,
-            # Default depth is "deep" (agentic). For web_search use
-            # we want "quick" to keep latency low — agent can re-call
-            # if it needs deeper research.
-            "depth": os.environ.get("VISITPROJECT_DEPTH", "quick"),
-        })
+        # Thread-safe singleton creation.
+        with cls._visitproject_lock:
+            if cls._visitproject_client is None:
+                try:
+                    client = MCPClient(
+                        command=["node", bin_path],
+                        env=cls._visitproject_env,
+                        timeout_s=15.0,
+                    )
+                    client.connect()
+                    atexit.register(client.close)
+                    cls._visitproject_client = client
+                except Exception as e:
+                    logger.warning("visitproject connect failed: %s", e)
+                    return []
+
+        # Call search — if it fails, reset singleton for next-call retry.
+        try:
+            result = cls._visitproject_client.call_tool("search", {
+                "query": query,
+                "max_results": max_results,
+                "depth": os.environ.get("VISITPROJECT_DEPTH", "quick"),
+            })
+        except Exception as e:
+            logger.warning("visitproject call failed, resetting singleton: %s", e)
+            try:
+                cls._visitproject_client.close()
+            except Exception:
+                pass
+            cls._visitproject_client = None
+            return []
+
         if not result:
             return []
 
@@ -386,11 +385,6 @@ class WebSearchTool(Tool):
                 "snippet": snippet[:400],
             })
         return out
-
-    # Class-level singleton for the visitproject subprocess. Lazily
-    # initialized on first call to _search_visitproject(); killed at
-    # interpreter exit via atexit.
-    _visitproject_client: Any = None
 
     def _search_searxng(self, query: str, max_results: int, base_url: str) -> list[dict[str, str]]:
         """Search via a self-hosted SearXNG instance (best quality, free)."""

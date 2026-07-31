@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -86,27 +87,29 @@ class ProjectStore:
         self.path = Path(path) if path else DB_PATH
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
+        self._lock = threading.RLock()
         self._conn.row_factory = sqlite3.Row
         self._migrate()
 
     def _migrate(self) -> None:
-        self._conn.executescript("""
-        CREATE TABLE IF NOT EXISTS projects (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            status TEXT NOT NULL DEFAULT 'draft',
-            current_phase TEXT NOT NULL DEFAULT 'requirement',
-            artifacts_json TEXT NOT NULL DEFAULT '{}',
-            session_ids_json TEXT NOT NULL DEFAULT '[]',
-            metadata_json TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_projects_status
-            ON projects(status, updated_at DESC);
-        """)
-        self._conn.commit()
+        with self._lock:
+            self._conn.executescript("""
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                current_phase TEXT NOT NULL DEFAULT 'requirement',
+                artifacts_json TEXT NOT NULL DEFAULT '{}',
+                session_ids_json TEXT NOT NULL DEFAULT '[]',
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_projects_status
+                ON projects(status, updated_at DESC);
+            """)
+            self._conn.commit()
 
     def _now(self) -> str:
         return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -142,47 +145,52 @@ class ProjectStore:
 
     def _save(self, proj: Project) -> None:
         proj.updated_at = self._now()
-        self._conn.execute("""
-        INSERT OR REPLACE INTO projects
-        (id, name, description, status, current_phase,
-         artifacts_json, session_ids_json, metadata_json,
-         created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            proj.id, proj.name, proj.description, proj.status,
-            proj.current_phase,
-            json.dumps(proj.artifacts, ensure_ascii=False),
-            json.dumps(proj.session_ids, ensure_ascii=False),
-            json.dumps(proj.metadata, ensure_ascii=False),
-            proj.created_at, proj.updated_at,
-        ))
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute("""
+            INSERT OR REPLACE INTO projects
+            (id, name, description, status, current_phase,
+             artifacts_json, session_ids_json, metadata_json,
+             created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                proj.id, proj.name, proj.description, proj.status,
+                proj.current_phase,
+                json.dumps(proj.artifacts, ensure_ascii=False),
+                json.dumps(proj.session_ids, ensure_ascii=False),
+                json.dumps(proj.metadata, ensure_ascii=False),
+                proj.created_at, proj.updated_at,
+            ))
+            self._conn.commit()
 
     def get(self, project_id: str) -> Project | None:
-        row = self._conn.execute(
-            "SELECT * FROM projects WHERE id = ?", (project_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM projects WHERE id = ?", (project_id,)
+            ).fetchone()
         return self._row_to_project(row) if row else None
 
     def list(self, status: str | None = None,
              limit: int = 50) -> list[Project]:
         if status:
-            rows = self._conn.execute(
-                "SELECT * FROM projects WHERE status = ? "
-                "ORDER BY updated_at DESC LIMIT ?", (status, limit)
-            ).fetchall()
+            with self._lock:
+                rows = self._conn.execute(
+                    "SELECT * FROM projects WHERE status = ? "
+                    "ORDER BY updated_at DESC LIMIT ?", (status, limit)
+                ).fetchall()
         else:
-            rows = self._conn.execute(
-                "SELECT * FROM projects ORDER BY updated_at DESC LIMIT ?",
-                (limit,)
-            ).fetchall()
+            with self._lock:
+                rows = self._conn.execute(
+                    "SELECT * FROM projects ORDER BY updated_at DESC LIMIT ?",
+                    (limit,)
+                ).fetchall()
         return [self._row_to_project(r) for r in rows]
 
     def delete(self, project_id: str) -> bool:
-        cur = self._conn.execute(
-            "DELETE FROM projects WHERE id = ?", (project_id,)
-        )
-        self._conn.commit()
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM projects WHERE id = ?", (project_id,)
+            )
+            self._conn.commit()
         return cur.rowcount > 0
 
     # ----- Workflow helpers ----- #

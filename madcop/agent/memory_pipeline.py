@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -114,9 +115,11 @@ class CheckpointManager:
         self._path = Path(path) if path else DEFAULT_PIPELINE_DB
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
+        self._lock = threading.RLock()
         self._conn.row_factory = sqlite3.Row
-        self._conn.executescript(SCHEMA)
-        self._conn.commit()
+        with self._lock:
+            self._conn.executescript(SCHEMA)
+            self._conn.commit()
 
     def close(self) -> None:
         try:
@@ -125,10 +128,11 @@ class CheckpointManager:
             pass
 
     def load(self, conversation_id: str) -> Checkpoint:
-        row = self._conn.execute(
-            "SELECT * FROM mc_checkpoints WHERE conversation_id = ?",
-            (conversation_id,),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM mc_checkpoints WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
         if row is None:
             return Checkpoint(
                 conversation_id=conversation_id,
@@ -145,23 +149,24 @@ class CheckpointManager:
     def save(self, cp: Checkpoint) -> None:
         cp.runner.updated_at = time.time()
         with self._conn:
-            self._conn.execute(
-                """INSERT INTO mc_checkpoints
-                   (conversation_id, runner_json, pipeline_json, schema_version, updated_at)
-                   VALUES (?, ?, ?, ?, ?)
-                   ON CONFLICT(conversation_id) DO UPDATE SET
-                     runner_json = excluded.runner_json,
-                     pipeline_json = excluded.pipeline_json,
-                     schema_version = excluded.schema_version,
-                     updated_at = excluded.updated_at""",
-                (
-                    cp.conversation_id,
-                    json.dumps(cp.runner.__dict__),
-                    json.dumps(cp.pipeline.__dict__),
-                    cp.schema_version,
-                    cp.runner.updated_at,
-                ),
-            )
+            with self._lock:
+                self._conn.execute(
+                    """INSERT INTO mc_checkpoints
+                       (conversation_id, runner_json, pipeline_json, schema_version, updated_at)
+                       VALUES (?, ?, ?, ?, ?)
+                       ON CONFLICT(conversation_id) DO UPDATE SET
+                         runner_json = excluded.runner_json,
+                         pipeline_json = excluded.pipeline_json,
+                         schema_version = excluded.schema_version,
+                         updated_at = excluded.updated_at""",
+                    (
+                        cp.conversation_id,
+                        json.dumps(cp.runner.__dict__),
+                        json.dumps(cp.pipeline.__dict__),
+                        cp.schema_version,
+                        cp.runner.updated_at,
+                    ),
+                )
 
     def mark_l1_complete(self, conversation_id: str, last_captured_ts: float, last_scene: str) -> None:
         """Called by the L1 runner after a successful L1 extraction."""

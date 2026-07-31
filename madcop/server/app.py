@@ -1607,7 +1607,7 @@ def create_app() -> FastAPI:
         call arguments arrive as streamed JSON fragments and are accumulated
         by index, then json-parsed at the end (standard OpenAI streaming)."""
         import asyncio as _a
-        loop = _a.get_event_loop()
+        loop = _a.get_running_loop()
         q: asyncio.Queue = asyncio.Queue(maxsize=64)
         sentinel = object()
 
@@ -1679,7 +1679,7 @@ def create_app() -> FastAPI:
         WebSocket heartbeats are not blocked).
         """
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         q: asyncio.Queue = asyncio.Queue(maxsize=64)
         sentinel = object()
 
@@ -1756,7 +1756,7 @@ def create_app() -> FastAPI:
         # this handler.  Keeps the asyncio loop responsive even when
         # synchronous LLM / tool I/O is in-flight.
         import asyncio as _chat_asyncio
-        _loop = _chat_asyncio.get_event_loop()
+        _loop = _chat_asyncio.get_running_loop()
 
         client = _get_client()
         messages = [Message(role=m.role, content=m.content) for m in body.messages]

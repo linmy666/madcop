@@ -150,77 +150,86 @@ class CronStore:
         self._path = Path(db_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
+        self._lock = threading.RLock()
         self._conn.row_factory = sqlite3.Row
         self._init_table()
 
     def _init_table(self) -> None:
-        self._conn.executescript("""
-            CREATE TABLE IF NOT EXISTS cron_jobs (
-                id TEXT PRIMARY KEY,
-                goal TEXT NOT NULL,
-                schedule TEXT NOT NULL,
-                mode TEXT NOT NULL DEFAULT 'standard',
-                enabled INTEGER NOT NULL DEFAULT 1,
-                last_run TEXT,
-                run_count INTEGER NOT NULL DEFAULT 0,
-                metadata TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-            );
-        """)
-        self._conn.commit()
+        with self._lock:
+            self._conn.executescript("""
+                CREATE TABLE IF NOT EXISTS cron_jobs (
+                    id TEXT PRIMARY KEY,
+                    goal TEXT NOT NULL,
+                    schedule TEXT NOT NULL,
+                    mode TEXT NOT NULL DEFAULT 'standard',
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    last_run TEXT,
+                    run_count INTEGER NOT NULL DEFAULT 0,
+                    metadata TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                );
+            """)
+            self._conn.commit()
 
     def add(self, job: CronJob) -> None:
         import json
-        self._conn.execute(
-            "INSERT OR REPLACE INTO cron_jobs "
-            "(id, goal, schedule, mode, enabled, last_run, run_count, metadata) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (job.id, job.goal, job.schedule, job.mode,
-             int(job.enabled), job.last_run, job.run_count,
-             json.dumps(job.metadata)),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO cron_jobs "
+                "(id, goal, schedule, mode, enabled, last_run, run_count, metadata) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (job.id, job.goal, job.schedule, job.mode,
+                 int(job.enabled), job.last_run, job.run_count,
+                 json.dumps(job.metadata)),
+            )
+            self._conn.commit()
 
     def remove(self, job_id: str) -> bool:
-        cur = self._conn.execute(
-            "DELETE FROM cron_jobs WHERE id=?", (job_id,)
-        )
-        self._conn.commit()
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM cron_jobs WHERE id=?", (job_id,)
+            )
+            self._conn.commit()
         return cur.rowcount > 0
 
     def get(self, job_id: str) -> CronJob | None:
-        row = self._conn.execute(
-            "SELECT * FROM cron_jobs WHERE id=?", (job_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM cron_jobs WHERE id=?", (job_id,)
+            ).fetchone()
         if row is None:
             return None
         return self._row_to_job(row)
 
     def list_all(self) -> list[CronJob]:
-        rows = self._conn.execute(
-            "SELECT * FROM cron_jobs ORDER BY id"
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM cron_jobs ORDER BY id"
+            ).fetchall()
         return [self._row_to_job(r) for r in rows]
 
     def list_enabled(self) -> list[CronJob]:
-        rows = self._conn.execute(
-            "SELECT * FROM cron_jobs WHERE enabled=1 ORDER BY id"
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM cron_jobs WHERE enabled=1 ORDER BY id"
+            ).fetchall()
         return [self._row_to_job(r) for r in rows]
 
     def update_after_run(self, job_id: str, timestamp: str) -> None:
-        self._conn.execute(
-            "UPDATE cron_jobs SET last_run=?, run_count=run_count+1 WHERE id=?",
-            (timestamp, job_id),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE cron_jobs SET last_run=?, run_count=run_count+1 WHERE id=?",
+                (timestamp, job_id),
+            )
+            self._conn.commit()
 
     def set_enabled(self, job_id: str, enabled: bool) -> None:
-        self._conn.execute(
-            "UPDATE cron_jobs SET enabled=? WHERE id=?",
-            (int(enabled), job_id),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE cron_jobs SET enabled=? WHERE id=?",
+                (int(enabled), job_id),
+            )
+            self._conn.commit()
 
     @staticmethod
     def _row_to_job(row: sqlite3.Row) -> CronJob:

@@ -113,7 +113,9 @@ def _fetch_candidates(
                 d = dict(r)
                 rows.append(d)
                 seen_ids.add(d["id"])
-        except Exception:
+        except Exception as _e:
+            import logging as _logging
+            _logging.getLogger(__name__).warning("hybrid search failed: %s", _e)
             pass
     # LIKE-based fallback — catches what FTS5 bm25 may have missed
     if len(rows) < limit:
@@ -131,7 +133,9 @@ def _fetch_candidates(
                 if d["id"] not in seen_ids:
                     rows.append(d)
                     seen_ids.add(d["id"])
-        except Exception:
+        except Exception as _e:
+            import logging as _logging
+            _logging.getLogger(__name__).warning("hybrid search failed: %s", _e)
             pass
     # Final fallback: if we still have very few candidates, pad with
     # most-recent memories so hybrid can at least rank *something*.
@@ -147,7 +151,9 @@ def _fetch_candidates(
                 if d["id"] not in seen_ids:
                     rows.append(d)
                     seen_ids.add(d["id"])
-        except Exception:
+        except Exception as _e:
+            import logging as _logging
+            _logging.getLogger(__name__).warning("hybrid search failed: %s", _e)
             pass
     return rows
 

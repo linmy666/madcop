@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -118,14 +119,17 @@ class TraceStore:
         self._path = Path(path) if path else DEFAULT_TRACE_DB
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
+        self._lock = threading.RLock()
         self._conn.row_factory = sqlite3.Row
         # WAL reduces "database is locked" under concurrent readers/writers.
         try:
-            self._conn.execute("PRAGMA journal_mode=WAL")
+            with self._lock:
+                self._conn.execute("PRAGMA journal_mode=WAL")
         except sqlite3.Error:
             pass
-        self._conn.executescript(SCHEMA)
-        self._conn.commit()
+        with self._lock:
+            self._conn.executescript(SCHEMA)
+            self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()
@@ -141,15 +145,16 @@ class TraceStore:
     def add(self, node: TraceNode) -> None:
         """Insert a new trace node."""
         with self._conn:
-            self._conn.execute(
-                """INSERT INTO trace_nodes
-                   (id, conversation_id, parent_id, node_type, status,
-                    label, input, output, error, created_at, completed_at, depth)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (node.id, node.conversation_id, node.parent_id, node.node_type,
-                 node.status, node.label, node.input, node.output, node.error,
-                 node.created_at, node.completed_at, node.depth),
-            )
+            with self._lock:
+                self._conn.execute(
+                    """INSERT INTO trace_nodes
+                       (id, conversation_id, parent_id, node_type, status,
+                        label, input, output, error, created_at, completed_at, depth)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (node.id, node.conversation_id, node.parent_id, node.node_type,
+                     node.status, node.label, node.input, node.output, node.error,
+                     node.created_at, node.completed_at, node.depth),
+                )
 
     def update(
         self,
@@ -179,11 +184,12 @@ class TraceStore:
             return False
         vals.append(node_id)
         with self._conn:
-            cur = self._conn.execute(
-                f"UPDATE trace_nodes SET {', '.join(sets)} WHERE id = ?",
-                vals,
-            )
-            return cur.rowcount > 0
+            with self._lock:
+                cur = self._conn.execute(
+                    f"UPDATE trace_nodes SET {', '.join(sets)} WHERE id = ?",
+                    vals,
+                )
+                return cur.rowcount > 0
 
     def mark_running(self, node_id: str) -> None:
         self.update(node_id, status=TraceStatus.RUNNING)
@@ -209,35 +215,39 @@ class TraceStore:
     # ------------------------------------------------------------------ #
 
     def get(self, node_id: str) -> TraceNode | None:
-        row = self._conn.execute(
-            "SELECT * FROM trace_nodes WHERE id = ?", (node_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM trace_nodes WHERE id = ?", (node_id,)
+            ).fetchone()
         return TraceNode.from_row(row) if row else None
 
     def get_conversation_trace(self, conversation_id: str) -> list[TraceNode]:
-        rows = self._conn.execute(
-            "SELECT * FROM trace_nodes WHERE conversation_id = ? "
-            "ORDER BY created_at ASC",
-            (conversation_id,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM trace_nodes WHERE conversation_id = ? "
+                "ORDER BY created_at ASC",
+                (conversation_id,),
+            ).fetchall()
         return [TraceNode.from_row(r) for r in rows]
 
     def list_conversations(self, limit: int = 50) -> list[str]:
         """Return distinct conversation_ids, most recent first."""
-        rows = self._conn.execute(
-            "SELECT DISTINCT conversation_id, MAX(created_at) AS last "
-            "FROM trace_nodes GROUP BY conversation_id "
-            "ORDER BY last DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT DISTINCT conversation_id, MAX(created_at) AS last "
+                "FROM trace_nodes GROUP BY conversation_id "
+                "ORDER BY last DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
         return [r["conversation_id"] for r in rows if r["conversation_id"]]
 
     def get_children(self, parent_id: str) -> list[TraceNode]:
-        rows = self._conn.execute(
-            "SELECT * FROM trace_nodes WHERE parent_id = ? "
-            "ORDER BY created_at ASC",
-            (parent_id,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM trace_nodes WHERE parent_id = ? "
+                "ORDER BY created_at ASC",
+                (parent_id,),
+            ).fetchall()
         return [TraceNode.from_row(r) for r in rows]
 
     # ------------------------------------------------------------------ #

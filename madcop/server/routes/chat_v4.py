@@ -124,14 +124,18 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     emitter = SSEEmitter()
 
     async def event_stream():
+        thread = None
         try:
             # Run engine in a thread (it's synchronous) and bridge to async
             q: queue.SimpleQueue = queue.SimpleQueue()
             sentinel = object()
+            cancel_flag = threading.Event()
 
             def worker():
                 try:
                     for step in engine.run(ctx):
+                        if cancel_flag.is_set():
+                            break
                         q.put(step)
                 except Exception as e:
                     q.put(AgentStep(kind=StepKind.ERROR, content=str(e)))
@@ -144,7 +148,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             while True:
                 try:
                     import asyncio
-                    item = await asyncio.get_event_loop().run_in_executor(
+                    item = await asyncio.get_running_loop().run_in_executor(
                         None, lambda: q.get(timeout=30.0)
                     )
                 except Exception:
@@ -159,6 +163,12 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         except Exception as e:
             logger.error("chat_v4 stream error: %s", e)
             yield emitter.error(str(e))
+        finally:
+            # Signal the worker to stop and wait briefly so tool
+            # side-effects don't continue after the client disconnects.
+            if thread is not None:
+                cancel_flag.set()
+                thread.join(timeout=2.0)
 
     return StreamingResponse(
         event_stream(),

@@ -46,6 +46,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -136,10 +137,12 @@ class PageDB:
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
+        self._lock = threading.RLock()
         self._conn.row_factory = sqlite3.Row
         # WAL reduces "database is locked" under concurrent readers/writers.
         try:
-            self._conn.execute("PRAGMA journal_mode=WAL")
+            with self._lock:
+                self._conn.execute("PRAGMA journal_mode=WAL")
         except sqlite3.Error:
             pass
         init_db(self._conn)
@@ -169,8 +172,9 @@ class PageDB:
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
-        with self._conn:
-            yield self._conn
+        with self._lock:
+            with self._conn:
+                yield self._conn
 
     # ---- validation -------------------------------------------------------
 
@@ -327,9 +331,10 @@ class PageDB:
     # ---- get / delete / list --------------------------------------------
 
     def _get_by_id(self, page_id: int) -> Page:
-        row = self._conn.execute(
-            "SELECT * FROM pages WHERE id=?", (page_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM pages WHERE id=?", (page_id,)
+            ).fetchone()
         if row is None:
             raise KeyError(f"page id {page_id} not found")
         page = Page.from_row(row)
@@ -337,31 +342,33 @@ class PageDB:
         return page
 
     def get(self, slug: str) -> Page | None:
-        row = self._conn.execute(
-            "SELECT * FROM pages WHERE slug=?", (slug,)
-        ).fetchone()
-        if row is None:
-            return None
-        page_id = int(row["id"])
-        page = Page.from_row(row)
-        page.tags = self._tags_for(page_id)
-        # Bump last_accessed_at — used by Dream consolidation to
-        # decide what's stale.
-        self._conn.execute(
-            "UPDATE pages SET last_accessed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') "
-            "WHERE id=?",
-            (page_id,),
-        )
-        # Re-read the column so the returned Page reflects the bump.
-        row2 = self._conn.execute(
-            "SELECT last_accessed_at FROM pages WHERE id=?", (page_id,)
-        ).fetchone()
-        if row2 is not None:
-            page.last_accessed_at = row2["last_accessed_at"]
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM pages WHERE slug=?", (slug,)
+            ).fetchone()
+            if row is None:
+                return None
+            page_id = int(row["id"])
+            page = Page.from_row(row)
+            page.tags = self._tags_for(page_id)
+            # Bump last_accessed_at — used by Dream consolidation to
+            # decide what's stale.
+            self._conn.execute(
+                "UPDATE pages SET last_accessed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') "
+                "WHERE id=?",
+                (page_id,),
+            )
+            # Re-read the column so the returned Page reflects the bump.
+            row2 = self._conn.execute(
+                "SELECT last_accessed_at FROM pages WHERE id=?", (page_id,)
+            ).fetchone()
+            if row2 is not None:
+                page.last_accessed_at = row2["last_accessed_at"]
         return page
 
     def delete(self, slug: str, *, source: str = "manual") -> bool:
-        row = self._conn.execute("SELECT id FROM pages WHERE slug=?", (slug,)).fetchone()
+        with self._lock:
+            row = self._conn.execute("SELECT id FROM pages WHERE slug=?", (slug,)).fetchone()
         if row is None:
             return False
         page_id = int(row["id"])
@@ -372,28 +379,31 @@ class PageDB:
 
     def list_by_type(self, type_: str, *, limit: int = 100) -> list[Page]:
         self.validate_type(type_)
-        rows = self._conn.execute(
-            "SELECT * FROM pages WHERE type=? ORDER BY updated_at DESC LIMIT ?",
-            (type_, int(limit)),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM pages WHERE type=? ORDER BY updated_at DESC LIMIT ?",
+                (type_, int(limit)),
+            ).fetchall()
         pages = [Page.from_row(r) for r in rows]
         for p in pages:
             p.tags = self._tags_for(p.id)
         return pages
 
     def list_all(self, *, limit: int = 1000) -> list[Page]:
-        rows = self._conn.execute(
-            "SELECT * FROM pages ORDER BY updated_at DESC LIMIT ?", (int(limit),)
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM pages ORDER BY updated_at DESC LIMIT ?", (int(limit),)
+            ).fetchall()
         pages = [Page.from_row(r) for r in rows]
         for p in pages:
             p.tags = self._tags_for(p.id)
         return pages
 
     def _tags_for(self, page_id: int) -> list[str]:
-        rows = self._conn.execute(
-            "SELECT tag FROM tags WHERE page_id=? ORDER BY tag", (page_id,)
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT tag FROM tags WHERE page_id=? ORDER BY tag", (page_id,)
+            ).fetchall()
         return [r["tag"] for r in rows]
 
     # ---- search (FTS5) ---------------------------------------------------
@@ -469,7 +479,8 @@ class PageDB:
         sql.append("ORDER BY score LIMIT ?")
         params.append(int(limit))
 
-        rows = self._conn.execute("\n".join(sql), params).fetchall()
+        with self._lock:
+            rows = self._conn.execute("\n".join(sql), params).fetchall()
         hits: list[SearchHit] = []
         for r in rows:
             page = Page.from_row(r)
@@ -581,16 +592,17 @@ class PageDB:
         page = self.get(slug)
         if page is None:
             return []
-        rows = self._conn.execute(
-            """
-            SELECT id, date, source, summary, detail, created_at
-              FROM timeline_entries
-             WHERE page_id=?
-             ORDER BY date DESC, id DESC
-             LIMIT ?
-            """,
-            (page.id, int(limit)),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT id, date, source, summary, detail, created_at
+                  FROM timeline_entries
+                 WHERE page_id=?
+                 ORDER BY date DESC, id DESC
+                 LIMIT ?
+                """,
+                (page.id, int(limit)),
+            ).fetchall()
         return [dict(r) for r in rows]
 
     def add_tags(self, slug: str, tags: Iterable[str]) -> int:
@@ -614,16 +626,17 @@ class PageDB:
         return added
 
     def pages_with_tag(self, tag: str, *, limit: int = 100) -> list[Page]:
-        rows = self._conn.execute(
-            """
-            SELECT p.* FROM pages p
-              JOIN tags t ON t.page_id = p.id
-             WHERE t.tag = ?
-             ORDER BY p.updated_at DESC
-             LIMIT ?
-            """,
-            (tag.lower(), int(limit)),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT p.* FROM pages p
+                  JOIN tags t ON t.page_id = p.id
+                 WHERE t.tag = ?
+                 ORDER BY p.updated_at DESC
+                 LIMIT ?
+                """,
+                (tag.lower(), int(limit)),
+            ).fetchall()
         pages = [Page.from_row(r) for r in rows]
         for p in pages:
             p.tags = self._tags_for(p.id)
@@ -635,16 +648,17 @@ class PageDB:
         page = self.get(slug)
         if page is None:
             return []
-        rows = self._conn.execute(
-            """
-            SELECT version_no, content_hash, saved_at, saved_by,
-                   length(compiled_truth) AS ct_len, length(timeline) AS tl_len
-              FROM versions
-             WHERE page_id=?
-             ORDER BY version_no DESC
-            """,
-            (page.id,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT version_no, content_hash, saved_at, saved_by,
+                       length(compiled_truth) AS ct_len, length(timeline) AS tl_len
+                  FROM versions
+                 WHERE page_id=?
+                 ORDER BY version_no DESC
+                """,
+                (page.id,),
+            ).fetchall()
         return [dict(r) for r in rows]
 
     def audit_log(
@@ -664,7 +678,8 @@ class PageDB:
             params.append(operation)
         sql += " ORDER BY id DESC LIMIT ?"
         params.append(int(limit))
-        rows = self._conn.execute(sql, params).fetchall()
+        with self._lock:
+            rows = self._conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
 
     # ---- introspection ---------------------------------------------------
@@ -676,7 +691,8 @@ class PageDB:
             "pages", "versions", "links", "timeline_entries",
             "tags", "review_queue", "ingest_log",
         ):
-            row = self._conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()
+            with self._lock:
+                row = self._conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()
             out[table] = int(row["n"])
         out["schema_version"] = self._schema_version
         return out

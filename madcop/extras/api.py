@@ -16,7 +16,10 @@ _USAGE = _DATA / "usage.json"
 def _load(p):
     if not p.exists(): return []
     try: return json.loads(p.read_text())
-    except: return []
+    except Exception as _e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("extras load failed: %s", _e)
+        return []
 
 def _save(p, d):
     p.write_text(json.dumps(d, ensure_ascii=False, indent=2))

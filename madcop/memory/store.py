@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -105,10 +106,12 @@ class MemoryStore:
         self._path = path
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
+        self._lock = threading.RLock()
         self._conn.row_factory = sqlite3.Row
         # WAL reduces "database is locked" under concurrent readers/writers.
         try:
-            self._conn.execute("PRAGMA journal_mode=WAL")
+            with self._lock:
+                self._conn.execute("PRAGMA journal_mode=WAL")
         except sqlite3.Error:
             pass
         self._init_schema()
@@ -144,17 +147,18 @@ class MemoryStore:
         rid = uuid.uuid4().hex[:16]
         now = time.time()
         with self._conn:
-            self._conn.execute(
-                """INSERT INTO memory_records
-                   (id, kind, title, content, tags, created_at, updated_at, metadata)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (rid, kind.value, title, content, ",".join(tags), now, now, metadata),
-            )
-            self._conn.execute(
-                """INSERT INTO memory_fts (id, kind, title, content, tags)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (rid, kind.value, title, content, " ".join(tags)),
-            )
+            with self._lock:
+                self._conn.execute(
+                    """INSERT INTO memory_records
+                       (id, kind, title, content, tags, created_at, updated_at, metadata)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (rid, kind.value, title, content, ",".join(tags), now, now, metadata),
+                )
+                self._conn.execute(
+                    """INSERT INTO memory_fts (id, kind, title, content, tags)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (rid, kind.value, title, content, " ".join(tags)),
+                )
         return MemoryRecord(
             id=rid,
             kind=kind,
@@ -167,18 +171,20 @@ class MemoryStore:
         )
 
     def get(self, record_id: str) -> MemoryRecord | None:
-        row = self._conn.execute(
-            "SELECT * FROM memory_records WHERE id = ?", (record_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM memory_records WHERE id = ?", (record_id,)
+            ).fetchone()
         return MemoryRecord.from_row(row) if row else None
 
     def delete(self, record_id: str) -> bool:
         """Remove a record (and its FTS entry). Returns True if existed."""
         with self._conn:
-            cur = self._conn.execute(
-                "DELETE FROM memory_records WHERE id = ?", (record_id,)
-            )
-            self._conn.execute("DELETE FROM memory_fts WHERE id = ?", (record_id,))
+            with self._lock:
+                cur = self._conn.execute(
+                    "DELETE FROM memory_records WHERE id = ?", (record_id,)
+                )
+                self._conn.execute("DELETE FROM memory_fts WHERE id = ?", (record_id,))
         return cur.rowcount > 0
 
     def update(
@@ -217,20 +223,21 @@ class MemoryStore:
         new_metadata = json.dumps(meta, ensure_ascii=False)
         new_updated_at = time.time()
         with self._conn:
-            self._conn.execute(
-                "UPDATE memory_records SET title=?, content=?, tags=?, "
-                "metadata=?, updated_at=? WHERE id=?",
-                (new_title, new_content, ",".join(new_tags),
-                 new_metadata, new_updated_at, record_id),
-            )
-            # FTS5 doesn't support UPDATE — delete + reinsert
-            self._conn.execute("DELETE FROM memory_fts WHERE id = ?", (record_id,))
-            self._conn.execute(
-                "INSERT INTO memory_fts(id, kind, title, content, tags) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (record_id, existing.kind.value, new_title, new_content,
-                 ",".join(new_tags)),
-            )
+            with self._lock:
+                self._conn.execute(
+                    "UPDATE memory_records SET title=?, content=?, tags=?, "
+                    "metadata=?, updated_at=? WHERE id=?",
+                    (new_title, new_content, ",".join(new_tags),
+                     new_metadata, new_updated_at, record_id),
+                )
+                # FTS5 doesn't support UPDATE — delete + reinsert
+                self._conn.execute("DELETE FROM memory_fts WHERE id = ?", (record_id,))
+                self._conn.execute(
+                    "INSERT INTO memory_fts(id, kind, title, content, tags) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (record_id, existing.kind.value, new_title, new_content,
+                     ",".join(new_tags)),
+                )
         return MemoryRecord(
             id=record_id,
             kind=existing.kind,
@@ -248,24 +255,27 @@ class MemoryStore:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MemoryRecord]:
-        rows = self._conn.execute(
-            """SELECT * FROM memory_records
-               WHERE kind = ?
-               ORDER BY created_at DESC
-               LIMIT ? OFFSET ?""",
-            (kind.value, limit, offset),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT * FROM memory_records
+                   WHERE kind = ?
+                   ORDER BY created_at DESC
+                   LIMIT ? OFFSET ?""",
+                (kind.value, limit, offset),
+            ).fetchall()
         return [MemoryRecord.from_row(r) for r in rows]
 
     def count_by_kind(self, kind: MemoryKind) -> int:
-        cur = self._conn.execute(
-            "SELECT COUNT(*) AS n FROM memory_records WHERE kind = ?",
-            (kind.value,),
-        ).fetchone()
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT COUNT(*) AS n FROM memory_records WHERE kind = ?",
+                (kind.value,),
+            ).fetchone()
         return int(cur["n"])
 
     def total_count(self) -> int:
-        cur = self._conn.execute("SELECT COUNT(*) AS n FROM memory_records").fetchone()
+        with self._lock:
+            cur = self._conn.execute("SELECT COUNT(*) AS n FROM memory_records").fetchone()
         return int(cur["n"])
 
     # ---- Full-text search -----------------------------------------------
@@ -311,7 +321,8 @@ class MemoryStore:
                 LIMIT ?
             """
             params = [query, limit]
-        rows = self._conn.execute(sql, params).fetchall()
+        with self._lock:
+            rows = self._conn.execute(sql, params).fetchall()
         return [MemoryRecord.from_row(r) for r in rows]
 
     # ---- Maintenance -----------------------------------------------------
@@ -323,29 +334,31 @@ class MemoryStore:
         from the PRD.
         """
         with self._conn:
-            # Get IDs of the rows to delete (everything except the most recent N)
-            to_delete = self._conn.execute(
-                """SELECT id FROM memory_records
-                   WHERE kind = ?
-                   ORDER BY created_at DESC
-                   LIMIT -1 OFFSET ?""",
-                (kind.value, keep_recent),
-            ).fetchall()
-            if not to_delete:
-                return 0
-            ids = [r["id"] for r in to_delete]
-            placeholders = ",".join("?" for _ in ids)
-            self._conn.execute(
-                f"DELETE FROM memory_records WHERE id IN ({placeholders})", ids
-            )
-            self._conn.execute(
-                f"DELETE FROM memory_fts WHERE id IN ({placeholders})", ids
-            )
+            with self._lock:
+                # Get IDs of the rows to delete (everything except the most recent N)
+                to_delete = self._conn.execute(
+                    """SELECT id FROM memory_records
+                       WHERE kind = ?
+                       ORDER BY created_at DESC
+                       LIMIT -1 OFFSET ?""",
+                    (kind.value, keep_recent),
+                ).fetchall()
+                if not to_delete:
+                    return 0
+                ids = [r["id"] for r in to_delete]
+                placeholders = ",".join("?" for _ in ids)
+                self._conn.execute(
+                    f"DELETE FROM memory_records WHERE id IN ({placeholders})", ids
+                )
+                self._conn.execute(
+                    f"DELETE FROM memory_fts WHERE id IN ({placeholders})", ids
+                )
         return len(ids)
 
     def vacuum(self) -> None:
         """Reclaim space after large deletes."""
-        self._conn.execute("VACUUM")
+        with self._lock:
+            self._conn.execute("VACUUM")
 
 
 __all__ = [
