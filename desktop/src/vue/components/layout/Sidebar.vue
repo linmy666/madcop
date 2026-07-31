@@ -554,10 +554,12 @@ const openProjectContextMenu = (
     || null
   const r = t ? t.getBoundingClientRect() : null
   contextMenu.value = null
+  const x = r ? Math.round(r.right - 230) : 16
+  const y = r ? Math.round(r.bottom + 6) : 16
   projectContextMenu.value = {
     key: project.key,
-    x: r ? Math.round(r.right - 230) : 16,
-    y: r ? Math.round(r.bottom + 6) : 16,
+    x,
+    y,
   }
 }
 
@@ -1681,7 +1683,7 @@ const projectMenuData = computed(() => {
       <div
         role="menu"
         class="fixed z-50 min-w-[230px] overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2 shadow-[var(--shadow-dropdown)]"
-        :style="positionProjectMenu(projectContextMenu && projectContextMenu.x, projectContextMenu && projectContextMenu.y)"
+        :style="{ left: (projectContextMenu ? projectContextMenu.x : 0) + 'px', top: (projectContextMenu ? projectContextMenu.y : 0) + 'px' }"
         @click.stop
       >
         <ProjectMenuItem
