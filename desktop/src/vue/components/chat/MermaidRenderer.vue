@@ -5,10 +5,14 @@
   fullscreen modal with zoom/pan, copy, and PNG export.
 -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, shallowRef } from 'vue'
 import DOMPurify from 'dompurify'
-import mermaid from 'mermaid'
 import { useUIStore } from '../../stores'
+
+// v4 perf: lazy-load mermaid (~1.5MB) only when this component
+// actually mounts. Previously the static import bloated the main
+// chunk even for users who never see a mermaid diagram.
+const mermaidModule = shallowRef<typeof import('mermaid')['default'] | null>(null)
 
 // ── Props ────────────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -180,6 +184,9 @@ function initMermaid(theme: 'light' | 'dark'): { lineColor: string } {
     lineColor,
     isDark,
   } = getMermaidThemeColors(theme)
+
+  const mermaid = mermaidModule.value
+  if (!mermaid) return { lineColor }
 
   mermaid.initialize({
     startOnLoad: false,
@@ -510,13 +517,17 @@ let fitAnimationFrame = 0
 
 async function renderMermaid(): Promise<void> {
   renderCancelled = false
+  // v4 perf: lazy-load mermaid (~1.5MB) on first render
+  if (!mermaidModule.value) {
+    mermaidModule.value = (await import('mermaid')).default
+  }
   const { lineColor } = initMermaid(theme.value)
 
   const id = `mermaid-${++mermaidIdCounter}`
   const renderCode = normalizeGeneratedFlowchartSyntax(props.code)
 
   try {
-    const result = await mermaid.render(id, renderCode)
+    const result = await mermaidModule.value!.render(id, renderCode)
     if (!renderCancelled) {
       svg.value = normalizeMermaidSvg((result as { svg: string }).svg, lineColor)
       error.value = null
