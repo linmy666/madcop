@@ -526,7 +526,39 @@ watch(
 const handleContextMenu = (e: MouseEvent, id: string) => {
   e.preventDefault()
   if (sessionStore.isBatchMode) return
-  contextMenu.value = { id, x: e.clientX, y: e.clientY }
+  // v4 fix: e.clientX/Y may be 0 or invalid in some contexts
+  // (e.g. when triggered programmatically or via stale refs). Fall
+  // back to the row's bounding rect so the menu lands next to
+  // the row, not at (0, 0).
+  const t = (e.currentTarget as HTMLElement | null)
+    || (e.target as HTMLElement | null)?.closest('button, [data-session-id], div')
+    || null
+  const r = t ? t.getBoundingClientRect() : null
+  contextMenu.value = {
+    id,
+    x: r ? Math.round(r.right - 140) : 16,
+    y: r ? Math.round(r.bottom + 6) : 16,
+  }
+}
+
+// v4: extracted ProjectContextMenu opener so the inline @click
+// handler stays simple. Uses the trigger button's bounding rect
+// (instead of e.clientX/Y) so the menu lands at the trigger, not
+// at (0, 0) when client coords are missing.
+const openProjectContextMenu = (
+  e: MouseEvent,
+  project: { key: string },
+) => {
+  const t = (e.currentTarget as HTMLElement | null)
+    || (e.target as HTMLElement | null)?.closest('button')
+    || null
+  const r = t ? t.getBoundingClientRect() : null
+  contextMenu.value = null
+  projectContextMenu.value = {
+    key: project.key,
+    x: r ? Math.round(r.right - 230) : 16,
+    y: r ? Math.round(r.bottom + 6) : 16,
+  }
 }
 
 const handleProjectDragStart = (event: MouseEvent, projectKey: string) => {
@@ -959,15 +991,19 @@ onUnmounted(() => {
 // ─── Sub-components (render function s / TODO placeholders for Phase 2) ──────────────────
 
 // ProjectMenuItem
+// v4: switched from `props.children` (string) to render-function
+// slots. Render-function components don't auto-collect default
+// slot text from template children, so a `children: String` prop
+// silently received `''` — making every menu item render as just
+// the icon. Now we read slots.default().
 const ProjectMenuItem = defineComponent({
   props: {
-    icon: Object,
-    children: String,
+    icon: { type: String, required: true },
     disabled: Boolean,
     danger: Boolean,
   },
   emits: ['click'],
-  setup(props, { emit }) {
+  setup(props, { slots, emit }) {
     return () => h('button', {
       type: 'button',
       role: 'menuitem',
@@ -979,8 +1015,10 @@ const ProjectMenuItem = defineComponent({
           : 'text-[var(--color-text-primary)] enabled:hover:bg-[var(--color-surface-hover)]'
       }`,
     }, [
-      h('span', { class: 'flex h-5 w-5 shrink-0 items-center justify-center text-current' }, [props.icon]),
-      h('span', { class: 'min-w-0 truncate' }, props.children),
+      h('span', {
+        class: 'material-symbols-outlined flex h-5 w-5 shrink-0 items-center justify-center text-current text-[18px]',
+      }, props.icon),
+      h('span', { class: 'min-w-0 truncate' }, slots.default ? slots.default() : ''),
     ])
   },
 })
@@ -1501,10 +1539,7 @@ const projectMenuData = computed(() => {
                     <!-- More actions -->
                     <button
                       type="button"
-                      @click.stop="(e) => {
-                        contextMenu = null
-                        projectContextMenu = { key: project.key, x: e.clientX, y: e.clientY }
-                      }"
+                      @click.stop="openProjectContextMenu($event, project)"
                       class="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-sidebar-item-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-border-focus)]"
                       :aria-label="t('sidebar.projectActions', { project: project.title })"
                       :title="t('sidebar.projectActions', { project: project.title })"
@@ -1646,7 +1681,7 @@ const projectMenuData = computed(() => {
       <div
         role="menu"
         class="fixed z-50 min-w-[230px] overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2 shadow-[var(--shadow-dropdown)]"
-        :style="positionProjectMenu(projectContextMenu!.x, projectContextMenu!.y)"
+        :style="positionProjectMenu(projectContextMenu && projectContextMenu.x, projectContextMenu && projectContextMenu.y)"
         @click.stop
       >
         <ProjectMenuItem
