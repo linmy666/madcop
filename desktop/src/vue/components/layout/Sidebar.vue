@@ -1658,6 +1658,8 @@ const projectMenuData = computed(() => {
       v-if="contextMenu"
       class="fixed z-50 min-w-[140px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] py-1"
       :style="{ left: (contextMenu ? contextMenu.x : 0) + 'px', top: (contextMenu ? contextMenu.y : 0) + 'px', boxShadow: 'var(--shadow-dropdown)' }"
+      @click.stop
+      @mousedown.stop
     >
       <button
         @click="() => {
@@ -1685,6 +1687,7 @@ const projectMenuData = computed(() => {
         class="fixed z-50 min-w-[230px] overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2 shadow-[var(--shadow-dropdown)]"
         :style="{ left: (projectContextMenu ? projectContextMenu.x : 0) + 'px', top: (projectContextMenu ? projectContextMenu.y : 0) + 'px' }"
         @click.stop
+        @mousedown.stop
       >
         <ProjectMenuItem
           :icon="projectMenuData.pinned ? 'push_pin' : 'push_pin'"
