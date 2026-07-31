@@ -73,6 +73,8 @@ class ReActResult:
 REACT_SYSTEM_PROMPT = """\
 你是 MadCop 的智能体。通过"思考-行动-观察"循环解决用户问题。
 
+⏰ 当前时间: {current_time}
+
 每一步严格按以下格式输出:
 
 Thought: <一句话描述你的推理，比如"用户需要X，我先查Y">
@@ -916,7 +918,17 @@ class ReActEngine:
 
     def _build_initial_messages(self, task: str, context: str) -> list[Message]:
         """Build the starting message list with system prompt + user task."""
-        sys = REACT_SYSTEM_PROMPT.format(tools_desc=self._tools_desc)
+        from datetime import datetime, timezone, timedelta
+        # Inject current time so the model knows what year/date it is.
+        # Without this, the model guesses from its training cutoff date
+        # and reports the wrong year (e.g. "2025" when it's 2026).
+        tz_cn = timezone(timedelta(hours=8))
+        now_str = datetime.now(tz_cn).strftime("%Y年%m月%d日 %H:%M 北京时间 (UTC+8)")
+        utc_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        sys = REACT_SYSTEM_PROMPT.format(
+            tools_desc=self._tools_desc,
+            current_time=f"{now_str} / {utc_str}",
+        )
         if self.system_prefix:
             sys = f"{self.system_prefix}\n\n{sys}"
         user = task

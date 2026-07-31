@@ -1895,6 +1895,15 @@ def create_app() -> FastAPI:
             "(`effective_model`, `provider_label`, `base_url`). "
             "Do not invent model names (e.g. do not guess GPT-4 / Claude)."
         )
+        # Inject current date/time so the model doesn't hallucinate the year.
+        from datetime import datetime, timezone, timedelta
+        _tz_cn = timezone(timedelta(hours=8))
+        _now_cn = datetime.now(_tz_cn).strftime("%Y年%m月%d日 %H:%M")
+        _now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        sys_prompt = (
+            sys_prompt
+            + f"\n\n⏰ 当前时间: {_now_cn} 北京时间 (UTC+8) / {_now_utc}"
+        )
         # Prepend system prompt (replace if one already exists)
         if messages and messages[0].role == "system":
             messages[0] = Message(role="system", content=sys_prompt)

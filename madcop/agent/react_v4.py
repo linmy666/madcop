@@ -269,8 +269,13 @@ class ReActEngineV4(AgentEngine):
         included as a conversation block in the user prompt so the
         LLM sees prior turns.
         """
+        from datetime import datetime, timezone, timedelta
+        tz_cn = timezone(timedelta(hours=8))
+        now_str = datetime.now(tz_cn).strftime("%Y年%m月%d日 %H:%M 北京时间 (UTC+8)")
+        utc_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         sys_text = REACT_SYSTEM_PROMPT.format(
-            tools_desc=self._format_tools(ctx.tool_schemas)
+            tools_desc=self._format_tools(ctx.tool_schemas),
+            current_time=f"{now_str} / {utc_str}",
         )
         if ctx.system_prefix:
             sys_text = f"{ctx.system_prefix}\n\n{sys_text}"
