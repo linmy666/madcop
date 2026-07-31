@@ -604,7 +604,14 @@ const createSessionForWorkDir = async (workDir?: string) => {
 
 const openProjectHeaderMenu = (event: MouseEvent, type: SidebarHeaderMenuType = 'main') => {
   event.stopPropagation()
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  // v4 fix: event.currentTarget may be null after Vue's emit chain.
+  // Fall back to event.target.closest('button') to reliably get the
+  // trigger element's rect.
+  const trigger = (event.currentTarget as HTMLElement | null)
+    || (event.target as HTMLElement | null)?.closest('button')
+    || null
+  if (!trigger) return
+  const rect = trigger.getBoundingClientRect()
   const width = type === 'create' ? 250 : 270
   projectContextMenu.value = null
   contextMenu.value = null
@@ -618,7 +625,12 @@ const openProjectHeaderMenu = (event: MouseEvent, type: SidebarHeaderMenuType = 
 
 const openProjectHeaderSubmenu = (event: MouseEvent, type: 'organize' | 'sort') => {
   event.stopPropagation()
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  // v4 fix: same currentTarget null fallback as openProjectHeaderMenu.
+  const trigger = (event.currentTarget as HTMLElement | null)
+    || (event.target as HTMLElement | null)?.closest('button')
+    || null
+  if (!trigger) return
+  const rect = trigger.getBoundingClientRect()
   const width = type === 'sort' ? 230 : 260
   projectHeaderSubmenu.value = {
     type,

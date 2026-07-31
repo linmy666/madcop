@@ -273,7 +273,13 @@ function openSessionMenu(ev: MouseEvent) {
     sessionMenuOpen.value = false
     return
   }
-  const btn = ev.currentTarget as HTMLElement | null
+  // v4 fix: ev.currentTarget may be null in Vue 3's event wrapper.
+  // Use ev.target + closest('button') as a fallback to reliably
+  // get the trigger button's rect.
+  const target = ev.target as HTMLElement | null
+  const btn = (ev.currentTarget as HTMLElement | null)
+    || target?.closest('button')
+    || null
   const r = btn ? btn.getBoundingClientRect() : null
   sessionMenuPos.value = r
     ? { x: Math.round(r.right - 180), y: Math.round(r.bottom + 6) }
