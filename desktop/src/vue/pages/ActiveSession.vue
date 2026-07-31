@@ -1021,8 +1021,10 @@ function openTerminalInTab() {
           </div>
         </div>
 
-        <!-- Chat input -->
+        <!-- Chat input: hidden when V4 is active (V4ChatPanel has its
+             own composer). Showing both causes the dual-textarea bug. -->
         <ChatInput
+          v-if="!useV4"
           :variant="isEmpty && !isMemberSession && !showRightPanel ? 'hero' : 'default'"
           :compact="showRightPanel"
         />

@@ -38,7 +38,21 @@ export function t(key: TranslationKey, params?: Record<string, string | number>)
 }
 
 export function translate(locale: Locale, key: TranslationKey, params?: Record<string, string | number>): string {
-  return t(key, params)
+  // v4 fix: previously this ignored the locale arg entirely and
+  // always read the current module-level translations. Now it
+  // selects the right table based on the passed locale.
+  let table: Record<string, string>
+  switch (locale) {
+    case 'en': table = EN; break
+    default: table = ZH; break
+  }
+  let text = table[key] || key
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      text = text.replace(`{${k}}`, String(v)).replace(`{count}`, String(v))
+    }
+  }
+  return text
 }
 
 // Returns a callable function — `const t = useTranslation(); t('key')` works

@@ -104,6 +104,10 @@ export function useSSEStream() {
   let abortCtrl: AbortController | null = null
 
   async function connect(url: string, body: unknown): Promise<void> {
+    // Cancel any previous connection first (prevents leak of the
+    // first AbortController + fetch).
+    if (abortCtrl) abortCtrl.abort()
+
     // Reset only the parsing-layer refs. Derived UI state lives in
     // useAgentState; consumers are expected to compute it from
     // ``events``.
@@ -115,6 +119,7 @@ export function useSSEStream() {
     clarifyOptions.value = []
 
     abortCtrl = new AbortController()
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 
     try {
       const res = await fetch(url, {
@@ -130,7 +135,7 @@ export function useSSEStream() {
         return
       }
 
-      const reader = res.body?.getReader()
+      reader = res.body?.getReader() ?? null
       if (!reader) {
         errorMessage.value = '无法读取数据流'
         isStreaming.value = false
@@ -176,6 +181,11 @@ export function useSSEStream() {
       errorMessage.value = err?.message || '连接失败'
     } finally {
       isStreaming.value = false
+      // v4 fix: release the reader so the underlying connection is
+      // closed even if the server keeps the stream open.
+      if (reader) {
+        try { reader.cancel() } catch {}
+      }
     }
   }
 

@@ -37,10 +37,11 @@ const showTabStrip = computed(() => {
 })
 
 // Listen for ⌘K toggle event from CommandPalette
+const _onPaletteToggle = () => {
+  paletteOpen.value = !paletteOpen.value
+}
 onMounted(() => {
-  window.addEventListener('madcop:command-palette-toggle', () => {
-    paletteOpen.value = !paletteOpen.value
-  })
+  window.addEventListener('madcop:command-palette-toggle', _onPaletteToggle)
 })
 
 // Global keyboard shortcuts (Cursor/Claude Code parity):
@@ -98,6 +99,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', _handleGlobalKeydown)
+  window.removeEventListener('madcop:command-palette-toggle', _onPaletteToggle)
 })
 
 const startupError = ref<string | null>(null)

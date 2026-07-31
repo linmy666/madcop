@@ -101,6 +101,11 @@ export const useSettingsStore = defineStore('settings', {
     },
     setLocale(locale: string) {
       this.locale = locale
+      // v4 fix: actually update the i18n module's translation table
+      // so all useTranslation() calls pick up the new locale.
+      import('../i18n').then(({ setLocale: i18nSetLocale }) => {
+        i18nSetLocale(locale as any)
+      })
     },
     setDesktopTerminal(patch: Partial<typeof this.desktopTerminal>) {
       Object.assign(this.desktopTerminal, patch)
