@@ -1,78 +1,76 @@
-# madcop
+# MadCop Architecture
 
-> **mad** + **cop** — the supply chain cop that goes *mad* for anomalies.
-> Pluggable LangGraph framework: from "detect" to "diagnose" to "decide",
-> with self-evolution.
+> Local-first AI agent desktop app. FastAPI + Vue 3 + Electron.
 
-## What this is (today)
-
-A framework that unifies data from **OMS / TMS / WMS / BMS** behind a single
-`UnifiedEvent` schema, runs rule + LLM hybrid anomaly detection, traces root
-causes through the event graph, and routes to a pluggable policy for action.
-**Self-evolution is real**: every detected anomaly + human feedback writes back
-into a weekly report and a feedback-weighted policy registry.
-
-## What this is NOT (yet)
-
-- A production-grade data integration platform — adapters ship as **pluggable
-  stubs** that talk to mock data. The interface is real; the wire is not.
-- A replacement for o9 / Kinaxis / Blue Yonder — those run on real customer
-  telemetry. This runs on **structured synthetic events** you can replay.
-- A self-training reinforcement learner. "Self-evolution" here means
-  **rule/policy feedback** and a **weekly report**, not gradient updates.
-
-## Architecture (4 layers, 1 graph)
+## High-level
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  L4  Strategy Router    — zero-code YAML policies     │
-├──────────────────────────────────────────────────────┤
-│  L3  LangGraph          — detect → diagnose → decide  │
-│                         → learn (state machine)        │
-├──────────────────────────────────────────────────────┤
-│  L2  Anomaly Engine     — rules · RCA · counterfactual│
-├──────────────────────────────────────────────────────┤
-│  L1  Unified Data Layer — OMS/TMS/WMS/BMS adapters    │
-└──────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────┐
+│  Electron Shell (main.cjs)              │
+│  ┌───────────────────────────────────┐  │
+│  │  Vue 3 Renderer (dist-vue/)       │  │
+│  │  Pinia stores + TailwindCSS       │  │
+│  │  SSE stream → chatStore           │  │
+│  └──────────┬────────────────────────┘  │
+│             │ HTTP / SSE                 │
+│  ┌──────────▼────────────────────────┐  │
+│  │  FastAPI Backend (localhost:8765) │  │
+│  │  ┌─────────────────────────────┐  │  │
+│  │  │  Agent Runtime              │  │  │
+│  │  │  QuickEngine (single LLM)   │  │  │
+│  │  │  ReActEngine (tool-use loop)│  │  │
+│  │  │  AgentNetwork (deep mode:   │  │  │
+│  │  │    planner→specialists→synth│  │  │
+│  │  │    parallel asyncio waves)  │  │  │
+│  │  └─────────────────────────────┘  │  │
+│  │  Tools (files, web, bash, etc.)   │  │
+│  │  Memory (SQLite: 5-tier hybrid)   │  │
+│  └───────────────────────────────────┘  │
+└─────────────────────────────────────────┘
 ```
 
-### L1 — Unified Data Layer
+## Backend (`madcop/`)
 
-`UnifiedEvent` is the lingua franca. Every adapter (`oms`, `tms`, `wms`, `bms`)
-implements `BaseAdapter` and yields `UnifiedEvent`s with these fields:
+| Module | Role |
+|---|---|
+| `server/app.py` | FastAPI app, SSE handlers, lifespan |
+| `server/routes/chat_v4.py` | V4 unified SSE chat endpoint |
+| `agent/react_v4.py` | ReAct engine (Thought→Action→Observation loop) |
+| `agent_network/engine.py` | Deep mode: multi-agent DAG with parallel waves |
+| `tools/` | Tool registry: files, web, bash, cron, RAG, MCP |
+| `tools/safety.py` | Pydantic input validation + path guardrails |
+| `memory/` | 5-tier memory: buffer, semantic, insight, persona, scenario |
+| `llm/` | ChatClient abstraction: OpenAI-compat, Anthropic native |
 
-- `id`, `timestamp`, `source_system`, `event_type`
-- `subject_id` (SKU / order / shipment / contract)
-- `value` (numeric measurement, e.g. temperature, lead_time_hours)
-- `attributes` (free-form dict)
-- `severity` (1-5, set by the adapter)
+## Frontend (`desktop/src/vue/`)
 
-### L2 — Anomaly Engine
+| Module | Role |
+|---|---|
+| `stores/chatStore.ts` | Session state, SSE event dispatch, message list |
+| `composables/useSSEStream.ts` | SSE parsing layer (v4) |
+| `composables/useAgentState.ts` | Computed derivation from SSE events |
+| `components/chat/V4ChatPanel.vue` | V4 unified chat panel |
+| `components/chat/SubAgentPanel.vue` | Deep-mode parallel agent grid |
+| `components/layout/Sidebar.vue` | Session list, project groups, search |
 
-Three composable modules:
+## Agent Modes
 
-- **rules** — declarative thresholds (`temp > -15°C for >15min`).
-- **rca** — causal trace: "this delay traces to contract X, clause Y".
-- **counterfactual** — "what if we'd picked supplier B?" simulator.
+| Mode | Engine | Behavior |
+|---|---|---|
+| `quick` | QuickEngine | Single LLM call, no tools |
+| `standard` | ReActEngineV4 | Thought→Action→Observation loop with tools |
+| `deep` | AgentNetwork | Planner → N specialists (parallel) → Synthesizer |
 
-### L3 — LangGraph Orchestrator
+## Security Model
 
-A typed state machine. The state holds the current event, the running
-hypothesis, the chosen policy, and the feedback score. Each node is a pure
-function that takes the state and returns a partial update. The graph
-sequences: `detect → diagnose → decide → learn`.
-
-### L4 — Strategy Router
-
-Strategies are **YAML** in `madcop/strategy/policies/`. A policy is
-`(trigger, action)`. The router picks one per anomaly, and humans rate the
-result on a 1-5 scale. Ratings feed the `PolicyRegistry`, which ranks
-strategies by their rolling effectiveness.
-
-## Roadmap (8 weeks, 1 commit/week)
-
-See [`ROADMAP.md`](ROADMAP.md). The current `main` branch is **W1**.
+- Server binds to `127.0.0.1` only (no remote access)
+- CORS restricted to Electron/Vite dev origins
+- WebSocket validates Origin header
+- API keys stored encrypted (Fernet) in `~/.madcop/settings.json`
+- Tool input validation via Pydantic (`safety.py`)
+- SSRF guard on web_fetch
+- Path guardrails on file tools
 
 ## License
 
-MIT.
+AGPL-3.0

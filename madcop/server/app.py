@@ -1038,9 +1038,15 @@ def create_app() -> FastAPI:
             except Exception as e:
                 logger.warning("shutdown persist failed: %s", e)
 
+    # Read version dynamically from package metadata.
+    try:
+        from importlib.metadata import version as _pkg_version
+        _app_version = _pkg_version("madcop")
+    except Exception:
+        _app_version = "2.6.0"
     app = FastAPI(
         title="MadCop Agent",
-        version="2.3.0",
+        version=_app_version,
         docs_url="/docs",
         lifespan=_lifespan,
     )
