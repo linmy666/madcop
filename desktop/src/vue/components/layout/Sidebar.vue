@@ -1657,7 +1657,7 @@ const projectMenuData = computed(() => {
     <div
       v-if="contextMenu"
       class="fixed z-50 min-w-[140px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] py-1"
-      :style="{ left: contextMenu.x, top: contextMenu.y, boxShadow: 'var(--shadow-dropdown)' }"
+      :style="{ left: (contextMenu ? contextMenu.x : 0) + 'px', top: (contextMenu ? contextMenu.y : 0) + 'px', boxShadow: 'var(--shadow-dropdown)' }"
     >
       <button
         @click="() => {
