@@ -98,6 +98,7 @@ import UserMessage from './UserMessage.vue'
 import AssistantMessage from './AssistantMessage.vue'
 import MemoryRecallBadge from './MemoryRecallBadge.vue'
 import CreationProgress from './CreationProgress.vue'
+import CitationList from './CitationList.vue'
 import SubAgentPanel from './SubAgentPanel.vue'
 import SpriteIsland from '../studio/SpriteIsland.vue'
 import {
@@ -155,6 +156,11 @@ const sessionState = computed(() => {
  * preview/layer) so MemoryRecallBadge can render them. */
 function getActiveSessionMemoryRecalls() {
   return sessionState.value?.memoryRecalls ?? []
+}
+
+/** Sprint 4 — creation-engine citations for the active session. */
+function getActiveSessionCitations() {
+  return sessionState.value?.citations ?? []
 }
 
 const messages = computed(() => sessionState.value?.messages ?? EMPTY_MESSAGES)
@@ -1200,6 +1206,12 @@ function renderItemContent(item: RenderItem) {
 
         <!-- Sprint 4 — source-first creation pipeline pill (create mode) -->
         <CreationProgress :session-id="activeTabId" />
+
+        <!-- Sprint 4 — creation-engine citations (shown after the article) -->
+        <CitationList
+          v-if="getActiveSessionCitations().length > 0"
+          :citations="getActiveSessionCitations()"
+        />
 
         <!-- v3.7.6 — ZCode-style reasoning panel. Stays visible
              for the whole turn (busy / streaming) so the gradient

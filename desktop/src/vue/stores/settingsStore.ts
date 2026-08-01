@@ -61,6 +61,49 @@ const DEFAULT_UPDATE_PROXY_SETTINGS: UpdateProxySettings = {
   url: '',
 }
 
+/**
+ * Persistence (P0-3): the settings store has no pinia-plugin-persistedstate,
+ * so we persist a curated subset of user-facing preferences to localStorage
+ * manually — matching the pattern used by uiStore (theme) and tabStore.
+ *
+ * Only user preferences are persisted; derived/server-state fields
+ * (availableModels, activeProviderName, h5Access*) are re-fetched on load.
+ */
+const SETTINGS_STORAGE_KEY = 'madcop-agent-settings'
+const PERSIST_KEYS = [
+  'permissionMode',
+  'currentModel',
+  'effortLevel',
+  'thinkingEnabled',
+  'autoDreamEnabled',
+  'locale',
+  'chatSendBehavior',
+  'outputStyle',
+  'desktopTerminal',
+  'proactive',
+] as const
+
+function loadPersistedSettings(): Record<string, unknown> {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+/** Merge persisted values into the default state (defensive: only known keys). */
+function initPersistedState(): Record<string, unknown> {
+  const persisted = loadPersistedSettings()
+  const out: Record<string, unknown> = {}
+  for (const k of PERSIST_KEYS) {
+    if (k in persisted) out[k] = persisted[k]
+  }
+  return out
+}
+
 export const useSettingsStore = defineStore('settings', {
   state: () => ({
     permissionMode: 'default' as string,
@@ -93,17 +136,35 @@ export const useSettingsStore = defineStore('settings', {
       observeFiles: false,
       observeTerminal: false,
     } as { enabled: boolean; observeFiles: boolean; observeTerminal: boolean },
+    // P0-3 — restore persisted user preferences over the defaults above.
+    ...initPersistedState(),
   }),
 
   actions: {
+    /** P0-3 — persist the curated preference subset to localStorage. */
+    _persist() {
+      try {
+        const snapshot: Record<string, unknown> = {}
+        for (const k of PERSIST_KEYS) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          snapshot[k] = (this as any)[k]
+        }
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(snapshot))
+      } catch {
+        /* quota / disabled — ignore */
+      }
+    },
     setCurrentModel(model: ModelInfo) {
       this.currentModel = model
+      this._persist()
     },
     setEffortLevel(level: string) {
       this.effortLevel = level
+      this._persist()
     },
     setPermissionMode(mode: string) {
       this.permissionMode = mode
+      this._persist()
     },
     setLocale(locale: string) {
       this.locale = locale
@@ -112,12 +173,15 @@ export const useSettingsStore = defineStore('settings', {
       import('../i18n').then(({ setLocale: i18nSetLocale }) => {
         i18nSetLocale(locale as any)
       })
+      this._persist()
     },
     setDesktopTerminal(patch: Partial<typeof this.desktopTerminal>) {
       Object.assign(this.desktopTerminal, patch)
+      this._persist()
     },
     setChatSendBehavior(behavior: string) {
       this.chatSendBehavior = behavior
+      this._persist()
     },
 
     /** Load providers/models from GET /api/settings into store. */
@@ -259,6 +323,7 @@ export const useSettingsStore = defineStore('settings', {
       if (typeof settings.enabled === 'boolean') this.proactive.enabled = settings.enabled
       if (typeof settings.observeFiles === 'boolean') this.proactive.observeFiles = settings.observeFiles
       if (typeof settings.observeTerminal === 'boolean') this.proactive.observeTerminal = settings.observeTerminal
+      this._persist()
     },
   },
 })

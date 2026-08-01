@@ -71,6 +71,14 @@ DANGER_LEVELS: dict[str, str] = {
     "edit_file": "mutating",
     "read_file": "safe",
     "remember": "mutating",
+    # Trading tools (paper account) — placing/resetting simulated trades.
+    # paper_order places a trade (reversible within sim, but mutating);
+    # paper_reset wipes the simulation history (destructive for sim data).
+    "paper_order": "mutating",
+    "paper_reset": "destructive",
+    # Market data tools are read-only.
+    "market_quote": "safe",
+    "market_history": "safe",
     # Destructive / shell
     "bash": "destructive",
     "run_command": "destructive",

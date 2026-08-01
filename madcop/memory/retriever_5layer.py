@@ -82,17 +82,17 @@ class FiveLayerRetriever:
             base_weight = LAYER_WEIGHTS.get(layer_id, 0.10)
             age_days = max(0.0, (now - c.get("updated_at", now)) / 86400.0)
             decay = 0.5 ** (age_days / half_life_days) if half_life_days > 0 else 1.0
-            score = c.get("_score", 0.0) * base_weight * decay
+            score = c.get("score", 0.0) * base_weight * decay
             tags = set(c.get("tags", []) or [])
             if "scenario" in tags:
                 layer_id = "L2_scenario"
-                score = c.get("_score", 0.0) * LAYER_WEIGHTS["L2_scenario"] * decay
+                score = c.get("score", 0.0) * LAYER_WEIGHTS["L2_scenario"] * decay
             elif "persona" in tags:
                 layer_id = "L3_persona"
-                score = c.get("_score", 0.0) * LAYER_WEIGHTS["L3_persona"] * decay
+                score = c.get("score", 0.0) * LAYER_WEIGHTS["L3_persona"] * decay
             elif "insight" in tags or "pattern" in tags:
                 layer_id = "L4b_insight"
-                score = c.get("_score", 0.0) * LAYER_WEIGHTS["L4b_insight"] * decay
+                score = c.get("score", 0.0) * LAYER_WEIGHTS["L4b_insight"] * decay
             scored.append(RecallResult(item=c, layer=layer_id, score=score))
         scored.sort(key=lambda r: r.score, reverse=True)
         return scored[:top_k]

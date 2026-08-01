@@ -2105,6 +2105,96 @@ def create_app() -> FastAPI:
                 for m in messages
             )
 
+            # ── Sprint 4 — Source-first creation mode ──────────────────────
+            # The CreationEngine (search→fetch→outline→write) lives in the v4
+            # engine layer and yields AgentStep. The legacy chat() handler
+            # dispatches quick/standard/deep below, but never handled "create"
+            # (it fell through to plain chat). We intercept create mode here,
+            # before the legacy dispatch, bridge the engine's AgentStep stream
+            # to the legacy SSE vocabulary the frontend expects, and emit
+            # metadata (citations/outline) on the final 'done' event.
+            if _agent_mode == "create":
+                import queue as _create_q_mod
+                import threading as _create_thr_mod
+                from madcop.agent.runtime import (
+                    RunContext as _CreateCtx,
+                    EngineFactory as _CreateFactory,
+                )
+                from madcop.llm.client import Message as _CreateMsg
+                # Build the v4 tool registry + executor (same path as chat_v4).
+                from madcop.agent.tool_executor import build_default_registry as _create_bdr
+                from madcop.server.deps import get_memory_store as _create_get_mem
+                _mem_store_create = _create_get_mem()
+                _create_reg, _create_te = _create_bdr(
+                    workspace_dir=_effective_wd, store=_mem_store_create,
+                )
+                def _create_tool_call(_name: str, _raw: str, _wd):
+                    return _create_te.execute(_name, _raw, _wd)
+                _create_ctx = _CreateCtx(
+                    messages=[_CreateMsg(role=m.role, content=m.content) for m in messages],
+                    model=getattr(body, "model", None),
+                    agent_mode="create",
+                    work_dir=_effective_wd,
+                    session_id=_sse_sid,
+                    client=client,
+                    tool_schemas=_create_reg.get_all_schemas(),
+                    system_prefix="",
+                )
+                _create_ctx.tool_executor = _create_tool_call
+                _create_engine = _CreateFactory.create(_create_ctx)
+
+                _create_q: _create_q_mod.SimpleQueue = _create_q_mod.SimpleQueue()
+                _create_sentinel = object()
+
+                def _create_worker() -> None:
+                    try:
+                        for _step in _create_engine.run(_create_ctx):
+                            _create_q.put(_step)
+                    except Exception as _e:
+                        _create_q.put(_e)
+                    finally:
+                        _create_q.put(_create_sentinel)
+
+                _create_thr_mod.Thread(
+                    target=_create_worker, daemon=True, name="madcop-create",
+                ).start()
+
+                while True:
+                    try:
+                        _ci = await _loop.run_in_executor(
+                            None, lambda: _create_q.get(timeout=30.0),
+                        )
+                    except _create_q_mod.Empty:
+                        yield ": keepalive\n\n"
+                        continue
+                    if _ci is _create_sentinel:
+                        break
+                    if isinstance(_ci, Exception):
+                        yield f"data: {json.dumps({'type': 'error', 'message': f'创作失败: {_ci}'}, ensure_ascii=False)}\n\n"
+                        break
+                    # Map AgentStep → legacy SSE vocabulary.
+                    _kind = getattr(_ci, "kind", None)
+                    _kval = _kind.value if _kind else ""
+                    if _kval == "tool_start":
+                        yield f"data: {json.dumps({'type': 'tool', 'name': getattr(_ci, 'tool_name', ''), 'phase': 'start'}, ensure_ascii=False)}\n\n"
+                    elif _kval == "tool_end":
+                        yield f"data: {json.dumps({'type': 'tool_result', 'name': getattr(_ci, 'tool_name', ''), 'phase': 'end'}, ensure_ascii=False)}\n\n"
+                    elif _kval == "text_delta":
+                        _chunk = getattr(_ci, "content", "") or ""
+                        if _chunk:
+                            yield f"data: {json.dumps({'type': 'text', 'content': _chunk}, ensure_ascii=False)}\n\n"
+                    elif _kval == "text_end":
+                        pass  # no-op; the done event closes the turn
+                    elif _kval == "error":
+                        yield f"data: {json.dumps({'type': 'error', 'message': getattr(_ci, 'content', '')}, ensure_ascii=False)}\n\n"
+                    elif _kval == "done":
+                        _meta = getattr(_ci, "metadata", {}) or {}
+                        _done_payload = {'type': 'done', 'model': getattr(_ci, 'model', '') or getattr(body, 'model', '') or ''}
+                        if _meta:
+                            _done_payload['metadata'] = _meta
+                        yield f"data: {json.dumps(_done_payload, ensure_ascii=False)}\n\n"
+                return
+
             if _agent_mode in ("quick", "standard", "deep"):
                 from madcop.agent_network.task_router import route_task, get_mode_config
                 # CRITICAL: use attachment-injected `messages`, not body.messages.

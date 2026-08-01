@@ -35,7 +35,7 @@ def fake_hybrid(records, base_score=1.0):
     in future refactors.
     """
     def fn(*_args, **_kwargs):
-        return [{**r.__dict__, "_score": base_score} for r in records]
+        return [{**r.__dict__, "score": base_score} for r in records]
     return fn
 
 

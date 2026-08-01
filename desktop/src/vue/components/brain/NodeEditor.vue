@@ -41,12 +41,23 @@ watch(
 function autoSlug() {
   // Only auto-generate for new nodes whose slug is untouched.
   if (isEdit.value || slug.value.trim()) return
-  slug.value = title.value
+  // Backend SLUG_RE: ^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$
+  // → lowercase ASCII alphanumerics + _- only, no CJK, must start & end
+  //   alphanumeric. Strip everything else, then collapse/trim separators.
+  let s = title.value
     .toLowerCase()
-    .trim()
-    .replace(/[^\w\u4e00-\u9fff]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    // drop any non-[a-z0-9_-] char (CJK, punctuation, spaces → removed)
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[^a-z0-9]+/, '')   // trim leading non-alphanumeric
+    .replace(/[^a-z0-9]+$/, '')   // trim trailing non-alphanumeric
     .slice(0, 60)
+  // Pure-CJK titles yield an empty slug → fall back to a stable random id
+  // so the user never sees a "slug required" error from a valid title.
+  if (!s) {
+    s = `node-${Math.random().toString(36).slice(2, 8)}`
+  }
+  slug.value = s
 }
 
 function submit() {
@@ -57,8 +68,10 @@ function submit() {
     error.value = '请填写标题'
     return
   }
-  if (!finalSlug || !/^[a-z0-9][a-z0-9_-]{0,127}$/i.test(finalSlug)) {
-    error.value = 'slug 只能包含字母、数字、下划线和连字符，且以字母或数字开头'
+  // Match backend SLUG_RE exactly: ^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$
+  // (no /i flag — lowercase only).
+  if (!/^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(finalSlug)) {
+    error.value = '标识符(slug)只能是小写字母、数字、下划线和连字符，且以字母或数字开头；中文标题会自动生成英文标识'
     return
   }
   const tags = tagsStr.value

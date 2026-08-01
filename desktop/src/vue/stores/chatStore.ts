@@ -160,6 +160,8 @@ export type PerSessionState = {
   activeToolName: string | null
   /** Sprint 2 — memories the LLM drew on for this turn. */
   memoryRecalls?: { id: string; kind: string; title: string; preview: string; layer: string }[]
+  /** Sprint 4 — source citations from the creation engine (DONE.metadata.citations). */
+  citations?: { url: string; title: string; snippet: string }[]
   activeThinkingId: string | null
   /** Plan-and-Execute mode toggle (per-session) */
   planModeEnabled: boolean
@@ -258,6 +260,7 @@ function createDefaultSessionState(): PerSessionState {
     streamingText: '',
     streamingToolInput: '',
   memoryRecalls: [],
+  citations: [],
     activeToolUseId: null,
     activeToolName: null,
     activeThinkingId: null,
@@ -445,6 +448,8 @@ export const useChatStore = defineStore('chat', {
       session.deepRoute = null
       session.agentStreams = {}
       session.clarificationPending = null
+      // Sprint 4 — clear citations from the previous turn.
+      session.citations = []
 
       // Diagnostic: count how many times sendMessage is called for this
       // session within a short window. If the count climbs while a fetch
@@ -822,6 +827,16 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'done') {
                     session.chatState = 'idle'
+                    // Sprint 4 — capture creation-engine citations from
+                    // DONE.metadata (only present in create mode).
+                    const _meta = (event as any)?.metadata
+                    if (_meta && Array.isArray(_meta.citations) && _meta.citations.length > 0) {
+                      session.citations = _meta.citations.map((c: any) => ({
+                        url: String(c.url || ''),
+                        title: String(c.title || c.url || ''),
+                        snippet: String(c.snippet || ''),
+                      }))
+                    }
                     // v3.8.2 — reset the raw-text accumulator so the
                     // next turn starts clean.
                     ;(session as any)._rawText = ''
