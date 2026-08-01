@@ -70,6 +70,66 @@ def _looks_like_teaching_request(text: str) -> str | None:
     return None
 
 
+# Words that strongly indicate the user is asking a chat-style
+# question (not a task that should become a reusable skill).
+_SOCIAL_QUESTION_HINTS = (
+    "你好", "hi", "hello", "谢谢", "thanks", "thank you", "你叫什么",
+    "what's your name", "who are you", "你是谁", "帮助", "help me understand",
+    "为什么", "why is", "why does", "how come", "什么意思", "what does",
+    "what is the meaning", "解释一下", "explain", "好的", "ok",
+)
+
+
+def _extract_topic_from_response(user_query: str, assistant_response: str) -> str | None:
+    """Pick a short topic string for SKILL.md title from the exchange."""
+    text = (user_query or "").strip()
+    if text:
+        if any(h in text for h in _SOCIAL_QUESTION_HINTS) and len(text) < 40:
+            return None
+        topic = re.sub(r"[?？。!！\s]+$", "", text).strip(" .,;:：")
+        if 4 <= len(topic) <= 80:
+            return topic[:80]
+    for line in (assistant_response or "").splitlines():
+        line = line.strip()
+        if line.startswith("# "):
+            return line[2:].strip()[:80]
+    return None
+
+
+# Thresholds for "this is a valuable skill, persist it"
+_MIN_RESPONSE_LEN = 400
+_MIN_TOPIC_LEN = 4
+
+
+def _is_valuable_skill(user_query: str, assistant_response: str) -> str | None:
+    """Heuristic: answer >= 400 chars, has code/list/section, extractable topic."""
+    if not user_query or not assistant_response:
+        return None
+    if len(assistant_response.strip()) < _MIN_RESPONSE_LEN:
+        return None
+    if not any(marker in assistant_response for marker in
+               ("```", "\n- ", "\n* ", "\n1.", "\n## ", "\n### ")):
+        return None
+    topic = _extract_topic_from_response(user_query, assistant_response)
+    if not topic or len(topic) < _MIN_TOPIC_LEN:
+        return None
+    return topic
+
+
+def auto_distill_if_valuable(user_query: str, assistant_response: str) -> str | None:
+    """Auto-distill a skill if the completed task looks valuable.
+
+    Unlike ``distill_skill_from_exchange`` (which only fires on
+    "teach me how to X" patterns), this runs on every task
+    completion and saves the exchange if it passes the value
+    heuristic. Returns the new skill name on success, None otherwise.
+    """
+    topic = _is_valuable_skill(user_query, assistant_response)
+    if not topic:
+        return None
+    return force_distill_skill(topic, user_query, assistant_response)
+
+
 def _build_skill_markdown(topic: str, user_query: str, assistant_response: str) -> str:
     """Format a SKILL.md from a teach-me exchange."""
     safe_topic = topic.strip() or "Skill"

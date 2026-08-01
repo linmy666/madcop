@@ -2902,13 +2902,21 @@ def create_app() -> FastAPI:
                     logger.warning("SSE: agent-mode persist assistant failed: %s", e)
                 # Auto-distill teach-me exchanges (parity with simple chat)
                 try:
-                    from madcop.memory.skill_distill import distill_skill_from_exchange
+                    from madcop.memory.skill_distill import (
+                        distill_skill_from_exchange,
+                        auto_distill_if_valuable,
+                    )
                     _uq = body.messages[-1].content if body.messages else ""
                     if isinstance(_uq, list):
                         _uq = " ".join(
                             str(b.get("text", b) if isinstance(b, dict) else b) for b in _uq
                         )
-                    _skill = distill_skill_from_exchange(str(_uq or ""), str(_answer or ""))
+                    # v4 — auto-distill when the answer looks valuable
+                    # (>= 400 chars + code/list/section), not only on
+                    # "teach me how to X" patterns.
+                    _skill = auto_distill_if_valuable(str(_uq or ""), str(_answer or ""))
+                    if not _skill:
+                        _skill = distill_skill_from_exchange(str(_uq or ""), str(_answer or ""))
                     if _skill:
                         yield f"data: {json.dumps({'type': 'skill_distilled', 'skillName': _skill, 'message': f'Auto-distilled SKILL: {_skill}'}, ensure_ascii=False)}\n\n"
                 except Exception as e:
@@ -3197,10 +3205,13 @@ def create_app() -> FastAPI:
                         logger.debug("swallowed: %s", e)
                     # Teach-me → SKILL.md (same path as WebSocket chat)
                     try:
-                        from madcop.memory.skill_distill import distill_skill_from_exchange
+                        from madcop.memory.skill_distill import (
+                            distill_skill_from_exchange,
+                            auto_distill_if_valuable,
+                        )
                         user_msg = body.messages[-1].content if body.messages else ""
                         full_assistant = resp.content or ""
-                        _skill = distill_skill_from_exchange(user_msg, full_assistant)
+                        _skill = auto_distill_if_valuable(user_msg, full_assistant) or distill_skill_from_exchange(user_msg, full_assistant)
                         if _skill:
                             yield f"data: {json.dumps({'type': 'skill_distilled', 'skillName': _skill, 'message': f'Auto-distilled SKILL: {_skill}'}, ensure_ascii=False)}\n\n"
                     except Exception as e:
@@ -3384,14 +3395,17 @@ def create_app() -> FastAPI:
                 except Exception as e:
                     logger.warning("SSE: skill auto-forge failed: %s", e)
                 try:
-                    from madcop.memory.skill_distill import distill_skill_from_exchange
+                    from madcop.memory.skill_distill import (
+                        distill_skill_from_exchange,
+                        auto_distill_if_valuable,
+                    )
                     if not title_user_msg:
                         title_user_msg = body.messages[-1].content if body.messages else ""
                     if not assistant_text:
                         assistant_text = "".join(
                             m.content for m in messages if m.role == "assistant" and isinstance(m.content, str)
                         )
-                    _skill = distill_skill_from_exchange(title_user_msg, assistant_text)
+                    _skill = auto_distill_if_valuable(title_user_msg, assistant_text) or distill_skill_from_exchange(title_user_msg, assistant_text)
                     if _skill:
                         yield f"data: {json.dumps({'type': 'skill_distilled', 'skillName': _skill, 'message': f'Auto-distilled SKILL: {_skill}'}, ensure_ascii=False)}\n\n"
                 except Exception as e:
