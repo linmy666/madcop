@@ -1862,6 +1862,14 @@ def create_app() -> FastAPI:
         # ---- Memory injection (before LLM call) ---------------------- #
         _active_label = active_provider_label(_settings_once)
 
+        # Sprint 2 — recall memories to (a) build the system prompt and
+        # (b) emit a memory_recall SSE event. NOTE: the SSE event itself
+        # must be yielded from event_stream() (the real generator), NOT
+        # here — yielding in chat() would make chat() itself a generator
+        # and break its `return StreamingResponse(...)`. So we stash the
+        # serialized payload here and event_stream() emits it first.
+        _pending_memory_recall: str | None = None
+
         # Find the latest user message and use it as the retrieval query.
         latest_user_msg = ""
         for m in reversed(messages):
@@ -1871,8 +1879,8 @@ def create_app() -> FastAPI:
         if latest_user_msg:
             try:
                 sys_prompt = _build_memory_system_prompt(latest_user_msg, model_label=_active_label)
-                # Sprint 2 — emit memory_recall SSE so the UI can show
-                # "基于 N 条记忆" pill above the assistant message.
+                # Sprint 2 — build the memory_recall SSE payload; event_stream()
+                # will emit it at the start of the stream.
                 try:
                     from madcop.memory.retriever_5layer import FiveLayerRetriever
                     from madcop.memory.hybrid import hybrid_search as _h
@@ -1881,7 +1889,7 @@ def create_app() -> FastAPI:
                         _fr = FiveLayerRetriever(_mem_store)
                         _recalls = _fr.retrieve(latest_user_msg, top_k=5)
                         if _recalls:
-                            yield f"data: {json.dumps({'type': 'memory_recall', 'memories': [{'id': str(r.item.get('id', '')), 'kind': r.item.get('kind', ''), 'title': r.item.get('title', ''), 'preview': r.item.get('content', '')[:200], 'layer': r.layer} for r in _recalls]}, ensure_ascii=False)}\n\n"
+                            _pending_memory_recall = f"data: {json.dumps({'type': 'memory_recall', 'memories': [{'id': str(r.item.get('id', '')), 'kind': r.item.get('kind', ''), 'title': r.item.get('title', ''), 'preview': r.item.get('content', '')[:200], 'layer': r.layer} for r in _recalls]}, ensure_ascii=False)}\n\n"
                 except Exception as _e:
                     logger.debug("memory_recall SSE skipped: %s", _e)
             except Exception as e:
@@ -2026,6 +2034,11 @@ def create_app() -> FastAPI:
                 yield _line
 
         async def event_stream() -> AsyncIterator[str]:
+            # Sprint 2 — emit the memory_recall SSE event first (built in
+            # chat() before the stream started), so the UI can show the
+            # "基于 N 条记忆" pill above the streaming assistant message.
+            if _pending_memory_recall:
+                yield _pending_memory_recall
             # -- Create trace root node ------------------------------ #
             from madcop.agent.trace import get_trace_store, TraceStatus
             trace_store = get_trace_store()

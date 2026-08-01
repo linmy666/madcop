@@ -34,10 +34,21 @@ export interface BrainGraph {
 }
 
 export const brainApi = {
-  /** Full graph for the canvas. */
-  graph: (workspace?: string) => {
+  /** Full graph for the canvas. Returns {nodes, edges} even when the
+   * backend is unavailable (404 → null from the shared client), so the
+   * canvas never crashes on `.nodes`. */
+  graph: async (workspace?: string): Promise<BrainGraph> => {
     const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
-    return api.get<BrainGraph>(`/api/brain/graph${query}`)
+    const res = await api.get<BrainGraph | null>(`/api/brain/graph${query}`)
+    if (!res || typeof res !== 'object') {
+      const e = new Error('知识画布接口不可用（后端可能未加载该路由，请重启后端）')
+      ;(e as any).unavailable = true
+      throw e
+    }
+    return {
+      nodes: Array.isArray(res.nodes) ? res.nodes : [],
+      edges: Array.isArray(res.edges) ? res.edges : [],
+    }
   },
 
   /** Single node detail (for the NodeDetail drawer). */
