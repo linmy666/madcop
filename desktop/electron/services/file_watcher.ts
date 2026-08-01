@@ -29,9 +29,14 @@ export class FileWatcher extends EventEmitter {
   watch(workspace: string): void {
     if (this.watchers.has(workspace)) return
     try {
-      const watcher = fs.watch(workspace, { recursive: false }, (_event, filename) => {
+      // recursive: true captures changes in subdirectories too — essential
+      // because real code lives under madcop/, desktop/, etc. Supported on
+      // macOS (FSEvents), Windows, and Linux (Node 22+ inotify).
+      const watcher = fs.watch(workspace, { recursive: true }, (_event, filename) => {
         if (!filename) return
-        const ext = path.extname(filename).toLowerCase()
+        // filename may be a relative path like "madcop/agent/creation.py"
+        const basename = path.basename(filename)
+        const ext = path.extname(basename).toLowerCase()
         if (!SUPPORTED_EXTS.has(ext)) return
         this.debouncedEmit(workspace, filename, ext)
       })
@@ -39,7 +44,7 @@ export class FileWatcher extends EventEmitter {
         console.warn('[file_watcher] watch error:', err.message)
       })
       this.watchers.set(workspace, watcher)
-      console.log(`[file_watcher] watching ${workspace}`)
+      console.log(`[file_watcher] watching ${workspace} (recursive)`)
     } catch (err) {
       console.warn('[file_watcher] failed to start watching:', workspace, err)
     }

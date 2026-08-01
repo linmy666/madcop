@@ -72,6 +72,12 @@ export const brainApi = {
       `/api/brain/link?from_slug=${encodeURIComponent(fromSlug)}&to_slug=${encodeURIComponent(toSlug)}&context=${encodeURIComponent(context)}`,
     ),
 
+  /** Remove a directed edge between two nodes (idempotent). */
+  deleteLink: (fromSlug: string, toSlug: string) =>
+    api.delete<{ ok: boolean; from: string; to: string }>(
+      `/api/brain/link?from_slug=${encodeURIComponent(fromSlug)}&to_slug=${encodeURIComponent(toSlug)}`,
+    ),
+
   /** Delete a node (idempotent). */
   deleteNode: (slug: string) =>
     api.delete<{ ok: boolean; slug: string }>(`/api/brain/node/${encodeURIComponent(slug)}`),

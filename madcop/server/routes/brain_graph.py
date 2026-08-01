@@ -100,7 +100,13 @@ def _db(workspace: str = "") -> PageDB:
 
 @router.get("/graph")
 def get_graph(workspace: str = "") -> dict[str, Any]:
-    """Return the full page graph (nodes + edges) for the canvas."""
+    """Return the full page graph (nodes + edges) for the canvas.
+
+    We query out-edges only (not "both") so each directed link appears
+    exactly once with the correct source→target orientation. Querying
+    "both" would emit every link twice (once per endpoint) and lose the
+    direction, producing duplicate/backwards edges on the canvas.
+    """
     db = _db(workspace)
     try:
         pages = db.list_all() if hasattr(db, "list_all") else db.search("", limit=200)
@@ -108,8 +114,7 @@ def get_graph(workspace: str = "") -> dict[str, Any]:
         edges: list[dict[str, Any]] = []
         seen_edge_ids: set[str] = set()
         for p in pages:
-            # "both" direction so the canvas shows inbound and outbound links.
-            for other_slug, ctx in db.get_links(p.slug, direction="both"):
+            for other_slug, ctx in db.get_links(p.slug, direction="out"):
                 edge = _link_to_edge(p.slug, other_slug, ctx, "out")
                 if edge["id"] in seen_edge_ids:
                     continue
@@ -180,6 +185,17 @@ def create_link(from_slug: str, to_slug: str, context: str = "") -> dict[str, An
     finally:
         db.close()
     return {"ok": True, "from": from_slug, "to": to_slug, "context": context}
+
+
+@router.delete("/link")
+def delete_link(from_slug: str, to_slug: str) -> dict[str, Any]:
+    """Remove a directed edge between two nodes. Idempotent."""
+    db = _db()
+    try:
+        db.delete_link(from_slug, to_slug)
+    finally:
+        db.close()
+    return {"ok": True, "from": from_slug, "to": to_slug}
 
 
 @router.delete("/node/{slug}")

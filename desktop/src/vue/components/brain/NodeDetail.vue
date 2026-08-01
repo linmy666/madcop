@@ -15,6 +15,7 @@ const emit = defineEmits<{
   (e: 'edit', node: BrainNode): void
   (e: 'delete', slug: string): void
   (e: 'navigate', slug: string): void
+  (e: 'deleteLink', fromSlug: string, toSlug: string): void
 }>()
 
 const TYPE_LABELS: Record<string, string> = {
@@ -62,6 +63,13 @@ const typeLabel = computed(() => (props.node ? TYPE_LABELS[props.node.type] ?? p
                 {{ l.slug }}
               </button>
               <span v-if="l.context" class="nd-link-ctx">{{ l.context }}</span>
+              <button
+                class="nd-link-del"
+                title="删除此链接"
+                @click="emit('deleteLink', node.slug, l.slug)"
+              >
+                <span class="material-symbols-outlined">link_off</span>
+              </button>
             </li>
           </ul>
         </section>
@@ -250,6 +258,27 @@ const typeLabel = computed(() => (props.node ? TYPE_LABELS[props.node.type] ?? p
 .nd-link-ctx {
   color: var(--color-text-tertiary);
   font-size: 11px;
+}
+.nd-link-del {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  border-radius: 4px;
+}
+.nd-link-del:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.nd-link-del .material-symbols-outlined {
+  font-size: 14px;
 }
 .nd-meta {
   display: flex;

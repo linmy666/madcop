@@ -575,6 +575,25 @@ class PageDB:
                 out.extend((r["s"], r["ctx"]) for r in rows)
         return out
 
+    def delete_link(self, from_slug: str, to_slug: str) -> bool:
+        """Remove a directed link from_slug → to_slug.
+
+        Returns True if a row was deleted, False if the link (or either
+        page) didn't exist. Does NOT validate slug format — invalid slugs
+        simply won't match any page and return False.
+        """
+        a = self.get(from_slug)
+        b = self.get(to_slug)
+        if a is None or b is None:
+            return False
+        with self.transaction() as conn:
+            cur = conn.execute(
+                "DELETE FROM links WHERE from_page_id=? AND to_page_id=?",
+                (a.id, b.id),
+            )
+            deleted = cur.rowcount > 0
+        return deleted
+
     # ---- timeline / tags ------------------------------------------------
 
     def add_timeline(

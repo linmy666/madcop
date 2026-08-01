@@ -65,7 +65,7 @@ function saveMessagesToStorage(data: Record<string, { messages: any[]; title?: s
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-export type ChatState = 'idle' | 'busy' | 'error' | 'stopped'
+export type ChatState = 'idle' | 'busy' | 'error' | 'stopped' | 'streaming'
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
 export interface TokenUsage { input_tokens: number; output_tokens: number }
@@ -676,6 +676,12 @@ export const useChatStore = defineStore('chat', {
               // A fresh array reference forces re-evaluation unconditionally.
               session.messages = [...session.messages]
             }
+            // P1-7 — mirror the accumulated assistant text into
+            // streamingText so components reading it (CreationProgress,
+            // MessageList) get a live signal during streaming. Previously
+            // this field was only ever reset, never written, so all
+            // streaming-state checks silently failed.
+            session.streamingText = assistantMsg
           }
           // 16ms is one rAF frame at 60fps. opencode's tui uses the
           // same value (sdk.tsx:48-80). Terminal events bypass this

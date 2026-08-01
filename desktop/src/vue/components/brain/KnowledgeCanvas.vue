@@ -276,6 +276,18 @@ async function onDelete(slug: string) {
   }
 }
 
+/** Sprint 6 / P1-2 — delete a single directed edge, then refresh. */
+async function onDeleteLink(fromSlug: string, toSlug: string) {
+  try {
+    await brainApi.deleteLink(fromSlug, toSlug)
+    await loadGraph()
+    // Re-open the detail so the links list updates.
+    await openDetail(fromSlug)
+  } catch (e) {
+    errorMsg.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
 async function navigateTo(slug: string) {
   await openDetail(slug)
   if (cy) {
@@ -421,6 +433,7 @@ function onOverlayClick() {
       @edit="startEdit"
       @delete="onDelete"
       @navigate="navigateTo"
+      @delete-link="onDeleteLink"
     />
 
     <!-- Editor modal -->
