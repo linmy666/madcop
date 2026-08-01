@@ -530,7 +530,7 @@ export const useChatStore = defineStore('chat', {
       // selection. 'auto' (or unset) means: let the backend/model decide.
       const _runtimeSel = useSessionRuntimeStore(this.$pinia).selections[sessionId]
       const _effort = _runtimeSel?.effortLevel || 'auto'
-      // Unified agent mode (quick/standard/deep). Must match AgentModeSelector
+      // Unified agent mode (quick/standard/deep/create). Must match AgentModeSelector
       // default (standard). Using 'auto' here when unset made the UI show「标准」
       // while the backend ran plan_mode + clarify with no visible reply.
       const _agentMode = _runtimeSel?.agentMode || 'standard'

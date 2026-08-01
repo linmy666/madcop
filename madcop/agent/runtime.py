@@ -115,7 +115,7 @@ class RunContext:
     # Input
     messages: list  # list of Message objects
     model: str | None = None
-    agent_mode: str = "standard"  # quick | standard | deep
+    agent_mode: str = "standard"  # quick | standard | deep | create
     temperature: float = 0.7
     max_tokens: int = 8192
     work_dir: str | None = None
@@ -208,6 +208,9 @@ class EngineFactory:
         elif mode == "deep":
             from .deep_v4 import DeepEngineV4
             return DeepEngineV4()
+        elif mode == "create":
+            from .creation import CreationEngine
+            return CreationEngine()
         else:
             return QuickEngine()
 

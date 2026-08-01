@@ -3,11 +3,12 @@
  * AgentModeSelector — unified execution-mode picker.
  *
  * Replaces the old EffortSelector + fake "R Act 推理" button.
- * Three modes that control BOTH the workflow AND reasoning effort:
+ * Modes that control BOTH the workflow AND reasoning effort:
  *
  *   快速 (quick)    — direct LLM call, effort=low
  *   标准 (standard) — ReAct loop, effort=medium  (DEFAULT)
  *   深度 (deep)     — multi-agent (plan→code→review), effort=high
+ *   创作 (create)   — source-first long-form: search→fetch→outline→write
  *
  * Also supports "auto" — lets the backend task router decide.
  */
@@ -72,6 +73,15 @@ const MODES: ModeOption[] = [
     workflow: 'multi_agent',
     effort: 'high',
   },
+  {
+    value: 'create',
+    label: '创作',
+    shortLabel: '创作',
+    desc: '源优先长文：联网检索 → 抓取 → 大纲 → 带引用正文',
+    icon: 'edit_note',
+    workflow: 'create',
+    effort: 'high',
+  },
 ]
 
 // ── Current selection ─────────────────────────────────────────────────
@@ -127,6 +137,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
       :class="{
         'agent-mode-selector__trigger--compact': compact,
         'agent-mode-selector__trigger--deep': current === 'deep',
+        'agent-mode-selector__trigger--create': current === 'create',
       }"
     >
       <span class="material-symbols-outlined agent-mode-selector__icon">
@@ -208,6 +219,12 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
   background: var(--color-tertiary-container);
   color: var(--color-on-tertiary-container);
   border-color: var(--color-tertiary);
+}
+
+.agent-mode-selector__trigger--create {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  border-color: var(--color-primary);
 }
 
 .agent-mode-selector__icon {

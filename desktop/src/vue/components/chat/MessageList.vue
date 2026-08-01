@@ -97,6 +97,7 @@ import { clearWindowSelection, useSelectionPopoverDismiss } from '../../hooks/us
 import UserMessage from './UserMessage.vue'
 import AssistantMessage from './AssistantMessage.vue'
 import MemoryRecallBadge from './MemoryRecallBadge.vue'
+import CreationProgress from './CreationProgress.vue'
 import SubAgentPanel from './SubAgentPanel.vue'
 import SpriteIsland from '../studio/SpriteIsland.vue'
 import {
@@ -1189,6 +1190,9 @@ function renderItemContent(item: RenderItem) {
           v-if="getActiveSessionMemoryRecalls().length > 0"
           :memories="getActiveSessionMemoryRecalls()"
         />
+
+        <!-- Sprint 4 — source-first creation pipeline pill (create mode) -->
+        <CreationProgress :session-id="activeTabId" />
 
         <!-- v3.7.6 — ZCode-style reasoning panel. Stays visible
              for the whole turn (busy / streaming) so the gradient
