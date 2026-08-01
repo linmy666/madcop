@@ -150,6 +150,18 @@ class PageDB:
 
     # ---- lifecycle --------------------------------------------------------
 
+    @classmethod
+    def default_path(cls) -> Path:
+        """Canonical brain DB location — matches `__main__._default_brain_path`
+        and `UnifiedConfig.brain_db` so the canvas reads exactly the DB the
+        ingest pipeline and CLI write to."""
+        return Path("~/.madcop/brain.db").expanduser()
+
+    @classmethod
+    def default(cls) -> "PageDB":
+        """Open the canonical brain DB at ~/.madcop/brain.db."""
+        return cls(cls.default_path())
+
     @property
     def path(self) -> Path:
         return self._path

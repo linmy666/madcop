@@ -16,7 +16,7 @@ export const WORKBENCH_TAB_PREFIX = '__workbench__'
 
 // ─── Types ─────────────────────────────────────────────────────────
 
-export type TabType = 'session' | 'settings' | 'scheduled' | 'terminal' | 'trace' | 'traces' | 'workbench' | 'workflows' | 'design' | 'agents' | 'knowledge' | 'skill-builder' | 'usage-stats' | 'arena'
+export type TabType = 'session' | 'settings' | 'scheduled' | 'terminal' | 'trace' | 'traces' | 'workbench' | 'workflows' | 'design' | 'agents' | 'knowledge' | 'skill-builder' | 'usage-stats' | 'arena' | 'brain-canvas'
 
 export interface Tab {
   sessionId: string
@@ -156,6 +156,10 @@ export const useTabStore = defineStore('madcop-tabs', () => {
   function openArenaTab() {
     openTab('__arena__', 'Arena', 'arena' as TabType)
   }
+  /** Sprint 6 — Knowledge Canvas (知识画布): the brain graph visualizer. */
+  function openBrainCanvasTab() {
+    openTab('__brain_canvas__', '知识画布', 'brain-canvas' as TabType)
+  }
 
   return {
     tabs,
@@ -172,5 +176,6 @@ export const useTabStore = defineStore('madcop-tabs', () => {
     openSkillBuilderTab,
     openUsageStatsTab,
     openArenaTab,
+    openBrainCanvasTab,
   }
 })

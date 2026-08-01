@@ -1303,6 +1303,14 @@ const projectMenuData = computed(() => {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 opacity-60"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
           <span class="flex-1 text-left text-[12px]">{{ t('sidebar.skillBuilder') }}</span>
         </button>
+        <button
+          type="button"
+          :class="secondaryNavClass(activeTabType === 'brain-canvas')"
+          @click="() => { tabStore.openBrainCanvasTab(); closeMobileDrawer() }"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 opacity-60"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><line x1="12" y1="7" x2="6" y2="16"/><line x1="12" y1="7" x2="18" y2="16"/><line x1="7" y1="18" x2="17" y2="18"/></svg>
+          <span class="flex-1 text-left text-[12px]">知识画布</span>
+        </button>
       </template>
     </nav>
 

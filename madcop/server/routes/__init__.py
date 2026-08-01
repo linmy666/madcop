@@ -14,3 +14,7 @@ def include_all_routers(app: FastAPI) -> None:
     app.include_router(memory_router)
     app.include_router(skills_router)
     app.include_router(meta_harness_router)
+
+    # Sprint 6 — Knowledge Canvas: brain graph API
+    from madcop.server.routes.brain_graph import router as brain_graph_router
+    app.include_router(brain_graph_router)
