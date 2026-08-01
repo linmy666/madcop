@@ -150,6 +150,13 @@ const sessionState = computed(() => {
   return chatStore.sessions[activeTabId.value]
 })
 
+/** Sprint 2 — memory-recall badge data for the active session.
+ * Returns the list of recalled memories (each with id/kind/title/
+ * preview/layer) so MemoryRecallBadge can render them. */
+function getActiveSessionMemoryRecalls() {
+  return sessionState.value?.memoryRecalls ?? []
+}
+
 const messages = computed(() => sessionState.value?.messages ?? EMPTY_MESSAGES)
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
 const isAIThinking = computed(() => {
