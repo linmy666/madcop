@@ -96,6 +96,7 @@ import { clearWindowSelection, useSelectionPopoverDismiss } from '../../hooks/us
 // ─── Child components ─────────────────────────────────────────
 import UserMessage from './UserMessage.vue'
 import AssistantMessage from './AssistantMessage.vue'
+import MemoryRecallBadge from './MemoryRecallBadge.vue'
 import SubAgentPanel from './SubAgentPanel.vue'
 import SpriteIsland from '../studio/SpriteIsland.vue'
 import {
@@ -1182,6 +1183,11 @@ function renderItemContent(item: RenderItem) {
           :content="streamingText"
           :is-streaming="true"
           :compact="compact"
+        />
+
+        <MemoryRecallBadge
+          v-if="getActiveSessionMemoryRecalls().length > 0"
+          :memories="getActiveSessionMemoryRecalls()"
         />
 
         <!-- v3.7.6 — ZCode-style reasoning panel. Stays visible

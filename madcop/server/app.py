@@ -1871,6 +1871,19 @@ def create_app() -> FastAPI:
         if latest_user_msg:
             try:
                 sys_prompt = _build_memory_system_prompt(latest_user_msg, model_label=_active_label)
+                # Sprint 2 — emit memory_recall SSE so the UI can show
+                # "基于 N 条记忆" pill above the assistant message.
+                try:
+                    from madcop.memory.retriever_5layer import FiveLayerRetriever
+                    from madcop.memory.hybrid import hybrid_search as _h
+                    _mem_store = _get_memory_store()
+                    if _mem_store is not None:
+                        _fr = FiveLayerRetriever(_mem_store)
+                        _recalls = _fr.retrieve(latest_user_msg, top_k=5)
+                        if _recalls:
+                            yield f"data: {json.dumps({'type': 'memory_recall', 'memories': [{'id': str(r.item.get('id', '')), 'kind': r.item.get('kind', ''), 'title': r.item.get('title', ''), 'preview': r.item.get('content', '')[:200], 'layer': r.layer} for r in _recalls]}, ensure_ascii=False)}\n\n"
+                except Exception as _e:
+                    logger.debug("memory_recall SSE skipped: %s", _e)
             except Exception as e:
                 logger.warning("chat: memory system prompt build failed: %s", e)
                 sys_prompt = (

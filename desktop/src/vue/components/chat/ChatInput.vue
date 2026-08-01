@@ -39,6 +39,7 @@ import FileSearchMenu from './FileSearchMenu.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ModelSelector from '../controls/ModelSelector.vue'
 import AgentModeSelector from '../controls/AgentModeSelector.vue'
+import VoiceButton from './VoiceButton.vue'
 import LocalSlashCommandPanel from './LocalSlashCommandPanel.vue'
 import ComposerDropOverlay from './ComposerDropOverlay.vue'
 import ProjectContextChip from '../shared/ProjectContextChip.vue'
@@ -1487,6 +1488,7 @@ watch(input, (v) => {
           <!-- Right side -->
           <div class="flex min-w-0 items-center justify-end gap-2 shrink">
             <template v-if="!isMemberSession && activeTabId">
+              <VoiceButton @transcript="onVoiceTranscript" />
               <ContextUsageIndicator
                 :session-id="activeTabId"
                 :chat-state="chatState"

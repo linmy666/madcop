@@ -158,6 +158,8 @@ export type PerSessionState = {
   streamingToolInput: string
   activeToolUseId: string | null
   activeToolName: string | null
+  /** Sprint 2 — memories the LLM drew on for this turn. */
+  memoryRecalls?: { id: string; kind: string; title: string; preview: string; layer: string }[]
   activeThinkingId: string | null
   /** Plan-and-Execute mode toggle (per-session) */
   planModeEnabled: boolean
@@ -255,6 +257,7 @@ function createDefaultSessionState(): PerSessionState {
     historyError: null,
     streamingText: '',
     streamingToolInput: '',
+  memoryRecalls: [],
     activeToolUseId: null,
     activeToolName: null,
     activeThinkingId: null,
@@ -859,6 +862,20 @@ export const useChatStore = defineStore('chat', {
                         message: `已自动蒸馏技能：${skillName}`,
                       })
                     } catch { /* toast optional */ }
+                  } else if (event.type === 'memory_recall' && Array.isArray(event.memories)) {
+                    // Sprint 2 — proactive memory recall. Stash the
+                    // list on the session so MemoryRecallBadge can
+                    // render a "based on N memories" pill above the
+                    // assistant's first message.
+                    if (event.memories.length > 0) {
+                      sess.memoryRecalls = event.memories.map((m: any) => ({
+                        id: String(m.id ?? m.slug ?? Math.random()),
+                        kind: m.kind ?? 'memory',
+                        title: m.title ?? '',
+                        preview: m.preview ?? m.content?.slice?.(0, 100) ?? '',
+                        layer: m.layer ?? 'L1',
+                      }))
+                    }
                   } else if (event.type === 'reasoning' && event.content) {
                     // v3.10 — Grok-Build-style thought blocks.
                     // Each segment of reasoning is an independent block.
