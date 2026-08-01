@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Notification, screen, session, WebContentsView } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, Notification, screen, session, setPermissionRequestHandler, WebContentsView } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -151,6 +151,12 @@ function getServerRuntime() {
     appRoot: appRoot(),
     h5DistDir: path.join(unpackedRoot(), 'dist'),
     resolveSystemProxy: (url) => session.defaultSession.resolveProxy(url),
+  // Sprint 3 — auto-grant microphone permission for the chat input
+  // (voice mode uses webkitSpeechRecognition which needs mic access).
+  setPermissionRequestHandler: (wc, permission, callback) => {
+    if (permission === 'media') return callback(true)
+    return callback(false)
+  },
   })
   return serverRuntime
 }
