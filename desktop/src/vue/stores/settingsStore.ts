@@ -87,6 +87,12 @@ export const useSettingsStore = defineStore('settings', {
     h5AccessError: null as string | null,
     // Update proxy settings
     updateProxy: DEFAULT_UPDATE_PROXY_SETTINGS as UpdateProxySettings,
+    // Sprint 5 — Proactive Observer toggles (default off; opt-in).
+    proactive: {
+      enabled: false,
+      observeFiles: false,
+      observeTerminal: false,
+    } as { enabled: boolean; observeFiles: boolean; observeTerminal: boolean },
   }),
 
   actions: {
@@ -247,6 +253,12 @@ export const useSettingsStore = defineStore('settings', {
         mode: settings.mode,
         url: settings.url.trim(),
       }
+    },
+    /** Sprint 5 — toggle the proactive observer on/off + per-source. */
+    setProactive(settings: { enabled?: boolean; observeFiles?: boolean; observeTerminal?: boolean }): void {
+      if (typeof settings.enabled === 'boolean') this.proactive.enabled = settings.enabled
+      if (typeof settings.observeFiles === 'boolean') this.proactive.observeFiles = settings.observeFiles
+      if (typeof settings.observeTerminal === 'boolean') this.proactive.observeTerminal = settings.observeTerminal
     },
   },
 })

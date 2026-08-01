@@ -8,7 +8,8 @@
  */
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { ipcMain, BrowserWindow } from 'electron'
+import { EventEmitter } from 'node:events'
+import { BrowserWindow } from 'electron'
 
 export interface FileChangeEvent {
   type: 'proactive:file-change'
@@ -21,14 +22,14 @@ export interface FileChangeEvent {
 const DEBOUNCE_MS = 500
 const SUPPORTED_EXTS = new Set(['.py', '.ts', '.js', '.vue', '.md', '.json', '.yaml', '.yml', '.sh', '.tsx', '.jsx', '.go', '.rs', '.css', '.html'])
 
-export class FileWatcher {
+export class FileWatcher extends EventEmitter {
   private watchers: Map<string, fs.FSWatcher> = new Map()
   private pending: Map<string, NodeJS.Timeout> = new Map()
 
   watch(workspace: string): void {
     if (this.watchers.has(workspace)) return
     try {
-      const watcher = fs.watch(workspace, { recursive: false }, (event, filename) => {
+      const watcher = fs.watch(workspace, { recursive: false }, (_event, filename) => {
         if (!filename) return
         const ext = path.extname(filename).toLowerCase()
         if (!SUPPORTED_EXTS.has(ext)) return
@@ -54,9 +55,12 @@ export class FileWatcher {
         type: 'proactive:file-change',
         workspace, file: filename, ext, timestamp: Date.now(),
       }
+      // Broadcast to renderer windows (legacy channel)...
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('proactive:file-change', evt)
       }
+      // ...and to in-process listeners (the ProactiveMonitor coordinator).
+      this.emit('change', evt)
     }, DEBOUNCE_MS))
   }
 

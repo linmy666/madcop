@@ -208,6 +208,8 @@ export type DesktopHost = {
     onExit(handler: (event: TerminalExitEvent) => void): Promise<DesktopHostUnlisten>
     getBashPath(): Promise<string | null>
     setBashPath(path: string | null): Promise<void>
+    /** Sprint 5 — read recent scrollback (for the proactive observer). */
+    readOutput(sessionId?: number, maxChars?: number): Promise<string>
   }
   preview: {
     open(url: string, bounds?: PreviewBounds): Promise<void>
@@ -231,6 +233,28 @@ export type DesktopHost = {
   zoom: {
     set(level: number): Promise<void>
   }
+  /** Sprint 5 — Proactive Observer. */
+  proactive: {
+    setWorkspace(input: ProactiveWorkspaceInput): Promise<void>
+    onObservation(handler: (event: ProactiveObservation) => void): Promise<DesktopHostUnlisten>
+  }
+}
+
+/** Sprint 5 — payload the renderer sends to enable/configure the observer. */
+export type ProactiveWorkspaceInput = {
+  workspace?: string
+  enabled?: boolean
+  observeFiles?: boolean
+  observeTerminal?: boolean
+}
+
+/** Sprint 5 — a proactive nudge pushed from main to the renderer. */
+export type ProactiveObservation = {
+  source: 'file' | 'terminal'
+  summary: string
+  suggestion: string
+  workspace?: string
+  timestamp: number
 }
 
 declare global {

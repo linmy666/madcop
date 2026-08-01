@@ -94,9 +94,32 @@ type DesktopTerminalConfig = {
 
 type TerminalSession = {
   pty: TerminalPtyProcess
+  /** Sprint 5 — ring buffer of recent output, for the proactive observer. */
+  ringBuffer: string[]
 }
 
 const preparedNodePtyDirs = new Set<string>()
+
+/** Sprint 5 — max bytes retained per terminal's ring buffer (~64KB). */
+const RING_BUFFER_MAX_BYTES = 64 * 1024
+
+/** Append a chunk to a ring buffer, evicting oldest chunks over the byte cap. */
+function pushToRingBuffer(buffer: string[], chunk: string): void {
+  buffer.push(chunk)
+  let size = buffer.reduce((sum, c) => sum + c.length, 0)
+  while (buffer.length > 1 && size > RING_BUFFER_MAX_BYTES) {
+    const evicted = buffer.shift()
+    if (evicted) size -= evicted.length
+    else break
+  }
+}
+
+/** Sprint 5 — read the recent scrollback for a session (for the observer). */
+export function readRingBuffer(buffer: string[], maxChars = 2000): string {
+  if (buffer.length === 0) return ''
+  const joined = buffer.join('')
+  return joined.length > maxChars ? joined.slice(-maxChars) : joined
+}
 
 export function terminalConfigPath(app: TerminalAppLike | undefined, env: NodeJS.ProcessEnv = process.env): string | null {
   const portableDir = env.CLAUDE_CONFIG_DIR?.trim()
@@ -542,9 +565,11 @@ export class ElectronTerminalService {
       },
     })
 
-    this.sessions.set(sessionId, { pty })
+    this.sessions.set(sessionId, { pty, ringBuffer: [] })
 
     pty.onData(data => {
+      // Sprint 5 — capture output for the proactive observer.
+      pushToRingBuffer(this.sessions.get(sessionId)?.ringBuffer ?? [], data)
       webContents.send(ELECTRON_EVENT_CHANNELS.terminalOutput, {
         session_id: sessionId,
         data,
@@ -589,6 +614,24 @@ export class ElectronTerminalService {
     for (const sessionId of Array.from(this.sessions.keys())) {
       this.kill(sessionId)
     }
+  }
+
+  /** Sprint 5 — read the recent scrollback of a session (for the
+   * proactive observer). Returns '' if the session is gone. */
+  getScrollback(sessionId: number, maxChars = 2000): string {
+    const session = this.sessions.get(sessionId)
+    if (!session) return ''
+    return readRingBuffer(session.ringBuffer, maxChars)
+  }
+
+  /** Sprint 5 — read the scrollback of the most recently active session,
+   * or '' if none. Used by the proactive coordinator's terminal poll. */
+  getLatestScrollback(maxChars = 2000): string {
+    const ids = Array.from(this.sessions.keys())
+    const last = ids[ids.length - 1]
+    if (last === undefined) return ''
+    // Highest id == most recently spawned; good enough heuristic.
+    return this.getScrollback(last, maxChars)
   }
 
   private getSession(sessionId: number): TerminalSession {

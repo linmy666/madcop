@@ -1,0 +1,171 @@
+/**
+ * Sprint 5 — Proactive Observer coordinator.
+ *
+ * Two observation sources converge here:
+ *   1. FileWatcher  → fires onFileChange(workspace, file, ext) on save.
+ *   2. Terminal     → polled every POLL_INTERVAL_MS for recent scrollback.
+ *
+ * Events are debounced (coalesced within a DEBOUNCE_MS window) and each
+ * batch is sent to the backend `POST /api/proactive/check` for a small
+ * LLM judgement. When the backend says it's worth a nudge, we push a
+ * `proactiveObservation` IPC event to every renderer window so the
+ * ProactiveToast can surface it.
+ *
+ * The whole subsystem is opt-in: callers pass an `enabled` getter. When
+ * disabled we skip both polling and file hooks.
+ */
+import { BrowserWindow } from 'electron'
+import { ELECTRON_EVENT_CHANNELS } from '../ipc/channels'
+import { fileWatcher, FileChangeEvent } from './file_watcher'
+import type { ElectronTerminalService } from './terminal'
+
+const POLL_INTERVAL_MS = 5 * 60 * 1000 // every 5 minutes
+const DEBOUNCE_MS = 5_000              // coalesce bursts
+const TERMINAL_MAX_CHARS = 2000
+
+export interface ProactiveObservation {
+  source: 'file' | 'terminal'
+  summary: string
+  suggestion: string
+  workspace?: string
+  timestamp: number
+}
+
+export interface ProactiveMonitorOptions {
+  /** Whether the observer is enabled (read live so settings can toggle it). */
+  enabled: () => boolean
+  /** Whether to observe file changes (live). */
+  observeFiles: () => boolean
+  /** Whether to observe terminal output (live). */
+  observeTerminal: () => boolean
+  /** Terminal service to read scrollback from. */
+  terminalService: () => ElectronTerminalService | null
+  /** Base URL of the FastAPI server (for /api/proactive/check). */
+  serverUrl: () => string
+  /** Current workspace dir, to pass to the backend. */
+  workspace: () => string
+}
+
+export class ProactiveMonitor {
+  private pollTimer: NodeJS.Timeout | null = null
+  private debounceTimer: NodeJS.Timeout | null = null
+  private pending: Array<{ source: 'file' | 'terminal'; content: string }> = []
+  private fileHandler: ((evt: FileChangeEvent) => void) | null = null
+  private lastTerminalSnapshot = ''
+
+  constructor(private readonly opts: ProactiveMonitorOptions) {}
+
+  /** Start observing. Idempotent. */
+  start(): void {
+    if (this.pollTimer) return
+    // Wire file changes.
+    this.fileHandler = (evt) => this.onFileChange(evt)
+    fileWatcher.on('change', this.fileHandler)
+    // Terminal poll.
+    this.pollTimer = setInterval(() => this.pollTerminal(), POLL_INTERVAL_MS)
+    console.log('[proactive] monitor started')
+  }
+
+  /** Stop observing and clean up. */
+  stop(): void {
+    if (this.fileHandler) {
+      fileWatcher.off('change', this.fileHandler)
+      this.fileHandler = null
+    }
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer)
+      this.pollTimer = null
+    }
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer)
+      this.debounceTimer = null
+    }
+    this.pending = []
+  }
+
+  /** Public hook so main.ts can forward fileWatcher events (or tests). */
+  onFileChange(evt: FileChangeEvent): void {
+    if (!this.opts.enabled() || !this.opts.observeFiles()) return
+    this.queue({ source: 'file', content: `${evt.file} (${evt.ext}) changed in ${evt.workspace}` })
+  }
+
+  /** Read the latest terminal scrollback; queue if it changed. */
+  private pollTerminal(): void {
+    if (!this.opts.enabled() || !this.opts.observeTerminal()) return
+    const svc = this.opts.terminalService()
+    if (!svc) return
+    const snapshot = svc.getLatestScrollback(TERMINAL_MAX_CHARS)
+    if (!snapshot || snapshot === this.lastTerminalSnapshot) return
+    // Only consider the *new* tail for novelty.
+    const prev = this.lastTerminalSnapshot
+    this.lastTerminalSnapshot = snapshot
+    const diff = prev && snapshot.startsWith(prev) ? snapshot.slice(prev.length) : snapshot
+    if (!diff.trim()) return
+    this.queue({ source: 'terminal', content: diff })
+  }
+
+  /** Debounced enqueue → after DEBOUNCE_MS, flush all pending to backend. */
+  private queue(item: { source: 'file' | 'terminal'; content: string }): void {
+    this.pending.push(item)
+    if (this.debounceTimer) clearTimeout(this.debounceTimer)
+    this.debounceTimer = setTimeout(() => this.flush(), DEBOUNCE_MS)
+  }
+
+  private async flush(): Promise<void> {
+    const batch = this.pending.splice(0)
+    this.debounceTimer = null
+    if (batch.length === 0) return
+    // Send each item to the backend for judgement.
+    for (const item of batch) {
+      try {
+        const verdict = await this.checkWithBackend(item.source, item.content)
+        if (verdict.worth) {
+          this.broadcast({
+            source: item.source,
+            summary: verdict.summary,
+            suggestion: verdict.suggestion,
+            workspace: this.opts.workspace(),
+            timestamp: Date.now(),
+          })
+        }
+      } catch (err) {
+        console.warn('[proactive] check failed:', err)
+      }
+    }
+  }
+
+  private async checkWithBackend(
+    source: 'file' | 'terminal',
+    content: string,
+  ): Promise<{ worth: boolean; summary: string; suggestion: string }> {
+    const base = this.opts.serverUrl().replace(/\/+$/, '')
+    const url = `${base}/api/proactive/check`
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 15_000)
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, content, workspace: this.opts.workspace() }),
+        signal: controller.signal,
+      })
+      if (!res.ok) return { worth: false, summary: '', suggestion: '' }
+      const data = (await res.json()) as { worth?: boolean; summary?: string; suggestion?: string }
+      return {
+        worth: !!data.worth,
+        summary: data.summary ?? '',
+        suggestion: data.suggestion ?? '',
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private broadcast(obs: ProactiveObservation): void {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(ELECTRON_EVENT_CHANNELS.proactiveObservation, obs)
+      }
+    }
+  }
+}

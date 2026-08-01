@@ -253,4 +253,31 @@ describe('Electron terminal service', () => {
 
     expect(fakePty.killed).toBe(true)
   })
+
+  it('Sprint 5 — ring buffer captures output and getScrollback returns the tail', async () => {
+    const dir = tempDir()
+    const fakePty = new FakePty()
+    const service = new ElectronTerminalService({
+      env: { HOME: dir, SHELL: '/bin/test-shell' },
+      platform: 'linux',
+      ptyFactory: { spawn: vi.fn(() => fakePty) },
+    })
+
+    await service.spawn({ cols: 80, rows: 24, cwd: dir }, { send: vi.fn() })
+    fakePty.emitData('line one\n')
+    fakePty.emitData('line two\n')
+
+    // The scrollback should contain both emitted chunks.
+    const scroll = service.getScrollback(1)
+    expect(scroll).toContain('line one')
+    expect(scroll).toContain('line two')
+
+    // getLatestScrollback returns the same (only one session).
+    expect(service.getLatestScrollback()).toContain('line two')
+
+    // After kill, scrollback is gone.
+    service.kill(1)
+    expect(service.getScrollback(1)).toBe('')
+    expect(service.getLatestScrollback()).toBe('')
+  })
 })

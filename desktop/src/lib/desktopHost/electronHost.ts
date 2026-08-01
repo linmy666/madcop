@@ -139,6 +139,7 @@ export function createElectronHost(bridge: ElectronHostBridge): DesktopHost {
       onExit: handler => subscribe(ELECTRON_EVENT_CHANNELS.terminalExit, handler),
       getBashPath: () => invoke(ELECTRON_IPC_CHANNELS.terminalGetBashPath),
       setBashPath: path => invoke(ELECTRON_IPC_CHANNELS.terminalSetBashPath, path),
+      readOutput: (sessionId, maxChars) => invoke<string>(ELECTRON_IPC_CHANNELS.terminalReadOutput, { sessionId, maxChars }),
     },
     preview: {
       open: (url, bounds) => invoke(ELECTRON_IPC_CHANNELS.previewOpen, { url, bounds }),
@@ -161,6 +162,10 @@ export function createElectronHost(bridge: ElectronHostBridge): DesktopHost {
     },
     zoom: {
       set: level => invoke(ELECTRON_IPC_CHANNELS.zoomSet, level),
+    },
+    proactive: {
+      setWorkspace: input => invoke(ELECTRON_IPC_CHANNELS.proactiveSetWorkspace, input),
+      onObservation: handler => subscribe(ELECTRON_EVENT_CHANNELS.proactiveObservation, handler),
     },
   }
 }

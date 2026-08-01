@@ -54,6 +54,10 @@ let previewService: ElectronPreviewService | null = null
 const traceWindows = new Map<string, BrowserWindow>()
 let isQuitting = false
 let trayController: TrayController | null = null
+// Sprint 5 — Proactive Observer coordinator (lazily started when a
+// workspace is set; default disabled).
+let proactiveMonitor: import('./services/proactive_monitor').ProactiveMonitor | null = null
+let proactiveWorkspace = ''
 
 installMacOsChromiumKeychainPromptGuard(app)
 
@@ -192,6 +196,56 @@ function getTerminalService() {
     nodePtyCacheDir: nodePtyRuntimeCacheDir(),
   })
   return terminalService
+}
+
+// Sprint 5 — live flags the ProactiveMonitor reads each tick.
+const proactiveFlags = { enabled: false, observeFiles: false, observeTerminal: false }
+
+/**
+ * Sprint 5 — (re)create the ProactiveMonitor with the latest flags.
+ * When disabled we tear down the existing monitor + file watcher so no
+ * work happens. Idempotent.
+ */
+function ensureProactiveMonitor(next: {
+  enabled: boolean
+  observeFiles: boolean
+  observeTerminal: boolean
+}): void {
+  proactiveFlags.enabled = next.enabled
+  proactiveFlags.observeFiles = next.observeFiles
+  proactiveFlags.observeTerminal = next.observeTerminal
+
+  if (!next.enabled) {
+    if (proactiveMonitor) {
+      proactiveMonitor.stop()
+      proactiveMonitor = null
+    }
+    import('./services/file_watcher').then(({ fileWatcher }) => {
+      if (proactiveWorkspace) fileWatcher.unwatch(proactiveWorkspace)
+    })
+    return
+  }
+
+  // Lazily build the monitor on first enable.
+  if (!proactiveMonitor) {
+    const { ProactiveMonitor } = require('./services/proactive_monitor') as typeof import('./services/proactive_monitor')
+    proactiveMonitor = new ProactiveMonitor({
+      enabled: () => proactiveFlags.enabled,
+      observeFiles: () => proactiveFlags.observeFiles,
+      observeTerminal: () => proactiveFlags.observeTerminal,
+      terminalService: () => terminalService,
+      serverUrl: () => 'http://127.0.0.1:8765',
+      workspace: () => proactiveWorkspace,
+    })
+    proactiveMonitor.start()
+  }
+
+  // (Re)watch the current workspace for file changes.
+  if (next.observeFiles && proactiveWorkspace) {
+    import('./services/file_watcher').then(({ fileWatcher }) => {
+      fileWatcher.watch(proactiveWorkspace)
+    })
+  }
 }
 
 function getPreviewService() {
@@ -335,6 +389,33 @@ function registerIpcHandlers() {
   })
   registerHandler(ELECTRON_IPC_CHANNELS.terminalGetBashPath, () => getTerminalService().getBashPath())
   registerHandler(ELECTRON_IPC_CHANNELS.terminalSetBashPath, (_event, payload) => getTerminalService().setBashPath(payload as string | null))
+  // Sprint 5 — read recent terminal scrollback (for the proactive observer).
+  registerHandler(ELECTRON_IPC_CHANNELS.terminalReadOutput, (_event, payload) => {
+    const { sessionId, maxChars } = (payload ?? {}) as { sessionId?: number; maxChars?: number }
+    const svc = getTerminalService()
+    if (typeof sessionId === 'number') {
+      return svc.getScrollback(sessionId, maxChars ?? 2000)
+    }
+    return svc.getLatestScrollback(maxChars ?? 2000)
+  })
+  // Sprint 5 — renderer pushes the active workspace so the proactive
+  // observer can watch it. Enabling/toggling is driven by settings flags
+  // passed in the payload.
+  registerHandler(ELECTRON_IPC_CHANNELS.proactiveSetWorkspace, (_event, payload) => {
+    const p = (payload ?? {}) as {
+      workspace?: string
+      enabled?: boolean
+      observeFiles?: boolean
+      observeTerminal?: boolean
+    }
+    proactiveWorkspace = p.workspace ?? proactiveWorkspace
+    ensureProactiveMonitor({
+      enabled: p.enabled ?? false,
+      observeFiles: p.observeFiles ?? false,
+      observeTerminal: p.observeTerminal ?? false,
+    })
+    return { ok: true }
+  })
   registerHandler(ELECTRON_IPC_CHANNELS.previewOpen, (event, payload) => {
     const { url, bounds } = payload as { url: string, bounds?: PreviewBounds }
     return getPreviewService().open(currentWindow(event), url, bounds ?? { x: 0, y: 0, width: 0, height: 0 })
@@ -477,6 +558,9 @@ app.on('before-quit', () => {
   trayController = null
   terminalService?.killAll()
   previewService?.close()
+  // Sprint 5 — tear down the proactive observer + file watcher.
+  proactiveMonitor?.stop()
+  proactiveMonitor = null
   // Synchronous on quit so the Windows taskkill completes before the process
   // exits, otherwise the fire-and-forget kill can leave orphaned sidecars.
   getServerRuntime().stopAll(true)

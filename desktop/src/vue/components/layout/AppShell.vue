@@ -12,11 +12,29 @@ import StartupErrorView from './StartupErrorView.vue'
 import CommandPalette from '../command/CommandPalette.vue'
 import TabStrip from './TabStrip.vue'
 import Toast from '../shared/Toast.vue'
+import ProactiveToast from '../chat/ProactiveToast.vue'
+import { useProactive } from '../../composables/useProactive'
+
+// Sprint 5 — start the proactive observer coordinator (subscribes to
+// IPC events + pushes config to main). Safe to call at setup time.
+const _proactive = useProactive()
 import { useSessionStore } from '../../stores/sessionStore'
 import { useTabStore } from '../../stores/tabs'
 import { useChatStore } from '../../stores/chatStore'
 import { useUIStore } from '../../stores/uiStore'
 import { useTranslation } from '../../i18n'
+
+// Sprint 5 — when the user "采纳" a proactive suggestion, push it into
+// the active chat session's composer as a prefill.
+const _chatStoreForProactive = useChatStore()
+function onProactiveAdopt(suggestion: string) {
+  const sid = tabStore.activeTabId
+  if (sid) {
+    _chatStoreForProactive.queueComposerPrefill(sid, { text: suggestion, mode: 'append' })
+  }
+}
+void _proactive
+void _chatStoreForProactive
 import { watch } from 'vue'
 
 const ready = ref(false)
@@ -200,5 +218,8 @@ function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 
     <!-- Toast notifications (mounted once globally so showToast() is visible) -->
     <Toast :toasts="uiStore.toasts" @remove="uiStore.removeToast" />
+
+    <!-- Sprint 5 — Proactive Observer toast (file/terminal nudges) -->
+    <ProactiveToast @adopt="onProactiveAdopt" />
   </div>
 </template>

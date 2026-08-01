@@ -206,6 +206,9 @@ export const browserHost: DesktopHost = {
     async setBashPath() {
       unsupported('Native shell path settings')
     },
+    async readOutput(): Promise<string> {
+      return ''
+    },
   },
   preview: {
     async open() {
@@ -255,6 +258,14 @@ export const browserHost: DesktopHost = {
   zoom: {
     async set() {
       unsupported('Native app zoom')
+    },
+  },
+  proactive: {
+    async setWorkspace() {
+      // No-op in browser: proactive observation is desktop-only.
+    },
+    async onObservation(): Promise<DesktopHostUnlisten> {
+      return noopUnlisten
     },
   },
 }

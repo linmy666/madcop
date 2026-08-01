@@ -32,6 +32,10 @@ export const ELECTRON_IPC_CHANNELS = {
   terminalKill: 'desktop:terminal:kill',
   terminalGetBashPath: 'desktop:terminal:get-bash-path',
   terminalSetBashPath: 'desktop:terminal:set-bash-path',
+  /** Sprint 5 — read recent terminal scrollback (for the observer). */
+  terminalReadOutput: 'desktop:terminal:read-output',
+  /** Sprint 5 — renderer pushes workspace + enable flags to the observer. */
+  proactiveSetWorkspace: 'desktop:proactive:set-workspace',
   previewOpen: 'desktop:preview:open',
   previewNavigate: 'desktop:preview:navigate',
   previewSetBounds: 'desktop:preview:set-bounds',
@@ -56,6 +60,8 @@ export const ELECTRON_EVENT_CHANNELS = {
   nativeMenuNavigate: 'desktop:window:native-menu-navigate',
   terminalOutput: 'desktop:terminal:output',
   terminalExit: 'desktop:terminal:exit',
+  /** Sprint 5 — proactive observer pushes a nudge to the renderer. */
+  proactiveObservation: 'desktop:proactive:observation',
   previewEvent: 'desktop:preview:event',
 } as const
 

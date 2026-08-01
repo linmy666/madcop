@@ -18,3 +18,7 @@ def include_all_routers(app: FastAPI) -> None:
     # Sprint 6 — Knowledge Canvas: brain graph API
     from madcop.server.routes.brain_graph import router as brain_graph_router
     app.include_router(brain_graph_router)
+
+    # Sprint 5 — Proactive Observer: file/terminal nudge endpoint
+    from madcop.server.routes.proactive_routes import router as proactive_router
+    app.include_router(proactive_router)

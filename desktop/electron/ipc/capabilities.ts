@@ -103,6 +103,10 @@ export const ELECTRON_IPC_VALIDATORS = {
   [ELECTRON_IPC_CHANNELS.terminalKill]: terminalSessionId,
   [ELECTRON_IPC_CHANNELS.terminalGetBashPath]: noPayload,
   [ELECTRON_IPC_CHANNELS.terminalSetBashPath]: value => value === null || stringPayload(value),
+  // Sprint 5 — terminal scrollback read (optional {sessionId?, maxChars?}).
+  [ELECTRON_IPC_CHANNELS.terminalReadOutput]: optionalRecord,
+  // Sprint 5 — proactive observer workspace/flags (optional record).
+  [ELECTRON_IPC_CHANNELS.proactiveSetWorkspace]: optionalRecord,
   [ELECTRON_IPC_CHANNELS.previewOpen]: urlWithOptionalBounds,
   [ELECTRON_IPC_CHANNELS.previewNavigate]: stringPayload,
   [ELECTRON_IPC_CHANNELS.previewSetBounds]: boundsPayload,

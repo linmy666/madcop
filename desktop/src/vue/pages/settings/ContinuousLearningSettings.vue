@@ -10,6 +10,10 @@
  */
 
 import { ref, onMounted } from 'vue'
+import { useSettingsStore } from '../../stores/settingsStore'
+
+// Sprint 5 — Proactive Observer toggles.
+const settingsStore = useSettingsStore()
 
 // ─── State ─────────────────────────────────────────────────────────────
 
@@ -352,6 +356,63 @@ onMounted(refreshStats)
           <span>loss {{ record.loss.toFixed(3) }}</span>
         </div>
       </div>
+    </div>
+
+    <!-- Sprint 5 — Proactive Observer -->
+    <div class="space-y-3 border-t border-[var(--color-border)] pt-6">
+      <div>
+        <h3 class="text-[13px] font-semibold text-[var(--color-text-primary)]">主动观察器</h3>
+        <p class="mt-1 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+          Agent 会安静地观察你的文件改动和终端输出，发现报错或可疑操作时主动提醒。所有判断在本地完成，仅用一次 LLM 调用决定是否值得打扰你。
+        </p>
+      </div>
+
+      <label class="flex items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3">
+        <div>
+          <div class="text-[12px] font-medium text-[var(--color-text-primary)]">启用主动观察</div>
+          <div class="text-[10px] text-[var(--color-text-tertiary)]">总开关，关闭后下面的子项不会生效</div>
+        </div>
+        <input
+          type="checkbox"
+          class="h-4 w-4 accent-[var(--color-brand)]"
+          :checked="settingsStore.proactive.enabled"
+          @change="settingsStore.setProactive({ enabled: ($event.target as HTMLInputElement).checked })"
+        />
+      </label>
+
+      <label
+        class="flex items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3"
+        :class="{ 'opacity-40': !settingsStore.proactive.enabled }"
+      >
+        <div>
+          <div class="text-[12px] font-medium text-[var(--color-text-primary)]">观察文件改动</div>
+          <div class="text-[10px] text-[var(--color-text-tertiary)]">监视当前工作区的源码/配置文件保存</div>
+        </div>
+        <input
+          type="checkbox"
+          class="h-4 w-4 accent-[var(--color-brand)]"
+          :disabled="!settingsStore.proactive.enabled"
+          :checked="settingsStore.proactive.observeFiles"
+          @change="settingsStore.setProactive({ observeFiles: ($event.target as HTMLInputElement).checked })"
+        />
+      </label>
+
+      <label
+        class="flex items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3"
+        :class="{ 'opacity-40': !settingsStore.proactive.enabled }"
+      >
+        <div>
+          <div class="text-[12px] font-medium text-[var(--color-text-primary)]">观察终端输出</div>
+          <div class="text-[10px] text-[var(--color-text-tertiary)]">每 5 分钟检查最近终端输出，捕获报错/失败</div>
+        </div>
+        <input
+          type="checkbox"
+          class="h-4 w-4 accent-[var(--color-brand)]"
+          :disabled="!settingsStore.proactive.enabled"
+          :checked="settingsStore.proactive.observeTerminal"
+          @change="settingsStore.setProactive({ observeTerminal: ($event.target as HTMLInputElement).checked })"
+        />
+      </label>
     </div>
   </div>
 </template>
