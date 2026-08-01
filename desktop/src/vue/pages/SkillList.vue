@@ -6,10 +6,11 @@ import { useTranslation } from '../i18n'
 import type { SkillSource } from '../stores/skillStore'
 import type { SkillDefinition } from '../stores/skillStore'
 
-const SOURCE_ORDER: SkillSource[] = ['user', 'project', 'plugin', 'mcp', 'bundled']
+const SOURCE_ORDER: SkillSource[] = ['user', 'auto-distilled', 'project', 'plugin', 'mcp', 'bundled']
 
 const SOURCE_ICONS: Record<SkillSource, string> = {
   user: 'person',
+  'auto-distilled': 'auto_awesome',
   project: 'folder',
   plugin: 'extension',
   mcp: 'hub',
@@ -18,6 +19,7 @@ const SOURCE_ICONS: Record<SkillSource, string> = {
 
 const SOURCE_ACCENT_CLASSES: Record<SkillSource, string> = {
   user: 'bg-[var(--color-primary-fixed)] text-[var(--color-brand)]',
+  'auto-distilled': 'bg-[var(--color-secondary-container)] text-[var(--color-secondary)]',
   project: 'bg-[var(--color-success-container)] text-[var(--color-success)]',
   plugin: 'bg-[var(--color-warning-container)] text-[var(--color-warning)]',
   mcp: 'bg-[var(--color-info-container)] text-[var(--color-info)]',
