@@ -27,7 +27,7 @@ from typing import Any, AsyncIterator, Callable, Iterator, Optional
 
 
 class StepKind(str, Enum):
-    """The 10 unified event kinds. Maps 1:1 to frontend SSE handlers."""
+    """The unified event kinds. Maps 1:1 to frontend SSE handlers."""
 
     # Thought lifecycle (Grok-Build-style independent blocks)
     THOUGHT_START = "thought_start"
@@ -44,6 +44,11 @@ class StepKind(str, Enum):
 
     # Clarification
     CLARIFY = "clarify"
+
+    # P3-A — memory/skill side-channel events (parity with legacy /api/chat).
+    # These carry structured metadata in `metadata` rather than `content`.
+    MEMORY_RECALL = "memory_recall"
+    SKILL_DISTILLED = "skill_distilled"
 
     # Terminal
     ERROR = "error"

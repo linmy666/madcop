@@ -138,16 +138,48 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     async def event_stream():
         thread = None
         try:
+            # P3-A — memory_recall: emit before the engine starts so the
+            # UI can show「基于 N 条记忆回答」. Mirrors the legacy /api/chat
+            # handler (app.py:1884-1894). Runs in the main thread (fast, <50ms).
+            _latest_user = ""
+            for m in reversed(messages):
+                if m.role == "user":
+                    _latest_user = m.content or ""
+                    break
+            if _latest_user and mem_store:
+                try:
+                    from madcop.memory.retriever_5layer import FiveLayerRetriever
+                    _fr = FiveLayerRetriever(mem_store)
+                    _recalls = _fr.retrieve(_latest_user, top_k=5)
+                    if _recalls:
+                        yield emitter.emit(AgentStep(
+                            kind=StepKind.MEMORY_RECALL,
+                            metadata={"memories": [
+                                {"id": str(r.item.get("id", "")),
+                                 "kind": r.item.get("kind", ""),
+                                 "title": r.item.get("title", ""),
+                                 "preview": (r.item.get("content", "") or "")[:200],
+                                 "layer": r.layer}
+                                for r in _recalls
+                            ]},
+                        ))
+                except Exception as _e:
+                    logger.debug("v4 memory_recall skipped: %s", _e)
+
             # Run engine in a thread (it's synchronous) and bridge to async
             q: queue.SimpleQueue = queue.SimpleQueue()
             sentinel = object()
             cancel_flag = threading.Event()
+            _assistant_text_holder: list[str] = [""]
 
             def worker():
                 try:
                     for step in engine.run(ctx):
                         if cancel_flag.is_set():
                             break
+                        # Capture assistant text for skill distill after the run.
+                        if step.kind == StepKind.TEXT_DELTA and step.content:
+                            _assistant_text_holder[0] += step.content
                         q.put(step)
                 except Exception as e:
                     q.put(AgentStep(kind=StepKind.ERROR, content=str(e)))
@@ -171,6 +203,21 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                     break
 
                 yield emitter.emit(item)
+
+            # P3-A — skill_distilled: after the run, auto-distill if the
+            # exchange looks valuable (mirrors legacy app.py:3037/3332/3526).
+            _assistant_text = _assistant_text_holder[0].strip()
+            if _assistant_text and len(_assistant_text) >= 400:
+                try:
+                    from madcop.memory.skill_distill import auto_distill_if_valuable
+                    _skill_name = auto_distill_if_valuable(_latest_user, _assistant_text)
+                    if _skill_name:
+                        yield emitter.emit(AgentStep(
+                            kind=StepKind.SKILL_DISTILLED,
+                            metadata={"skillName": _skill_name},
+                        ))
+                except Exception as _e:
+                    logger.debug("v4 skill_distill skipped: %s", _e)
 
         except Exception as e:
             logger.error("chat_v4 stream error: %s", e)

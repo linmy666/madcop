@@ -89,6 +89,9 @@ export interface SSEStreamState {
   errorMessage: string | null
   isStreaming: boolean
   model: string
+  /** P3-A — memory recalls + skill distillation side-channel events. */
+  memoryRecalls: { id: string; kind: string; title: string; preview: string; layer: string }[]
+  distilledSkill: string | null
 }
 
 // ─── Composable ──────────────────────────────────────────────────────────────
@@ -100,6 +103,8 @@ export function useSSEStream() {
   const model = ref('')
   const clarifyQuestion = ref<string | null>(null)
   const clarifyOptions = ref<string[]>([])
+  const memoryRecalls = ref<SSEStreamState['memoryRecalls']>([])
+  const distilledSkill = ref<string | null>(null)
 
   let abortCtrl: AbortController | null = null
 
@@ -117,6 +122,8 @@ export function useSSEStream() {
     model.value = ''
     clarifyQuestion.value = null
     clarifyOptions.value = []
+    memoryRecalls.value = []
+    distilledSkill.value = null
 
     abortCtrl = new AbortController()
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
@@ -173,6 +180,13 @@ export function useSSEStream() {
               model.value = ev.model || ''
               isStreaming.value = false
               break
+            // P3-A — memory/skill side-channel events (parity with legacy).
+            case 'memory_recall':
+              memoryRecalls.value = (ev as any)?.metadata?.memories || []
+              break
+            case 'skill_distilled':
+              distilledSkill.value = (ev as any)?.metadata?.skillName || null
+              break
           }
         }
       }
@@ -206,6 +220,8 @@ export function useSSEStream() {
     errorMessage: errorMessage.value,
     isStreaming: isStreaming.value,
     model: model.value,
+    memoryRecalls: memoryRecalls.value,
+    distilledSkill: distilledSkill.value,
   }))
 
   return {
@@ -215,6 +231,8 @@ export function useSSEStream() {
     model,
     clarifyQuestion,
     clarifyOptions,
+    memoryRecalls,
+    distilledSkill,
     state,
     connect,
     abort,
