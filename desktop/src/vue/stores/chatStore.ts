@@ -678,13 +678,16 @@ export const useChatStore = defineStore('chat', {
               // (a plain JSON-parsed array, not reactive-wrapped).
               // A fresh array reference forces re-evaluation unconditionally.
               session.messages = [...session.messages]
+            } else {
+              // P1-7 — before ensureAssistantPushed() runs, the only
+              // place the live text is visible is <AssistantMessage
+              // :content="streamingText">. Mirror the accumulated text
+              // there. Once assistantMsgObj is pushed (above branch),
+              // we stop writing to streamingText to avoid the same
+              // reply rendering twice (once in messages, once via the
+              // streaming component).
+              session.streamingText = assistantMsg
             }
-            // P1-7 — mirror the accumulated assistant text into
-            // streamingText so components reading it (CreationProgress,
-            // MessageList) get a live signal during streaming. Previously
-            // this field was only ever reset, never written, so all
-            // streaming-state checks silently failed.
-            session.streamingText = assistantMsg
           }
           // 16ms is one rAF frame at 60fps. opencode's tui uses the
           // same value (sdk.tsx:48-80). Terminal events bypass this
@@ -880,6 +883,12 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'done') {
                     session.chatState = 'idle'
+                    // P1-7/feature-clear — clear the live-streaming buffer
+                    // so the floating <AssistantMessage> bubble (v-if'd on
+                    // `streamingText.trim()`) disappears and the cursor stops
+                    // blinking. The finalized content remains visible via
+                    // the assistant_msg row in session.messages.
+                    session.streamingText = ''
                     // P2-12 — mark the tab idle so Sidebar's running count clears.
                     try { useTabStore().setTabStatus(_sse_sid, 'idle') } catch { /* ignore */ }
                     // Sprint 4 — capture creation-engine citations from
