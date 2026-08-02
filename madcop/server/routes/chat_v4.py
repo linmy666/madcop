@@ -185,6 +185,29 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     if _output_style in _style_hints:
         sys_prefix = (sys_prefix + _style_hints[_output_style]).strip() + "\n"
 
+    # P2-NS — quick mode tool awareness. Without this, the LLM doesn't
+    # know web_search / web_fetch / weather / memory are available, so
+    # it hallucinates "I can't search the web" for time-sensitive queries.
+    # The actual tool execution is handled by QuickEngine (one step only).
+    if agent_mode == "quick" and reg.get_all_schemas():
+        try:
+            _tool_names = ", ".join(
+                s.get("function", {}).get("name", "?")
+                for s in reg.get_all_schemas()
+            )
+            if _tool_names:
+                sys_prefix = (
+                    sys_prefix
+                    + "\n[Available tools] "
+                    + _tool_names
+                    + ". If the user's question requires real-time data (weather, "
+                    "news, current events) or any other tool, emit ONE tool call "
+                    "rather than guessing. ONE tool call only — for complex tasks, "
+                    "switch to standard mode."
+                )
+        except Exception:
+            pass
+
     # Build run context
     ctx = RunContext(
         messages=messages,

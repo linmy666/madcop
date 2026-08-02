@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, AsyncIterator, Callable, Iterator, Optional
 
+from madcop.llm.client import Message
+
 
 # ─── Step Types ──────────────────────────────────────────────────────────────
 
@@ -167,30 +169,143 @@ class AgentEngine(ABC):
 
 
 class QuickEngine(AgentEngine):
-    """Direct single-shot LLM call. No tool loop."""
+    """Direct LLM call with optional single tool invocation.
+
+    P2-NS — quick mode (without this fix) called the LLM without any
+    tools, so users got hallucinated responses like "I can't search the
+    web" for time-sensitive queries. Now we pass tool_schemas to the LLM
+    so it knows what's available, and if the model chooses to call a
+    tool, we execute it once and feed the result back. One-step only —
+    anything complex should switch to standard mode.
+    """
 
     def run(self, ctx: RunContext) -> Iterator[AgentStep]:
         try:
+            # 1) First call: stream with tools. The LLM client may emit
+            # tool_call_deltas (incremental) during streaming rather than
+            # a complete tool_call object at the end, so we accumulate.
+            raw_text = ""
+            tc_args_acc = ""
+            tc_name: str | None = None
+            tc_id: str | None = None
             if hasattr(ctx.client, "stream"):
                 for chunk in ctx.client.stream(
                     ctx.messages,
                     model=ctx.model,
                     temperature=ctx.temperature,
                     max_tokens=ctx.max_tokens,
+                    tools=ctx.tool_schemas or None,
                 ):
                     text = getattr(chunk, "text", "") or ""
                     if text:
+                        raw_text += text
                         yield AgentStep(kind=StepKind.TEXT_DELTA, content=text)
+                    # Process streaming tool-call deltas (Anthropic-style).
+                    for d in (getattr(chunk, "tool_call_deltas", None) or ()):
+                        if not isinstance(d, dict):
+                            continue
+                        if d.get("id"):
+                            tc_id = d["id"]
+                        if d.get("name"):
+                            tc_name = d["name"]
+                        if d.get("arguments"):
+                            tc_args_acc += d["arguments"]
+                    # Non-streaming fallback (some clients only emit at the end).
+                    end_tc = getattr(chunk, "tool_call", None)
+                    if end_tc is not None:
+                        if hasattr(end_tc, "name"):
+                            tc_name = end_tc.name
+                            tc_args_acc = (
+                                json.dumps(end_tc.arguments, ensure_ascii=False)
+                                if not isinstance(end_tc.arguments, str)
+                                else end_tc.arguments
+                            )
+                        elif isinstance(end_tc, dict):
+                            tc_name = end_tc.get("function", {}).get("name") or tc_name
+                            a = end_tc.get("function", {}).get("arguments")
+                            if a:
+                                tc_args_acc = a if isinstance(a, str) else json.dumps(a, ensure_ascii=False)
+                    fr = getattr(chunk, "finish_reason", None)
+                    if fr:
+                        break
             else:
                 resp = ctx.client.chat(
                     ctx.messages,
                     model=ctx.model,
                     temperature=ctx.temperature,
                     max_tokens=ctx.max_tokens,
+                    tools=ctx.tool_schemas or None,
                 )
-                text = getattr(resp, "content", "") or str(resp)
-                if text:
-                    yield AgentStep(kind=StepKind.TEXT_DELTA, content=text)
+                raw_text = getattr(resp, "content", "") or str(resp)
+                if raw_text:
+                    yield AgentStep(kind=StepKind.TEXT_DELTA, content=raw_text)
+                # Some non-streaming clients return a list of tool_calls.
+                tcs = getattr(resp, "tool_calls", None) or []
+                if tcs:
+                    first = tcs[0]
+                    tc_name = getattr(first, "name", None) or first.get("function", {}).get("name")
+                    a = getattr(first, "arguments", None) or first.get("function", {}).get("arguments")
+                    tc_args_acc = a if isinstance(a, str) else json.dumps(a or {}, ensure_ascii=False)
+
+            # 2) If the LLM requested a tool and we have a tool_executor,
+            # run it once and feed the result back.
+            if tc_name and ctx.tool_executor:
+                tool_use_id = tc_id or f"qtool-{uuid.uuid4().hex[:8]}"
+                try:
+                    args_dict = json.loads(tc_args_acc) if tc_args_acc else {}
+                except Exception:
+                    args_dict = {"raw": tc_args_acc or ""}
+                yield AgentStep(
+                    kind=StepKind.TOOL_START,
+                    tool_name=tc_name,
+                    tool_input=args_dict,
+                    tool_use_id=tool_use_id,
+                )
+                try:
+                    tool_result = ctx.tool_executor(
+                        tc_name, json.dumps(args_dict, ensure_ascii=False), ctx.work_dir
+                    )
+                    result_text = (
+                        getattr(tool_result, "content", None)
+                        or (tool_result if isinstance(tool_result, str) else json.dumps(tool_result, ensure_ascii=False, default=str))
+                    )
+                except Exception as _te:
+                    result_text = f"[tool error: {_te}]"
+                yield AgentStep(
+                    kind=StepKind.TOOL_END,
+                    tool_name=tc_name,
+                    tool_use_id=tool_use_id,
+                    tool_result=result_text[:2000],
+                )
+                # 3) Follow-up call: stream final answer with the tool
+                # result in the conversation so the LLM can use it.
+                follow_up = list(ctx.messages) + [
+                    Message(role="user", content=(
+                        f"Tool `{tc_name}` returned:\n\n{result_text[:2000]}\n\n"
+                        "Respond based on this data. If the tool didn't help, "
+                        "answer with what you know."
+                    )),
+                ]
+                if hasattr(ctx.client, "stream"):
+                    for chunk in ctx.client.stream(
+                        follow_up,
+                        model=ctx.model,
+                        temperature=ctx.temperature,
+                        max_tokens=ctx.max_tokens,
+                    ):
+                        text = getattr(chunk, "text", "") or ""
+                        if text:
+                            yield AgentStep(kind=StepKind.TEXT_DELTA, content=text)
+                else:
+                    resp2 = ctx.client.chat(
+                        follow_up,
+                        model=ctx.model,
+                        temperature=ctx.temperature,
+                        max_tokens=ctx.max_tokens,
+                    )
+                    text = getattr(resp2, "content", "") or str(resp2)
+                    if text:
+                        yield AgentStep(kind=StepKind.TEXT_DELTA, content=text)
 
             yield AgentStep(kind=StepKind.TEXT_END)
             yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")
