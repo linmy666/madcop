@@ -97,11 +97,18 @@ export type DesktopTerminalSettings = {
   customShellPath: string
 }
 
+// P1-5 — single source of truth for model metadata. Backend
+// /api/models now emits all 7 fields; legacy frontend consumers
+// only read id/name/description/context and ignore the rest, so
+// widening this is backward-compatible.
 export type ModelInfo = {
   id: string
   name: string
   description: string
   context: string
+  context_window?: number | null
+  providerId?: string
+  providerName?: string
 }
 
 export type UserSettings = {

@@ -19,11 +19,7 @@ export type UpdateProxySettings = {
  * H5Access state added for Phase 2 translation.
  */
 
-export type ModelInfo = {
-  id: string
-  name: string
-  provider?: string
-}
+export type { ModelInfo } from '../types/settings'
 
 export type H5AccessSettings = {
   enabled: boolean
@@ -198,8 +194,9 @@ export const useSettingsStore = defineStore('settings', {
             models.push({
               id: `${p.provider_id}:${p.model}`,
               name: p.model,
-              provider: p.label || p.provider_id,
-            })
+              providerId: p.provider_id,
+              providerName: p.label || p.provider_id,
+            } as ModelInfo)
           }
         }
         this.availableModels = models
@@ -208,8 +205,9 @@ export const useSettingsStore = defineStore('settings', {
           this.currentModel = {
             id: `${active.provider_id}:${active.model}`,
             name: active.model,
-            provider: active.label || active.provider_id,
-          }
+            providerId: active.provider_id,
+            providerName: active.label || active.provider_id,
+          } as ModelInfo
         }
       } catch {
         /* keep local state */
