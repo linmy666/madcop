@@ -75,6 +75,31 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     work_dir = body.get("work_dir")
     session_id = body.get("conversation_id") or ""
 
+    # v4-5 — context compaction: if the conversation is very long (>20
+    # messages or >30k chars), keep the system prompt + last N messages
+    # and summarize the middle into a compact block. This prevents token
+    # overflow on long sessions. Mirrors legacy app.py:1939-1959.
+    _total_chars = sum(len(m.content or "") for m in messages)
+    if len(messages) > 20 or _total_chars > 30000:
+        _keep_first = 2   # system + first user
+        _keep_last = 12   # recent context
+        if len(messages) > _keep_first + _keep_last:
+            _head = messages[:_keep_first]
+            _tail = messages[-_keep_last:]
+            _middle = messages[_keep_first:-_keep_last]
+            _summary_parts = []
+            for m in _middle:
+                role = m.role or "user"
+                content = (m.content or "")[:200]
+                _summary_parts.append(f"[{role}] {content}")
+            _compact = Message(
+                role="user",
+                content=f"--- 对话摘要 (前 {len(_middle)} 条消息已压缩) ---\n"
+                        + "\n".join(_summary_parts)
+                        + "\n--- 最近对话 ---",
+            )
+            messages = [*_head, _compact, *_tail]
+
     # P3-G — attachment injection (parity with legacy app.py:1799-1858).
     # When the user attaches files, their text content is appended to
     # the last user message as an ATTACHMENT block so the LLM can see
@@ -224,6 +249,26 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 except Exception as _e:
                     logger.debug("v4 session persist (user) failed: %s", _e)
 
+            # v4-3 — trace node: create a root user_input node so
+            # /api/trace/{conversation_id} returns data. Full DAG (per-tool
+            # nodes) is a follow-up; this at least makes the trace view
+            # non-empty.
+            _trace_root_id = None
+            if session_id:
+                try:
+                    from madcop.agent.trace import get_trace_store, TraceStatus
+                    _ts = get_trace_store()
+                    _tn = _ts.create_node(
+                        conversation_id=session_id,
+                        node_type="user_input",
+                        label=_latest_user[:60],
+                        input_data={"messages": len(messages), "mode": agent_mode},
+                    )
+                    _ts.mark_running(_tn.id)
+                    _trace_root_id = _tn.id
+                except Exception:
+                    pass
+
             # Run engine in a thread (it's synchronous) and bridge to async
             q: queue.SimpleQueue = queue.SimpleQueue()
             sentinel = object()
@@ -242,10 +287,20 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 except Exception as e:
                     q.put(AgentStep(kind=StepKind.ERROR, content=str(e)))
                 finally:
-                    # v4-1/2 — persist messages + generate title INSIDE the
-                    # worker thread, before the sentinel. This runs even if
-                    # the SSE client disconnects after receiving `done`,
-                    # because the thread is joined in the finally block below.
+                    # v4-1/2/3 — persist messages + generate title + complete
+                    # trace INSIDE the worker thread, before the sentinel.
+                    # This runs even if the SSE client disconnects after
+                    # receiving `done`, because the thread is joined in the
+                    # finally block below.
+
+                    # v4-3 — mark trace root as done.
+                    if _trace_root_id:
+                        try:
+                            from madcop.agent.trace import get_trace_store
+                            get_trace_store().mark_done(_trace_root_id)
+                        except Exception:
+                            pass
+
                     _at = _assistant_text_holder[0].strip()
                     if session_id and _at:
                         try:

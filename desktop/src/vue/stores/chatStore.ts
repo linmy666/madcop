@@ -1128,6 +1128,13 @@ export const useChatStore = defineStore('chat', {
                     // If ask_user returned a clarify marker but SSE event was missed,
                     // still surface the panel from the tool result payload.
                     const tname = (event.name || prev?.toolName || '').toLowerCase()
+                    // v4-4 — preview_update: when write_file/edit_file completes,
+                    // bump the preview refresh key so any HTML/markdown preview
+                    // re-reads the file. (Legacy /api/chat emitted a separate
+                    // preview_update SSE event; v4 folds it into tool_result.)
+                    if (['write_file', 'edit_file', 'write_xlsx'].includes(tname)) {
+                      session.previewRefreshKey = (session.previewRefreshKey || 0) + 1
+                    }
                     if ((tname === 'ask_user' || tname === 'clarify') && !session.clarificationPending) {
                       try {
                         let raw: any = event.result
