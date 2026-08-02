@@ -75,6 +75,51 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     work_dir = body.get("work_dir")
     session_id = body.get("conversation_id") or ""
 
+    # P3-G — attachment injection (parity with legacy app.py:1799-1858).
+    # When the user attaches files, their text content is appended to
+    # the last user message as an ATTACHMENT block so the LLM can see
+    # the file without calling read_file.
+    attachments = body.get("attachments") or []
+    if attachments and messages and messages[-1].role == "user":
+        extra_parts: list[str] = []
+        for att in attachments:
+            if not isinstance(att, dict):
+                continue
+            att_name = att.get("name", "attachment")
+            att_type = att.get("type", "file")
+            att_path = att.get("path", "")
+            att_data = att.get("dataUrl") or att.get("data") or ""
+            if att_path:
+                try:
+                    from pathlib import Path
+                    p = Path(att_path).expanduser()
+                    if p.is_file() and p.stat().st_size < 500_000:
+                        content = p.read_text(errors="ignore")[:8000]
+                        extra_parts.append(
+                            f"--- ATTACHMENT: {att_name} ({att_type}) ---\n{content}\n--- END ---"
+                        )
+                        continue
+                except Exception:
+                    pass
+            if att_data and isinstance(att_data, str) and len(att_data) < 500_000:
+                # dataUrl format: data:<mime>;base64,<data>
+                if "," in att_data:
+                    import base64
+                    try:
+                        raw_b64 = att_data.split(",", 1)[1]
+                        decoded = base64.b64decode(raw_b64).decode("utf-8", errors="ignore")[:8000]
+                        extra_parts.append(
+                            f"--- ATTACHMENT: {att_name} ({att_type}) ---\n{decoded}\n--- END ---"
+                        )
+                    except Exception:
+                        pass
+        if extra_parts:
+            original = messages[-1].content or ""
+            messages[-1] = Message(
+                role="user",
+                content=original + "\n\n" + "\n\n".join(extra_parts),
+            )
+
     # Build tool registry with memory store
     try:
         from madcop.server.deps import get_memory_store

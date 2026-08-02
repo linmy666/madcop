@@ -1416,12 +1416,11 @@ def register(app: FastAPI) -> None:
         }
 
     # ---- Memory (5-tier) -------------------------------------------- #
-
-    @app.get("/api/memory", include_in_schema=False)
-    async def cc_memory_list() -> dict[str, Any]:
-        return _safe(_list_memory,
-                      default={"episodic": [], "semantic": [], "reflective": [],
-                               "scenario": [], "persona": [], "insight": []})
+    # P3-I — the duplicate GET /api/memory route below was removed because
+    # it was always shadowed by memory_routes.py (registered first via
+    # include_all_routers at app.py:1075). Keeping it was dead code that
+    # confused readers. The _list_memory() function is retained for
+    # _synthesize_memory_md() which still uses it.
 
     # NOTE: /api/memory/{projects,files,file} are defined in the v2.6.0
     # section below with full real implementations. The legacy stubs that

@@ -57,7 +57,7 @@ const turns = ref<Turn[]>([])
 let turnIdCounter = 0
 
 const conversationMessages = ref<{ role: string; content: string }[]>([])
-const selectedAgentMode = ref<'quick' | 'standard' | 'deep'>('standard')
+const selectedAgentMode = ref<'quick' | 'standard' | 'deep' | 'create'>('standard')
 const selectedModel = ref('')
 
 function persistTurns() {
@@ -263,9 +263,10 @@ watch([thoughtBlocks, toolCalls, answer], () => {
     <div class="v4-input">
       <div class="v4-input__toolbar">
         <select v-model="selectedAgentMode" class="v4-input__mode" :disabled="isStreaming">
-          <option value="quick">快速</option>
           <option value="standard">标准</option>
+          <option value="quick">快速</option>
           <option value="deep">深度</option>
+          <option value="create">创作</option>
         </select>
       </div>
       <div class="v4-input__row">

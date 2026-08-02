@@ -475,7 +475,12 @@ export const useChatStore = defineStore('chat', {
       // endpoint respects the single base-URL source of truth (set at
       // startup via initializeDesktopServerUrl / setBaseUrl) instead of
       // a second hard-coded port that can drift out of sync.
-      const apiUrl = getApiUrl('/api/chat')
+      // P3-G — migrate main chat to the v4 engine endpoint. The v4 route
+      // uses the unified AgentEngine (Quick/ReAct/Deep/Create) and emits
+      // `kind`-based SSE events, which the adapter above maps back to the
+      // legacy `type` vocabulary this store was built on. The old
+      // /api/chat handler is retained for backward compat but is deprecated.
+      const apiUrl = getApiUrl('/api/v4/chat')
       // v3.0: include the locally-cached message history so the
       // backend LLM can see context. Without this, after a reload
       // the assistant thinks the user is starting a new chat because
@@ -740,6 +745,46 @@ export const useChatStore = defineStore('chat', {
                   // Skip malformed event line; keep the SSE stream
                   // alive so a single bad line doesn't drop the run.
                   continue
+                }
+                // P3-G — v4→legacy SSE vocabulary adapter. The v4 endpoint
+                // (/api/v4/chat) emits `kind` (StepKind enum), but this
+                // store's parse logic below is built on legacy `type`
+                // values. Map kind→type so both endpoints work without
+                // rewriting 50+ event.type branches.
+                if (event.kind && !event.type) {
+                  const KIND_TO_TYPE: Record<string, string> = {
+                    text_delta: 'text',
+                    text_end: 'text_end',
+                    tool_start: 'tool',
+                    tool_end: 'tool_result',
+                    thought_start: 'reasoning',
+                    thought_delta: 'reasoning',
+                    thought_end: 'thought_end',
+                    clarify: 'clarification_request',
+                    memory_recall: 'memory_recall',
+                    skill_distilled: 'skill_distilled',
+                    error: 'error',
+                    done: 'done',
+                  }
+                  const mapped = KIND_TO_TYPE[event.kind]
+                  if (mapped) {
+                    event.type = mapped
+                    // v4 puts content in `content`; legacy uses `content`
+                    // for text and `message` for error — normalize.
+                    if (event.kind === 'error' && event.content) {
+                      event.message = event.content
+                    }
+                    // v4 memory_recall/skill_distilled use metadata;
+                    // legacy uses top-level fields — normalize.
+                    if (event.kind === 'memory_recall' && event.metadata?.memories) {
+                      event.memories = event.metadata.memories
+                    }
+                    if (event.kind === 'skill_distilled' && event.metadata?.skillName) {
+                      event.skillName = event.metadata.skillName
+                    }
+                    // v4 clarify uses question/options fields directly;
+                    // legacy uses the same field names — no transform needed.
+                  }
                 }
                 // Debug telemetry — mirrors opencode's stream.ts which
                 // logs every event id/type at 'debug' level. Without
