@@ -14,6 +14,7 @@ import logging
 import queue
 import threading
 import time
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter
@@ -23,6 +24,12 @@ from madcop.agent.runtime import RunContext, EngineFactory, AgentStep, StepKind
 from madcop.agent.tool_executor import build_default_registry
 from madcop.server.sse_v4 import SSEEmitter
 from madcop.llm.client import Message
+from madcop.workflow.planner import (
+    StepStatus,
+    generate_plan,
+    execute_step,
+    verify_step,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -202,20 +209,227 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     # Create engine
     engine = EngineFactory.create(ctx)
 
+    # v4-7 — Plan-and-Execute mode: a separate engine-like flow that runs
+    # alongside the normal engine. emit_plan_events returns an async generator
+    # of legacy SSE events (plan/plan_step/plan_done/text/done) paralleling
+    # the standard engine lifecycle.
+    async def emit_plan_events():
+        """Run planner → step executor → verifier loop, yielding legacy
+        plan events. Uses ctx.client for LLM calls and ctx.tool_executor
+        for tool calls when a step is tool-based.
+        """
+        # Extract latest user task.
+        _task = ""
+        for _m in reversed(messages):
+            if _m.role == "user" and (_m.content or "").strip():
+                _task = _m.content
+                break
+        if not _task:
+            yield {"type": "plan_done", "steps": []}
+            return
+
+        # Build a planner LLM callback that uses ctx.client.
+        def _plan_llm_chat(msgs: list[dict]) -> str:
+            try:
+                _llm = ctx.client
+                if _llm is None or not hasattr(_llm, "chat"):
+                    return ""
+                _resp = _llm.chat(
+                    [Message(role=m.get("role", "user"), content=m.get("content", "")) for m in msgs],
+                    model=ctx.model, temperature=0.5,
+                )
+                return getattr(_resp, "content", "") or str(_resp) or ""
+            except Exception as _e:
+                logger.warning("plan llm call failed: %s", _e)
+                return ""
+
+        # Phase 1: generate plan.
+        _plan = generate_plan(_task, llm_complete=_plan_llm_chat, max_steps=6)
+        yield {"type": "plan", "plan": _plan.to_dict()}
+
+        # Phase 2: execute + verify each step.
+        _plan_clarify_queue: list[dict] = []
+        for _step in _plan.steps:
+            _step.status = StepStatus.IN_PROGRESS
+            yield {"type": "plan_step", "step": _step.to_dict()}
+
+            # If the step expects a tool, try to invoke it via the executor.
+            if _step.tool and ctx.tool_executor:
+                try:
+                    _raw = ctx.tool_executor(
+                        _step.tool,
+                        json.dumps({"input_hint": _step.input_hint}, ensure_ascii=False),
+                        ctx.work_dir,
+                    )
+                    _content = getattr(_raw, "content", "") or (
+                        _raw if isinstance(_raw, str) else json.dumps(_raw, ensure_ascii=False, default=str)
+                    )
+                    _step.result = _content[:2000]
+                except Exception as _te:
+                    _step.result = f"[tool error: {_te}]"
+            else:
+                # LLM-only step.
+                _step.result = execute_step(
+                    _step, _plan.goal, llm_complete=_plan_llm_chat,
+                )[:2000]
+
+            # Verify.
+            passed, _reason = verify_step(_step, llm_complete=_plan_llm_chat)
+            _step.status = StepStatus.COMPLETED if passed else StepStatus.FAILED
+            yield {"type": "plan_step", "step": _step.to_dict()}
+
+            # Handle ask_user / clarify surfaced by the executor.
+            if _plan_clarify_queue:
+                for _c in _plan_clarify_queue:
+                    yield {
+                        "type": "clarification_request",
+                        "question": _c.get("question", ""),
+                        "options": _c.get("options", []),
+                        "allowFreeText": True,
+                        "tool_use_id": f"plan-{_step.step}",
+                    }
+                _plan_clarify_queue.clear()
+
+        # Phase 3: synthesize a final text from successful steps.
+        _synth = (
+            f"计划「{_plan.goal}」执行完成。\n\n"
+            + "\n".join(
+                f"**步骤 {_s.step} ({_s.action})**：\n{(_s.result or '').strip()[:800]}"
+                for _s in _plan.steps
+                if _s.status == StepStatus.COMPLETED
+            )
+        )
+        yield {"type": "text", "content": _synth}
+        yield {"type": "plan_done", "steps": [s.to_dict() for s in _plan.steps]}
+        yield {"type": "done", "model": ctx.model or ""}
+
     # SSE stream
     emitter = SSEEmitter()
 
     async def event_stream():
         thread = None
+        _trace_root_id: str | None = None  # initialized lazily in plan/standard
         try:
-            # P3-A — memory_recall: emit before the engine starts so the
-            # UI can show「基于 N 条记忆回答」. Mirrors the legacy /api/chat
-            # handler (app.py:1884-1894). Runs in the main thread (fast, <50ms).
+            # Capture last user message once (used by memory_recall +
+            # plan branches below).
             _latest_user = ""
             for m in reversed(messages):
                 if m.role == "user":
                     _latest_user = m.content or ""
                     break
+
+            # v4-7 — Plan-and-Execute mode: a separate flow that runs the
+            # planner → step executor → verifier loop and emits legacy
+            # plan/plan_step/plan_done SSE events. We don't run the normal
+            # engine for this mode.
+
+            if agent_mode == "plan":
+                # Persist user message + start trace (run inside thread so
+                # it survives SSE disconnect — see v4-1/3).
+                # Run the planner in a thread for symmetry with the engine
+                # path, but emit legacy SSE events directly.
+                _plan_thread_result: list[Any] = []
+                _plan_thread_error: list[Exception] = []
+
+                def _plan_worker():
+                    try:
+                        # Drain the async generator into a list.
+                        async def _drain():
+                            async for _ev in emit_plan_events():
+                                _plan_thread_result.append(_ev)
+                        _loop_plan = asyncio.new_event_loop()
+                        try:
+                            _loop_plan.run_until_complete(_drain())
+                        finally:
+                            _loop_plan.close()
+                    except Exception as _e:
+                        _plan_thread_error.append(_e)
+
+                _plan_thread = threading.Thread(target=_plan_worker, daemon=True)
+                _plan_thread.start()
+
+                # v4-1: persist user message
+                if session_id and _latest_user:
+                    try:
+                        from madcop.server.session_persist import append_user_and_ensure
+                        append_user_and_ensure(
+                            session_id, _latest_user,
+                            title_hint=_latest_user[:40],
+                            work_dir=work_dir,
+                        )
+                    except Exception:
+                        pass
+
+                # Stream events from the worker thread.
+                while True:
+                    if _plan_thread_error:
+                        logger.warning("v4 plan thread error: %s", _plan_thread_error[0])
+                        yield f"data: {json.dumps({'type': 'error', 'message': str(_plan_thread_error[0])}, ensure_ascii=False)}\n\n"
+                        break
+                    if not _plan_thread_result and not _plan_thread.is_alive():
+                        break
+                    if _plan_thread_result:
+                        _ev = _plan_thread_result.pop(0)
+                        yield f"data: {json.dumps(_ev, ensure_ascii=False)}\n\n"
+                    else:
+                        # Yield keepalive while waiting.
+                        yield ": keepalive\n\n"
+                        await asyncio.sleep(0.1)
+
+                _plan_thread.join(timeout=2.0)
+
+                # v4-1: persist assistant text collected during plan.
+                if session_id and _plan_thread_result:
+                    # The last item should be the 'text' event. Persist it.
+                    pass  # TODO: collect text from events
+
+                # v4-2: auto-generate title (threaded path).
+                if session_id and _latest_user:
+                    try:
+                        from madcop.server.session_persist import update_session_title
+                        if _plan_thread_result:
+                            _t = _plan_thread_result[-1] if isinstance(_plan_thread_result[-1], dict) else {}
+                        else:
+                            _t = {}
+                        _first_text = ""
+                        for _e in _plan_thread_result:
+                            if isinstance(_e, dict) and _e.get("type") == "text":
+                                _first_text = _e.get("content", "")
+                                break
+                        if _first_text:
+                            _llm = ctx.client
+                            if _llm and hasattr(_llm, "chat"):
+                                _tp = (
+                                    "Generate a concise 3-6 word title (same language "
+                                    "as the conversation). Return ONLY the title.\n\n"
+                                    f"User: {_latest_user[:300]}\n\n"
+                                    f"Assistant: {_first_text[:300]}\n\nTitle:"
+                                )
+                                _tr = _llm.chat(
+                                    [Message(role="system", content="Title generator."),
+                                     Message(role="user", content=_tp)],
+                                    model=model, temperature=0.3, max_tokens=30,
+                                )
+                                _title = (getattr(_tr, "content", "") or "").strip().strip('"').strip("'")
+                                if _title and len(_title) <= 60:
+                                    update_session_title(session_id, _title)
+                    except Exception:
+                        pass
+
+                # v4-3: complete trace root.
+                if _trace_root_id:
+                    try:
+                        from madcop.agent.trace import get_trace_store
+                        get_trace_store().mark_done(_trace_root_id)
+                    except Exception:
+                        pass
+
+                return
+
+            # P3-A — memory_recall: emit before the engine starts so the
+            # UI can show「基于 N 条记忆回答」. Mirrors the legacy /api/chat
+            # handler (app.py:1884-1894). Runs in the main thread (fast, <50ms).
+            # _latest_user is computed once at the top of event_stream.
             if _latest_user and mem_store:
                 try:
                     from madcop.memory.retriever_5layer import FiveLayerRetriever
@@ -338,7 +552,6 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
 
             while True:
                 try:
-                    import asyncio
                     item = await asyncio.get_running_loop().run_in_executor(
                         None, lambda: q.get(timeout=30.0)
                     )
