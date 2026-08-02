@@ -57,6 +57,13 @@ async def list_memory() -> dict[str, Any]:
                 "description": ins.description,
                 "confidence": ins.confidence,
                 "occurrences": ins.occurrences, "tags": ins.tags,
+                # P2-8 — surface the evidence columns so the memory
+                # page can show "this insight was derived from
+                # atoms X / scenario Y / persona trait Z" instead of
+                # showing a floating claim with no provenance.
+                "evidence_atom_ids": list(getattr(ins, "evidence_atom_ids", []) or []),
+                "evidence_scenario_ids": list(getattr(ins, "evidence_scenario_ids", []) or []),
+                "evidence_persona_keys": list(getattr(ins, "evidence_persona_keys", []) or []),
             })
     except Exception as e:
         logger.debug("memory insight list: %s", e)

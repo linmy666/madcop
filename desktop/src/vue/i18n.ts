@@ -6,7 +6,12 @@ import { ref } from 'vue'
 import { zh as ZH_FULL } from '../i18n/locales/zh'
 import { en as EN_FULL } from '../i18n/locales/en'
 
-export type Locale = 'zh' | 'en' | 'jp' | 'kr' | 'zh-TW'
+// P2-10 — Locale trimmed to the two values that actually have a
+// translation table. 'jp'/'kr'/'zh-TW' fell through to the default
+// (zh-CN) without warning, so declaring them as type values just
+// invited bugs (e.g. settingsStore.locale='jp' looked valid but showed
+// Chinese). Add a real locale here when a translation table lands.
+export type Locale = 'zh' | 'en'
 export type TranslationKey = string
 
 // Load the full translation tables from the real locale files.
