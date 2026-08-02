@@ -1,5 +1,11 @@
 import { getDesktopHost } from '../../lib/desktopHost'
 
+/**
+ * session_id is the node-pty backend handle — a positive integer
+ * returned by spawn() and used to write/resize/kill the PTY. Do not
+ * confuse with `terminalPanelStore.panelBySession[tabId].runtimeId`,
+ * which is the renderer-side runtime identifier (a string).
+ */
 export type TerminalSpawnResult = {
   session_id: number
   shell: string

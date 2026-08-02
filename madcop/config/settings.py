@@ -279,11 +279,18 @@ def settings_to_public_dict(settings: Settings) -> dict[str, Any]:
     Keys are MASKED — never expose plaintext to the frontend. All
     extended fields (sampling params, api_format, etc.) are returned so
     the settings UI can round-trip them on edit.
+
+    P2-9 — alongside the legacy snake_case fields, also emits the
+    same data with camelCase keys (e.g. providerId, baseUrl, apiFormat)
+    so the frontend can migrate gradually without a giant rename
+    diff. Frontend consumers that prefer the camelCase side can adopt
+    the new keys at their own pace; the snake_case keys remain
+    stable.
     """
     providers_out = []
     for p in settings.providers:
         plaintext_key = _decrypt(p.api_key)
-        providers_out.append({
+        snake_entry = {
             "provider_id": p.provider_id,
             "label": p.label,
             "base_url": p.base_url,
@@ -302,6 +309,25 @@ def settings_to_public_dict(settings: Settings) -> dict[str, Any]:
             "top_p": p.top_p,
             "auto_compact_window": p.auto_compact_window,
             "model_params": p.model_params,
+        }
+        # P2-9 — camelCase mirror so the frontend has a single naming
+        # convention to converge on. Both shapes ship together; once
+        # all consumers adopt camelCase we can drop the snake keys.
+        providers_out.append({
+            **snake_entry,
+            "providerId": p.provider_id,
+            "baseUrl": p.base_url,
+            "apiKeyMasked": _mask_key(plaintext_key),
+            "hasKey": bool(plaintext_key),
+            "presetId": p.preset_id,
+            "apiFormat": p.api_format,
+            "authStrategy": p.auth_strategy,
+            "runtimeKind": p.runtime_kind,
+            "toolSearchEnabled": p.tool_search_enabled,
+            "maxTokens": p.max_tokens,
+            "topP": p.top_p,
+            "autoCompactWindow": p.auto_compact_window,
+            "modelParams": p.model_params,
         })
     return {
         "active_provider": settings.active_provider,

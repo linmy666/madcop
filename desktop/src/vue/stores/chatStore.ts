@@ -4,6 +4,7 @@ import { saveToStorage } from './sessionStore'
 import { useSessionStore } from './sessionStore'
 import { useSessionRuntimeStore } from './sessionRuntimeStore'
 import { useSettingsStore } from './settingsStore'
+import { useTabStore } from './tabs'
 import { useUIStore } from './uiStore'
 import { getApiUrl } from '../api/client'
 
@@ -388,6 +389,10 @@ export const useChatStore = defineStore('chat', {
     ) {
       const session = this.getSession(sessionId)
       session.chatState = 'busy'
+      // P2-12 — flip the tab's status so Sidebar's running indicator
+      // reflects this session. (Previously status was hard-coded to
+      // 'idle' on open and never updated.)
+      try { useTabStore().setTabStatus(sessionId, 'running') } catch { /* store not ready */ }
       // The user is sending a new message — clear any pending
       // clarification from a prior ask_user turn. Otherwise the purple
       // ClarificationPanel stays stuck on screen even though the user
@@ -826,6 +831,8 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'done') {
                     session.chatState = 'idle'
+                    // P2-12 — mark the tab idle so Sidebar's running count clears.
+                    try { useTabStore().setTabStatus(_sse_sid, 'idle') } catch { /* ignore */ }
                     // Sprint 4 — capture creation-engine citations from
                     // DONE.metadata (only present in create mode).
                     const _meta = (event as any)?.metadata
@@ -1164,6 +1171,8 @@ export const useChatStore = defineStore('chat', {
                     // and the error toast land in the same tick.
                     _flushTerminal()
                     pushChatError(event.message)
+                    // P2-12 — mark the tab error so Sidebar can flag it.
+                    try { useTabStore().setTabStatus(_sse_sid, 'error') } catch { /* ignore */ }
                   } else if (event.type === 'cancelled') {
                     // User-initiated abort acknowledgement. The backend
                     // does not emit this yet (round-2 audit gap), but we

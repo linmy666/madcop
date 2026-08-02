@@ -133,6 +133,18 @@ export const useTabStore = defineStore('madcop-tabs', () => {
     tabs.value.splice(toIndex, 0, moved)
   }
 
+  /** P2-12 — update the tab's run status so Sidebar's running
+   *  indicator actually reflects what's happening. No-op if the
+   *  tab doesn't exist or isn't a session. */
+  function setTabStatus(id: string, status: 'idle' | 'running' | 'error'): void {
+    const idx = tabs.value.findIndex(t => t.sessionId === id)
+    if (idx < 0) return
+    const tab = tabs.value[idx]
+    if (tab.status === status) return
+    // Mutate in place so Pinia's reactive proxy triggers updates.
+    tab.status = status
+  }
+
   // ─── Sidebar nav-item helpers (open specific tab by type) ───
   function openWorkflowsTab() {
     openTab('__workflows__', '工作流', 'workflows' as TabType)
@@ -169,6 +181,7 @@ export const useTabStore = defineStore('madcop-tabs', () => {
     closeTab,
     openTerminalTab,
     moveTab,
+    setTabStatus,
     openWorkflowsTab,
     openDesignTab,
     openAgentHubTab,

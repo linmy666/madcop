@@ -46,16 +46,19 @@ export const useProviderStore = defineStore('provider', {
         const data = await res.json()
         this.activeId = data.active_provider || null
         this.providers = (data.providers || []).map((p: any) => ({
-          id: p.provider_id,
-          name: p.label || p.provider_id,
+          // P2-9 — prefer the camelCase keys that /api/settings now
+          // emits (added in P2-9 for naming unification). Falls back
+          // to snake_case so older backends keep working.
+          id: p.providerId ?? p.provider_id,
+          name: (p.label ?? p.providerId ?? p.provider_id) || '',
           description: p.notes || '',
-          apiKey: p.api_key_masked || '',
-          baseUrl: p.base_url || '',
+          apiKey: (p.apiKeyMasked ?? p.api_key_masked) || '',
+          baseUrl: (p.baseUrl ?? p.base_url) || '',
           model: p.model || '',
-          enabled: p.has_key !== false,
-          hasKey: p.has_key,
+          enabled: (p.hasKey ?? p.has_key) !== false,
+          hasKey: p.hasKey ?? p.has_key,
           temperature: p.temperature,
-          maxTokens: p.max_tokens,
+          maxTokens: p.maxTokens ?? p.max_tokens,
         }))
         this.providerOrder = this.providers.map((p) => p.id)
         this.hasLoadedProviders = true
