@@ -211,6 +211,19 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 except Exception as _e:
                     logger.debug("v4 memory_recall skipped: %s", _e)
 
+            # v4-1 — persist the user message to the session store so the
+            # conversation survives reloads. Mirrors legacy app.py:2074-2080.
+            if session_id and _latest_user:
+                try:
+                    from madcop.server.session_persist import append_user_and_ensure
+                    append_user_and_ensure(
+                        session_id, _latest_user,
+                        title_hint=_latest_user[:40],
+                        work_dir=work_dir,
+                    )
+                except Exception as _e:
+                    logger.debug("v4 session persist (user) failed: %s", _e)
+
             # Run engine in a thread (it's synchronous) and bridge to async
             q: queue.SimpleQueue = queue.SimpleQueue()
             sentinel = object()
@@ -229,6 +242,40 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 except Exception as e:
                     q.put(AgentStep(kind=StepKind.ERROR, content=str(e)))
                 finally:
+                    # v4-1/2 — persist messages + generate title INSIDE the
+                    # worker thread, before the sentinel. This runs even if
+                    # the SSE client disconnects after receiving `done`,
+                    # because the thread is joined in the finally block below.
+                    _at = _assistant_text_holder[0].strip()
+                    if session_id and _at:
+                        try:
+                            from madcop.server.session_persist import append_assistant
+                            append_assistant(session_id, _at, model=model or "")
+                        except Exception:
+                            pass
+                    # Auto-generate title (persist to session store).
+                    if session_id and _latest_user and _at:
+                        try:
+                            _llm = ctx.client
+                            if _llm and hasattr(_llm, "chat"):
+                                from madcop.llm.client import Message as _Msg
+                                _tp = (
+                                    "Generate a concise 3-6 word title (same language as "
+                                    "the conversation). Return ONLY the title.\n\n"
+                                    f"User: {_latest_user[:300]}\n\n"
+                                    f"Assistant: {_at[:300]}\n\nTitle:"
+                                )
+                                _tr = _llm.chat(
+                                    [_Msg(role="system", content="Title generator."),
+                                     _Msg(role="user", content=_tp)],
+                                    model=model, temperature=0.3, max_tokens=30,
+                                )
+                                _title = (getattr(_tr, "content", "") or "").strip().strip('"').strip("'")
+                                if _title and len(_title) <= 60:
+                                    from madcop.server.session_persist import update_session_title
+                                    update_session_title(session_id, _title)
+                        except Exception:
+                            pass
                     q.put(sentinel)
 
             thread = threading.Thread(target=worker, daemon=True)
@@ -251,6 +298,9 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
 
             # P3-A — skill_distilled: after the run, auto-distill if the
             # exchange looks valuable (mirrors legacy app.py:3037/3332/3526).
+            # Note: message persistence + title generation now run inside the
+            # worker thread (above) so they execute even if the SSE client
+            # disconnects after `done`.
             _assistant_text = _assistant_text_holder[0].strip()
             if _assistant_text and len(_assistant_text) >= 400:
                 try:

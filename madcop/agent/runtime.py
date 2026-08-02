@@ -49,6 +49,8 @@ class StepKind(str, Enum):
     # These carry structured metadata in `metadata` rather than `content`.
     MEMORY_RECALL = "memory_recall"
     SKILL_DISTILLED = "skill_distilled"
+    # v4-2 — auto-generated session title after the first exchange.
+    SESSION_TITLE = "session_title"
 
     # Terminal
     ERROR = "error"

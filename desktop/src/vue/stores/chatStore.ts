@@ -763,6 +763,7 @@ export const useChatStore = defineStore('chat', {
                     clarify: 'clarification_request',
                     memory_recall: 'memory_recall',
                     skill_distilled: 'skill_distilled',
+                    session_title: 'session_title',
                     error: 'error',
                     done: 'done',
                   }
@@ -781,6 +782,9 @@ export const useChatStore = defineStore('chat', {
                     }
                     if (event.kind === 'skill_distilled' && event.metadata?.skillName) {
                       event.skillName = event.metadata.skillName
+                    }
+                    if (event.kind === 'session_title' && event.metadata?.title) {
+                      event.title = event.metadata.title
                     }
                     // v4 clarify uses question/options fields directly;
                     // legacy uses the same field names — no transform needed.

@@ -147,3 +147,12 @@ def append_assistant(
         msg_id=msg_id,
         model=model,
     )
+
+
+def update_session_title(session_id: str, title: str) -> None:
+    """Force-update a session's title (used by auto-title generation)."""
+    with _PERSIST_LOCK:
+        sess = _SESSIONS.get(session_id)
+        if sess is not None:
+            sess["title"] = title[:60]
+            sess["modifiedAt"] = _now_iso()
