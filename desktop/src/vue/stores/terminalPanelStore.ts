@@ -14,10 +14,11 @@ import { defineStore } from 'pinia'
 
 export interface PanelEntry {
   runtimeId: string
+  isOpen: boolean
 }
 
 export interface TerminalPanelState {
-  /** Map of tabId -> attached runtime id. */
+  /** Map of tabId -> attached runtime id + open state. */
   panelBySession: Record<string, PanelEntry>
   /** Current panel height in px (resizable). */
   height: number
@@ -32,15 +33,25 @@ export const useTerminalPanelStore = defineStore('terminalPanel', {
     panelBySession: {},
     height: TERMINAL_PANEL_DEFAULT_HEIGHT,
   }),
+  getters: {
+    /** True if the panel for `tabId` is currently attached and open. */
+    isPanelOpen: (state) => (tabId: string): boolean => {
+      return state.panelBySession[tabId]?.isOpen ?? false
+    },
+  },
   actions: {
     /** Open (or refresh) the terminal panel for `tabId` with the given
      *  renderer-side `runtimeId`. Idempotent — re-opening updates the
      *  attached runtime without resetting the height. */
     openPanel(tabId: string, runtimeId: string): void {
-      this.panelBySession[tabId] = { runtimeId }
+      this.panelBySession[tabId] = { runtimeId, isOpen: true }
     },
     closePanel(tabId: string): void {
-      delete this.panelBySession[tabId]
+      const entry = this.panelBySession[tabId]
+      if (entry) {
+        entry.isOpen = false
+        delete this.panelBySession[tabId]
+      }
     },
     /** Drop the runtime attachment (e.g. on tab switch) but keep the
      *  panel open so height is preserved. */
