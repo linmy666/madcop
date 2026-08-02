@@ -937,6 +937,12 @@ export const useChatStore = defineStore('chat', {
                     // list on the session so MemoryRecallBadge can
                     // render a "based on N memories" pill above the
                     // assistant's first message.
+                    // NOTE: `sess` is defined here (instead of only in the
+                    // reasoning branch below) because v4's memory_recall
+                    // event arrives BEFORE the reasoning events in the SSE
+                    // stream, and the previous lazy-define pattern would
+                    // throw `ReferenceError: sess is not defined`.
+                    const sess: any = session
                     if (event.memories.length > 0) {
                       sess.memoryRecalls = event.memories.map((m: any) => ({
                         id: String(m.id ?? m.slug ?? Math.random()),
@@ -948,7 +954,7 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'reasoning' && event.content) {
                     // v3.10 — Grok-Build-style thought blocks.
-                    // Each segment of reasoning is an independent block.
+                    // Each segment of reasoning is an independent block,
                     // thought_event tells us whether to start a new block,
                     // append to existing, or the thought_end event closes it.
                     const sess: any = session
