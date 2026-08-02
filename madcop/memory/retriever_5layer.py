@@ -69,7 +69,10 @@ class FiveLayerRetriever:
         # monkey-patching in unit tests).
         if hybrid_fn is None:
             hybrid_fn = hybrid_search
-        candidates = hybrid_fn(self.store, query, top_k * 3)
+        # hybrid_search signature is (store, query, limit=10, ...); the
+        # legacy "top_k" name was a bug that broke SQL queries (sent the
+        # token as a column name rather than a bound parameter).
+        candidates = hybrid_fn(self.store, query, limit=top_k * 3)
         now = self._now()
         scored: list[RecallResult] = []
         for c in candidates:

@@ -103,8 +103,10 @@ def _fetch_candidates(
     if words:
         fts_query = " OR ".join(f'"{w}"' for w in words)
         try:
+            # P0-fix — memory_fts virtual table has NO `created_at` column
+            # (only id, kind, title, content, tags); SELECT only those.
             cur = store._conn.execute(
-                "SELECT id, kind, title, content, tags, created_at "
+                "SELECT id, kind, title, content, tags "
                 "FROM memory_fts WHERE memory_fts MATCH ? "
                 "ORDER BY rank LIMIT ?",
                 (fts_query, limit),
