@@ -333,7 +333,7 @@ const activeSession = computed(() => {
   return sessionStore.sessions.find((session) => session.id === id) ?? null
 })
 const currentWorkDir = computed(
-  () => activeSession.value?.workDir || activeSession.value?.projectRoot || activeSession.value?.projectPath || '',
+  () => activeSession.value?.workDir || activeSession.value?.projectPath || '',
 )
 
 const resolveOperationCwd = (server?: McpServerRecord) => server?.projectPath ?? currentWorkDir.value

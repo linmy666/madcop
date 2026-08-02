@@ -185,7 +185,7 @@ function writeCachedSidebarProjectPreferences(preferences: SidebarProjectPrefere
 }
 
 function getSessionProjectKey(session: SessionListItem): string {
-  // The session's projectRoot may be missing (e.g. older sessions
+  // The session's projectPath may be missing (e.g. older sessions
   // saved before the field was added, or sessions created before the
   // workspace was selected). In that case attribute the session to
   // the current workspace dir so it groups under the proper project
@@ -199,7 +199,7 @@ function getSessionProjectKey(session: SessionListItem): string {
   if (session.id === 'default' || session.id?.startsWith('default-')) {
     return '__default__'
   }
-  return session.projectRoot || session.workDir || session.projectPath
+  return session.projectPath || session.workDir
       || (typeof localStorage !== 'undefined'
             ? localStorage.getItem('madcop_workspace_dir') || ''
             : '')
@@ -253,12 +253,12 @@ function groupByProject(sessions: SessionListItem[], sortBy: SidebarProjectSortB
   const groups = [...groupsByKey.entries()].map(([key, items]) => {
     const sortedSessions = [...items].sort((a, b) => compareSessionsByTimestamp(a, b, sortBy))
     const newest = sortedSessions[0]
-    const projectRoot = newest?.projectRoot || newest?.workDir || key
+    const projectPath = newest?.projectPath || newest?.workDir || key
     return {
       key,
-      title: projectTitle(projectRoot),
-      subtitle: projectSubtitle(projectRoot, key),
-      workDir: projectRoot || newest?.workDir || undefined,
+      title: projectTitle(projectPath),
+      subtitle: projectSubtitle(projectPath, key),
+      workDir: projectPath || newest?.workDir || undefined,
       sessions: sortedSessions,
     }
   })
@@ -1194,7 +1194,7 @@ const projectMenuData = computed(() => {
         @click="() => {
           const curTabId = tabStore.activeTabId
           const curSession = curTabId ? sessionStore.sessions.find((s) => s.id === curTabId) : null
-          void createSessionForWorkDir(curSession?.workDir || curSession?.projectRoot || undefined)
+          void createSessionForWorkDir(curSession?.workDir || curSession?.projectPath || undefined)
           closeMobileDrawer()
         }"
         :class="primaryNavClass(activeTabType === 'session' || activeTabType === null)"

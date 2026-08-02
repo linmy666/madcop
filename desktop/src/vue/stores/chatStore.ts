@@ -320,7 +320,7 @@ export const useChatStore = defineStore('chat', {
         try {
           const ss = useSessionStore(this.$pinia)
           const sess = ss.sessions.find((x: any) => x.id === sessionId)
-          wd = sess?.workDir || sess?.projectPath || sess?.projectRoot || ''
+          wd = sess?.workDir || sess?.projectPath || ''
         } catch {}
         const payload = JSON.stringify({ messages: s.messages, title: s.title, workDir: wd })
         fetch(getApiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/messages`), {
@@ -576,7 +576,7 @@ export const useChatStore = defineStore('chat', {
             try {
               const ss = useSessionStore(this.$pinia)
               const s = ss.sessions?.find((x: any) => x.id === sessionId)
-              return s?.workDir || s?.projectRoot || s?.projectPath
+              return s?.workDir || s?.projectPath
                 || localStorage.getItem('madcop_workspace_dir')
                 || null
             } catch {

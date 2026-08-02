@@ -201,9 +201,9 @@ export function compactProjectPath(pathLike: string): string {
   return `.../${segments.slice(-3, -1).join('/')}`
 }
 
-export function projectSubtitle(projectRoot: string | null | undefined, fallbackKey: string): string | null {
-  if (!projectRoot) return fallbackKey === 'unknown' ? null : fallbackKey
-  return compactProjectPath(projectRoot)
+export function projectSubtitle(projectPath: string | null | undefined, fallbackKey: string): string | null {
+  if (!projectPath) return fallbackKey === 'unknown' ? null : fallbackKey
+  return compactProjectPath(projectPath)
 }
 
 export function isSameOrChildPath(childPath: string, parentPath: string): boolean {
@@ -215,8 +215,8 @@ export function isSameOrChildPath(childPath: string, parentPath: string): boolea
 export function isWorktreeSession(session: SessionListItem): boolean {
   if (!session.workDir) return false
   if (/[/\\]\.claude[/\\]worktrees[/\\]/.test(session.workDir)) return true
-  if (!session.projectRoot || session.workDir === session.projectRoot) return false
-  return !isSameOrChildPath(session.workDir, session.projectRoot)
+  if (!session.projectPath || session.workDir === session.projectPath) return false
+  return !isSameOrChildPath(session.workDir, session.projectPath)
 }
 
 export function moveProjectKey(

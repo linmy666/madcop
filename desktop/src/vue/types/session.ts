@@ -6,8 +6,9 @@ export type SessionListItem = {
   createdAt: string
   modifiedAt: string
   messageCount: number
+  /** Project root path (always set, non-null). Use this unless you need
+   *  a sub-folder / git worktree — in that case use `workDir`. */
   projectPath: string
-  projectRoot?: string | null
   workDir: string | null
   workDirExists: boolean
   permissionMode?: string

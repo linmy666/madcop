@@ -587,7 +587,6 @@ const replaceEmptySession = async (workDir: string, _repository?: { branch?: str
     const s = sessionStore.sessions.find((x) => x.id === id)
     if (s && workDir) {
       s.workDir = workDir
-      s.projectRoot = workDir
       s.projectPath = workDir
       s.workDirExists = true
     }

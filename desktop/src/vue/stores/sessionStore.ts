@@ -14,9 +14,10 @@ export type SessionListItem = {
   createdAt: string
   modifiedAt: string
   messageCount: number
+  /** Project root path (always set, non-null). Use this unless you need
+   *  a sub-folder / git worktree — in that case use `workDir`. */
   projectPath: string
   workDir: string | null
-  projectRoot: string | null
   workDirExists: boolean
   permissionMode?: string
 }
@@ -54,9 +55,8 @@ export function loadFromStorage(): SessionListItem[] {
         createdAt: s.createdAt || new Date().toISOString(),
         modifiedAt: s.modifiedAt || new Date().toISOString(),
         messageCount: s.messageCount ?? 0,
-        projectPath: s.projectPath ?? '',
+        projectPath: s.projectPath ?? s.projectRoot ?? '',
         workDir: s.workDir ?? null,
-        projectRoot: s.projectRoot ?? null,
         workDirExists: s.workDirExists ?? true,
         permissionMode: s.permissionMode,
       })) as SessionListItem[]
@@ -65,7 +65,7 @@ export function loadFromStorage(): SessionListItem[] {
   return []
 }
 
-// Backfill sessions that predate the projectRoot/workDir fields.
+// Backfill sessions that predate the workDir field.
 // In-memory only — caller decides whether to persist.
 export function backfillMissingProjectRoot(
   sessions: SessionListItem[],
@@ -73,14 +73,13 @@ export function backfillMissingProjectRoot(
 ): { sessions: SessionListItem[]; changed: boolean } {
   let changed = false
   const result = sessions.map((s) => {
-    if (s.projectRoot || s.workDir || s.projectPath) return s
+    if (s.workDir || s.projectPath) return s
     if (!fallbackWorkDir) return s
     changed = true
     return {
       ...s,
       projectPath: fallbackWorkDir,
       workDir: fallbackWorkDir,
-      projectRoot: fallbackWorkDir,
     }
   })
   return { sessions: result, changed }
@@ -109,9 +108,8 @@ async function backendLoadSessions(workDir: string): Promise<SessionListItem[]> 
       createdAt: s.createdAt || new Date().toISOString(),
       modifiedAt: s.modifiedAt || new Date().toISOString(),
       messageCount: s.messageCount ?? 0,
-      projectPath: s.projectPath ?? '',
+      projectPath: s.projectPath ?? s.projectRoot ?? '',
       workDir: s.workDir ?? null,
-      projectRoot: s.projectRoot ?? null,
       workDirExists: s.workDirExists ?? true,
       permissionMode: s.permissionMode,
     }))
@@ -127,7 +125,7 @@ async function backendUpsertSession(s: SessionListItem) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: s.id,
-        workDir: s.workDir || s.projectPath || s.projectRoot || '',
+        workDir: s.workDir || s.projectPath || '',
         title: s.title,
       }),
     })
@@ -199,7 +197,7 @@ export const useSessionStore = defineStore('session', {
       // Scope local sessions to the current workspace so that sessions
       // created under a different project don't leak into this view.
       const localScoped = wd
-        ? local.filter((s) => (s.workDir || s.projectRoot || s.projectPath) === wd)
+        ? local.filter((s) => (s.workDir || s.projectPath) === wd)
         : local
 
       // Merge by id (local wins for fields like title).
@@ -218,7 +216,7 @@ export const useSessionStore = defineStore('session', {
           {
             id: 'default', title: '新对话',
             createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(),
-            messageCount: 0, projectPath: '', workDir: null, projectRoot: null, workDirExists: true,
+            messageCount: 0, projectPath: '', workDir: null, workDirExists: true,
           },
         ]
         this.activeSessionId = this.activeSessionId || merged[0]?.id || null
@@ -256,7 +254,7 @@ export const useSessionStore = defineStore('session', {
       const session: SessionListItem = {
         id, title: '新对话',
         createdAt: now, modifiedAt: now,
-        messageCount: 0, projectPath: workDir, workDir: workDir || null, projectRoot: workDir || null, workDirExists: true,
+        messageCount: 0, projectPath: workDir, workDir: workDir || null, workDirExists: true,
       }
       this.sessions.unshift(session)
       this.activeSessionId = id
@@ -281,8 +279,7 @@ export const useSessionStore = defineStore('session', {
         createdAt: now,
         modifiedAt: now,
         messageCount: 0,
-        projectPath: sourceSession?.projectPath ?? '',
-        projectRoot: sourceSession?.projectRoot ?? sourceSession?.workDir ?? result.workDir ?? null,
+        projectPath: sourceSession?.projectPath ?? sourceSession?.workDir ?? result.workDir ?? '',
         workDir: result.workDir ?? sourceSession?.workDir ?? null,
         workDirExists: true,
         permissionMode: sourceSession?.permissionMode,
