@@ -1,4 +1,8 @@
-export type SkillSource = 'user' | 'auto-distilled' | 'project' | 'plugin' | 'mcp' | 'bundled'
+// P2-7 — SkillSource restricted to what backend actually produces
+// (see madcop/server/routes/skills_routes.py). 'plugin'/'mcp'/'auto-distilled'
+// were declared but never returned, so 'pluginName' became a dead field
+// on SkillMeta (frontend used it, backend never supplied it).
+export type SkillSource = 'user' | 'project' | 'bundled'
 
 export type SkillMeta = {
   name: string
@@ -9,7 +13,6 @@ export type SkillMeta = {
   version?: string
   contentLength: number
   hasDirectory: boolean
-  pluginName?: string
 }
 
 export type FileTreeNode = {
@@ -21,12 +24,13 @@ export type FileTreeNode = {
 
 export type SkillFrontmatter = Record<string, unknown>
 
+// P2-7 — frontmatter/body removed from SkillFile: backend never produces
+// these fields, so any reader (SkillDetail.vue) saw undefined. 'path',
+// 'content', 'language', 'isEntry' are the real contract.
 export type SkillFile = {
   path: string
   content: string
   language: string
-  frontmatter?: SkillFrontmatter
-  body?: string
   isEntry?: boolean
 }
 

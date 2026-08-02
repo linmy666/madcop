@@ -2,13 +2,17 @@ import { defineStore } from 'pinia'
 import { getApiUrl } from '../api/client'
 
 /**
- * Skill source categories — mirrors the React app's SkillSource union.
+ * Skill source categories — P2-7 trimmed to what the backend actually
+ * returns (user/project/bundled). The previous union included
+ * 'plugin', 'mcp', 'auto-distilled' but skills_routes.py never emits
+ * any of those, so the extra values were unreachable dead branches.
  */
-export type SkillSource = 'user' | 'project' | 'plugin' | 'mcp' | 'bundled'
+export type SkillSource = 'user' | 'project' | 'bundled'
 
 /**
  * Rich skill metadata — matches the React app's SkillMeta shape so pages
  * like SkillList can render all fields without casting.
+ * P2-7: removed pluginName (backend never supplies it).
  */
 export interface SkillDefinition {
   id: string
@@ -18,7 +22,6 @@ export interface SkillDefinition {
   enabled: boolean
   source: SkillSource
   version?: string
-  pluginName?: string
   contentLength: number
   hasDirectory: boolean
   userInvocable: boolean
@@ -35,7 +38,6 @@ function normalizeSkill(raw: any, index: number): SkillDefinition {
     enabled: raw?.enabled !== false,
     source,
     version: raw?.version,
-    pluginName: raw?.pluginName,
     contentLength: Number(raw?.contentLength ?? raw?.content_length ?? 0),
     hasDirectory: Boolean(raw?.hasDirectory),
     userInvocable: raw?.userInvocable !== false,

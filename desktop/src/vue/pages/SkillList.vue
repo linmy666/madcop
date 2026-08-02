@@ -66,7 +66,9 @@ const filteredSkills = computed(() => {
       skill.source,
       t(`settings.skills.source.${skill.source}`),
       skill.version ?? '',
-      skill.pluginName ?? '',
+      // P2-7 — pluginName removed: backend never produces it, so we
+      // surface the skill source as a label here.
+      t(`settings.skills.source.${skill.source}`),
     ]
 
     return fields.some(
