@@ -182,13 +182,15 @@ class ToolExecutor:
                 elapsed_ms=_elapsed_ms(),
             )
 
-        # 2. HITL check — prefer the plugin's own `danger` field if the
-        #    tool registered one, otherwise fall back to the global
-        #    DANGER_LEVELS lookup table. This makes `ToolPlugin.danger`
-        #    actually do something (previously it was stored but never
-        #    read, with execute() always re-querying danger_level()).
-        plugin = self.plugins.get(tool_name)
-        level = (plugin.danger if plugin and getattr(plugin, 'danger', None) else None) or danger_level(tool_name)
+        # 2. HITL check — the global DANGER_LEVELS table is the safety
+        #    policy source of truth. Plugin.danger is the *default*
+        #    override, used only when the tool isn't in the global
+        #    table (e.g. plugins registered at runtime). This way
+        #    ToolPlugin.danger actually has an effect for custom tools,
+        #    while built-in tools still get the curated safety policy.
+        plugin = self._registry.get(tool_name)
+        plugin_default = plugin.danger if plugin and getattr(plugin, 'danger', None) else None
+        level = danger_level(tool_name) or plugin_default or 'safe'
         if level == "destructive":
             return ToolResult(
                 tool_name=tool_name,
