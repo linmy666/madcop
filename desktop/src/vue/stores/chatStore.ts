@@ -143,8 +143,7 @@ export type PerSessionState = {
   title?: string
   /** Pending clarification from the LLM (ambiguous query). */
   clarificationPending?: { question: string; options: string[] } | null
-  /** Skip the rest of the current SSE text stream (after clarify/choices JSON). */
-  skipResponse?: boolean
+  // P2-2 — skipResponse removed: dead field (never read or written anywhere).
   historyStatus?: 'idle' | 'loading' | 'ready' | 'error'
   historyError?: string | null
   streamingText: string
@@ -215,20 +214,13 @@ export type PerSessionState = {
     requestId: string
     request: ComputerUsePermissionRequest
   } | null
-  pendingClarification?: {
-    toolUseId: string
-    question: string
-    options: string[]
-    allowFreeText: boolean
-  } | null
+  // P2-2 — `pendingClarification` removed: unused dead field
+  // (clarificationPending is the one components actually read).
   tokenUsage: TokenUsage
   compactCount?: number
-  streamingResponseChars: number
-  elapsedSeconds: number
-  statusVerb: string
-  thinkingStage?: string | null
-  apiRetry?: ApiRetryState | null
-  streamingFallback?: StreamingFallbackState | null
+  // P2-2 — removed dead fields: streamingResponseChars, elapsedSeconds,
+  // statusVerb, thinkingStage, apiRetry, streamingFallback. These were
+  // always defined and never read by any component.
   slashCommands: Array<{ name: string; description: string; argumentHint?: string }>
   agentTaskNotifications: Record<string, AgentTaskNotification>
   backgroundAgentTasks?: Record<string, BackgroundAgentTask>
@@ -273,15 +265,9 @@ function createDefaultSessionState(): PerSessionState {
     pendingPermission: null,
     pendingComputerUsePermission: null,
     clarificationPending: null,
-    pendingClarification: null,
     tokenUsage: { input_tokens: 0, output_tokens: 0 },
     compactCount: 0,
-    streamingResponseChars: 0,
-    elapsedSeconds: 0,
-    statusVerb: '',
-    thinkingStage: null,
-    apiRetry: null,
-    streamingFallback: null,
+    // P2-2 — defaults for removed dead fields deleted.
     slashCommands: [
       { name: '/new', description: 'Start a new chat session' },
       { name: '/stop', description: 'Stop the current generation' },
