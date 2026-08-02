@@ -250,6 +250,27 @@ class ReActEngineV4(AgentEngine):
                 metadata=tool_meta,
             )
 
+            # P2-4 — ask_user / clarify: yield a CLARIFY AgentStep so the
+            # frontend can render a question + options bubble, then break
+            # out of the loop so the user can actually answer. The
+            # legacy ReAct path emits `clarification_request` SSE (see
+            # app.py:2599); v4 emits CLARIFY AgentStep which useSSEStream
+            # already knows how to render.
+            if action.strip().lower() in ("ask_user", "clarify") and not is_error:
+                try:
+                    _clarify_payload = json.loads(observation)
+                except Exception:
+                    _clarify_payload = {}
+                if isinstance(_clarify_payload, dict) and _clarify_payload.get("__clarify_pending__"):
+                    yield AgentStep(
+                        kind=StepKind.CLARIFY,
+                        tool_name=action,
+                        tool_use_id=tool_use_id,
+                        question=_clarify_payload.get("question", ""),
+                        options=list(_clarify_payload.get("options", []) or []),
+                    )
+                    return  # pause the loop; the user's next send re-enters run()
+
             # Feed observation back to LLM
             messages.append(Message(role="assistant", content=raw))
             messages.append(Message(role="user", content=f"Observation: {observation}"))
