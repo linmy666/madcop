@@ -96,6 +96,18 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         except Exception:
             pass
 
+    # P2-3 — outputStyle from settings (default 'Learning'). Each style
+    # adds a small behavioral nudge so the chosen style actually changes
+    # the model's voice / verbosity.
+    _output_style = body.get("output_style") or "Learning"
+    _style_hints = {
+        "Learning": "\n\n[Output style: Learning] Explain your reasoning step by step. Use clear examples and highlight key takeaways at the end.",
+        "Concise": "\n\n[Output style: Concise] Be brief. Skip preamble, give the answer in 1-3 sentences. No bullet lists unless asked.",
+        "Detailed": "\n\n[Output style: Detailed] Provide comprehensive coverage: background, edge cases, and trade-offs. Use structure when it helps.",
+    }
+    if _output_style in _style_hints:
+        sys_prefix = (sys_prefix + _style_hints[_output_style]).strip() + "\n"
+
     # Build run context
     ctx = RunContext(
         messages=messages,

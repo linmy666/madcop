@@ -3,6 +3,7 @@ import { deriveSessionTitle, isPlaceholderTitle } from '../lib/autoTitle'
 import { saveToStorage } from './sessionStore'
 import { useSessionStore } from './sessionStore'
 import { useSessionRuntimeStore } from './sessionRuntimeStore'
+import { useSettingsStore } from './settingsStore'
 import { useUIStore } from './uiStore'
 import { getApiUrl } from '../api/client'
 
@@ -573,6 +574,12 @@ export const useChatStore = defineStore('chat', {
           plan_mode: !!session.planModeEnabled && !(_attachments && _attachments.length > 0),
           effort: _effort === 'auto' ? null : _effort,
           agent_mode: _agentMode === 'auto' ? null : _agentMode,
+          // P2-3 — outputStyle from settingsStore (Learning / Concise / Detailed).
+          // Backend injects a small behavioral nudge into the system prompt.
+          output_style: (() => {
+            try { return useSettingsStore(this.$pinia)?.outputStyle || 'Learning' }
+            catch { return 'Learning' }
+          })(),
           // Session project folder → file-tool allowlist (write/read).
           work_dir: (() => {
             try {
