@@ -213,7 +213,11 @@ class WebSearchTool(Tool):
 
         # Strategy 5: LLM knowledge fallback — return a clear message
         # so the agent uses its own knowledge instead of looping.
-        return [{"error": "搜索引擎不可用。请用你自己的知识回答，不要再尝试搜索。"}]
+        # P2-5 — include explicit `success: False` so callers can
+        # distinguish "no results" (still a list) from "engine error"
+        # without relying on the presence of an `error` key (which
+        # could also appear in partial-failure backends).
+        return [{"error": "搜索引擎不可用。请用你自己的知识回答，不要再尝试搜索。", "success": False}]
 
     def _search_baidu_playwright(self, query: str, max_results: int) -> list[dict[str, str]]:
         """Search Baidu using Playwright (real browser, bypasses anti-bot).
@@ -594,9 +598,10 @@ class WebFetchTool(Tool):
     def __call__(self, **kwargs: Any) -> dict[str, Any]:
         url = kwargs.get("url", "").strip()
         if not url:
-            return {"error": "missing 'url' parameter"}
+            return {"error": "missing 'url' parameter", "success": False}
 
         if not url.startswith(("http://", "https://")):
+            return {"error": f"URL must start with http:// or https:// (got: {url[:50]})", "success": False}
             return {"error": f"URL must start with http:// or https:// (got: {url[:50]})"}
 
         max_chars = int(kwargs.get("max_chars", 4000))
@@ -626,10 +631,11 @@ class WebFetchTool(Tool):
                 "chars": len(text),
                 "truncated": truncated,
                 "content_type": content_type or "text",
+                "success": True,
             }
         except Exception as e:
             logger.warning("web_fetch '%s' failed: %s", url, e)
-            return {"error": f"{type(e).__name__}: {e}"}
+            return {"error": f"{type(e).__name__}: {e}", "success": False}
 
     @staticmethod
     def _html_to_text(html: str) -> str:

@@ -182,8 +182,13 @@ class ToolExecutor:
                 elapsed_ms=_elapsed_ms(),
             )
 
-        # 2. HITL check
-        level = danger_level(tool_name)
+        # 2. HITL check — prefer the plugin's own `danger` field if the
+        #    tool registered one, otherwise fall back to the global
+        #    DANGER_LEVELS lookup table. This makes `ToolPlugin.danger`
+        #    actually do something (previously it was stored but never
+        #    read, with execute() always re-querying danger_level()).
+        plugin = self.plugins.get(tool_name)
+        level = (plugin.danger if plugin and getattr(plugin, 'danger', None) else None) or danger_level(tool_name)
         if level == "destructive":
             return ToolResult(
                 tool_name=tool_name,
