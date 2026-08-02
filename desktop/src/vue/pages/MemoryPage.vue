@@ -109,44 +109,42 @@ const LAYERS: { key: MemoryLayer; label: string; desc: string; count: () => numb
 async function loadAll() {
   loading.value = true
   try {
-    // Fetch real memory data from the backend. Each endpoint returns
-    // its layer's facts; if the backend is unreachable or returns
-    // nothing, we fall back to empty arrays (not fake data).
-    const [profRes, relRes, prefRes, sklRes] = await Promise.allSettled([
-      fetch(getApiUrl('/api/memory/profile')),
-      fetch(getApiUrl('/api/memory/relevant')),
-      fetch(getApiUrl('/api/memory/preferences')),
+    // P3-B — fetch from the real /api/memory endpoint (SQLite MemoryStore)
+    // which returns {episodic, semantic, reflective, scenario, persona,
+    // insight, total}. The old code called /api/memory/profile,
+    // /api/memory/relevant, /api/memory/preferences — none of which
+    // existed, so the page always showed empty arrays.
+    const [memRes, sklRes] = await Promise.allSettled([
+      fetch(getApiUrl('/api/memory')),
       fetch(getApiUrl('/api/skills')),
     ])
-    if (profRes.status === 'fulfilled' && profRes.value.ok) {
-      const d = await profRes.value.json()
-      profile.value = (d.facts || d.profile || d.data || []).map((f: any) => ({
+    if (memRes.status === 'fulfilled' && memRes.value.ok) {
+      const d = await memRes.value.json()
+      // profile ← persona traits (用户画像)
+      profile.value = (d.persona || []).map((f: any) => ({
         id: f.id || f.key || Math.random().toString(36),
-        content: f.content || f.value || f.fact || '',
+        content: f.value || f.content || f.fact || '',
         source: f.source || 'auto',
         confidence: f.confidence ?? 1.0,
         createdAt: f.createdAt || f.created_at || new Date().toISOString(),
         usedCount: f.usedCount || f.used_count || 0,
       }))
-    }
-    if (relRes.status === 'fulfilled' && relRes.value.ok) {
-      const d = await relRes.value.json()
-      relevant.value = (d.memories || d.relevant || d.data || []).map((m: any) => ({
+      // relevant ← episodic + semantic (相关记忆/事实)
+      const rel = [...(d.episodic || []), ...(d.semantic || [])]
+      relevant.value = rel.map((m: any) => ({
         id: m.id || Math.random().toString(36),
-        content: m.content || m.text || '',
-        layer: m.layer || 'episodic',
+        content: m.content || m.title || '',
+        layer: m.kind || 'episodic',
         relevance: m.relevance ?? m.score ?? 0.5,
         createdAt: m.createdAt || m.created_at || new Date().toISOString(),
-        preview: (m.content || m.text || '').slice(0, 60),
+        preview: (m.content || m.title || '').slice(0, 60),
       }))
-    }
-    if (prefRes.status === 'fulfilled' && prefRes.value.ok) {
-      const d = await prefRes.value.json()
-      preferences.value = (d.preferences || d.data || []).map((p: any) => ({
+      // preferences ← insight (洞察/偏好)
+      preferences.value = (d.insight || []).map((p: any) => ({
         id: p.id || Math.random().toString(36),
-        text: p.text || p.content || '',
+        text: p.description || p.title || p.content || '',
         kind: p.kind || 'likes',
-        strength: p.strength ?? 0.5,
+        strength: p.confidence ?? 0.5,
         createdAt: p.createdAt || p.created_at || new Date().toISOString(),
       }))
     }

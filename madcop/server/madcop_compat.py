@@ -2039,20 +2039,19 @@ def register(app: FastAPI) -> None:
 
     @app.get("/api/settings/providers/presets", include_in_schema=False)
     async def cc_provider_presets() -> dict[str, Any]:
-        """Built-in provider templates for quick setup."""
+        """Built-in provider templates for quick setup.
+
+        P3-C — previously a hardcoded 6-item list that drifted from
+        settings.py:PROVIDER_PRESETS (7 items). Now sourced from the
+        single source of truth so both /api/settings and
+        /api/settings/providers/presets stay in sync.
+        """
+        from madcop.config.settings import PROVIDER_PRESETS
         presets = [
-            {"provider_id": "openai", "label": "OpenAI", "model": "gpt-4o",
-             "base_url": "https://api.openai.com/v1", "api_key": ""},
-            {"provider_id": "deepseek", "label": "DeepSeek", "model": "deepseek-chat",
-             "base_url": "https://api.deepseek.com/v1", "api_key": ""},
-            {"provider_id": "sensenova", "label": "SenseNova", "model": "SenseChat-5",
-             "base_url": "https://api.sensenova.cn/compatible-mode/v1", "api_key": ""},
-            {"provider_id": "anthropic", "label": "Anthropic", "model": "claude-sonnet-4-20250514",
-             "base_url": "https://api.anthropic.com/v1", "api_key": ""},
-            {"provider_id": "moonshot", "label": "Moonshot (Kimi)", "model": "moonshot-v1-8k",
-             "base_url": "https://api.moonshot.cn/v1", "api_key": ""},
-            {"provider_id": "openrouter", "label": "OpenRouter", "model": "auto",
-             "base_url": "https://openrouter.ai/api/v1", "api_key": ""},
+            {"provider_id": p["id"], "label": p["label"],
+             "model": p["default_model"], "base_url": p["base_url"],
+             "api_key": ""}
+            for p in PROVIDER_PRESETS
         ]
         return {"presets": presets}
 
