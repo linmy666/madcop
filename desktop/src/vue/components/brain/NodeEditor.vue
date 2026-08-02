@@ -13,7 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'save', payload: { slug: string; title: string; body: string; type: string; tags: string[] }): void
+  (e: 'save', payload: { slug: string; title: string; body: string; type: string; tags: string[]; staleAfterDays?: number | null }): void
 }>()
 
 const isEdit = computed(() => !!props.existing)
@@ -23,6 +23,9 @@ const slug = ref(props.existing?.slug ?? '')
 const body = ref(props.existing?.body ?? '')
 const type = ref(props.existing?.type ?? 'concept')
 const tagsStr = ref((props.existing?.tags ?? []).join(', '))
+const staleAfterDays = ref<string>(
+  props.existing?.staleAfterDays != null ? String(props.existing.staleAfterDays) : '',
+)
 const error = ref('')
 
 // Reset on open when switching targets.
@@ -34,6 +37,7 @@ watch(
     body.value = n?.body ?? ''
     type.value = n?.type ?? 'concept'
     tagsStr.value = (n?.tags ?? []).join(', ')
+    staleAfterDays.value = n?.staleAfterDays != null ? String(n.staleAfterDays) : ''
     error.value = ''
   },
 )
@@ -78,7 +82,15 @@ function submit() {
     .split(',')
     .map((t) => t.trim())
     .filter(Boolean)
-  emit('save', { slug: finalSlug, title: finalTitle, body: body.value, type: type.value, tags })
+  const staleDays = staleAfterDays.value.trim()
+  emit('save', {
+    slug: finalSlug,
+    title: finalTitle,
+    body: body.value,
+    type: type.value,
+    tags,
+    staleAfterDays: staleDays ? parseInt(staleDays, 10) : null,
+  })
 }
 
 const TYPE_OPTIONS = [
@@ -128,6 +140,11 @@ const TYPE_OPTIONS = [
           <label class="ne-field">
             <span class="ne-label">标签 <span class="ne-hint">逗号分隔</span></span>
             <input v-model="tagsStr" class="ne-input" placeholder="例如：react, 前端, 性能" />
+          </label>
+
+          <label class="ne-field">
+            <span class="ne-label">过期天数 <span class="ne-hint">留空=永不过期；超期节点在画布上灰显</span></span>
+            <input v-model="staleAfterDays" type="number" min="1" class="ne-input" placeholder="例如 30" />
           </label>
 
           <p v-if="error" class="ne-error">{{ error }}</p>

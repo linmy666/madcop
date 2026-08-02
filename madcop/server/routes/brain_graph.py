@@ -45,6 +45,8 @@ def _page_to_node(page: Any) -> dict[str, Any]:
         "preview": (body[:280] + "…") if len(body) > 280 else body,
         "updatedAt": getattr(page, "updated_at", ""),
         "createdAt": getattr(page, "created_at", ""),
+        "staleAfterDays": getattr(page, "stale_after_days", None),
+        "lastAccessedAt": getattr(page, "last_accessed_at", None),
     }
 
 
@@ -85,6 +87,7 @@ class NodeSave(BaseModel):
     body: str = ""
     type: str = _DEFAULT_PAGE_TYPE
     tags: list[str] = Field(default_factory=list)
+    staleAfterDays: int | None = None
 
 
 def _db(workspace: str = "") -> PageDB:
@@ -143,6 +146,7 @@ def save_node(node: NodeSave, workspace: str = "") -> dict[str, Any]:
             tags=node.tags,
             source="canvas",
             saved_by="user",
+            stale_after_days=node.staleAfterDays,
         )
         return {"ok": True, "node": _page_to_node(page)}
     except ValueError as e:

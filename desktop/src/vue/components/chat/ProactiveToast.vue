@@ -55,7 +55,13 @@ function onAdopt() {
         </p>
         <div class="pt-actions">
           <button class="pt-btn pt-btn--ghost" @click="dismiss">忽略</button>
-          <button class="pt-btn pt-btn--primary" @click="onAdopt">
+          <!-- P2-6 — only offer "采纳" when there's a concrete suggestion;
+               otherwise the button would silently no-op. -->
+          <button
+            v-if="proactiveObservation.suggestion"
+            class="pt-btn pt-btn--primary"
+            @click="onAdopt"
+          >
             <span class="material-symbols-outlined">north_east</span>
             采纳
           </button>

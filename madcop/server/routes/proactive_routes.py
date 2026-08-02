@@ -140,6 +140,9 @@ def proactive_check(payload: ProactiveCheck, request: Request) -> dict[str, Any]
                 "reason": f"llm_error: {type(e).__name__}"}
 
     verdict = _parse_verdict(raw)
+    # P2-6 — always return a stable `reason` so the frontend can tell
+    # "the LLM judged this" apart from "no LLM configured" / "LLM errored".
+    verdict["reason"] = "judged"
     return verdict
 
 

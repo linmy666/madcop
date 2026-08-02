@@ -27,6 +27,16 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 const typeLabel = computed(() => (props.node ? TYPE_LABELS[props.node.type] ?? props.node.type : ''))
+
+/** P2-1 — true when the node has a stale_after_days threshold AND its
+ * last update is older than that threshold. */
+const isStale = computed(() => {
+  if (!props.node?.staleAfterDays) return false
+  const updated = props.node.updatedAt ? new Date(props.node.updatedAt).getTime() : 0
+  if (!updated) return false
+  const ageDays = (Date.now() - updated) / 86400000
+  return ageDays > props.node.staleAfterDays
+})
 </script>
 
 <template>
@@ -90,6 +100,8 @@ const typeLabel = computed(() => (props.node ? TYPE_LABELS[props.node.type] ?? p
         <div class="nd-meta">
           <span v-if="node.createdAt">创建于 {{ new Date(node.createdAt).toLocaleString('zh-CN') }}</span>
           <span v-if="node.updatedAt">更新于 {{ new Date(node.updatedAt).toLocaleString('zh-CN') }}</span>
+          <span v-if="isStale" class="nd-stale">⚠ 可能已过期（超过 {{ node.staleAfterDays }} 天未更新）</span>
+          <span v-else-if="node.staleAfterDays">过期阈值：{{ node.staleAfterDays }} 天</span>
         </div>
       </div>
 
@@ -288,6 +300,11 @@ const typeLabel = computed(() => (props.node ? TYPE_LABELS[props.node.type] ?? p
   color: var(--color-text-tertiary);
   padding-top: 8px;
   border-top: 1px solid var(--color-border);
+}
+.nd-stale {
+  color: #b45309;
+  font-weight: 600;
+  margin-top: 2px;
 }
 .nd-foot {
   display: flex;

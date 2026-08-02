@@ -218,6 +218,7 @@ class PageDB:
         source: str = "manual",
         saved_by: str = "system",
         tags: Iterable[str] | None = None,
+        stale_after_days: int | None = None,
     ) -> Page:
         """Insert or update a page. Writes a `versions` row and an
         `ingest_log` entry. Returns the new page state.
@@ -239,10 +240,12 @@ class PageDB:
                 cur = conn.execute(
                     """
                     INSERT INTO pages(
-                      slug, type, title, compiled_truth, timeline, frontmatter
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                      slug, type, title, compiled_truth, timeline, frontmatter,
+                      stale_after_days
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (slug, page_type, title, compiled_truth, timeline, fm_json),
+                    (slug, page_type, title, compiled_truth, timeline, fm_json,
+                     stale_after_days),
                 )
                 page_id = int(cur.lastrowid)
                 op = "insert"
@@ -263,11 +266,12 @@ class PageDB:
                     """
                     UPDATE pages
                        SET type=?, title=?, compiled_truth=?, timeline=?,
-                           frontmatter=?,
+                           frontmatter=?, stale_after_days=?,
                            updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
                      WHERE id=?
                     """,
-                    (page_type, title, compiled_truth, timeline, fm_json, page_id),
+                    (page_type, title, compiled_truth, timeline, fm_json,
+                     stale_after_days, page_id),
                 )
                 op = "update"
 

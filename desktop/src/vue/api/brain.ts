@@ -15,6 +15,8 @@ export interface BrainNode {
   preview: string
   updatedAt: string
   createdAt: string
+  staleAfterDays?: number | null
+  lastAccessedAt?: string | null
   linksIn?: { slug: string; context: string }[]
   linksOut?: { slug: string; context: string }[]
 }
@@ -55,7 +57,7 @@ export const brainApi = {
   node: (slug: string) => api.get<{ node: BrainNode }>(`/api/brain/node/${encodeURIComponent(slug)}`),
 
   /** Create or update a node (canvas double-click → new). */
-  saveNode: (input: { slug: string; title: string; body?: string; type?: string; tags?: string[] }, workspace?: string) => {
+  saveNode: (input: { slug: string; title: string; body?: string; type?: string; tags?: string[]; staleAfterDays?: number | null }, workspace?: string) => {
     const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
     return api.post<{ ok: boolean; node: BrainNode }>(`/api/brain/node${query}`, {
       slug: input.slug,
@@ -63,6 +65,7 @@ export const brainApi = {
       body: input.body ?? '',
       type: input.type ?? 'concept',
       tags: input.tags ?? [],
+      staleAfterDays: input.staleAfterDays ?? null,
     })
   },
 

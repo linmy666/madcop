@@ -255,7 +255,7 @@ function startEdit(node: BrainNode) {
   selectedNode.value = null
 }
 
-async function onSave(payload: { slug: string; title: string; body: string; type: string; tags: string[] }) {
+async function onSave(payload: { slug: string; title: string; body: string; type: string; tags: string[]; staleAfterDays?: number | null }) {
   editorOpen.value = false
   try {
     await brainApi.saveNode(payload, props.workspace)
