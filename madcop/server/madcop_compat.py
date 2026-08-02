@@ -3230,10 +3230,14 @@ def register(app: FastAPI) -> None:
     ) -> dict[str, Any]:
         """Read a memory file's full content.
 
-        Special case: if the file is `MEMORY.md` and its content is empty,
-        auto-generate content from the L1 Semantic memory store (facts like
-        "user name is 林芮翰") so the user can actually see their
-        remembered facts in the UI.
+        Special case: if the file is `MEMORY.md` and its content is empty
+        or very short (<50 chars), auto-generate content from the L1
+        Semantic memory store (facts like "user name is 林芮翰") so the
+        user can actually see their remembered facts in the UI.
+
+        P3-D — threshold relaxed from "empty" to "<50 chars" so that a
+        stub MEMORY.md (e.g. just a title "# Memory") still triggers
+        synthesis. User-written content >50 chars is preserved as-is.
         """
         if not path:
             return {"file": None, "error": "path required"}
@@ -3247,8 +3251,8 @@ def register(app: FastAPI) -> None:
             updated = _dt.datetime.fromtimestamp(
                 stat.st_mtime, tz=_dt.timezone.utc
             ).strftime("%Y-%m-%dT%H:%M:%SZ")
-            # If file is empty/blank AND it's MEMORY.md, synthesise from L1
-            if (not content.strip()
+            # If file is empty/short AND it's MEMORY.md, synthesise from L1
+            if (len(content.strip()) < 50
                 and p.name.upper() == "MEMORY.MD"):
                 content = _synthesize_memory_md()
             return {"file": {

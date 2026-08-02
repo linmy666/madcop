@@ -25,10 +25,21 @@ from ..llm import ToolCall
 
 @dataclass(frozen=True)
 class ToolResult:
-    """The result of executing a tool."""
+    """The result of executing a tool.
+
+    P3-E — `output` is the canonical field name for this legacy ToolResult
+    (used by ToolRegistry.dispatch). The v4 ToolResult (tool_executor.py)
+    uses `content` for the same concept. Callers that handle both can
+    use the `content` read-only property below as a unified accessor.
+    """
     tool_name: str
     output: Any
     error: str | None = None
+
+    @property
+    def content(self) -> Any:
+        """Alias for `output` — aligns with v4 ToolResult naming."""
+        return self.output
 
     def to_message_content(self) -> str:
         """Format for LLM tool-result message."""
