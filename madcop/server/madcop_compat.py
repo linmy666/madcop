@@ -3599,17 +3599,38 @@ def register(app: FastAPI) -> None:
         }
         if not wd or not Path(wd).is_dir():
             return info
-        # Try to read git branch
+        # Try to read git branch. We use multiple fallbacks because
+        # `git rev-parse --abbrev-ref HEAD` fails (returncode 128) on
+        # repos with no commits yet — common in fresh CI runners where
+        # git config is missing. Fall back to reading .git/HEAD
+        # directly, which always works (even on empty repos).
         try:
             import subprocess as _sp
-            r = _sp.run(["git", "-C", wd, "rev-parse", "--abbrev-ref", "HEAD"],
-                        capture_output=True, text=True, timeout=2)
-            if r.returncode == 0:
-                info["branch"] = r.stdout.strip()
-            r = _sp.run(["git", "-C", wd, "rev-parse", "--show-toplevel"],
-                        capture_output=True, text=True, timeout=2)
-            if r.returncode == 0:
-                info["repoName"] = Path(r.stdout.strip()).name
+
+            def _git_or_fallback(args: list[str], fallback_file: str | None = None) -> str:
+                r = _sp.run(["git", "-C", wd] + args,
+                            capture_output=True, text=True, timeout=2)
+                if r.returncode == 0 and r.stdout.strip():
+                    return r.stdout.strip()
+                # Fallback: read .git/HEAD directly.
+                # Format: "ref: refs/heads/<branch>\n" or "<40-char-sha>".
+                if fallback_file:
+                    git_dir = Path(wd) / ".git"
+                    head_file = git_dir / fallback_file
+                    if head_file.is_file():
+                        txt = head_file.read_text(errors="ignore").strip()
+                        if txt.startswith("ref: refs/heads/"):
+                            return txt[len("ref: refs/heads/"):].strip()
+                        if txt and " " not in txt:
+                            return txt  # detached HEAD; return the sha
+                return ""
+
+            info["branch"] = _git_or_fallback(
+                ["rev-parse", "--abbrev-ref", "HEAD"], "HEAD",
+            ) or info["branch"]
+            info["repoName"] = Path(_git_or_fallback(
+                ["rev-parse", "--show-toplevel"],
+            )).name if _git_or_fallback(["rev-parse", "--show-toplevel"]) else info["repoName"]
             r = _sp.run(["git", "-C", wd, "status", "--porcelain"],
                         capture_output=True, text=True, timeout=2)
             if r.returncode == 0:
