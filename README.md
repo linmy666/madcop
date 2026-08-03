@@ -1,14 +1,31 @@
+<a id="readme-top"></a>
+
 # MadCop
 
 **A local-first AI agent desktop workstation.**
 
 MadCop is a cross-platform desktop application that brings the power of modern LLMs into a private, agentic workflow. It runs as a single Electron binary on macOS, Windows, and Linux, talks to any OpenAI-compatible API endpoint, and keeps your conversations, files, and knowledge base entirely on your machine. No cloud lock-in, no per-seat fees, no data leaving the device.
 
+## About
+
+MadCop is an Electron + Vue 3 + FastAPI desktop agent that ships four integrated workflow systems end-to-end:
+
+- **Source-first creation** — a planner → fetcher → outliner → writer pipeline that produces cited long-form articles backed by live web search.
+- **Proactive observer** — watches file changes and terminal scrollback in the background, routes observations through a small LLM judge, and surfaces only what needs your attention.
+- **Knowledge canvas** — an interactive graph (cytoscape + force layout) of the nodes your agent has learned about, with drag-to-pin positions and double-click-to-create.
+- **Auto-skill distillation** — every long exchange (> 400 chars) is automatically captured as a reusable `~/.madcop/skills/<topic>.md` so the agent gets smarter across sessions.
+
+The single Electron binary contains both the Vue 3 renderer and the FastAPI backend (the backend is in-process for production and dev-mode-fast-iteration when the desktop loads it from a sidecar). Backend state lives in `~/.madcop/` (SQLite for memory, `settings.json` for providers, plan-mode-relevant flat files). The v4 agent engine emits a single normalized `AgentStep` stream so the SSE adapter is one switch statement, not five.
+
+> If you want to understand the shape of the system — the engine architecture, the memory model, the ProactiveObserver pipeline, the KnowledgeCanvas state machine — read `ARCHITECTURE.md` next.
+
 This document explains the *why* behind the major design decisions — written for product managers and reviewers who want to understand how the system is put together, not just a list of features.
 
 ---
 
-## Preview
+<a href="#readme-content" id="skip-to-content">Skip to content</a>
+
+## <a id="readme-content"></a>Preview
 
 <table>
   <tr>
