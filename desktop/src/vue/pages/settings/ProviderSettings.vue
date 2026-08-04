@@ -127,6 +127,7 @@ const capsMeta = ref<{ model?: string; base_url?: string }>({})
 // Create modal
 const showCreateModal = ref(false)
 const createForm = ref({
+  provider_id: '',
   label: '',
   base_url: '',
   model: '' as string,
@@ -228,6 +229,7 @@ const presetOptions = computed(() => {
 
 function applyPreset(preset: ProviderPreset) {
   createForm.value.preset_id = preset.id
+  createForm.value.provider_id = preset.provider_id || preset.id || ''
   createForm.value.label = preset.label
   createForm.value.base_url = preset.base_url
   createForm.value.model = preset.default_model
@@ -247,6 +249,7 @@ function applyPresetToEdit(preset: ProviderPreset) {
 // ── Build payload ─────────────────────────────────────────────────────
 function buildPayload(form: typeof createForm.value | typeof editForm.value) {
   const base: any = {
+    provider_id: form.provider_id,
     label: form.label,
     base_url: form.base_url,
     api_format: form.api_format,
@@ -274,7 +277,7 @@ function buildPayload(form: typeof createForm.value | typeof editForm.value) {
 
 // ── Create provider ───────────────────────────────────────────────────
 async function createProvider() {
-  if (!createForm.value.label || !createForm.value.base_url) return
+  if (!createForm.value.label || !createForm.value.provider_id || !createForm.value.base_url) return
   const body = buildPayload(createForm.value)
   try {
     const res = await fetch(getApiUrl('/api/settings'), {
@@ -592,6 +595,11 @@ function fmtContext(n: number | null | undefined) {
             <input v-model="createForm.label" type="text" class="modal-input" placeholder="例如: 我的GLM" />
           </div>
           <div class="modal-field">
+            <label class="modal-label">供应商 ID <span class="req">*</span></label>
+            <input v-model="createForm.provider_id" type="text" class="modal-input" placeholder="例如: minimax" />
+            <div style="font-size: 11px; color: var(--color-text-tertiary); margin-top: 4px; opacity: 0.7;">后端唯一标识，英文/数字/下划线，不要带空格</div>
+          </div>
+          <div class="modal-field">
             <label class="modal-label">API 地址 <span class="req">*</span></label>
             <input v-model="createForm.base_url" type="text" class="modal-input" placeholder="https://api.openai.com/v1" />
           </div>
@@ -679,8 +687,8 @@ function fmtContext(n: number | null | undefined) {
             <button @click="showCreateModal = false" class="modal-btn">取消</button>
             <button
               @click="createProvider"
-              :disabled="!createForm.label || !createForm.base_url"
-              :class="['modal-btn modal-btn--primary', (!createForm.label || !createForm.base_url) ? 'modal-btn--disabled' : '']"
+              :disabled="!createForm.label || !createForm.provider_id || !createForm.base_url"
+              :class="['modal-btn modal-btn--primary', (!createForm.label || !createForm.provider_id || !createForm.base_url) ? 'modal-btn--disabled' : '']"
             >添加</button>
           </div>
         </div>
