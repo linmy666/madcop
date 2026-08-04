@@ -41,9 +41,11 @@ _PROACTIVE_PROMPT = """\
 \"\"\"{content}\"\"\"
 
 判断标准（值得提醒 = True）：
-- 明显的错误：报错、异常堆栈、测试失败、编译失败、linter 报红。
-- 可能的问题：疑似配置错误、密钥泄漏、删除了大量文件、疑似死循环。
-不值得提醒（False）：正常的文件保存、普通日志输出、成功的命令、无关紧要的改动。
+- 明显的错误：报错、异常堆栈、测试失败、编译失败、linter 报红、SyntaxError、ImportError。
+- 代码中的可疑模式：疑似硬编码密钥/token、危险的 shell 命令、注释掉的 TODO/FIXME/BUG、明显的逻辑错误。
+- 配置问题：.env 或 config 文件中的异常值、端口冲突、依赖版本不兼容。
+- 文件内容中的问题：如果内容包含代码，检查是否有明显的语法错误或类型错误。
+不值得提醒（False）：正常的文件保存、普通日志输出、成功的命令、无关紧要的改动、常规代码修改。
 
 只返回一个 JSON 对象，不要任何额外文字：
 {{"worth": true/false, "summary": "一句话概括发生了什么(≤30字)", "suggestion": "若值得提醒，给一句≤40字的建议；否则空字符串"}}
@@ -122,19 +124,26 @@ def proactive_check(payload: ProactiveCheck, request: Request) -> dict[str, Any]
     raw = ""
     try:
         from madcop.llm.client import Message
-        messages = [Message(role="user", content=prompt)]
-        if hasattr(client, "chat"):
-            resp = client.chat(messages, temperature=0.1, max_tokens=160)
-            raw = getattr(resp, "content", "") or str(resp)
-        elif hasattr(client, "stream"):
+        # System prompt helps some models (e.g. sensenova flash-lite) that
+        # consume tokens on internal reasoning without emitting content
+        # when there's no system message. Also needs higher max_tokens
+        # (500) and temperature (0.7) for reliable structured output.
+        messages = [
+            Message(role="system", content="You are a quiet coding assistant. Reply in JSON only."),
+            Message(role="user", content=prompt),
+        ]
+        if hasattr(client, "stream"):
             parts: list[str] = []
-            for chunk in client.stream(messages, temperature=0.1, max_tokens=160):
+            for chunk in client.stream(messages, temperature=0.7, max_tokens=500):
                 t = getattr(chunk, "text", "") or ""
                 if t:
                     parts.append(t)
                 if getattr(chunk, "finish_reason", None):
                     break
             raw = "".join(parts)
+        if not raw and hasattr(client, "chat"):
+            resp = client.chat(messages, temperature=0.7, max_tokens=500)
+            raw = getattr(resp, "content", "") or str(resp)
     except Exception as e:  # noqa: BLE001 — degrade, don't crash the observer
         return {"worth": False, "summary": "", "suggestion": "",
                 "reason": f"llm_error: {type(e).__name__}"}

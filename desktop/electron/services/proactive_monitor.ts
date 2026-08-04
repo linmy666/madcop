@@ -19,7 +19,7 @@ import { ELECTRON_EVENT_CHANNELS } from '../ipc/channels'
 import { fileWatcher, FileChangeEvent } from './file_watcher'
 import type { ElectronTerminalService } from './terminal'
 
-const POLL_INTERVAL_MS = 5 * 60 * 1000 // every 5 minutes
+const POLL_INTERVAL_MS = 30 * 1000 // every 30 seconds (was 5 min; shortened so the observer feels "live")
 const DEBOUNCE_MS = 5_000              // coalesce bursts
 const TERMINAL_MAX_CHARS = 2000
 
@@ -83,10 +83,40 @@ export class ProactiveMonitor {
     this.pending = []
   }
 
-  /** Public hook so main.ts can forward fileWatcher events (or tests). */
+  /** Public hook so main.ts can forward fileWatcher events (or tests).
+   *  P2-NS — now reads the file's tail (last 1000 chars) so the LLM
+   *  judge can see actual content (e.g. a syntax error, a suspicious
+   *  config value) instead of guessing from the filename alone.
+   *  This closes the gap between the resume claim ("flags suspicious
+   *  config") and the old implementation (only saw the filename).
+   */
   onFileChange(evt: FileChangeEvent): void {
     if (!this.opts.enabled() || !this.opts.observeFiles()) return
-    this.queue({ source: 'file', content: `${evt.file} (${evt.ext}) changed in ${evt.workspace}` })
+    // Try to read the last ~1000 chars of the file for context.
+    let fileTail = ''
+    try {
+      const fs = require('node:fs')
+      const path = require('node:path')
+      const fullPath = path.join(evt.workspace, evt.file)
+      const stat = fs.statSync(fullPath)
+      if (stat.isFile() && stat.size < 50_000) {
+        // Small enough to read entirely
+        fileTail = fs.readFileSync(fullPath, 'utf-8').slice(-1000)
+      } else if (stat.isFile()) {
+        // Large file: read last 1000 bytes
+        const fd = fs.openSync(fullPath, 'r')
+        const buf = Buffer.alloc(1000)
+        fs.readSync(fd, buf, 0, 1000, stat.size - 1000)
+        fs.closeSync(fd)
+        fileTail = buf.toString('utf-8')
+      }
+    } catch {
+      // File may have been deleted or is not readable — just use the name.
+    }
+    const content = fileTail
+      ? `${evt.file} (${evt.ext}) changed in ${evt.workspace}\n--- file tail (last 1000 chars) ---\n${fileTail}`
+      : `${evt.file} (${evt.ext}) changed in ${evt.workspace}`
+    this.queue({ source: 'file', content })
   }
 
   /** Read the latest terminal scrollback; queue if it changed. */
