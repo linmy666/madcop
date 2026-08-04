@@ -66,6 +66,22 @@ const DEFAULT_UPDATE_PROXY_SETTINGS: UpdateProxySettings = {
  * (availableModels, activeProviderName, h5Access*) are re-fetched on load.
  */
 const SETTINGS_STORAGE_KEY = 'madcop-agent-settings'
+
+/** P2-NS — default state for the Proactive Observer.
+ *  If the user has already picked a workspace (madcop_workspace_dir),
+ *  enable the observer + file/terminal watching so the
+ *  "open MadCop and it works" experience matches the resume claim.
+ *  Otherwise default to opt-in (everything off) so we don't fire
+ *  out of the blue at first-time users. */
+function _initialProactiveState(): { enabled: boolean; observeFiles: boolean; observeTerminal: boolean } {
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('madcop_workspace_dir')) {
+      return { enabled: true, observeFiles: true, observeTerminal: true }
+    }
+  } catch { /* SSR / restricted storage */ }
+  return { enabled: false, observeFiles: false, observeTerminal: false }
+}
+
 const PERSIST_KEYS = [
   'permissionMode',
   'currentModel',
@@ -126,12 +142,12 @@ export const useSettingsStore = defineStore('settings', {
     h5AccessError: null as string | null,
     // Update proxy settings
     updateProxy: DEFAULT_UPDATE_PROXY_SETTINGS as UpdateProxySettings,
-    // Sprint 5 — Proactive Observer toggles (default off; opt-in).
-    proactive: {
-      enabled: false,
-      observeFiles: false,
-      observeTerminal: false,
-    } as { enabled: boolean; observeFiles: boolean; observeTerminal: boolean },
+    // P2-NS — Proactive Observer: auto-on if user already picked a workspace.
+    // First-time users still see opt-in (default off) so we don't fire
+    // out of the blue. Once they've selected a project folder
+    // (madcop_workspace_dir is set), enable both file + terminal watching
+    // so the "open MadCop and it works" experience matches the resume.
+    proactive: _initialProactiveState() as { enabled: boolean; observeFiles: boolean; observeTerminal: boolean },
     // P0-3 — restore persisted user preferences over the defaults above.
     ...initPersistedState(),
   }),
