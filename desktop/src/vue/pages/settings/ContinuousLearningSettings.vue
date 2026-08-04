@@ -365,6 +365,9 @@ onMounted(refreshStats)
         <p class="mt-1 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
           Agent 会安静地观察你的文件改动和终端输出，发现报错或可疑操作时主动提醒。所有判断在本地完成，仅用一次 LLM 调用决定是否值得打扰你。
         </p>
+        <p class="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
+          <strong>使用方法：</strong>先在左侧选择你的项目文件夹（工作区），然后开启下方的开关。Agent 会自动监控该文件夹下的代码改动。
+        </p>
       </div>
 
       <label class="flex items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3">
@@ -403,7 +406,7 @@ onMounted(refreshStats)
       >
         <div>
           <div class="text-[12px] font-medium text-[var(--color-text-primary)]">观察终端输出</div>
-          <div class="text-[10px] text-[var(--color-text-tertiary)]">每 5 分钟检查最近终端输出，捕获报错/失败</div>
+          <div class="text-[10px] text-[var(--color-text-tertiaryary)]">每 30 秒检查最近终端输出，捕获报错/失败</div>
         </div>
         <input
           type="checkbox"
