@@ -393,6 +393,24 @@ export const useChatStore = defineStore('chat', {
       // reflects this session. (Previously status was hard-coded to
       // 'idle' on open and never updated.)
       try { useTabStore().setTabStatus(sessionId, 'running') } catch { /* store not ready */ }
+      // P2-NS — guard against the "task panel stuck on 正在处理" bug.
+      // If a 'done' event is lost (e.g. upstream error before flush,
+      // SSE socket close, sensenova silent-hang), chatState never
+      // flips back to 'idle' and PlanTasksPanel shows 正在处理 forever.
+      // Auto-flip after 5 min so the UI is never permanently stuck.
+      if (session._busyWatchdog) clearTimeout(session._busyWatchdog)
+      session._busyWatchdog = setTimeout(() => {
+        const s = this.sessions[sessionId]
+        if (!s || s.chatState !== 'busy') return
+        s.chatState = 'idle'
+        try { useTabStore().setTabStatus(sessionId, 'idle') } catch { /* ignore */ }
+        try {
+          useUIStore().addToast({
+            type: 'info',
+            message: '会话超时未收到完成信号，已自动重置',
+          })
+        } catch { /* ignore */ }
+      }, 5 * 60 * 1000)
       // The user is sending a new message — clear any pending
       // clarification from a prior ask_user turn. Otherwise the purple
       // ClarificationPanel stays stuck on screen even though the user
@@ -773,6 +791,24 @@ export const useChatStore = defineStore('chat', {
                   const mapped = KIND_TO_TYPE[event.kind]
                   if (mapped) {
                     event.type = mapped
+                    // P3-G/fix — preserve thought sub-type so the
+                    // reasoning handler below can distinguish
+                    // thought_start / thought_delta / thought_end.
+                    // Without this, all 3 get mapped to 'reasoning'
+                    // with empty thought_event, so thought blocks
+                    // are never created and the user sees nothing
+                    // during the (potentially long) thinking phase.
+                    if (event.kind === 'thought_start') {
+                      event.thought_event = 'thought_start'
+                    } else if (event.kind === 'thought_delta') {
+                      event.thought_event = 'thought_delta'
+                    } else if (event.kind === 'thought_end') {
+                      event.thought_event = 'thought_end'
+                    }
+                    // Preserve thought_id so blocks can be paired.
+                    if (event.thought_id) {
+                      // already set by v4
+                    }
                     // v4 puts content in `content`; legacy uses `content`
                     // for text and `message` for error — normalize.
                     if (event.kind === 'error' && event.content) {
