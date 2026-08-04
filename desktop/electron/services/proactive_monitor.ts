@@ -197,5 +197,35 @@ export class ProactiveMonitor {
         win.webContents.send(ELECTRON_EVENT_CHANNELS.proactiveObservation, obs)
       }
     }
+    // P2-NS — also raise a system-level (OS) notification so the user
+    // sees the event even when MadCop is in the background / minimised.
+    // Without this, the ProactiveToast (in-window) is invisible when the
+    // user is in another app. The desktop notification carries the same
+    // summary + suggestion; clicking it focuses the MadCop window.
+    this.fireSystemNotification(obs)
+  }
+
+  private fireSystemNotification(obs: ProactiveObservation): void {
+    try {
+      const { Notification } = require('electron') as typeof import('electron')
+      if (!Notification.isSupported()) return
+      const title = obs.source === 'file' ? 'MadCop · File change' : 'MadCop · Terminal'
+      const n = new Notification({
+        title,
+        body: obs.suggestion ? `${obs.summary} — ${obs.suggestion}` : obs.summary,
+        silent: false,
+      })
+      n.on('click', () => {
+        const win = BrowserWindow.getAllWindows().find(w => !w.isDestroyed())
+        if (win) {
+          if (win.isMinimized()) win.restore()
+          win.focus()
+        }
+      })
+      n.show()
+    } catch (e) {
+      // best-effort: never let notification failures break the observer
+      console.warn('[proactive] system notification failed:', e)
+    }
   }
 }
