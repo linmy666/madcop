@@ -16,6 +16,7 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { desktopHost } from '../../lib/desktopHost'
 import type { ProactiveObservation } from '../../lib/desktopHost/types'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useUIStore } from '../stores/uiStore'
 
 const currentObservation = ref<ProactiveObservation | null>(null)
 let installed = false
@@ -67,6 +68,24 @@ export function useProactive() {
       }
     }
     await pushConfig()
+    // P2-NS — show a one-time welcome toast the first time we actually
+    // start monitoring. If the user picked a workspace and we auto-
+    // enabled Observer (改进 1), tell them so they know it's running.
+    // If they didn't pick a workspace yet, surface the onboarding CTA
+    // so the empty Sidebar card isn't a surprise.
+    const ui = useUIStore()
+    const ws = getWorkspace()
+    if (ws && settings.proactive.enabled) {
+      ui.addToast({
+        type: 'success',
+        message: `已自动开始监控 ${ws.split('/').pop() || ws}`,
+      })
+    } else if (!ws) {
+      ui.addToast({
+        type: 'info',
+        message: '请在左侧选择项目文件夹，开始使用 MadCop',
+      })
+    }
   })
 
   // Re-push whenever toggles change.

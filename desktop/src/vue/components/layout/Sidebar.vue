@@ -9,6 +9,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useTabStore, SETTINGS_TAB_ID, SCHEDULED_TAB_ID } from '../../stores/tabs'
 import { useChatStore } from '../../stores/chatStore'
+import { useWorkspacePanelStore } from '../../stores/workspacePanelStore'
 import { useOpenTargetStore } from '../../stores/openTargetStore'
 import { translate, type TranslationKey } from '../../i18n'
 import type { SessionListItem } from '../../../types/session'
@@ -81,6 +82,7 @@ const sessionStore = useSessionStore()
 const uiStore = useUIStore()
 const tabStore = useTabStore()
 const chatStore = useChatStore()
+const workspacePanelStore = useWorkspacePanelStore()
 const settingsStore = useSettingsStore()
 const openTargetStore = useOpenTargetStore()
 
@@ -737,7 +739,21 @@ const togglePinnedProject = (projectKey: string) => {
   persistSidebarProjectPreferences(buildSidebarProjectPreferences(projectOrderState.value, current, hiddenProjectKeys.value, projectOrganizationState.value, projectSortByState.value))
 }
 
-const restoreAllHiddenProjects = () => {
+  // P2-NS — onboarding: when the user hasn't picked a workspace yet, show
+  // a subtle inline CTA so the empty Sidebar isn't confusing. Once
+  // madcop_workspace_dir is set, the card hides.
+  const hasWorkspace = (() => {
+    try { return !!localStorage.getItem('madcop_workspace_dir') }
+    catch { return false }
+  })()
+
+  const openWorkspacePanel = () => {
+    if (tabStore.activeTabId) {
+      workspacePanelStore.openPanel(tabStore.activeTabId)
+    }
+  }
+
+  const restoreAllHiddenProjects = () => {
   projectHeaderMenu.value = null
   projectHeaderSubmenu.value = null
   hiddenProjectKeys.value = new Set<string>()
@@ -1645,6 +1661,32 @@ const projectMenuData = computed(() => {
     >
       <div v-if="expanded" class="px-2 pb-2">
         <WorkspacePanel />
+
+        <!-- P2-NS — onboarding card: shown only when no workspace is
+             picked. Once a workspace is set, it auto-hides. Tells the
+             user how to take the first step (Observer depends on this). -->
+        <div
+          v-if="!hasWorkspace && expanded"
+          class="mx-3 mt-3 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] p-3"
+        >
+          <div class="flex items-start gap-2">
+            <span class="material-symbols-outlined text-[18px] text-[var(--color-text-tertiary)] shrink-0">rocket_launch</span>
+            <div class="min-w-0 flex-1">
+              <div class="text-[12px] font-medium text-[var(--color-text-primary)]">开始使用 MadCop</div>
+              <p class="mt-1 text-[10.5px] leading-snug text-[var(--color-text-tertiary)]">
+                选择你的项目文件夹，AI 就会自动开始监控文件改动、终端报错，异常时主动提醒。
+              </p>
+              <button
+                type="button"
+                class="mt-2 inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11px] font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-hover)]"
+                @click="openWorkspacePanel()"
+              >
+                <span class="material-symbols-outlined text-[14px]">folder_open</span>
+                选择项目文件夹
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <div :class="`p-3`">
         <NavItem

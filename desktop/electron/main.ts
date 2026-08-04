@@ -538,6 +538,53 @@ app.whenReady().then(async () => {
     onAction: emitNotificationAction,
   })
 
+  // P2-NS — daily digest (18:00). On every launch, check whether
+  // today's worth=true events need to be summarized (e.g. if the app
+  // started/restarted at/after 18:00, the events from earlier haven't
+  // been sent yet). Send a single system notification per day, then
+  // clear today's log so we don't send it again.
+  const fireDailyDigest = (monitor: { getTodayDigest: () => unknown[]; clearTodayDigest: () => void } | null) => {
+    if (!monitor) return
+    const events = monitor.getTodayDigest() as Array<{ source: string; summary: string; suggestion: string }>
+    if (events.length === 0) return
+    const summary = `MadCop 今日观察: ${events.length} 个值得注意的事件\n` +
+      events.slice(0, 5).map((e, i) => `${i + 1}. [${e.source}] ${e.summary}`).join('\n')
+    try {
+      if (Notification.isSupported()) {
+        const n = new Notification({
+          title: `MadCop · 今日观察摘要 (${events.length} 个事件)`,
+          body: summary.slice(0, 500),
+        })
+        n.on('click', () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore()
+            mainWindow.focus()
+          }
+        })
+        n.show()
+      }
+    } catch (e) {
+      console.warn('[daily-digest] notification failed:', e)
+    }
+    monitor.clearTodayDigest()
+  }
+  // Run once on launch (covers the case where app was closed at 18:00
+  // and reopened later the same day, with accumulated events).
+  if (proactiveMonitor) fireDailyDigest(proactiveMonitor)
+  // Schedule a recurring check: every 10 minutes. If we cross 18:00
+  // (server local time) and haven't sent today's digest, send it.
+  // Cheap — just a Date.now() comparison.
+  let lastDigestDay = ''
+  setInterval(() => {
+    if (!proactiveMonitor) return
+    const now = new Date()
+    const today = now.toISOString().slice(0, 10)
+    if (today === lastDigestDay) return  // already sent today
+    if (now.getHours() < 18) return
+    lastDigestDay = today
+    fireDailyDigest(proactiveMonitor)
+  }, 10 * 60 * 1000)
+
   app.on('activate', () => {
     if (mainWindow) {
       showMainWindow(mainWindow, app)

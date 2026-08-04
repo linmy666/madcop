@@ -150,17 +150,84 @@ export class ProactiveMonitor {
       try {
         const verdict = await this.checkWithBackend(item.source, item.content)
         if (verdict.worth) {
-          this.broadcast({
+          const obs = {
             source: item.source,
             summary: verdict.summary,
             suggestion: verdict.suggestion,
             workspace: this.opts.workspace(),
             timestamp: Date.now(),
-          })
+          } as ProactiveObservation
+          this.broadcast(obs)
+          this.recordDailyEvent(obs)  // P2-NS — for the 18:00 daily digest
         }
       } catch (err) {
         console.warn('[proactive] check failed:', err)
       }
+    }
+  }
+
+  /** P2-NS — record a worth=true event for today's 18:00 daily digest.
+   *  Persists to ~/.madcop/proactive_daily.json so a fresh start
+   *  (or restart) can still fire the digest on the next launch. */
+  private recordDailyEvent(obs: ProactiveObservation): void {
+    try {
+      const os = require('node:os') as typeof import('node:os')
+      const path = require('node:path') as typeof import('node:path')
+      const fs = require('node:fs') as typeof import('node:fs')
+      const day = new Date().toISOString().slice(0, 10)  // YYYY-MM-DD
+      const file = path.join(os.homedir(), '.madcop', 'proactive_daily.json')
+      let state: Record<string, ProactiveObservation[]> = {}
+      try {
+        if (fs.existsSync(file)) {
+          state = JSON.parse(fs.readFileSync(file, 'utf-8'))
+        }
+      } catch { /* corrupt file, ignore */ }
+      if (!state[day]) state[day] = []
+      state[day].push(obs)
+      // Cap history at 30 days to avoid unbounded growth
+      const days = Object.keys(state).sort()
+      while (days.length > 30) {
+        delete state[days.shift()!]
+      }
+      // Cap per-day at 50 events
+      if (state[day].length > 50) state[day] = state[day].slice(-50)
+      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 })
+      fs.writeFileSync(file, JSON.stringify(state, null, 0), { mode: 0o600 })
+    } catch (e) {
+      console.warn('[proactive] recordDailyEvent failed:', e)
+    }
+  }
+
+  /** P2-NS — read today's digest events (called by main.ts at 18:00). */
+  public getTodayDigest(): ProactiveObservation[] {
+    try {
+      const os = require('node:os') as typeof import('node:os')
+      const path = require('node:path') as typeof import('node:path')
+      const fs = require('node:fs') as typeof import('node:fs')
+      const day = new Date().toISOString().slice(0, 10)
+      const file = path.join(os.homedir(), '.madcop', 'proactive_daily.json')
+      if (!fs.existsSync(file)) return []
+      const state = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      return (state[day] || []) as ProactiveObservation[]
+    } catch {
+      return []
+    }
+  }
+
+  /** P2-NS — clear today's events (called after digest is sent). */
+  public clearTodayDigest(): void {
+    try {
+      const os = require('node:os') as typeof import('node:os')
+      const path = require('node:path') as typeof import('node:path')
+      const fs = require('node:fs') as typeof import('node:fs')
+      const day = new Date().toISOString().slice(0, 10)
+      const file = path.join(os.homedir(), '.madcop', 'proactive_daily.json')
+      if (!fs.existsSync(file)) return
+      const state = JSON.parse(fs.readFileSync(file, 'utf-8'))
+      delete state[day]
+      fs.writeFileSync(file, JSON.stringify(state, null, 0), { mode: 0o600 })
+    } catch (e) {
+      console.warn('[proactive] clearTodayDigest failed:', e)
     }
   }
 
