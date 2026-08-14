@@ -147,7 +147,7 @@ class SessionLog:
         - ANSWER-domain events (text deltas + done) fold into one
           assistant message per turn.
         - REASONING events are EXCLUDED — execution trajectories are
-          discarded; only the verified answer survives (dsh principle).
+          discarded; only the verified answer survives (the principle).
         - TOOL tool_call/tool_result pairs render as an assistant
           narration ("Used <tool>") followed by a user-role observation,
           keeping the message sequence valid for OpenAI-compatible APIs
@@ -219,7 +219,7 @@ class SessionLog:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Capability Protocols — swappable backends (like DeepSeek's seams)
+# Capability Protocols — swappable backends (plugin seams)
 # ═══════════════════════════════════════════════════════════════════════
 
 @runtime_checkable
@@ -320,7 +320,7 @@ def assert_transition(step: "Step", to: TurnState) -> bool:
 
 @dataclass
 class Step:
-    """One step in the MEA loop. Maps to DeepSeek's Step concept."""
+    """One step in the MEA loop."""
     index: int
     state: TurnState = TurnState.IDLE
     contract_description: str = ""

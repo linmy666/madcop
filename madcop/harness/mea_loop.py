@@ -67,7 +67,7 @@ class MadCopHarness:
         self.steps: list[Step] = []
         self._last_contract_desc = ""
         self._last_executor_output = ""
-        # Capability seams (dsh pattern): swappable backends. Defaults to
+        # Capability seams (production pattern): swappable backends. Defaults to
         # the local filesystem; a sandboxed/remote implementation can be
         # injected without touching the loop.
         from .core import LocalFileSystem, FileSystemCapability
@@ -232,7 +232,7 @@ class MadCopHarness:
     def _collect_file_evidence(self) -> str:
         """Phase 4b — real environment verification via the fs capability.
 
-        dsh's Auditor pattern: don't trust the executor's self-report —
+        Independent-verification principle: don't trust the executor's self-report —
         inspect the actual environment with read-only tools. For every
         write_file/edit_file the executor performed this step, read the
         file back through self.fs and attach the first N chars as
