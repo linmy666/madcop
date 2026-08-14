@@ -19,7 +19,7 @@ import concurrent.futures
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -877,6 +877,90 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/api/v4/sessions/{session_id}/events")
+async def session_events(session_id: str) -> dict[str, Any]:
+    """Replay the session's event log (dsh-style trajectory).
+
+    Returns the full JSONL event stream for the UI: thoughts, tool
+    calls, and answers in temporal order. This is what history loading
+    should consume — it survives reloads (unlike text-only session
+    persistence, which dropped tools/thoughts).
+    """
+    from madcop.harness.core import SessionLog
+    log = SessionLog.for_session(session_id)
+    events = [
+        {
+            "id": e.id,
+            "domain": e.domain.value,
+            "kind": e.kind,
+            "content": e.content,
+            "metadata": e.metadata,
+            "timestamp": e.timestamp,
+        }
+        for e in log.events()
+    ]
+    return {"session_id": session_id, "events": events}
+
+
+class ForkBody(BaseModel):
+    """Fork a session: copy the log up to a boundary into a new session."""
+    until_event_id: str | None = None  # None = up to the last turn_end
+    new_session_id: str | None = None  # caller may pin the target id
+
+
+@router.post("/api/v4/sessions/{session_id}/fork")
+async def session_fork(session_id: str, body: ForkBody | None = None) -> dict[str, Any]:
+    """Fork the conversation at an event boundary.
+
+    Copies the log prefix (up to `until_event_id`, or the last complete
+    turn when omitted) into a NEW session's log. The new session's
+    context derives entirely from that prefix — the dsh fork primitive.
+    """
+    import shutil
+    from madcop.harness.core import SessionLog, EventDomain, HarnessEvent
+
+    body = body or ForkBody()
+    src = SessionLog.for_session(session_id)
+    src_events = src.events()
+    if not src_events:
+        raise HTTPException(404, f"no event log for session '{session_id}'")
+
+    # Determine the cut point.
+    if body.until_event_id:
+        cut_idx = next(
+            (i for i, e in enumerate(src_events) if e.id == body.until_event_id),
+            None,
+        )
+        if cut_idx is None:
+            raise HTTPException(404, f"event id '{body.until_event_id}' not found")
+        prefix = src_events[: cut_idx + 1]
+    else:
+        # Default: up to and including the LAST turn_end (complete turns only).
+        last_end = max(
+            (i for i, e in enumerate(src_events)
+             if e.domain == EventDomain.SYSTEM and e.kind == "turn_end"),
+            default=None,
+        )
+        prefix = src_events[: last_end + 1] if last_end is not None else []
+
+    if not prefix:
+        raise HTTPException(400, "fork boundary produced an empty prefix")
+
+    new_session_id = body.new_session_id or f"{session_id}-fork-{uuid.uuid4().hex[:6]}"
+    dst = SessionLog.for_session(new_session_id)
+    for e in prefix:
+        dst.append(HarnessEvent(
+            domain=e.domain, kind=e.kind, content=e.content,
+            metadata=e.metadata, timestamp=e.timestamp,
+        ))
+    return {
+        "ok": True,
+        "source_session": session_id,
+        "new_session_id": new_session_id,
+        "events_copied": len(prefix),
+    }
 
 
 __all__ = ["router", "chat_v4"]

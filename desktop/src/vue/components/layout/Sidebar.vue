@@ -826,6 +826,39 @@ const handleDelete = (id: string) => {
   pendingDeleteSessionId.value = id
 }
 
+// Phase 3b — dsh-style fork: copy the session's event-log prefix into a
+// new session. The new conversation's context derives entirely from the
+// copied events (server-side single source of truth), so the fork starts
+// with full memory of everything up to the last complete turn.
+const handleForkSession = async (id: string) => {
+  contextMenu.value = null
+  try {
+    // Create the frontend session FIRST, then fork the log INTO its id
+    // so backend context derivation (keyed by conversation_id) finds it.
+    const src = sessionStore.sessions.find((s) => s.id === id)
+    const created = await sessionStore.createSession(
+      src?.workDir || src?.projectPath || undefined,
+    )
+    if (!created) return
+
+    const { getApiUrl } = await import('../../api/client')
+    const res = await fetch(getApiUrl(`/api/v4/sessions/${id}/fork`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_session_id: created }),
+    })
+    if (!res.ok) {
+      uiStore.showToast('分叉失败 — 该会话可能没有事件日志（旧会话）', 'error')
+      return
+    }
+    const data = await res.json()
+    uiStore.showToast(`已分叉会话（继承 ${data.events_copied} 条事件）`, 'success')
+    tabStore.openTab(created, '分叉对话', 'session')
+  } catch (e: any) {
+    uiStore.showToast(`分叉失败: ${e?.message || '网络错误'}`, 'error')
+  }
+}
+
 const confirmDelete = async () => {
   if (!pendingDeleteSessionId.value) return
   await sessionStore.deleteSession(pendingDeleteSessionId.value)
@@ -1779,6 +1812,12 @@ const projectMenuData = computed(() => {
         class="w-full px-3 py-1.5 text-left text-xs text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-hover)]"
       >
         {{ t('common.rename') }}
+      </button>
+      <button
+        @click="() => handleForkSession(contextMenu.id)"
+        class="w-full px-3 py-1.5 text-left text-xs text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-hover)]"
+      >
+        {{ t('common.fork', '从当前位置分叉') }}
       </button>
       <button
         @click="() => handleDelete(contextMenu.id)"
