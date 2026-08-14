@@ -26,6 +26,7 @@ patterns, not copied from any single source):
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -285,6 +286,38 @@ class TurnState(str, Enum):
     ERROR = "error"
 
 
+# Legal state-machine transitions. Anything not listed is a bug —
+# assert_transition() logs loudly instead of failing the turn.
+_TRANSITIONS: dict[TurnState, frozenset[TurnState]] = {
+    TurnState.IDLE: frozenset({TurnState.PLANNING, TurnState.ERROR}),
+    TurnState.PLANNING: frozenset({TurnState.EXECUTING, TurnState.WAITING_HUMAN,
+                                   TurnState.BLOCKED, TurnState.DONE, TurnState.ERROR}),
+    TurnState.EXECUTING: frozenset({TurnState.AUDITING, TurnState.WAITING_HUMAN,
+                                    TurnState.BLOCKED, TurnState.ERROR}),
+    TurnState.WAITING_HUMAN: frozenset({TurnState.EXECUTING, TurnState.AUDITING,
+                                        TurnState.BLOCKED, TurnState.DONE, TurnState.ERROR}),
+    TurnState.AUDITING: frozenset({TurnState.PLANNING, TurnState.DONE,
+                                   TurnState.BLOCKED, TurnState.ERROR}),
+    TurnState.DONE: frozenset({TurnState.PLANNING}),   # next step
+    TurnState.BLOCKED: frozenset(),
+    TurnState.ERROR: frozenset(),
+}
+
+
+def assert_transition(step: "Step", to: TurnState) -> bool:
+    """Validate a state change on a Step. Returns False (and logs) on an
+    illegal transition rather than raising — a bookkeeping bug must not
+    kill an in-flight agent turn."""
+    from_current = _TRANSITIONS.get(step.state, frozenset())
+    if to not in from_current:
+        logging.getLogger(__name__).warning(
+            "illegal turn-state transition %s → %s on step %d",
+            step.state.value, to.value, step.index,
+        )
+        return False
+    return True
+
+
 @dataclass
 class Step:
     """One step in the MEA loop. Maps to DeepSeek's Step concept."""
@@ -300,6 +333,18 @@ class Step:
     def duration_ms(self) -> int:
         end = self.completed_at or time.time()
         return int((end - self.started_at) * 1000)
+
+    def transition(self, to: TurnState) -> bool:
+        """Validated state change (see assert_transition).
+
+        Returns True when legal; on an illegal transition the state is
+        NOT mutated (an in-flight loop would corrupt itself otherwise) and
+        a warning is logged so bookkeeping bugs surface in ops.
+        """
+        legal = assert_transition(self, to)
+        if legal:
+            self.state = to
+        return legal
 
     def to_dict(self) -> dict:
         return {

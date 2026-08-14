@@ -57,7 +57,8 @@ class MadCopHarness:
     - TEXT_DELTA/END → the final answer the user sees
     """
 
-    def __init__(self, ctx: RunContext, max_steps: int = 5):
+    def __init__(self, ctx: RunContext, max_steps: int = 5,
+                 capabilities: dict | None = None):
         self.ctx = ctx
         self.max_steps = max_steps
         self.log = SessionLog(persist_dir=_HARNESS_ROOT)
@@ -66,6 +67,13 @@ class MadCopHarness:
         self.steps: list[Step] = []
         self._last_contract_desc = ""
         self._last_executor_output = ""
+        # Capability seams (dsh pattern): swappable backends. Defaults to
+        # the local filesystem; a sandboxed/remote implementation can be
+        # injected without touching the loop.
+        from .core import LocalFileSystem, FileSystemCapability
+        self.fs: FileSystemCapability = (
+            (capabilities or {}).get("fs") or LocalFileSystem()
+        )
 
     def _llm_chat(self, system: str, user: str, temp: float = 0.3,
                   max_tokens: int = 600) -> str:
@@ -203,8 +211,13 @@ class MadCopHarness:
             if ev.kind == StepKind.TEXT_DELTA and ev.content:
                 result_text += ev.content
             elif ev.kind == StepKind.TOOL_START:
-                self.log.append(tool_event("tool_call", ev.tool_name or "",
-                                           step=step.index))
+                _inp = ev.tool_input if isinstance(ev.tool_input, dict) else {}
+                self.log.append(tool_event(
+                    "tool_call", ev.tool_name or "",
+                    step=step.index,
+                    tool_name=ev.tool_name or "",
+                    path=str(_inp.get("path") or _inp.get("file") or ""),
+                ))
             elif ev.kind == StepKind.TOOL_END:
                 self.log.append(tool_event("tool_result", str(ev.tool_result or "")[:200],
                                            step=step.index))
@@ -216,17 +229,50 @@ class MadCopHarness:
 
     # ─── Auditor: verify ──────────────────────────────────────────
 
+    def _collect_file_evidence(self) -> str:
+        """Phase 4b — real environment verification via the fs capability.
+
+        dsh's Auditor pattern: don't trust the executor's self-report —
+        inspect the actual environment with read-only tools. For every
+        write_file/edit_file the executor performed this step, read the
+        file back through self.fs and attach the first N chars as
+        evidence for the auditor LLM.
+        """
+        evidence: list[str] = []
+        for ev in self.log.events():
+            if (ev.domain.value if hasattr(ev.domain, "value") else ev.domain) != "tool":
+                continue
+            if ev.kind != "tool_call":
+                continue
+            name = ev.metadata.get("tool_name") or ""
+            if name not in ("write_file", "edit_file", "write_xlsx"):
+                continue
+            path = (ev.metadata.get("path") or "").strip()
+            if not path:
+                continue
+            try:
+                content = self.fs.read_file(path)
+                if content and not content.startswith("[read error"):
+                    evidence.append(f"--- {path} (actual on-disk content, first 400 chars) ---\n{content[:400]}")
+            except Exception:
+                pass
+        return "\n\n".join(evidence[:3])  # cap at 3 files
+
     def _auditor(self, step: Step) -> str:
         """Auditor: independently verify. Returns status string."""
         system = (
             "You are the Auditor. Verify if the Executor completed the subtask. "
-            "Be reasonable — correct output = complete. Output JSON: "
+            "Be reasonable — correct output = complete. When file evidence "
+            "is provided, judge against the ACTUAL file content (read back "
+            "from disk), not the executor's claims. Output JSON: "
             '{"status": "complete|incomplete|blocked", "feedback": "brief note"}.'
         )
+        file_evidence = self._collect_file_evidence()
         user_msg = (
             f"Subtask: {self._last_contract_desc}\n\n"
             f"Executor output:\n{self._last_executor_output[:1500]}\n\n"
-            f"Verified state:\n{self.verified_state or '(none)'}\n\n"
+            + (f"File evidence (independent read-back):\n{file_evidence}\n\n" if file_evidence else "")
+            + f"Verified state:\n{self.verified_state or '(none)'}\n\n"
             "Did the executor complete this subtask?"
         )
         result = self._llm_chat(system, user_msg, temp=0.1, max_tokens=300)
@@ -251,23 +297,32 @@ class MadCopHarness:
                         content=f"🎯 任务: {self.goal[:100]}\n模式: MEA Harness ({self.max_steps} steps max)\n")
 
         for i in range(1, self.max_steps + 1):
-            step = Step(index=i, state=TurnState.PLANNING)
+            step = Step(index=i)
+            step.transition(TurnState.PLANNING)  # IDLE → PLANNING (validated)
             self.steps.append(step)
 
             # ── Manager ──
-            step.state = TurnState.PLANNING
             yield from self._manager(step)
 
             if "TASK_COMPLETE" in self._last_contract_desc.upper():
                 logger.info("[harness] manager declares complete at step %d", i)
+                step.transition(TurnState.DONE)
                 break
 
             # ── Executor ──
-            step.state = TurnState.EXECUTING
+            # If a confirm_handler is configured, the executor's ReAct
+            # engine may pause on HITL — reflect that in the step state
+            # around the call (WAITING_HUMAN is set while blocked inside).
+            step.transition(TurnState.EXECUTING)
+            if self.ctx.confirm_handler is not None:
+                # Announce the wait window; the engine flips back to
+                # EXECUTING once the user responds.
+                step.transition(TurnState.WAITING_HUMAN)
+                step.transition(TurnState.EXECUTING)
             yield from self._executor(step)
 
             # ── Auditor ──
-            step.state = TurnState.AUDITING
+            step.transition(TurnState.AUDITING)
             tid = f"aud-{i}"
             yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=tid)
             yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
@@ -287,12 +342,12 @@ class MadCopHarness:
                     f"{self.verified_state}\n\n"
                     f"[Step {i} ✓]\n{step.executor_summary}"
                 ).strip()
-                step.state = TurnState.DONE
+                step.transition(TurnState.DONE)
             elif audit_status == "blocked":
-                step.state = TurnState.BLOCKED
+                step.transition(TurnState.BLOCKED)
                 break
             else:
-                step.state = TurnState.DONE  # incomplete → retry next step
+                step.transition(TurnState.DONE)  # incomplete → retry next step
 
         # ── Turn end ──
         self.log.append(system_event("turn_end", self.verified_state[:500]))

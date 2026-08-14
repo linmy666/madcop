@@ -139,12 +139,22 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         except Exception as _e:
             logger.debug("log-derived context unavailable, using body: %s", _e)
 
-    # v4-5 — context compaction: if the conversation is very long (>20
-    # messages or >30k chars), keep the system prompt + last N messages
-    # and summarize the middle into a compact block. This prevents token
-    # overflow on long sessions. Mirrors legacy app.py:1939-1959.
+    # Meta-Harness knob: compaction threshold (D5 — previously loaded
+    # AFTER compaction ran, so the knob never took effect). Loaded here
+    # so the condition below actually consumes it.
+    _compact_threshold = 20
+    try:
+        from madcop.meta_harness.task_harness import load_active_harness
+        _compact_threshold = load_active_harness().compact_threshold_messages or 20
+    except Exception:
+        pass
+
+    # v4-5 — context compaction: if the conversation is very long
+    # (> _compact_threshold messages or >30k chars), keep the system
+    # prompt + last N messages and summarize the middle into a compact
+    # block. This prevents token overflow on long sessions.
     _total_chars = sum(len(m.content or "") for m in messages)
-    if len(messages) > 20 or _total_chars > 30000:
+    if len(messages) > _compact_threshold or _total_chars > 30000:
         _keep_first = 2   # system + first user
         _keep_last = 12   # recent context
         if len(messages) > _keep_first + _keep_last:
@@ -299,19 +309,15 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
 
     ctx.tool_executor = tool_call
 
-    # Meta-Harness: load active harness knobs and apply them. This connects
-    # the ChatTaskHarness (memory budgets, tool policies, compaction threshold)
-    # to the live chat path — previously the knobs existed but weren't wired in.
+    # Meta-Harness: apply tool-policy knobs. (Compaction threshold is
+    # consumed earlier — before compaction runs — see _compact_threshold.)
     try:
         from madcop.meta_harness.task_harness import load_active_harness
         _harness = load_active_harness()
         # Apply tool policy (allowlist / max_tools / enable)
         ctx.tool_schemas = _harness.filter_tool_schemas(ctx.tool_schemas)
-        # Apply compaction threshold
-        if _harness.compact_threshold_messages:
-            _compact_threshold = _harness.compact_threshold_messages
         logger.info("meta-harness active: %s (tools=%d, compact=%d)",
-                    _harness.name, len(ctx.tool_schemas), _harness.compact_threshold_messages)
+                    _harness.name, len(ctx.tool_schemas), _compact_threshold)
     except Exception as _e:
         logger.debug("meta-harness not loaded: %s", _e)
 
