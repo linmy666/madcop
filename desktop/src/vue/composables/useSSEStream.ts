@@ -105,6 +105,109 @@ export function useSSEStream() {
   const clarifyOptions = ref<string[]>([])
   const memoryRecalls = ref<SSEStreamState['memoryRecalls']>([])
   const distilledSkill = ref<string | null>(null)
+  // HITL: pending tool confirmation request from the backend.
+  const pendingConfirm = ref<{
+    tool_use_id: string
+    tool_name: string
+    tool_input: Record<string, any>
+  } | null>(null)
+  // Deep-Review F1: separate "text stream ended" from "whole turn ended".
+  // textEnded lets the caret stop without collapsing the live turn block
+  // (which v-if="isStreaming" would do if we reused isStreaming).
+  const textEnded = ref(false)
+
+  // BUG-FIX (批次2.1): incremental derived state. Previously these were
+  // computed() in useAgentState that re-walked the ENTIRE events array
+  // on every single token (O(n²) for a long turn). Now we maintain them
+  // incrementally here — each event updates only what it affects — and
+  // useAgentState just forwards these refs (O(1) per access).
+  const answerRef = ref('')
+  const thoughtBlocksRef = ref<ThoughtBlock[]>([])
+  const toolCallsRef = ref<ToolCallState[]>([])
+  // Internal accumulators (not exposed)
+  let _currentThoughtId = ''
+  let _currentThoughtRaw = ''
+  const _toolLookup = new Map<string, ToolCallState>()
+
+  function _resetDerived() {
+    answerRef.value = ''
+    thoughtBlocksRef.value = []
+    toolCallsRef.value = []
+    _currentThoughtId = ''
+    _currentThoughtRaw = ''
+    _toolLookup.clear()
+  }
+
+  // Lightweight protocol-marker filter (same logic as the old computed).
+  function _filterProtocol(text: string): string {
+    return text
+      .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
+      .replace(/\bFINAL_ANSWER\b\s*/gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+  }
+
+  // Incrementally apply a single event to the derived refs.
+  function _applyEvent(ev: SSEEvent) {
+    switch (ev.kind) {
+      case 'thought_start': {
+        _currentThoughtId = ev.thought_id || `t-${thoughtBlocksRef.value.length}`
+        _currentThoughtRaw = ''
+        thoughtBlocksRef.value = [...thoughtBlocksRef.value, {
+          id: _currentThoughtId, text: '', done: false,
+        }]
+        break
+      }
+      case 'thought_delta': {
+        if (!_currentThoughtId) break
+        // PERF FIX: filter only the NEW chunk (not full accumulated text)
+        // to avoid O(n²) on long reasoning traces. Same pattern as text_delta.
+        const _chunk = (ev.content || '')
+          .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
+        if (_chunk) {
+          _currentThoughtRaw += _chunk
+          thoughtBlocksRef.value = thoughtBlocksRef.value.map(b =>
+            b.id === _currentThoughtId ? { ...b, text: _currentThoughtRaw } : b
+          )
+        }
+        break
+      }
+      case 'thought_end': {
+        thoughtBlocksRef.value = thoughtBlocksRef.value.map(b =>
+          b.id === _currentThoughtId ? { ...b, done: true, elapsedMs: ev.elapsed_ms } : b
+        )
+        _currentThoughtId = ''
+        _currentThoughtRaw = ''
+        break
+      }
+      case 'tool_start': {
+        const id = ev.tool_use_id || `tool-${toolCallsRef.value.length}`
+        const call: ToolCallState = {
+          id, name: ev.tool_name || '', input: ev.tool_input,
+          result: undefined, isError: false, done: false,
+        }
+        _toolLookup.set(id, call)
+        toolCallsRef.value = [...toolCallsRef.value, call]
+        break
+      }
+      case 'tool_end': {
+        const id = ev.tool_use_id || toolCallsRef.value[toolCallsRef.value.length - 1]?.id
+        if (!id) break
+        const result = typeof ev.tool_result === 'string'
+          ? ev.tool_result.slice(0, 500)
+          : JSON.stringify(ev.tool_result)?.slice(0, 500)
+        toolCallsRef.value = toolCallsRef.value.map(c =>
+          c.id === id ? { ...c, result, isError: !!ev.is_error, done: true } : c
+        )
+        break
+      }
+      case 'text_delta': {
+        const chunk = (ev.content || '')
+          .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
+        if (chunk) answerRef.value += chunk
+        break
+      }
+    }
+  }
 
   let abortCtrl: AbortController | null = null
 
@@ -117,13 +220,16 @@ export function useSSEStream() {
     // useAgentState; consumers are expected to compute it from
     // ``events``.
     events.value = []
+    _resetDerived()
     isStreaming.value = true
+    textEnded.value = false
     errorMessage.value = null
     model.value = ''
     clarifyQuestion.value = null
     clarifyOptions.value = []
     memoryRecalls.value = []
     distilledSkill.value = null
+    pendingConfirm.value = null
 
     abortCtrl = new AbortController()
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
@@ -168,6 +274,7 @@ export function useSSEStream() {
             continue
           }
           events.value = [...events.value, ev]
+          _applyEvent(ev)  // BUG-FIX (批次2.1): incremental update, O(1)
           switch (ev.kind) {
             case 'clarify':
               clarifyQuestion.value = ev.question || ''
@@ -175,6 +282,15 @@ export function useSSEStream() {
               break
             case 'error':
               errorMessage.value = ev.content || '未知错误'
+              break
+            case 'text_end':
+              // Deep-Review F1: do NOT set isStreaming=false here. V4ChatPanel
+              // renders the live turn with v-if="isStreaming" — flipping it
+              // false on text_end makes the reply vanish between text_end
+              // and done (the turn is only finalized after connect() resolves
+              // post-done). The caret can be stopped via a separate flag;
+              // stream completion is owned by done/error only.
+              textEnded.value = true
               break
             case 'done':
               model.value = ev.model || ''
@@ -186,6 +302,14 @@ export function useSSEStream() {
               break
             case 'skill_distilled':
               distilledSkill.value = (ev as any)?.metadata?.skillName || null
+              break
+            // HITL: backend asks the user to approve a mutating tool call.
+            case 'tool_confirm_request':
+              pendingConfirm.value = {
+                tool_use_id: (ev as any).tool_use_id || '',
+                tool_name: (ev as any).tool_name || '',
+                tool_input: (ev as any).tool_input || {},
+              }
               break
           }
         }
@@ -208,6 +332,18 @@ export function useSSEStream() {
     isStreaming.value = false
   }
 
+  /** HITL: respond to a pending tool confirmation (user clicked Approve/Reject). */
+  async function respondConfirm(toolUseId: string, approved: boolean): Promise<void> {
+    pendingConfirm.value = null
+    try {
+      await fetch(getApiUrl('/api/v4/chat/confirm'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool_use_id: toolUseId, approved }),
+      })
+    } catch { /* network error — the backend timeout will reject */ }
+  }
+
   // Backwards-compat aggregate so old callers that still depend on
   // the ``state`` blob keep working. Prefer ``useAgentState(events)``
   // for new code.
@@ -224,6 +360,16 @@ export function useSSEStream() {
     distilledSkill: distilledSkill.value,
   }))
 
+  // BUG-FIX (批次2.1): attach the incremental refs to the events ref via
+  // a non-enumerable property so useAgentState(events) can detect them
+  // and forward in O(1) without changing its call signature.
+  Object.defineProperty(events, '__incremental', {
+    value: { answerRef, thoughtBlocksRef, toolCallsRef },
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  })
+
   return {
     events,
     isStreaming,
@@ -233,6 +379,14 @@ export function useSSEStream() {
     clarifyOptions,
     memoryRecalls,
     distilledSkill,
+    pendingConfirm,
+    respondConfirm,
+    // BUG-FIX (批次2.1): expose incremental derived refs so useAgentState
+    // can forward them in O(1) instead of recomputing from events.
+    answerRef,
+    thoughtBlocksRef,
+    toolCallsRef,
+    textEnded,
     state,
     connect,
     abort,

@@ -15,10 +15,13 @@ import queue
 import threading
 import time
 import asyncio
+import concurrent.futures
+import uuid
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from madcop.agent.runtime import RunContext, EngineFactory, AgentStep, StepKind
 from madcop.agent.tool_executor import build_default_registry
@@ -33,6 +36,31 @@ from madcop.workflow.planner import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# HITL confirmation bridge: maps tool_use_id → Future. The worker thread
+# creates a Future and blocks on it; the POST /api/v4/chat/confirm route
+# resolves it when the user clicks Approve/Reject.
+_PENDING_CONFIRMS: dict[str, asyncio.Future] = {}
+
+
+class ConfirmRequest(BaseModel):
+    """Frontend payload for responding to a tool confirmation request."""
+    session_id: str = ""
+    tool_use_id: str
+    approved: bool
+
+
+@router.post("/api/v4/chat/confirm")
+async def confirm_tool(body: ConfirmRequest) -> dict[str, Any]:
+    """Resolve a pending tool confirmation. Called by the frontend when
+    the user clicks Approve or Reject on an inline HITL card."""
+    fut = _PENDING_CONFIRMS.get(body.tool_use_id)
+    if fut is None or fut.done():
+        return {"ok": False, "error": "no pending confirmation for this tool_use_id"}
+    # concurrent.futures.Future.set_result is thread-safe — can be called
+    # from the event loop thread while the worker thread blocks on result().
+    fut.set_result(body.approved)
+    return {"ok": True, "approved": body.approved}
 
 
 def _get_client():
@@ -189,6 +217,12 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     # know web_search / web_fetch / weather / memory are available, so
     # it hallucinates "I can't search the web" for time-sensitive queries.
     # The actual tool execution is handled by QuickEngine (one step only).
+    #
+    # BUG-FIX: previous version only said "consider emitting" — models
+    # still preferred to answer in prose ("I can't search the web, here
+    # are alternative ways..."). Rewrote as a hard directive: "you MUST
+    # call web_search whenever the user asks about something that could
+    # have changed recently".
     if agent_mode == "quick" and reg.get_all_schemas():
         try:
             _tool_names = ", ".join(
@@ -200,10 +234,17 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                     sys_prefix
                     + "\n[Available tools] "
                     + _tool_names
-                    + ". If the user's question requires real-time data (weather, "
-                    "news, current events) or any other tool, emit ONE tool call "
-                    "rather than guessing. ONE tool call only — for complex tasks, "
-                    "switch to standard mode."
+                    + "\n[Tool-use directive] This is QUICK mode. You have tools. "
+                    "If the user's question involves anything time-sensitive, "
+                    "current events, weather, recent news, latest version, "
+                    "today/now/this-week/this-month, or any fact that could have "
+                    "changed after your training cutoff, you MUST emit a tool "
+                    "call (web_search / web_fetch / weather) as your FIRST output "
+                    "— do NOT answer in prose first. NEVER say 'I can't search "
+                    "the web' or recommend external sites — you CAN search via "
+                    "the tools. After the tool returns, summarise the result. "
+                    "ONE tool call only — for complex multi-step tasks, tell "
+                    "the user to switch to standard mode."
                 )
         except Exception:
             pass
@@ -228,6 +269,44 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         return tool_executor.execute(name, raw_input, wd)
 
     ctx.tool_executor = tool_call
+
+    # Meta-Harness: load active harness knobs and apply them. This connects
+    # the ChatTaskHarness (memory budgets, tool policies, compaction threshold)
+    # to the live chat path — previously the knobs existed but weren't wired in.
+    try:
+        from madcop.meta_harness.task_harness import load_active_harness
+        _harness = load_active_harness()
+        # Apply tool policy (allowlist / max_tools / enable)
+        ctx.tool_schemas = _harness.filter_tool_schemas(ctx.tool_schemas)
+        # Apply compaction threshold
+        if _harness.compact_threshold_messages:
+            _compact_threshold = _harness.compact_threshold_messages
+        logger.info("meta-harness active: %s (tools=%d, compact=%d)",
+                    _harness.name, len(ctx.tool_schemas), _harness.compact_threshold_messages)
+    except Exception as _e:
+        logger.debug("meta-harness not loaded: %s", _e)
+
+    # HITL confirmation bridge: when the engine calls confirm_handler,
+    # we register a concurrent.futures.Future in _PENDING_CONFIRMS, yield
+    # a TOOL_CONFIRM_REQUEST event to the frontend, and block until the
+    # user responds via POST /api/v4/chat/confirm (which sets the future).
+    # We use concurrent.futures.Future (NOT asyncio.Future) because:
+    #   1. The worker thread blocks on fut.result(timeout=120) — only
+    #      concurrent.futures.Future supports the timeout param.
+    #   2. The POST route runs in the event loop thread, so it uses
+    #      fut.set_result() which is thread-safe on concurrent.futures.
+    def confirm_handler(tool_name: str, tool_input: dict, tool_use_id: str) -> bool:
+        """Block until the user responds to the confirmation card."""
+        fut: concurrent.futures.Future = concurrent.futures.Future()
+        _PENDING_CONFIRMS[tool_use_id] = fut
+        try:
+            return fut.result(timeout=120)
+        except concurrent.futures.TimeoutError:
+            return False  # timeout = reject
+        finally:
+            _PENDING_CONFIRMS.pop(tool_use_id, None)
+
+    ctx.confirm_handler = confirm_handler
 
     # Create engine
     engine = EngineFactory.create(ctx)
@@ -511,6 +590,18 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             sentinel = object()
             cancel_flag = threading.Event()
             _assistant_text_holder: list[str] = [""]
+            # D2 fix: in task (MEA) mode, the executor's inner TEXT_DELTAs
+            # must NOT be accumulated as the turn's assistant message —
+            # they're per-step fragments. Only text emitted AFTER the last
+            # inner DONE is the MEA outer answer. We track the last-done
+            # offset and slice when persisting.
+            _last_done_len: list[int] = [0]
+            _saw_done: list[bool] = [False]
+            # Resume-Claim-4: collect web_search/web_fetch tool results so we
+            # can attach them as citations on the DONE event — not just in
+            # create mode, but in ANY mode that used web tools. This makes
+            # "every conclusion carries citation traceability" true.
+            _citations_holder: list[dict] = []
 
             def worker():
                 try:
@@ -520,6 +611,43 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                         # Capture assistant text for skill distill after the run.
                         if step.kind == StepKind.TEXT_DELTA and step.content:
                             _assistant_text_holder[0] += step.content
+                        elif step.kind == StepKind.DONE:
+                            # D2: MEA executor emits inner DONEs (now filtered
+                            # at the harness layer, but guard here too for any
+                            # engine that terminates mid-run). Text after the
+                            # last DONE is the authoritative outer answer.
+                            _last_done_len[0] = len(_assistant_text_holder[0])
+                            _saw_done[0] = True
+                        # Resume-Claim-4: capture web tool results as citations
+                        if step.kind == StepKind.TOOL_END and step.tool_name in ("web_search", "web_fetch"):
+                            try:
+                                _raw_result = step.tool_result
+                                if isinstance(_raw_result, str):
+                                    import json as _json
+                                    try:
+                                        _parsed = _json.loads(_raw_result)
+                                    except Exception:
+                                        _parsed = None
+                                else:
+                                    _parsed = _raw_result
+                                # web_search returns a list of {title,url,snippet}
+                                if isinstance(_parsed, list):
+                                    for _hit in _parsed:
+                                        if isinstance(_hit, dict) and _hit.get("url"):
+                                            _citations_holder.append({
+                                                "url": str(_hit.get("url", "")),
+                                                "title": str(_hit.get("title", "") or _hit.get("url", ""))[:120],
+                                                "snippet": str(_hit.get("snippet", ""))[:200],
+                                            })
+                                # web_fetch returns {url, content}
+                                elif isinstance(_parsed, dict) and _parsed.get("url") and not _parsed.get("is_spa"):
+                                    _citations_holder.append({
+                                        "url": str(_parsed.get("url", "")),
+                                        "title": str(_parsed.get("title", "") or _parsed.get("url", ""))[:120],
+                                        "snippet": str(_parsed.get("content", ""))[:200],
+                                    })
+                            except Exception:
+                                pass
                         q.put(step)
                 except Exception as e:
                     q.put(AgentStep(kind=StepKind.ERROR, content=str(e)))
@@ -585,6 +713,26 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 if item is sentinel:
                     break
 
+                # Resume-Claim-4: if this is the DONE event AND we collected
+                # web tool results during the run, attach them as citations
+                # so the user sees source traceability for search-based
+                # answers (not just create mode). Dedup by URL, cap at 8.
+                if isinstance(item, AgentStep) and item.kind == StepKind.DONE and _citations_holder:
+                    _seen_urls = set()
+                    _deduped = []
+                    for _c in _citations_holder:
+                        if _c["url"] and _c["url"] not in _seen_urls:
+                            _seen_urls.add(_c["url"])
+                            _deduped.append(_c)
+                        if len(_deduped) >= 8:
+                            break
+                    if _deduped:
+                        item = AgentStep(
+                            kind=StepKind.DONE,
+                            model=item.model,
+                            metadata={"citations": _deduped},
+                        )
+
                 yield emitter.emit(item)
 
             # P3-A — skill_distilled: after the run, auto-distill if the
@@ -592,7 +740,13 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             # Note: message persistence + title generation now run inside the
             # worker thread (above) so they execute even if the SSE client
             # disconnects after `done`.
-            _assistant_text = _assistant_text_holder[0].strip()
+            # D2: if an inner DONE was seen (MEA mode), only the text after
+            # it is the outer authoritative answer.
+            _full_text = _assistant_text_holder[0]
+            _assistant_text = (
+                _full_text[_last_done_len[0]:].strip() if _saw_done[0]
+                else _full_text.strip()
+            )
             if _assistant_text and len(_assistant_text) >= 400:
                 try:
                     from madcop.memory.skill_distill import auto_distill_if_valuable
@@ -604,6 +758,19 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                         ))
                 except Exception as _e:
                     logger.debug("v4 skill_distill skipped: %s", _e)
+
+            # Resume-Claim-5: auto-grow the knowledge graph. After a
+            # substantive turn, extract the topic + answer into a brain
+            # node so the Knowledge Canvas literally grows with use. This
+            # is what makes "understanding you better over time" true.
+            if _assistant_text and len(_assistant_text) >= 600:
+                try:
+                    from madcop.brain.auto_extract import auto_extract_to_brain
+                    _brain_slug = auto_extract_to_brain(_latest_user, _assistant_text)
+                    if _brain_slug:
+                        logger.info("brain graph auto-grew: slug=%s", _brain_slug)
+                except Exception as _e:
+                    logger.debug("brain_auto skipped: %s", _e)
 
         except Exception as e:
             logger.error("chat_v4 stream error: %s", e)

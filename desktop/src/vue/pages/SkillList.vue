@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useSkillStore } from '../stores/skillStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useTranslation } from '../i18n'
+import ErrorState from '../components/common/ErrorState.vue'
+import SkeletonList from '../components/common/SkeletonList.vue'
 import type { SkillSource } from '../stores/skillStore'
 import type { SkillDefinition } from '../stores/skillStore'
 
@@ -109,15 +111,16 @@ function handleSkillClick(
 </script>
 
 <template>
-  <div v-if="skillStore.isLoading" class="flex justify-center py-12">
-    <div
-      class="animate-spin w-5 h-5 border-2 border-[var(--color-brand)] border-t-transparent rounded-full"
-    />
+  <div v-if="skillStore.isLoading">
+    <SkeletonList :count="4" :item-height="56" />
   </div>
 
-  <div v-else-if="skillStore.error" class="text-sm text-[var(--color-error)] py-4">
-    {{ skillStore.error }}
-  </div>
+  <ErrorState
+    v-else-if="skillStore.error"
+    :message="skillStore.error"
+    retry-label="重试"
+    @retry="() => { if (typeof skillStore.reload === 'function') skillStore.reload() }"
+  />
 
   <div
     v-else-if="skills.length === 0"

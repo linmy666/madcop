@@ -15,6 +15,7 @@
 
 import { ref, computed, onMounted } from 'vue'
 import { getApiUrl } from '../api/client'
+import ErrorState from '../components/common/ErrorState.vue'
 
 // ─── Data model ────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ const relevant = ref<RelevantMemory[]>([])
 const preferences = ref<Preference[]>([])
 const skills = ref<Skill[]>([])
 const loading = ref(false)
+const loadError = ref('')  // C-1: surface load errors instead of silent empty
 const activeTab = ref<MemoryLayer>('profile')
 const newProfileFact = ref('')
 
@@ -158,8 +160,11 @@ async function loadAll() {
         triggered: s.triggered || s.use_count || 0,
       }))
     }
-  } catch {
-    // Network error — leave arrays empty (empty state shows).
+  } catch (e: any) {
+    // C-1: surface the error so the user knows it's a network issue, not
+    // "you have no memories". Previously this was silently swallowed and
+    // the user saw an empty state that looked like "nothing saved yet".
+    loadError.value = e?.message || '记忆加载失败 — 请确认后端服务正在运行'
   } finally {
     loading.value = false
   }
@@ -264,6 +269,7 @@ onMounted(loadAll)
     </header>
 
     <!-- Toggle hint -->
+    <ErrorState v-if="loadError" :message="loadError" retry-label="重试" @retry="() => { loadError = ''; loadAll() }" />
     <p
       v-if="learningEnabled"
       class="rounded-lg border border-[var(--color-brand)]/30 bg-[var(--color-brand)]/5 px-3 py-2 text-[12px] text-[var(--color-text-primary)]"

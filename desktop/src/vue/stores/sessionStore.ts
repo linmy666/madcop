@@ -175,6 +175,10 @@ function collapseEmptySessions(
   )
 }
 
+// C-2: module-level map for pending undo deletes. Not reactive (no need
+// to be — it's internal bookkeeping), so we keep it out of Pinia state.
+const _pendingUndeletes = new Map<string, { session: any; timer: ReturnType<typeof setTimeout> }>()
+
 export const useSessionStore = defineStore('session', {
   state: () => ({
     sessions: loadFromStorage() as SessionListItem[],
@@ -302,11 +306,45 @@ export const useSessionStore = defineStore('session', {
       }
     },
     async deleteSession(id: string) {
+      // C-2: undo support. Remove from the visible list immediately, but
+      // DELAY the backend deletion + localStorage persist by 6s so the
+      // user can undo via the toast action. If they click "撤销" we
+      // restore the session to the list and cancel the pending delete.
+      const session = this.sessions.find(s => s.id === id)
       this.sessions = this.sessions.filter(s => s.id !== id)
       this.selectedSessionIds = this.selectedSessionIds.filter(sid => sid !== id)
       if (this.activeSessionId === id) this.activeSessionId = this.sessions[0]?.id || null
-      saveToStorage(this.sessions)
-      backendDeleteSession(id)
+      // NOTE: don't saveToStorage yet — keep the session recoverable.
+
+      // Schedule the real deletion
+      const timer = setTimeout(() => {
+        _pendingUndeletes.delete(id)
+        saveToStorage(this.sessions)
+        backendDeleteSession(id)
+      }, 6000)
+      _pendingUndeletes.set(id, { session, timer })
+
+      // Fire the undo toast (if uiStore is available)
+      try {
+        const { useUIStore } = await import('./uiStore')
+        const ui = useUIStore()
+        ui.showToastWithAction(
+          `已删除会话${session?.title ? ' · ' + session.title : ''}`,
+          '撤销',
+          () => this.undoDelete(id),
+        )
+      } catch { /* uiStore not available — delete proceeds */ }
+    },
+    /** C-2: restore a session deleted via deleteSession (within the 6s window). */
+    undoDelete(id: string) {
+      const pending = _pendingUndeletes.get(id)
+      if (!pending) return
+      clearTimeout(pending.timer)
+      _pendingUndeletes.delete(id)
+      if (pending.session) {
+        this.sessions.unshift(pending.session)
+        if (!this.activeSessionId) this.activeSessionId = id
+      }
     },
     async deleteSessions(ids: string[]) {
       this.sessions = this.sessions.filter(s => !ids.includes(s.id))

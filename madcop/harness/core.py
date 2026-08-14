@@ -1,0 +1,275 @@
+"""
+MadCop Harness — Core Types & Protocols.
+
+Architectural design principles (adapted from production agent harness
+patterns, not copied from any single source):
+
+1. **Event log is the single source of truth.** All model-visible data
+   must be reconstructable from the append-only event log. Messages,
+   tool calls, and reasoning are derived from the log — not held in
+   ad-hoc arrays that drift out of sync.
+
+2. **Three event domains, structurally separated.**
+   - Reasoning → thought_start/delta/end (the model's internal logic)
+   - Tool calls → tool_start/end (side effects on the environment)
+   - Answer → text_delta/end (what the user sees)
+   These NEVER mix in a single text blob.
+
+3. **Capability seams.** File system, shell, and search are Protocol
+   interfaces — swappable backends without changing the agent loop.
+   This enables sandboxing, remote execution, or mock testing.
+
+4. **Turn/Step lifecycle.** A Turn spans user input → final answer.
+   Each Step is one model request + its tool calls. The lifecycle is
+   a formal state machine, not a while loop with break conditions.
+"""
+from __future__ import annotations
+
+import json
+import time
+import uuid
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any, Callable, Iterator, Protocol, runtime_checkable
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Event Types — the three domains
+# ═══════════════════════════════════════════════════════════════════════
+
+class EventDomain(str, Enum):
+    REASONING = "reasoning"
+    TOOL = "tool"
+    ANSWER = "answer"
+    SYSTEM = "system"  # lifecycle events (turn/step start/end)
+
+
+@dataclass
+class HarnessEvent:
+    """One event in the session log. Append-only, immutable after creation."""
+    id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    domain: EventDomain = EventDomain.SYSTEM
+    kind: str = ""  # thought_start, tool_call, text_delta, turn_start, etc.
+    content: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    timestamp: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["domain"] = self.domain.value
+        d["timestamp_iso"] = datetime.fromtimestamp(self.timestamp).isoformat(timespec="seconds")
+        return d
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Session Log — append-only, the single source of truth
+# ═══════════════════════════════════════════════════════════════════════
+
+class SessionLog:
+    """Append-only event log. The single source of truth for a task run.
+
+    Design invariant: "model-visible ⟺ logged." Any data the model sees
+    in its context must be reconstructable from this log. Messages are
+    derived from the log stream, not stored separately.
+
+    Persistence: JSONL file under ~/.madcop/harness_runs/<run_id>/log.jsonl
+    """
+
+    def __init__(self, run_id: str | None = None, persist_dir: Path | None = None):
+        self.run_id = run_id or uuid.uuid4().hex[:8]
+        self._events: list[HarnessEvent] = []
+        self._persist_path: Path | None = None
+
+        if persist_dir:
+            self._persist_dir = persist_dir / self.run_id
+            self._persist_dir.mkdir(parents=True, exist_ok=True)
+            self._persist_path = self._persist_dir / "log.jsonl"
+
+    def append(self, event: HarnessEvent) -> HarnessEvent:
+        """Append an event. Also persists to JSONL if a path is set."""
+        self._events.append(event)
+        if self._persist_path:
+            with open(self._persist_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
+        return event
+
+    def events(self, domain: EventDomain | None = None) -> list[HarnessEvent]:
+        """Return events, optionally filtered by domain."""
+        if domain:
+            return [e for e in self._events if e.domain == domain]
+        return list(self._events)
+
+    def derive_messages(self) -> list[dict[str, str]]:
+        """Derive model-visible messages from the log.
+
+        This is the key method — model context is ALWAYS derived from
+        the log, never stored separately. This prevents drift between
+        what the model saw and what the log records.
+        """
+        messages: list[dict[str, str]] = []
+        current_role = None
+        current_content = []
+
+        for ev in self._events:
+            if ev.domain == EventDomain.SYSTEM:
+                if ev.kind == "user_input":
+                    if current_role:
+                        messages.append({"role": current_role, "content": "".join(current_content)})
+                    current_role = "user"
+                    current_content = [ev.content]
+                elif ev.kind == "turn_end":
+                    if current_role:
+                        messages.append({"role": current_role, "content": "".join(current_content)})
+                    current_role = None
+                    current_content = []
+            elif ev.domain == EventDomain.ANSWER:
+                if current_role != "assistant":
+                    if current_role:
+                        messages.append({"role": current_role, "content": "".join(current_content)})
+                    current_role = "assistant"
+                    current_content = []
+                current_content.append(ev.content)
+            elif ev.domain == EventDomain.TOOL and ev.kind == "tool_result":
+                if current_role:
+                    messages.append({"role": current_role, "content": "".join(current_content)})
+                current_role = "tool"
+                current_content = [ev.content]
+
+        if current_role:
+            messages.append({"role": current_role, "content": "".join(current_content)})
+
+        return messages
+
+    def reasoning_summary(self) -> str:
+        """Concatenate all reasoning events — for audit/review."""
+        return "\n".join(e.content for e in self.events(EventDomain.REASONING) if e.content)
+
+    def tool_calls_summary(self) -> list[dict]:
+        """Summary of all tool calls — for the trajectory UI."""
+        calls = []
+        for ev in self._events:
+            if ev.domain == EventDomain.TOOL:
+                calls.append({
+                    "kind": ev.kind,
+                    "content": ev.content[:100],
+                    "metadata": ev.metadata,
+                    "timestamp": ev.timestamp,
+                })
+        return calls
+
+    def answer_text(self) -> str:
+        """Concatenate all answer events — the final user-visible output."""
+        return "".join(e.content for e in self.events(EventDomain.ANSWER))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Capability Protocols — swappable backends (like DeepSeek's seams)
+# ═══════════════════════════════════════════════════════════════════════
+
+@runtime_checkable
+class FileSystemCapability(Protocol):
+    """File system operations. Swappable: local FS, sandbox, remote."""
+    def read_file(self, path: str) -> str: ...
+    def write_file(self, path: str, content: str) -> bool: ...
+    def list_dir(self, path: str) -> list[str]: ...
+
+
+@runtime_checkable
+class ShellCapability(Protocol):
+    """Shell command execution. Swappable: local, sandbox, remote."""
+    def exec(self, command: str, timeout: int = 30) -> tuple[str, int]: ...
+
+
+@runtime_checkable
+class SearchCapability(Protocol):
+    """Web search. Swappable: Bing, SearXNG, Tavily."""
+    def search(self, query: str, max_results: int = 5) -> list[dict]: ...
+
+
+@dataclass
+class LocalFileSystem:
+    """Default local filesystem implementation."""
+    root: Path = field(default_factory=lambda: Path.cwd())
+
+    def read_file(self, path: str) -> str:
+        p = self.root / path if not Path(path).is_absolute() else Path(path)
+        try:
+            return p.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:
+            return f"[read error: {e}]"
+
+    def write_file(self, path: str, content: str) -> bool:
+        p = self.root / path if not Path(path).is_absolute() else Path(path)
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+            return True
+        except Exception:
+            return False
+
+    def list_dir(self, path: str) -> list[str]:
+        p = self.root / path if not Path(path).is_absolute() else Path(path)
+        try:
+            return [str(f.name) for f in p.iterdir()]
+        except Exception:
+            return []
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Turn/Step State Machine
+# ═══════════════════════════════════════════════════════════════════════
+
+class TurnState(str, Enum):
+    IDLE = "idle"
+    PLANNING = "planning"      # Manager is thinking
+    EXECUTING = "executing"    # Executor is running
+    AUDITING = "auditing"      # Auditor is verifying
+    WAITING_HUMAN = "waiting_human"  # HITL confirmation
+    DONE = "done"
+    BLOCKED = "blocked"
+    ERROR = "error"
+
+
+@dataclass
+class Step:
+    """One step in the MEA loop. Maps to DeepSeek's Step concept."""
+    index: int
+    state: TurnState = TurnState.IDLE
+    contract_description: str = ""
+    executor_summary: str = ""
+    audit_status: str = ""
+    started_at: float = field(default_factory=time.time)
+    completed_at: float | None = None
+
+    @property
+    def duration_ms(self) -> int:
+        end = self.completed_at or time.time()
+        return int((end - self.started_at) * 1000)
+
+    def to_dict(self) -> dict:
+        return {
+            "step": self.index,
+            "state": self.state.value,
+            "contract": self.contract_description[:200],
+            "audit": self.audit_status,
+            "duration_ms": self.duration_ms,
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Event Factory — convenient constructors for each domain
+# ═══════════════════════════════════════════════════════════════════════
+
+def reasoning_event(kind: str, content: str, **meta) -> HarnessEvent:
+    return HarnessEvent(domain=EventDomain.REASONING, kind=kind, content=content, metadata=meta)
+
+def tool_event(kind: str, content: str, **meta) -> HarnessEvent:
+    return HarnessEvent(domain=EventDomain.TOOL, kind=kind, content=content, metadata=meta)
+
+def answer_event(kind: str, content: str, **meta) -> HarnessEvent:
+    return HarnessEvent(domain=EventDomain.ANSWER, kind=kind, content=content, metadata=meta)
+
+def system_event(kind: str, content: str = "", **meta) -> HarnessEvent:
+    return HarnessEvent(domain=EventDomain.SYSTEM, kind=kind, content=content, metadata=meta)

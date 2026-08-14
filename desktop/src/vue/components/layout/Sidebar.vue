@@ -337,7 +337,16 @@ const isMobileComputed = computed(() => props.isMobile ?? false)
 const closeMobileDrawer = () => props.onRequestClose?.()
 
 // === v3.1 — Graph-theoretic nav: more/less state for secondary nav ===
-const navMoreOpen = ref(false)
+// B-2: "更多" menu defaults to OPEN so secondary features (workflows,
+// design, skill builder) are discoverable. Persisted to localStorage.
+function _loadNavMoreOpen(): boolean {
+  try {
+    const stored = localStorage.getItem('madcop_nav_more_open')
+    return stored === null ? true : stored === 'true'
+  } catch { return true }
+}
+const navMoreOpen = ref(_loadNavMoreOpen())
+watch(navMoreOpen, (v) => { try { localStorage.setItem('madcop_nav_more_open', String(v)) } catch { /* noop */ } })
 const activeSessionCount = computed(() => sessionStore.sessions?.length ?? 0)
 const runningSessionCount = computed(() => (tabStore.tabs ?? []).filter((tb: any) => tb.status === 'running').length)
 
@@ -430,6 +439,17 @@ const activeTabId = computed(() => tabStore.activeTabId)
 const activeTabType = computed(() => {
   const tab = tabStore.tabs.find((t) => t.sessionId === activeTabId.value)
   return tab?.type ?? null
+})
+
+// A-1: Observer status — green dot when enabled AND workspace set.
+const observerActive = computed(() => {
+  try {
+    const settings = useSettingsStore()
+    const ws = typeof localStorage !== 'undefined' && localStorage.getItem('madcop_workspace_dir')
+    return !!(settings.proactive?.enabled && ws)
+  } catch {
+    return false
+  }
 })
 
 const sidebarOpen = computed(() => uiStore.sidebarOpen)
@@ -1246,6 +1266,46 @@ const projectMenuData = computed(() => {
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/><line x1="6.5" y1="6.5" x2="10" y2="10"/><line x1="17.5" y1="6.5" x2="14" y2="10"/><line x1="6.5" y1="17.5" x2="10" y2="14"/><line x1="17.5" y1="17.5" x2="14" y2="14"/></svg>
         <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.agentHub') }}</span>
+      </button>
+
+      <!-- A-1: Observer — flagship differentiator, promoted to primary nav.
+           Shows a green status dot when actively monitoring, gray when off. -->
+      <button
+        type="button"
+        :class="primaryNavClass(activeTabType === 'observer')"
+        :aria-label="t('sidebar.observer', '观察器')"
+        @click="() => { tabStore.openTab('__observer__', t('sidebar.observer', '观察器'), 'observer' as any); closeMobileDrawer() }"
+      >
+        <span class="material-symbols-outlined text-[18px] shrink-0">visibility</span>
+        <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.observer', '观察器') }}</span>
+        <span
+          v-if="expanded"
+          class="ml-auto w-2 h-2 rounded-full shrink-0"
+          :class="observerActive ? 'bg-green-500 animate-pulse' : 'bg-[var(--color-border)]'"
+          :title="observerActive ? '观察器运行中' : '观察器未开启'"
+        ></span>
+      </button>
+
+      <!-- B-2: Memory — promoted from buried Settings sub-page to primary nav -->
+      <button
+        type="button"
+        :class="primaryNavClass(activeTabType === 'memory')"
+        :aria-label="t('sidebar.memory', '记忆')"
+        @click="() => { tabStore.openTab('__memory__', t('sidebar.memory', '记忆'), 'memory' as any); closeMobileDrawer() }"
+      >
+        <span class="material-symbols-outlined text-[18px] shrink-0">psychology</span>
+        <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.memory', '记忆') }}</span>
+      </button>
+
+      <!-- B-2: Knowledge Canvas — promoted from collapsed "更多" to primary nav -->
+      <button
+        type="button"
+        :class="primaryNavClass(activeTabType === 'brain-canvas')"
+        :aria-label="t('sidebar.knowledgeCanvas', '知识画布')"
+        @click="() => { tabStore.openTab('__brain_canvas__', t('sidebar.knowledgeCanvas', '知识画布'), 'brain-canvas' as any); closeMobileDrawer() }"
+      >
+        <span class="material-symbols-outlined text-[18px] shrink-0">hub</span>
+        <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.knowledgeCanvas', '知识画布') }}</span>
       </button>
     </nav>
 

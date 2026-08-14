@@ -117,6 +117,7 @@ import PermissionDialog from './PermissionDialog.vue'
 import AskUserQuestion from './AskUserQuestion.vue'
 import StreamingIndicator from './StreamingIndicator.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
+import AgentPulse from './AgentPulse.vue'
 import InlineTaskSummary from './InlineTaskSummary.vue'
 import CurrentTurnChangeCard from './CurrentTurnChangeCard.vue'
 import { ConfirmDialog } from '../shared/ConfirmDialog.vue'
@@ -1212,6 +1213,9 @@ function renderItemContent(item: RenderItem) {
           v-if="getActiveSessionCitations().length > 0"
           :citations="getActiveSessionCitations()"
         />
+
+        <!-- AgentPulse: live phase indicator (思考中/调用工具/输出中) -->
+        <AgentPulse />
 
         <!-- v3.7.6 — ZCode-style reasoning panel. Stays visible
              for the whole turn (busy / streaming) so the gradient

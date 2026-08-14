@@ -21,6 +21,16 @@ const GITHUB_ISSUES = `${GITHUB_REPO}/issues`
 const GITHUB_RELEASES = `${GITHUB_REPO}/releases`
 const AUTHOR_GITHUB = 'https://github.com/linmy666'
 const AUTHOR_NAME = '林芮翰'
+// D-2: competitive comparison data
+const comparisonRows = [
+  { feature: '主动观察器 (文件+终端监控)', cc: false, cursor: false, continue: false },
+  { feature: '多层记忆系统', cc: false, cursor: false, continue: false },
+  { feature: '知识图谱 (可视化)', cc: false, cursor: false, continue: false },
+  { feature: '多模型 Arena 对比', cc: false, cursor: false, continue: false },
+  { feature: '技能自动蒸馏 (SKILL.md)', cc: true, cursor: false, continue: false },
+  { feature: '本地优先 (数据不离机)', cc: false, cursor: false, continue: true },
+  { feature: 'Provider 无关 (任意 API)', cc: false, cursor: false, continue: true },
+]
 const SOCIAL_LINKS = [
   {
     // v2.6.0: GitHub removed — already shown in the Author block above
@@ -431,6 +441,34 @@ const updateDescription = computed(() => {
           <div class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.about.feedbackDesc') }}</div>
         </div>
       </button>
+    </div>
+
+    <!-- D-2: Competitive comparison — why MadCop is different -->
+    <div class="mt-6 w-full">
+      <h3 class="text-xs font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider mb-3">vs 竞品</h3>
+      <div class="rounded-xl border border-[var(--color-border)] overflow-hidden">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="bg-[var(--color-surface-container-low)]">
+              <th class="text-left px-3 py-2 font-medium text-[var(--color-text-secondary)]">特性</th>
+              <th class="px-3 py-2 font-semibold text-[var(--color-brand)]">MadCop</th>
+              <th class="px-3 py-2 font-medium text-[var(--color-text-tertiary)]">Claude Code</th>
+              <th class="px-3 py-2 font-medium text-[var(--color-text-tertiary)]">Cursor</th>
+              <th class="px-3 py-2 font-medium text-[var(--color-text-tertiary)]">Continue</th>
+            </tr>
+          </thead>
+          <tbody class="text-[var(--color-text-secondary)]">
+            <tr v-for="row in comparisonRows" :key="row.feature" class="border-t border-[var(--color-border)]">
+              <td class="px-3 py-2 font-medium text-[var(--color-text-primary)]">{{ row.feature }}</td>
+              <td class="px-3 py-2 text-center text-green-500">✓</td>
+              <td class="px-3 py-2 text-center" :class="row.cc ? 'text-green-500' : 'text-[var(--color-text-tertiary)]'">{{ row.cc ? '✓' : '—' }}</td>
+              <td class="px-3 py-2 text-center" :class="row.cursor ? 'text-green-500' : 'text-[var(--color-text-tertiary)]'">{{ row.cursor ? '✓' : '—' }}</td>
+              <td class="px-3 py-2 text-center" :class="row.continue ? 'text-green-500' : 'text-[var(--color-text-tertiary)]'">{{ row.continue ? '✓' : '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="mt-2 text-[11px] text-[var(--color-text-tertiary)]">MadCop = 本地优先 + 主动观察器 + 多层记忆 + 知识图谱 + 多模型对比,数据不离机器。</p>
     </div>
   </div>
 </template>

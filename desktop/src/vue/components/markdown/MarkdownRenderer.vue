@@ -58,7 +58,15 @@ const mathRenderCache = new Map<string, string>()
 
 const FINALIZED_CACHE_MAX_ENTRIES = 200
 const FINALIZED_CACHE_MAX_CHARS = 8_000_000
-const STREAMING_CACHE_MAX_ENTRIES = 4
+// BUG-FIX (批次2.3): raised from 4 to 16. The streaming cache is keyed by
+// content-length+hash, so during active streaming every token is a miss
+// anyway (the cache only helps when re-rendering the same finalized
+// content). But with only 4 entries, even a couple of distinct short
+// messages would evict each other. 16 is still cheap (each entry is just
+// the parsed AST, not the rendered DOM) and reduces re-parse churn when
+// toggling between recent messages. The real streaming win comes from the
+// LONG_STREAM throttle (120ms / 96 chars) below, which is already in place.
+const STREAMING_CACHE_MAX_ENTRIES = 16
 
 // ── Helper functions (verbatim from React, no logic change) ───────────────────
 function normalizeCodeLanguage(language: string | undefined): string | undefined {

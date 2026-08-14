@@ -29,7 +29,11 @@ declare module 'cytoscape-fcose' {
   export default ext
 }
 
-cytoscape.use(fcose)
+// Register fcose — wrapped in try/catch: throws if already registered
+// (HMR reload / duplicate import), which caused "出现异常" on Canvas open.
+try {
+  cytoscape.use(fcose)
+} catch (_e: any) { /* already registered */ }
 
 const props = defineProps<{
   workspace?: string

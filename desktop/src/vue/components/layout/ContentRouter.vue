@@ -17,6 +17,7 @@ const WorkflowsListPage = defineAsyncComponent(() => import('../../pages/Workflo
 const KnowledgeBase = defineAsyncComponent(() => import('../../pages/KnowledgeBase.vue'))
 const KnowledgeCanvasPage = defineAsyncComponent(() => import('../../pages/KnowledgeCanvasPage.vue'))
 const ArenaPage = defineAsyncComponent(() => import('../../pages/ArenaPage.vue'))
+const MemoryPage = defineAsyncComponent(() => import('../../pages/MemoryPage.vue'))
 const AgentOverview = defineAsyncComponent(() => import('../../pages/AgentOverview.vue'))
 const ContinuousLearningSettings = defineAsyncComponent(() => import('../../pages/settings/ContinuousLearningSettings.vue'))
 const DesignPage = defineAsyncComponent(() => import('../../pages/DesignPage.vue'))
@@ -149,6 +150,11 @@ const resolvedPage = computed(() => {
       <KnowledgeCanvasPage v-else-if="resolvedPage.kind === 'brain-canvas'" />
       <ActiveSession v-else-if="resolvedPage.kind === 'active'" />
       <ContinuousLearningSettings v-else-if="resolvedPage.kind === 'continuous-learning'" />
+      <!-- A-1: Observer promoted to primary nav — reuses the same settings
+           page, which works as both a settings sub-page and a standalone tab. -->
+      <ContinuousLearningSettings v-else-if="resolvedPage.kind === 'observer'" />
+      <!-- B-2: Memory promoted to primary nav -->
+      <MemoryPage v-else-if="resolvedPage.kind === 'memory'" />
     </div>
 
     <!-- Terminal tab overlays (mirrors ContentRouter.tsx lines 58–80) -->

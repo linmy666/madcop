@@ -35,11 +35,26 @@ _PROTOCOL_RE = re.compile(
     re.IGNORECASE,
 )
 _FA_MARKER = re.compile(
-    r"(?:Action\s*[:：]\s*)?FINAL_ANSWER\b\s*[:：\n]",
+    r"(?:Action\s*[:：]\s*)?FINAL_ANSWER\b\s*[:：\n]"
+    r"(?:\s*Action\s*Input\s*[:：]\s*)?",  # also consume a following "Action Input:" line
     re.IGNORECASE,
 )
 _AI_MARKER = re.compile(r"Action\s*Input\s*[:：]", re.IGNORECASE)
 _BARE_FA_RE = re.compile(r"FINAL_ANSWER\s*[:：]\s*(.*)", re.DOTALL | re.IGNORECASE)
+
+# D1 fix: strip <think>...</think> blocks before a raw response is appended
+# back into the LLM context. Think content is for the DISPLAY layer
+# (ThinkSeparator routes it to THOUGHT_DELTA); the next ReAct iteration
+# must never re-receive chain-of-thought — it inflates tokens and re-leaks
+# reasoning the design says to discard.
+_THINK_BLOCK_RE = re.compile(r"<think>[\s\S]*?</think>", re.IGNORECASE)
+
+
+def _context_clean(text: str) -> str:
+    """Strip think blocks + leftover think tags for LLM-context use."""
+    cleaned = _THINK_BLOCK_RE.sub("", text)
+    cleaned = re.sub(r"</?think>", "", cleaned)
+    return cleaned.strip()
 
 
 class ReActEngineV4(AgentEngine):
@@ -68,6 +83,25 @@ class ReActEngineV4(AgentEngine):
             # --- LLM call with streaming + FINAL_ANSWER detection ---
             raw = ""
             stream_state = 0  # 0=reasoning, 1=saw FA, 2=answer body
+            # ThinkSeparator: MiniMax/DeepSeek/Qwen put reasoning in
+            # <think>...</think> tags in content. Split them so reasoning
+            # goes to THOUGHT_DELTA (visible thinking) and the answer goes
+            # to TEXT_DELTA — instead of dumping everything as thought or
+            # leaking <think> tags into the answer.
+            from .runtime import ThinkSeparator
+            _think_sep = ThinkSeparator()
+            _think_block_open = False
+            self._v4_answer_buf = ''  # accumulate post-think text for ReAct detection
+            # BUG-FIX: when MiniMax / similar OpenAI-compatible models are
+            # given a ReAct-style text prompt, they emit tool calls in the
+            # wrong shape ("web_searchAction Input: {...}" as plain text),
+            # which the Action/Input parser then misreads as a brand-new
+            # tool name. Instead, pass `tools=ctx.tool_schemas` so the model
+            # uses the standard OpenAI tool_calls field, then prefer that
+            # path when present.
+            oa_tc_name: str | None = None
+            oa_tc_args: str = ""
+            oa_tc_id: str | None = None
 
             try:
                 if hasattr(ctx.client, "stream"):
@@ -76,7 +110,35 @@ class ReActEngineV4(AgentEngine):
                         model=ctx.model,
                         temperature=0.1,
                         max_tokens=2048,
+                        tools=ctx.tool_schemas or None,
                     ):
+                        # Capture OpenAI-style tool_call deltas if any.
+                        for d in (getattr(chunk, "tool_call_deltas", None) or ()):
+                            if not isinstance(d, dict):
+                                continue
+                            if d.get("id"):
+                                oa_tc_id = d["id"]
+                            if d.get("name"):
+                                oa_tc_name = d["name"]
+                            if d.get("arguments"):
+                                oa_tc_args += d["arguments"]
+                        # Non-streaming fallback (some clients only emit
+                        # the full tool_call at the end).
+                        end_tc = getattr(chunk, "tool_call", None)
+                        if end_tc is not None and not oa_tc_name:
+                            if hasattr(end_tc, "name"):
+                                oa_tc_name = end_tc.name
+                                oa_tc_args = (
+                                    json.dumps(end_tc.arguments, ensure_ascii=False)
+                                    if not isinstance(end_tc.arguments, str)
+                                    else end_tc.arguments
+                                )
+                            elif isinstance(end_tc, dict):
+                                oa_tc_name = end_tc.get("function", {}).get("name") or oa_tc_name
+                                a = end_tc.get("function", {}).get("arguments")
+                                if a:
+                                    oa_tc_args = a if isinstance(a, str) else json.dumps(a, ensure_ascii=False)
+
                         text = getattr(chunk, "text", "") or ""
                         if not text:
                             fr = getattr(chunk, "finish_reason", None)
@@ -84,6 +146,88 @@ class ReActEngineV4(AgentEngine):
                                 break
                             continue
                         raw += text
+
+                        # BUG-FIX: MiniMax after </think> often outputs
+                        # "Action: web_search\nAction Input: {...}" as TEXT
+                        # (not OpenAI tool_calls). ThinkSeparator would route
+                        # this as answer text. Instead, detect ReAct protocol
+                        # markers in the post-think output and let the legacy
+                        # state-0 ReAct parser handle them (which knows how to
+                        # extract Action/Action Input and emit tool calls).
+                        #
+                        # Strategy: feed to ThinkSeparator, but if the ANSWER
+                        # portion contains Action:/FINAL_ANSWER:, DON'T stream
+                        # it — accumulate it so parse_react_response at stream
+                        # end can extract the tool call.
+                        _reasoning_chunk, _answer_chunk = _think_sep.feed(text)
+
+                        # Route reasoning → THOUGHT_DELTA (visible thinking)
+                        if _reasoning_chunk:
+                            _emit_r = _PROTOCOL_RE.sub("", _reasoning_chunk)
+                            if _emit_r:
+                                if not _think_block_open:
+                                    _think_block_open = True
+                                    thought_active = True
+                                    thought_counter += 1
+                                    cur_tid = f"thought-{thought_counter}"
+                                    yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=cur_tid)
+                                yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=cur_tid, content=_emit_r)
+
+                        # If we just exited <think>, close the thought block
+                        # and switch to answer streaming (state 2).
+                        if _answer_chunk and _think_block_open and not _think_sep.in_think:
+                            yield AgentStep(kind=StepKind.THOUGHT_END, thought_id=cur_tid,
+                                            elapsed_ms=int((time.time() - step_start) * 1000))
+                            thought_active = False
+                            _think_block_open = False
+                            stream_state = 2  # switch to answer mode
+
+                        # Route answer → TEXT_DELTA
+                        # BUG-FIX: MiniMax after </think> may output a MIX of
+                        # prose (": 用户想知道...") AND ReAct protocol
+                        # ("Action: web_search\nAction Input: {...}"). We can't
+                        # know if it's answer or protocol until we've seen the
+                        # full post-think output. So: BUFFER all post-think
+                        # text, and only stream it as answer IF we're confident
+                        # it's NOT protocol text.
+                        #
+                        # Strategy: buffer until we either (a) see a protocol
+                        # marker (→ keep buffering, let parse_react_response
+                        # handle at stream end), or (b) accumulate >30 chars
+                        # with NO markers (→ flush buffer as answer, switch to
+                        # direct streaming). This prevents the race where "T"
+                        # gets streamed before "Thought:" arrives.
+                        if _answer_chunk:
+                            self._v4_answer_buf = getattr(self, '_v4_answer_buf', '') + _answer_chunk
+                            _full_answer = self._v4_answer_buf
+                            _has_react_markers = bool(re.search(
+                                r'(Action\s*[:：]|Action\s*Input\s*[:：]|FINAL_ANSWER\s*[:：]|Thought\s*[:：])',
+                                _full_answer, re.IGNORECASE
+                            ))
+                            if _has_react_markers:
+                                # Protocol text detected — buffer everything.
+                                # parse_react_response at stream end handles it.
+                                pass
+                            elif len(_full_answer) > 30:
+                                # 30+ chars with NO protocol markers → this is
+                                # a real answer. Flush the buffer and switch to
+                                # direct streaming for the rest.
+                                if not fa_streamed:
+                                    fa_streamed = True
+                                    yield AgentStep(kind=StepKind.TEXT_DELTA, content=_full_answer.lstrip(" \t\n"))
+                                else:
+                                    yield AgentStep(kind=StepKind.TEXT_DELTA, content=_answer_chunk)
+                                stream_state = 2
+                            # else: <30 chars, no markers yet — keep buffering.
+
+                        # If ThinkSeparator handled this chunk (reasoning or
+                        # answer), skip state-0 ReAct logic.
+                        _handled = bool(_reasoning_chunk) or bool(_answer_chunk)
+                        if _handled:
+                            fr = getattr(chunk, "finish_reason", None)
+                            if fr:
+                                break
+                            continue
 
                         if stream_state == 0:
                             if _FA_MARKER.search(raw):
@@ -100,6 +244,15 @@ class ReActEngineV4(AgentEngine):
                                 m = _FA_MARKER.search(raw)
                                 if m:
                                     tail = raw[m.end():].lstrip(" \t\n")
+                                    # BUG: models write "Action: FINAL_ANSWER
+                                    # \nAction Input:\n\n<answer>" — the tail
+                                    # then starts with a stray "Action Input:"
+                                    # line that leaked into the answer. Strip
+                                    # any leading protocol lines from the tail.
+                                    tail = re.sub(
+                                        r'^(Action\s*Input|Input|Action|Observation)\s*[:：]\s*',
+                                        '', tail, flags=re.IGNORECASE
+                                    ).lstrip(" \t\n")
                                     if tail:
                                         fa_streamed = True
                                         yield AgentStep(kind=StepKind.TEXT_DELTA, content=tail)
@@ -145,7 +298,56 @@ class ReActEngineV4(AgentEngine):
                 return
 
             # --- Parse response ---
+            # BUG-FIX: if ThinkSeparator already streamed the answer (model
+            # used <think> tags), DON'T run parse_react_response — the answer
+            # is already in the stream. Running the ReAct parser on MiniMax
+            # output causes duplicate answer loops.
+            #
+            # D3 fix: BUT if the model ALSO emitted an OpenAI tool_call
+            # (prose like "Let me search that" + tool_call deltas), the
+            # tool must win — returning early here dropped the call and
+            # the user got neither the search nor a correct answer.
+            if fa_streamed and not oa_tc_name:
+                yield AgentStep(kind=StepKind.TEXT_END)
+                yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")
+                return
+
+            # If ThinkSeparator buffered post-think text but didn't stream it
+            # (protocol markers detected OR <30 chars), handle at stream end.
+            _buf = getattr(self, '_v4_answer_buf', '')
+            if _buf and not fa_streamed and not oa_tc_name:
+                _has_action = bool(re.search(r'Action\s*[:：]', _buf, re.IGNORECASE))
+                if not _has_action:
+                    # No Action — model gave up on ReAct. Strip protocol
+                    # prefixes (Thought:, :, etc.) and output as answer.
+                    _clean = _buf.strip()
+                    _clean = re.sub(
+                        r'^[\s:：]*(Thought|Action|FINAL_ANSWER|Observation)\s*[:：]\s*',
+                        '', _clean, flags=re.IGNORECASE
+                    )
+                    _clean = re.sub(r'^[\s:：]+', '', _clean).strip()
+                    if _clean:
+                        yield AgentStep(kind=StepKind.TEXT_DELTA, content=_clean)
+                    yield AgentStep(kind=StepKind.TEXT_END)
+                    yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")
+                    return
+
             thought, action, action_input = parse_react_response(raw)
+
+            # BUG-FIX: if the LLM emitted a proper OpenAI tool_calls object
+            # (via `tools=ctx.tool_schemas` we now pass to client.stream),
+            # prefer that over the text-parsed result. This is critical for
+            # models like MiniMax that don't follow ReAct text format and
+            # would otherwise emit garbage like "web_searchAction Input: {...}"
+            # which the parser then misreads as a brand-new tool name.
+            if oa_tc_name:
+                action = oa_tc_name
+                action_input = oa_tc_args or action_input
+                # If no text thought was emitted, fall back to the raw text
+                # (which is the model's "reasoning" preamble) so COT
+                # enforcement below still passes.
+                if not thought.strip():
+                    thought = raw.strip() or f"Calling {action}"
 
             # Close any open thought block
             if thought_active:
@@ -162,7 +364,7 @@ class ReActEngineV4(AgentEngine):
                     "你刚才尝试调用工具但没有先思考。"
                     "请先用 Thought 分析当前状况，然后再写 Action。"
                 )
-                messages.append(Message(role="assistant", content=raw))
+                messages.append(Message(role="assistant", content=_context_clean(raw)))
                 messages.append(Message(role="user", content=f"Observation: {reflection}"))
                 continue
 
@@ -179,11 +381,26 @@ class ReActEngineV4(AgentEngine):
             )
             if is_same_loop or is_research_loop:
                 reflection = "你已经连续调用了多次同一类工具。请停止，换工具或直接 FINAL_ANSWER。"
-                messages.append(Message(role="assistant", content=raw))
+                messages.append(Message(role="assistant", content=_context_clean(raw)))
                 messages.append(Message(role="user", content=f"Observation: {reflection}"))
                 continue
 
             steps_log.append(action)
+
+            # BUG-FIX: if the parser returned an empty action name (happens
+            # when the model emits free-form text without 'Action:' markers
+            # and without FINAL_ANSWER), don't try to call a tool named ''.
+            # Instead treat the raw text as a thought + prompt the model to
+            # either call a tool properly or give FINAL_ANSWER.
+            if not action.strip():
+                reflection = (
+                    "你的回复没有包含有效的 Action 或 FINAL_ANSWER。"
+                    "请用 'Thought: ...\\nAction: tool_name\\nAction Input: {...}' "
+                    "格式调用工具，或 'Action: FINAL_ANSWER\\nFINAL_ANSWER: 你的回答' 结束。"
+                )
+                messages.append(Message(role="assistant", content=_context_clean(raw)))
+                messages.append(Message(role="user", content=f"Observation: {reflection}"))
+                continue
 
             # --- FINAL_ANSWER ---
             if action.upper() == "FINAL_ANSWER":
@@ -196,11 +413,30 @@ class ReActEngineV4(AgentEngine):
 
             # --- Tool call ---
             tool_use_id = f"tool-{step_num}"
-            # Parse args
-            try:
-                args = json.loads(action_input) if action_input.strip() else {}
-            except json.JSONDecodeError:
-                args = {"path": action_input.strip(), "query": action_input.strip()}
+            # Parse args. BUG-FIX: some models (MiniMax in ReAct mode)
+            # occasionally emit MULTIPLE JSON objects concatenated
+            # (e.g. {"query":"a"}{"query":"b"}) when they want to fire
+            # two searches at once. json.loads rejects that, and the old
+            # fallback stuffed the whole blob into {"path": ...} which
+            # broke web_search ("path" is not a valid param). Now we try
+            # to extract the FIRST valid JSON object via regex; only if
+            # that also fails do we fall back to the path/query shape.
+            args: dict = {}
+            _ai = action_input.strip()
+            if _ai:
+                try:
+                    args = json.loads(_ai)
+                except json.JSONDecodeError:
+                    # Try to find the first {...} block (handles concat JSON
+                    # and surrounding ReAct prose like 'Input: {"query":...}')
+                    _m = re.search(r'\{[^{}]*\}', _ai, re.DOTALL)
+                    if _m:
+                        try:
+                            args = json.loads(_m.group(0))
+                        except json.JSONDecodeError:
+                            args = {"query": _ai[:200], "path": _ai[:200]}
+                    else:
+                        args = {"query": _ai[:200], "path": _ai[:200]}
 
             yield AgentStep(
                 kind=StepKind.TOOL_START,
@@ -208,6 +444,37 @@ class ReActEngineV4(AgentEngine):
                 tool_input=args,
                 tool_use_id=tool_use_id,
             )
+
+            # HITL confirmation: if the tool is mutating AND confirm_handler
+            # is set, ask the user before executing.
+            _approved = True
+            if ctx.confirm_handler:
+                try:
+                    from madcop.tools.safety import needs_confirmation
+                    if needs_confirmation(action):
+                        yield AgentStep(
+                            kind=StepKind.TOOL_CONFIRM_REQUEST,
+                            tool_name=action,
+                            tool_input=args,
+                            tool_use_id=tool_use_id,
+                        )
+                        _approved = ctx.confirm_handler(action, args, tool_use_id)
+                except Exception:
+                    _approved = True
+
+            if not _approved:
+                observation = "[用户拒绝了此操作]"
+                is_error = True
+                yield AgentStep(
+                    kind=StepKind.TOOL_END,
+                    tool_name=action,
+                    tool_use_id=tool_use_id,
+                    tool_result=observation,
+                    is_error=True,
+                )
+                messages.append(Message(role="assistant", content=_context_clean(raw)))
+                messages.append(Message(role="user", content=f"Observation: {observation}"))
+                continue
 
             # Execute tool
             observation = ""
@@ -272,7 +539,7 @@ class ReActEngineV4(AgentEngine):
                     return  # pause the loop; the user's next send re-enters run()
 
             # Feed observation back to LLM
-            messages.append(Message(role="assistant", content=raw))
+            messages.append(Message(role="assistant", content=_context_clean(raw)))
             messages.append(Message(role="user", content=f"Observation: {observation}"))
 
         # --- Max steps exhausted ---
@@ -301,31 +568,28 @@ class ReActEngineV4(AgentEngine):
         if ctx.system_prefix:
             sys_text = f"{ctx.system_prefix}\n\n{sys_text}"
 
-        # Build user_text: include full multi-turn history so the
-        # LLM can recall prior turns. Last message is the current
-        # query; all prior messages are context.
-        msgs = ctx.messages or []
-        if len(msgs) > 1:
-            history_lines = []
-            for m in msgs[:-1]:
-                role = m.role or "user"
-                content = m.content or ""
-                history_lines.append(f"[{role}] {content}")
-            history_block = "\n".join(history_lines)
-            current_query = msgs[-1].content or ""
-            user_text = (
-                f"--- 对话历史 ---\n{history_block}\n\n"
-                f"--- 当前问题 ---\n{current_query}"
-            )
-        else:
-            user_text = msgs[-1].content if msgs else ""
+        # D6 fix: preserve role structure — pass multi-turn history
+        # through as native messages instead of flattening everything
+        # into one "[role] content" user prompt. Flattening destroyed
+        # the user/assistant alternation the model was trained on and
+        # made every prior turn look like user input.
+        msgs = list(ctx.messages or [])
+        if not msgs:
+            msgs = [Message(role="user", content="")]
 
+        out = [Message(role="system", content=sys_text)]
+        for m in msgs:
+            # Sanitize: strip think blocks from any historical assistant
+            # turns (D1 — reasoning must never re-enter context).
+            content = _context_clean(m.content or "") if m.role == "assistant" else (m.content or "")
+            if not content and m.role == "assistant":
+                continue  # skip empty assistant turns (all-think content)
+            out.append(Message(role=m.role or "user", content=content))
+
+        # Append context as a final user note if present.
         if ctx.context:
-            user_text = f"{user_text}\n\n--- 上下文 ---\n{ctx.context}"
-        return [
-            Message(role="system", content=sys_text),
-            Message(role="user", content=user_text),
-        ]
+            out.append(Message(role="user", content=f"--- 上下文 ---\n{ctx.context}"))
+        return out
 
     @staticmethod
     def _format_tools(schemas: list[dict]) -> str:

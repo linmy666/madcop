@@ -6,6 +6,7 @@ defineProps<{
     id: string
     type: 'success' | 'error' | 'warning' | 'info'
     message: string
+    action?: { label: string; onClick: () => void }
   }>
 }>()
 
@@ -30,10 +31,18 @@ const typeClasses: Record<string, string> = {
     >
       <div class="flex items-center justify-between gap-2">
         <span>{{ toast.message }}</span>
-        <button
-          class="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-lg leading-none"
-          @click="emit('remove', toast.id)"
-        >×</button>
+        <div class="flex items-center gap-2">
+          <!-- C-2: action button (e.g. Undo) -->
+          <button
+            v-if="toast.action"
+            class="text-[var(--color-brand)] hover:brightness-125 text-[13px] font-medium"
+            @click="toast.action.onClick(); emit('remove', toast.id)"
+          >{{ toast.action.label }}</button>
+          <button
+            class="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] text-lg leading-none"
+            @click="emit('remove', toast.id)"
+          >×</button>
+        </div>
       </div>
     </div>
   </div>

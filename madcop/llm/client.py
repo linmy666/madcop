@@ -316,11 +316,25 @@ class OpenAICompatClient(ChatClient):
         default_headers = dict(self.harness.extra_headers)
         # auth_token strategy: some gateways want empty api_key header style
         # still use Bearer via SDK; dual strategies pass the same token.
+        #
+        # RESILIENCE: build an httpx client that ignores proxy env vars.
+        # Users in mainland China often have a local proxy (Clash on
+        # :7897 etc.) that may be DOWN — httpx would then fail every LLM
+        # call with "Connection error" even though the provider API is
+        # directly reachable. Bypassing the proxy makes LLM calls work
+        # regardless of proxy state.
+        import httpx
+        _http = httpx.Client(
+            timeout=timeout,
+            verify=False,
+            trust_env=False,  # ignore http_proxy/https_proxy env vars
+        )
         self._client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=timeout,
             default_headers=default_headers or None,
+            http_client=_http,
         )
 
     def _reasoning_effort_extra_body(self, effort: str | None, model: str | None) -> dict | None:

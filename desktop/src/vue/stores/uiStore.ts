@@ -23,7 +23,7 @@ export const useUIStore = defineStore('ui', {
     pendingSettingsTab: null as string | null,
     pendingMemoryPath: null as string | null,
     activeModal: null as string | null,
-    toasts: [] as Array<{ id: string; message: string; type: 'info' | 'success' | 'error' }>,
+    toasts: [] as Array<{ id: string; message: string; type: 'info' | 'success' | 'error'; action?: { label: string; onClick: () => void } }>,
   }),
 
   actions: {
@@ -55,6 +55,14 @@ export const useUIStore = defineStore('ui', {
       setTimeout(() => {
         this.toasts = this.toasts.filter(t => t.id !== id)
       }, 4000)
+    },
+    /** C-2: Toast with an action button (e.g. "Undo" for destructive ops). */
+    showToastWithAction(message: string, actionLabel: string, onAction: () => void, type: 'info' | 'success' | 'error' = 'info') {
+      const id = `toast-${++toastCounter}`
+      this.toasts.push({ id, message, type, action: { label: actionLabel, onClick: onAction } })
+      setTimeout(() => {
+        this.toasts = this.toasts.filter(t => t.id !== id)
+      }, 6000)  // longer for action toasts so user has time to click
     },
     /** Compat alias used by several Vue pages: addToast({ type, message }). */
     addToast(payload: { message: string; type?: 'info' | 'success' | 'error' } | string, type?: 'info' | 'success' | 'error') {

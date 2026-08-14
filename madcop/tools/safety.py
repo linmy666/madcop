@@ -257,6 +257,11 @@ def danger_level(tool: str) -> str:
     return DANGER_LEVELS.get(tool, "safe")
 
 
+def needs_confirmation(tool: str) -> bool:
+    """True if the tool mutates state and should trigger HITL confirmation."""
+    return danger_level(tool) in ("mutating", "destructive")
+
+
 __all__ = [
     "WriteFileInput",
     "EditFileInput",

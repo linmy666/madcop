@@ -440,6 +440,10 @@ onMounted(loadLearning)
         <div v-else-if="activeTab === 'mcp'" class="settings-section settings-section--fullbleed">
           <McpSettings />
         </div>
+        <!-- ═══ Plugins ═══ -->
+        <div v-else-if="activeTab === 'plugins'" class="settings-section settings-section--fullbleed">
+          <PluginSettingsPage />
+        </div>
         <!-- ═══ Agents ═══ -->
         <div v-else-if="activeTab === 'agents'" class="settings-section settings-section--fullbleed">
           <AgentsSettingsPage />

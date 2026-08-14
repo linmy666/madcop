@@ -25,6 +25,117 @@ from typing import Any, AsyncIterator, Callable, Iterator, Optional
 from madcop.llm.client import Message
 
 
+# ─── <think> tag separator ──────────────────────────────────────────────────
+# Models like MiniMax-M3, DeepSeek-R1, Qwen-QwQ put their reasoning inside
+# <think>...</think> tags in the CONTENT stream (not in a separate
+# reasoning_content field). This separator splits incoming text deltas into
+# reasoning (inside <think>) vs answer (outside), so the frontend can show
+# the reasoning process in a collapsible "thinking" block — exactly like
+# Claude / Cursor / Co-Work do — instead of hiding it or dumping it raw.
+#
+# Usage: create one ThinkSeparator per engine run, feed each text chunk via
+# .feed(text), and route the returned (reasoning, answer) to THOUGHT_DELTA /
+# TEXT_DELTA respectively. The separator buffers across chunk boundaries so
+# a split "</thi" + "nk>" is handled correctly.
+
+class ThinkSeparator:
+    """Stateful <think> tag splitter for streaming text.
+
+    feed(chunk) → (reasoning_text, answer_text)
+    Both may be empty. Call flush() at the end to drain the buffer.
+    Manages thought block lifecycle: emits nothing itself (the caller does
+    yield THOUGHT_START/END based on _in_think transitions).
+    """
+
+    def __init__(self):
+        self._buf = ""
+        self._in_think = False  # currently inside <think> block?
+        self._thought_started = False  # have we emitted thought_start?
+
+    @property
+    def in_think(self) -> bool:
+        return self._in_think
+
+    def feed(self, chunk: str) -> tuple[str, str]:
+        """Process a text chunk. Returns (reasoning, answer) strings."""
+        self._buf += chunk
+        reasoning_parts: list[str] = []
+        answer_parts: list[str] = []
+
+        while self._buf:
+            if self._in_think:
+                # Look for closing </think>
+                idx = self._buf.find("</think>")
+                if idx != -1:
+                    # Found closing tag
+                    reasoning_parts.append(self._buf[:idx])
+                    self._buf = self._buf[idx + 8:]  # skip past </think>
+                    self._in_think = False
+                    continue
+                # No closing tag found. Check if the buffer ENDS with a
+                # partial "</think>" prefix — if so, hold those chars back
+                # and output the rest immediately. This keeps reasoning
+                # streaming live instead of buffering everything.
+                hold = 0
+                close_tag = "</think>"
+                for n in range(min(len(close_tag) - 1, len(self._buf)), 0, -1):
+                    if self._buf.endswith(close_tag[:n]):
+                        hold = n
+                        break
+                safe = self._buf[:len(self._buf) - hold] if hold < len(self._buf) else ""
+                if safe:
+                    reasoning_parts.append(safe)
+                    self._buf = self._buf[len(safe):]
+                break  # wait for more data
+            else:
+                # Look for opening <think>
+                idx = self._buf.find("<think>")
+                if idx != -1:
+                    # Found opening tag
+                    before = self._buf[:idx]
+                    if before:
+                        answer_parts.append(before)
+                    self._buf = self._buf[idx + 7:]  # skip past <think>
+                    self._in_think = True
+                    self._thought_started = True
+                    continue
+                # No opening tag. Check for partial "<think>" prefix at end.
+                hold = 0
+                open_tag = "<think>"
+                for n in range(min(len(open_tag) - 1, len(self._buf)), 0, -1):
+                    if self._buf.endswith(open_tag[:n]):
+                        hold = n
+                        break
+                safe = self._buf[:len(self._buf) - hold] if hold < len(self._buf) else ""
+                if safe:
+                    # Strip leading whitespace/newlines right after </think>
+                    if self._thought_started:
+                        stripped = safe.lstrip("\n\r")
+                        if stripped:
+                            answer_parts.append(stripped)
+                            self._thought_started = False
+                    else:
+                        answer_parts.append(safe)
+                    self._buf = self._buf[len(safe):]
+                break
+
+        return ("".join(reasoning_parts), "".join(answer_parts))
+
+    def flush(self) -> tuple[str, str]:
+        """Drain any remaining buffer (call at end of stream)."""
+        remaining = self._buf
+        self._buf = ""
+        if self._in_think:
+            # Stream ended inside <think> — treat the rest as reasoning
+            return (remaining, "")
+        # Outside think — might have trailing answer text (e.g. model ended
+        # without closing tag, or leftover whitespace after </think>)
+        if remaining and self._thought_started:
+            remaining = remaining.lstrip("\n\r")
+            self._thought_started = False
+        return ("", remaining)
+
+
 # ─── Step Types ──────────────────────────────────────────────────────────────
 
 
@@ -39,6 +150,10 @@ class StepKind(str, Enum):
     # Tool lifecycle
     TOOL_START = "tool_start"
     TOOL_END = "tool_end"
+    # HITL: request user confirmation before executing a mutating tool.
+    # Frontend shows an inline approval card; user responds via
+    # POST /api/v4/chat/confirm → confirm_handler returns True/False.
+    TOOL_CONFIRM_REQUEST = "tool_confirm_request"
 
     # Answer text
     TEXT_DELTA = "text_delta"
@@ -138,6 +253,13 @@ class RunContext:
     tool_executor: Callable[..., str] | None = None
     tool_schemas: list[dict] = field(default_factory=list)
 
+    # HITL confirmation: when set, mutating tools (write_file/edit_file/
+    # bash etc.) will call this BEFORE executing. Returns True=approved,
+    # False=rejected. When None, all tools execute immediately (yolo).
+    # The handler is called from the worker thread and should BLOCK until
+    # the user responds (the SSE bridge handles async fan-out).
+    confirm_handler: Callable[[str, dict, str], bool] | None = None
+
     # System prompt prefix (extra rules injected by chat handler)
     system_prefix: str = ""
 
@@ -179,18 +301,57 @@ class QuickEngine(AgentEngine):
     anything complex should switch to standard mode.
     """
 
+    @staticmethod
+    def _with_system_prefix(ctx: RunContext) -> list:
+        """Return ctx.messages with ctx.system_prefix merged in.
+
+        Behavior:
+          - If there is no system_prefix: return the original list unchanged.
+          - If the first message is already a system role: prepend the prefix
+            to its content (so we don't clobber any existing instructions).
+          - Otherwise: insert a new system message at index 0.
+        This mirrors what ReActEngineV4._build_messages does, so quick
+        and standard modes get the same prompt prefix treatment.
+        """
+        prefix = (ctx.system_prefix or "").strip()
+        if not prefix:
+            return ctx.messages
+        msgs = list(ctx.messages)  # don't mutate the caller's list
+        if msgs and getattr(msgs[0], "role", None) == "system":
+            existing = getattr(msgs[0], "content", "") or ""
+            msgs[0] = Message(
+                role="system",
+                content=f"{prefix}\n\n{existing}".strip(),
+            )
+        else:
+            msgs.insert(0, Message(role="system", content=prefix))
+        return msgs
+
     def run(self, ctx: RunContext) -> Iterator[AgentStep]:
         try:
-            # 1) First call: stream with tools. The LLM client may emit
-            # tool_call_deltas (incremental) during streaming rather than
-            # a complete tool_call object at the end, so we accumulate.
+            # BUG-FIX: previously QuickEngine called client.stream(ctx.messages)
+            # without ever using ctx.system_prefix — so the chat handler's
+            # quick-mode tool awareness prompt (injected in chat_v4.py) was
+            # never delivered to the LLM. The model had no idea web_search
+            # / weather / memory were available, so it just hallucinated
+            # "I can't search the web" for time-sensitive queries.
+            #
+            # Now we prepend ctx.system_prefix as a system message (or merge
+            # into the first existing system message) before streaming.
+            messages = self._with_system_prefix(ctx)
             raw_text = ""
             tc_args_acc = ""
             tc_name: str | None = None
             tc_id: str | None = None
+            # Think-separator: splits <think>...</think> reasoning from the
+            # answer so the frontend can show the reasoning process live
+            # (like Claude/Cursor/Co-Work) instead of hiding it or dumping
+            # it raw into the answer bubble.
+            _think = ThinkSeparator()
+            _thought_block_open = False
             if hasattr(ctx.client, "stream"):
                 for chunk in ctx.client.stream(
-                    ctx.messages,
+                    messages,
                     model=ctx.model,
                     temperature=ctx.temperature,
                     max_tokens=ctx.max_tokens,
@@ -199,7 +360,20 @@ class QuickEngine(AgentEngine):
                     text = getattr(chunk, "text", "") or ""
                     if text:
                         raw_text += text
-                        yield AgentStep(kind=StepKind.TEXT_DELTA, content=text)
+                        reasoning, answer = _think.feed(text)
+                        # Route reasoning → THOUGHT_DELTA (visible thinking)
+                        if reasoning:
+                            if not _thought_block_open:
+                                _thought_block_open = True
+                                yield AgentStep(kind=StepKind.THOUGHT_START, thought_id="think-1")
+                            yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id="think-1", content=reasoning)
+                        # If we transitioned out of <think>, close the block
+                        if answer and _thought_block_open and not _think.in_think:
+                            yield AgentStep(kind=StepKind.THOUGHT_END, thought_id="think-1")
+                            _thought_block_open = False
+                        # Route answer → TEXT_DELTA
+                        if answer:
+                            yield AgentStep(kind=StepKind.TEXT_DELTA, content=answer)
                     # Process streaming tool-call deltas (Anthropic-style).
                     for d in (getattr(chunk, "tool_call_deltas", None) or ()):
                         if not isinstance(d, dict):
@@ -228,17 +402,40 @@ class QuickEngine(AgentEngine):
                     fr = getattr(chunk, "finish_reason", None)
                     if fr:
                         break
+                # Flush any remaining buffered text from the think separator
+                r_rem, a_rem = _think.flush()
+                if r_rem:
+                    if not _thought_block_open:
+                        _thought_block_open = True
+                        yield AgentStep(kind=StepKind.THOUGHT_START, thought_id="think-1")
+                    yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id="think-1", content=r_rem)
+                if _thought_block_open:
+                    yield AgentStep(kind=StepKind.THOUGHT_END, thought_id="think-1")
+                    _thought_block_open = False
+                if a_rem:
+                    yield AgentStep(kind=StepKind.TEXT_DELTA, content=a_rem)
             else:
                 resp = ctx.client.chat(
-                    ctx.messages,
+                    messages,
                     model=ctx.model,
                     temperature=ctx.temperature,
                     max_tokens=ctx.max_tokens,
                     tools=ctx.tool_schemas or None,
                 )
                 raw_text = getattr(resp, "content", "") or str(resp)
-                if raw_text:
-                    yield AgentStep(kind=StepKind.TEXT_DELTA, content=raw_text)
+                # Non-streaming: still split <think> tags for consistency.
+                _think2 = ThinkSeparator()
+                _tb2 = False
+                reasoning, answer = _think2.feed(raw_text)
+                r2, a2 = _think2.flush()
+                reasoning += r2
+                answer += a2
+                if reasoning:
+                    yield AgentStep(kind=StepKind.THOUGHT_START, thought_id="think-1")
+                    yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id="think-1", content=reasoning)
+                    yield AgentStep(kind=StepKind.THOUGHT_END, thought_id="think-1")
+                if answer:
+                    yield AgentStep(kind=StepKind.TEXT_DELTA, content=answer)
                 # Some non-streaming clients return a list of tool_calls.
                 tcs = getattr(resp, "tool_calls", None) or []
                 if tcs:
@@ -261,17 +458,45 @@ class QuickEngine(AgentEngine):
                     tool_input=args_dict,
                     tool_use_id=tool_use_id,
                 )
-                try:
-                    tool_result = ctx.tool_executor(
-                        tc_name, json.dumps(args_dict, ensure_ascii=False), ctx.work_dir
+                # HITL: if the tool is mutating AND a confirm_handler is
+                # set, ask the user before executing. This lets the
+                # frontend show an Accept/Reject card (with diff preview
+                # for file edits) before the change is applied.
+                _approved = True
+                if ctx.confirm_handler:
+                    try:
+                        from madcop.tools.safety import needs_confirmation
+                        if needs_confirmation(tc_name):
+                            yield AgentStep(
+                                kind=StepKind.TOOL_CONFIRM_REQUEST,
+                                tool_name=tc_name,
+                                tool_input=args_dict,
+                                tool_use_id=tool_use_id,
+                            )
+                            _approved = ctx.confirm_handler(tc_name, args_dict, tool_use_id)
+                    except Exception:
+                        _approved = True  # on error, proceed (don't block)
+
+                if not _approved:
+                    yield AgentStep(
+                        kind=StepKind.TOOL_END,
+                        tool_name=tc_name,
+                        tool_use_id=tool_use_id,
+                        tool_result="[用户拒绝了此操作]",
+                        is_error=True,
                     )
-                    result_text = (
-                        getattr(tool_result, "content", None)
-                        or (tool_result if isinstance(tool_result, str) else json.dumps(tool_result, ensure_ascii=False, default=str))
-                    )
-                except Exception as _te:
-                    result_text = f"[tool error: {_te}]"
-                yield AgentStep(
+                else:
+                    try:
+                        tool_result = ctx.tool_executor(
+                            tc_name, json.dumps(args_dict, ensure_ascii=False), ctx.work_dir
+                        )
+                        result_text = (
+                            getattr(tool_result, "content", None)
+                            or (tool_result if isinstance(tool_result, str) else json.dumps(tool_result, ensure_ascii=False, default=str))
+                        )
+                    except Exception as _te:
+                        result_text = f"[tool error: {_te}]"
+                    yield AgentStep(
                     kind=StepKind.TOOL_END,
                     tool_name=tc_name,
                     tool_use_id=tool_use_id,
@@ -317,22 +542,75 @@ class QuickEngine(AgentEngine):
 
 
 class EngineFactory:
-    """Create the right engine based on agent_mode."""
+    """Create the right engine based on agent_mode.
+
+    Mode design (product-oriented):
+    - chat:    Auto-routes to Quick (simple Q&A) or ReAct (needs tools/search)
+    - task:    MEA Harness loop (Manager→Executor→Auditor) for long-horizon work
+    - create:  CreationEngine (search→fetch→outline→write with citations)
+
+    Legacy modes (quick/standard/deep) are mapped for backward compat:
+    - quick → QuickEngine directly
+    - standard → ReActEngineV4
+    - deep → ReActEngineV4 with max_steps=20
+    """
+
+    @staticmethod
+    def _should_use_tools(ctx: RunContext) -> bool:
+        """Heuristic: does this query need tools (search/file/etc)?"""
+        last_msg = ""
+        if ctx.messages:
+            last_msg = (ctx.messages[-1].content or "").lower()
+        # Tool-needed signals: questions about current events, files, data
+        tool_signals = [
+            "最新", "搜索", "搜一下", "查一下", "今天", "现在", "当前",
+            "天气", "新闻", "价格", "汇率", "latest", "search", "current",
+            "文件", "读取", "修改", "创建", "file", "read", "write",
+            "帮我写", "帮我做", "帮我创建", "帮我分析",
+        ]
+        return any(sig in last_msg for sig in tool_signals)
 
     @staticmethod
     def create(ctx: RunContext) -> AgentEngine:
-        mode = (ctx.agent_mode or "standard").lower()
-        if mode == "quick":
+        mode = (ctx.agent_mode or "chat").lower()
+
+        # ── New product modes ──
+        if mode == "chat":
+            # Auto-route: simple Q&A → Quick, needs tools → ReAct
+            if EngineFactory._should_use_tools(ctx):
+                from .react_v4 import ReActEngineV4
+                return ReActEngineV4()
+            return QuickEngine()
+
+        elif mode == "task":
+            # MEA Harness: Manager→Executor→Auditor loop for long tasks.
+            # Returns AgentStep events like a normal engine.
+            from madcop.harness import MadCopHarness
+
+            class _HarnessEngineWrapper(AgentEngine):
+                def __init__(self):
+                    self._harness = None
+
+                def run(self, ctx: RunContext):
+                    self._harness = MadCopHarness(ctx, max_steps=5)
+                    yield from self._harness.run()
+
+            return _HarnessEngineWrapper()
+
+        elif mode == "create":
+            from .creation import CreationEngine
+            return CreationEngine()
+
+        # ── Legacy modes (backward compat) ──
+        elif mode == "quick":
             return QuickEngine()
         elif mode == "standard":
             from .react_v4 import ReActEngineV4
             return ReActEngineV4()
         elif mode == "deep":
-            from .deep_v4 import DeepEngineV4
-            return DeepEngineV4()
-        elif mode == "create":
-            from .creation import CreationEngine
-            return CreationEngine()
+            from .react_v4 import ReActEngineV4
+            ctx.max_steps = 20
+            return ReActEngineV4()
         else:
             return QuickEngine()
 

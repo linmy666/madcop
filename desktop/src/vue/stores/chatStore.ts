@@ -6,6 +6,7 @@ import { useSessionRuntimeStore } from './sessionRuntimeStore'
 import { useSettingsStore } from './settingsStore'
 import { useTabStore } from './tabs'
 import { useUIStore } from './uiStore'
+import { syncLiveState, resetLiveState, endLiveState } from '../composables/useLiveState'
 import { getApiUrl } from '../api/client'
 
 // v3.0: local persistence for per-session messages. The chat API
@@ -389,6 +390,8 @@ export const useChatStore = defineStore('chat', {
     ) {
       const session = this.getSession(sessionId)
       session.chatState = 'busy'
+      // Sync to liveState so PlanTasksPanel shows "思考中" immediately
+      resetLiveState(sessionId)
       // P2-12 — flip the tab's status so Sidebar's running indicator
       // reflects this session. (Previously status was hard-coded to
       // 'idle' on open and never updated.)
@@ -553,7 +556,7 @@ export const useChatStore = defineStore('chat', {
       // Unified agent mode (quick/standard/deep/create). Must match AgentModeSelector
       // default (standard). Using 'auto' here when unset made the UI show「标准」
       // while the backend ran plan_mode + clarify with no visible reply.
-      const _agentMode = _runtimeSel?.agentMode || 'standard'
+      const _agentMode = _runtimeSel?.agentMode || 'chat'
       // Bump the preview refresh key so any stale HTML from a previous
       // task is re-fetched — prevents the user from seeing the last
       // task's preview while the new one is still streaming.
@@ -711,12 +714,35 @@ export const useChatStore = defineStore('chat', {
           // same value (sdk.tsx:48-80). Terminal events bypass this
           // and call _flushTerminal() instead of _flushNow() so a 'done'
           // event doesn't sit in the queue behind a stale rAF.
+          //
+          // Deep-Review C3: rAF callbacks are throttled to ZERO when the
+          // Electron window is hidden/minimized or the tab is backgrounded.
+          // Without a fallback, a long unattended run would accumulate
+          // tokens with no visible update until the user refocuses. We
+          // schedule BOTH a rAF (for visible smoothness) AND a setTimeout
+          // (for background reliability); _pendingFlush dedupes so only
+          // the first to fire runs _flushNow.
           const _requestFlush = () => {
             if (_pendingFlush) return
             _pendingFlush = true
             requestAnimationFrame(() => _flushNow())
+            setTimeout(_flushNow, 100)  // background fallback
           }
           const _flushTerminal = () => {
+            // BUG-FIX (Deep-Review C1): before the final write, recover any
+            // text held back in the tail buffer. The 批次2.2 incremental
+            // filter holds the last ≤24 chars of every chunk in
+            // sess._filterTail (in case they're the start of a split
+            // protocol marker). On terminal events (done/error/cancel/
+            // stream-end) that buffer must be flushed or up to 24 chars
+            // of the reply are silently lost. Previously only the
+            // text_end handler flushed it — done/error/stream-close all
+            // dropped the tail.
+            const _tsess: any = session
+            if (_tsess._filterTail) {
+              assistantMsg = (assistantMsg || '') + _tsess._filterTail
+              _tsess._filterTail = ''
+            }
             // Cancel any pending frame; apply the final write now.
             _pendingFlush = false
             _flushNow()
@@ -870,6 +896,12 @@ export const useChatStore = defineStore('chat', {
                     // Some models wrap FINAL_ANSWER as {"message":"a\\nb"} —
                     // unwrap so markdown renders instead of raw JSON.
                     let chunk = event.content as string
+                    // Fallback: if the backend ThinkSeparator didn't strip
+                    // <think> tags (e.g. legacy path or edge case), strip
+                    // them here so reasoning doesn't leak into the answer.
+                    if (chunk.includes('<think>') || chunk.includes('</think>')) {
+                      chunk = chunk.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<\/?think>/g, '').trim()
+                    }
                     const trimmed = chunk.trim()
                     if (
                       (trimmed.startsWith('{') && trimmed.includes('"message"'))
@@ -883,29 +915,49 @@ export const useChatStore = defineStore('chat', {
                         }
                       } catch { /* keep raw */ }
                     }
-                    // v3.8.2 — accumulate raw text and re-filter on every
-                    // token, exactly like reasoning. Per-chunk filtering
-                    // can't match 'Action Input:' when it's split across
-                    // chunks ('Action' + ' Input:'), so the protocol marker
-                    // leaks into the reply bubble.
+                    // BUG-FIX (批次2.2): previously every token re-ran 4
+                    // global regexes over the ENTIRE accumulated text
+                    // (sess2._rawText), making long replies O(n²) and
+                    // visibly choppy. Now we filter only the NEW chunk and
+                    // append, with a small tail-buffer to catch protocol
+                    // markers split across chunks (e.g. "Action" + " Input:").
                     const sess2: any = session
-                    sess2._rawText = (sess2._rawText || '') + chunk
-                    let filtered = sess2._rawText as string
-                    filtered = filtered
+                    // _filterTail holds the last ~24 chars of the previous
+                    // chunk that might be the start of a split marker.
+                    const _tail = (sess2._filterTail || '') as string
+                    const _combined = _tail + chunk
+                    // Filter protocol markers from the combined buffer.
+                    let _filteredChunk = _combined
                       .replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
                       .replace(/(FINAL_ANSWER)\s*[:：]/gi, '')
                       .replace(/\bAction\s*Input\b\s*[:：]\s*/gi, '')
+                      .replace(/\\n/g, '\n').replace(/\\t/g, '\t')
                       .replace(/\n{3,}/g, '\n\n')
-                    // v3.8.5 — assistantMsg is the FULL filtered text.
-                    // Do NOT += a delta on top — that was the white-screen
-                    // bug: line 764 set assistantMsg = filtered, then line
-                    // 769 did assistantMsg += chunk (the delta), producing
-                    // garbage doubled content that Markdown couldn't render.
-                    assistantMsg = filtered
-                    // Handle literal \n escapes some models emit.
-                    if (assistantMsg.includes('\\n') && (assistantMsg.match(/\n/g) || []).length < (assistantMsg.match(/\\n/g) || []).length) {
-                      assistantMsg = assistantMsg.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+                    // Save the tail of what's LEFT after filtering, in case
+                    // a marker is still forming. We only keep the last 24
+                    // chars (longest marker is "FINAL_ANSWER" = 13 chars).
+                    //
+                    // Deep-Review C5: only engage the tail buffer once the
+                    // accumulated text is long enough that holding back 24
+                    // chars is negligible. For short replies (< 48 chars
+                    // total), appending directly means the user sees text
+                    // trickle in immediately instead of nothing-then-pop.
+                    const _accLen = (assistantMsg || '').length
+                    const _TAIL_THRESHOLD = 48
+                    if (_accLen >= _TAIL_THRESHOLD) {
+                      sess2._filterTail = _filteredChunk.slice(-24)
+                      const _safeAppend = _filteredChunk.slice(0, -24)
+                      if (_safeAppend) assistantMsg = (assistantMsg || '') + _safeAppend
+                    } else {
+                      // Short reply: append the whole filtered chunk. The
+                      // risk of a split marker at this length is minimal
+                      // (most markers are mid-sentence), and visibility
+                      // matters more than perfect filtering.
+                      sess2._filterTail = ''
+                      assistantMsg = (assistantMsg || '') + _filteredChunk
                     }
+                    // Keep rawText for debugging/compaction, but don't filter it.
+                    sess2._rawText = (sess2._rawText || '') + chunk
                     _requestFlush()
                     // The final answer is now streaming in. Switch out of the
                     // "thinking" state so the hand-drawn planning animation is
@@ -917,6 +969,25 @@ export const useChatStore = defineStore('chat', {
                       session.chatState = 'streaming'
                       if (assistantMsgObj) assistantMsgObj.isStreaming = true
                     }
+                    // Sync live state for PlanTasksPanel (thinking + answer progress)
+                    syncLiveState({
+                      isStreaming: true,
+                      thoughts: (session.thoughtBlocks || []).map(tb => ({ id: tb.id, text: tb.text, done: tb.done })),
+                      tools: [],
+                      answerLength: (assistantMsg || '').length,
+                      sessionId,
+                    })
+                  } else if (event.type === 'text_end') {
+                    // BUG-FIX: text_end was mapped in KIND_TO_TYPE but had
+                    // no handler, so assistantMsgObj.isStreaming stayed true
+                    // until 'done' arrived. If 'done' was ever lost/delayed,
+                    // the streaming caret blinked forever on a finished
+                    // message. Now we stop the caret here — 'done' still
+                    // handles session.chatState + tab status + finalization.
+                    // (_flushTerminal now handles tail-buffer recovery
+                    // uniformly — see Deep-Review C1.)
+                    if (assistantMsgObj) assistantMsgObj.isStreaming = false
+                    _flushTerminal()
                   } else if (event.type === 'done') {
                     session.chatState = 'idle'
                     // P1-7/feature-clear — clear the live-streaming buffer
@@ -925,8 +996,9 @@ export const useChatStore = defineStore('chat', {
                     // blinking. The finalized content remains visible via
                     // the assistant_msg row in session.messages.
                     session.streamingText = ''
+                    endLiveState()  // notify PlanTasksPanel streaming ended
                     // P2-12 — mark the tab idle so Sidebar's running count clears.
-                    try { useTabStore().setTabStatus(_sse_sid, 'idle') } catch { /* ignore */ }
+                    try { useTabStore().setTabStatus(sessionId, 'idle') } catch { /* ignore */ }
                     // Sprint 4 — capture creation-engine citations from
                     // DONE.metadata (only present in create mode).
                     const _meta = (event as any)?.metadata
@@ -1045,6 +1117,14 @@ export const useChatStore = defineStore('chat', {
                     // Keep reasoningContent for backward compat
                     session.reasoningContent = (session.thoughtBlocks || [])
                       .map((b: any) => b.text).join('\n\n')
+                    // Sync live state for PlanTasksPanel
+                    syncLiveState({
+                      isStreaming: true,
+                      thoughts: (session.thoughtBlocks || []).map(tb => ({ id: tb.id, text: tb.text, done: tb.done })),
+                      tools: [],
+                      answerLength: (assistantMsg || '').length,
+                      sessionId,
+                    })
                   } else if (event.type === 'thought_end') {
                     // v3.10 — close the current thought block
                     const sess: any = session
@@ -1055,6 +1135,14 @@ export const useChatStore = defineStore('chat', {
                     sess._curThoughtId = null
                     sess._curRawBlock = ''  // v3.10.2 — reset for next block
                     session.thoughtBlocks = [...(session.thoughtBlocks || [])]
+                    // Sync: thought done → AgentPulse switches from "思考中"
+                    syncLiveState({
+                      isStreaming: true,
+                      thoughts: (session.thoughtBlocks || []).map(tb => ({ id: tb.id, text: tb.text, done: tb.done })),
+                      tools: [],
+                      answerLength: (assistantMsg || '').length,
+                      sessionId,
+                    })
                   } else if (event.type === 'reasoning_clear') {
                     // v3.10 — clear thought blocks + reasoningContent
                     session.reasoningContent = null
@@ -1115,6 +1203,14 @@ export const useChatStore = defineStore('chat', {
                     // thinking indicator so the user can see what's happening.
                     session.activeToolName = event.name
                     session.activeToolUseId = event.tool_use_id || `tool-${Date.now()}-${Math.random()}`
+                    // Sync live state so AgentPulse shows "调用 <tool>..."
+                    syncLiveState({
+                      isStreaming: true,
+                      thoughts: (session.thoughtBlocks || []).map(tb => ({ id: tb.id, text: tb.text, done: tb.done })),
+                      tools: [{ id: session.activeToolUseId, name: event.name, done: false, isError: false }],
+                      answerLength: (assistantMsg || '').length,
+                      sessionId,
+                    })
                     const toolMsg: UIMessage = {
                       type: 'tool_use',
                       toolUseId: session.activeToolUseId,
@@ -1210,12 +1306,20 @@ export const useChatStore = defineStore('chat', {
                       session.activeToolName = null
                     }
                     session.activeToolUseId = null
-                    // After tool execution, the next 'text' events belong to
-                    // the Phase-2 synthesis (a fresh answer), so reset the
-                    // assistant placeholder. This starts a NEW assistant
-                    // bubble after the tool cards instead of appending to
-                    // the Phase-1 pre-tool text — keeping the timeline as
-                    // [phase-1 text] → [tool] → [tool_result] → [phase-2 answer].
+                    // BUG-FIX (批次3.1): previously this reset assistantPushed
+                    // + assistantMsgObj + assistantMsg on every tool_result,
+                    // which fragmented ReAct loops with multiple tool calls
+                    // into a series of partial bubbles ([text1][tool][text2]
+                    // [tool][text3]...). Now we keep the SAME assistant message
+                    // object across the whole turn and only clear the text
+                    // ARCHITECTURE FIX (Codex-style timeline): after a tool
+                    // result, RESET the assistant placeholder so the next
+                    // text segment becomes a NEW message. This makes the
+                    // messages array interleave naturally:
+                    //   [text₁, tool, tool_result, text₂, tool, text₃]
+                    // so the user sees text → tool animation → text → ...
+                    // instead of one giant text block with tools stuck on top.
+                    ;(session as any)._rawText = ''
                     assistantPushed = false
                     assistantMsgObj = null
                     assistantMsg = ''
@@ -1279,7 +1383,7 @@ export const useChatStore = defineStore('chat', {
                     _flushTerminal()
                     pushChatError(event.message)
                     // P2-12 — mark the tab error so Sidebar can flag it.
-                    try { useTabStore().setTabStatus(_sse_sid, 'error') } catch { /* ignore */ }
+                    try { useTabStore().setTabStatus(sessionId, 'error') } catch { /* ignore */ }
                   } else if (event.type === 'cancelled') {
                     // User-initiated abort acknowledgement. The backend
                     // does not emit this yet (round-2 audit gap), but we
@@ -1297,6 +1401,14 @@ export const useChatStore = defineStore('chat', {
               }
             }
           }
+          // BUG-FIX (Deep-Review C2): stream ended without a terminal event
+          // (backend crash, proxy drop, renderer kill). Recover the tail
+          // buffer + stop the caret + clear streamingText so we don't
+          // leave a "ghost" streaming bubble blinking forever on a
+          // finalized message.
+          _flushTerminal()
+          if (assistantMsgObj) assistantMsgObj.isStreaming = false
+          session.streamingText = ''
           session.chatState = 'idle'
         })
         .catch((err: any) => {

@@ -1772,3 +1772,23 @@ textarea {
     scroll-behavior: auto !important;
   }
 }
+
+/* D-3: focus-visible for keyboard a11y — BUT only on interactive
+ * controls (buttons, links, nav items), NOT on inputs/textareas which
+ * have their own focus styling. A global :focus-visible was polluting
+ * the composer input with an unwanted blue outline + border-radius. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-brand, #4a9eff);
+  outline-offset: 2px;
+}
+
+/* D-4: H5/mobile responsive safety net — TABLES ONLY. The previous
+ * version also targeted main/[class*="page"]/[class*="panel"] which
+ * broke desktop layout by forcing overflow-x:auto everywhere. Now
+ * scoped to just tables, which is the actual breakage risk on phones. */
+@media (max-width: 767px) {
+  table { display: block; overflow-x: auto; white-space: nowrap; }
+}

@@ -460,12 +460,9 @@ const ragDebugOpen = ref(false)
 const showDebugPanels = ref(
   typeof window !== 'undefined' && (window as any).__madcopShowDebug === true
 )
-// v4.0 — use V4ChatPanel by default (unified architecture).
-// Set localStorage 'madcop_v4' = 'false' to revert to legacy.
-const useV4 = ref(
-  typeof window !== 'undefined' &&
-  localStorage.getItem('madcop_v4') !== 'false'
-)
+// v4.0 — use legacy path by default (it has the full composer + rich UI).
+// V4ChatPanel is kept for future migration but NOT forced.
+const useV4 = ref(false)
 
 const isEmpty = computed(() =>
   messages.value.length === 0 &&

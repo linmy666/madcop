@@ -30,7 +30,7 @@ const inputRef = ref<HTMLInputElement>()
 
 interface PaletteItem {
   id: string
-  group: '命令' | '节点' | '最近'
+  group: '命令' | '最近'
   label: string
   detail?: string
   shortcut?: string
@@ -114,26 +114,10 @@ const baseItems = computed<PaletteItem[]>(() => {
     },
   )
 
-  // — 节点 (graph nodes = agents) —
-  const agentNodes = [
-    { name: '代码专家', model: 'GLM-5.2', id: 'agent-code' },
-    { name: '写作专家', model: 'Qwen3-80B', id: 'agent-write' },
-    { name: '数据分析', model: 'DeepSeek-V3', id: 'agent-data' },
-    { name: '测试专家', model: 'GLM-5.2', id: 'agent-test' },
-    { name: '架构师', model: 'Qwen3-80B', id: 'agent-arch' },
-  ]
-  for (const a of agentNodes) {
-    items.push({
-      id: a.id,
-      group: '节点',
-      label: a.name,
-      detail: a.model,
-      action: () => {
-        // Activate this agent node — for now, just open a new session
-        tabStore.openTab(`session-${Date.now()}`, `对话 · ${a.name}`, 'session')
-      },
-    })
-  }
+  // D-1: Removed hardcoded mock agent nodes (代码专家/写作专家/etc).
+  // These were fake data that opened a generic session on click, which
+  // felt broken. Real agent routing will be added when the agent hub
+  // data layer is wired. For now the palette only shows 命令 + 最近.
 
   // — 最近 —
   const recentSessions = (sessionStore.sessions ?? []).slice(0, 5)
@@ -166,7 +150,7 @@ const filteredItems = computed<PaletteItem[]>(() => {
 
 const groupedItems = computed(() => {
   const groups: { label: string; items: PaletteItem[] }[] = []
-  const order = ['命令', '最近', '节点'] as const
+  const order = ['命令', '最近'] as const
   for (const g of order) {
     const items = filteredItems.value.filter((i) => i.group === g)
     if (items.length > 0) groups.push({ label: g, items })

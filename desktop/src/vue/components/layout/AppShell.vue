@@ -13,6 +13,8 @@ import CommandPalette from '../command/CommandPalette.vue'
 import TabStrip from './TabStrip.vue'
 import Toast from '../shared/Toast.vue'
 import ProactiveToast from '../chat/ProactiveToast.vue'
+import OnboardingWizard from '../onboarding/OnboardingWizard.vue'
+import ShortcutHelp from '../command/ShortcutHelp.vue'
 import { useProactive } from '../../composables/useProactive'
 
 // Sprint 5 — start the proactive observer coordinator (subscribes to
@@ -39,6 +41,7 @@ import { watch } from 'vue'
 
 const ready = ref(false)
 const paletteOpen = ref(false)
+const shortcutHelpOpen = ref(false)  // C-4: ? key overlay
 const uiStore = useUIStore()
 const tabStore = useTabStore()
 
@@ -90,6 +93,12 @@ function _handleGlobalKeydown(e: KeyboardEvent) {
   }
   // Shortcuts below are blocked while typing in inputs.
   if (_isTypingTarget(e.target)) return
+  // C-4: ? shows keyboard shortcut help
+  if (e.key === '?' && !mod) {
+    e.preventDefault()
+    shortcutHelpOpen.value = !shortcutHelpOpen.value
+    return
+  }
   if (mod && e.key.toLowerCase() === 'b') {
     e.preventDefault()
     sidebarOpen.value = !sidebarOpen.value
@@ -221,5 +230,11 @@ function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 
     <!-- Sprint 5 — Proactive Observer toast (file/terminal nudges) -->
     <ProactiveToast @adopt="onProactiveAdopt" />
+
+    <!-- A-2: First-run onboarding wizard (overlay; only shows when not dismissed) -->
+    <OnboardingWizard @close="() => {}" />
+
+    <!-- C-4: Keyboard shortcut help (? key) -->
+    <ShortcutHelp :open="shortcutHelpOpen" @close="shortcutHelpOpen = false" />
   </div>
 </template>

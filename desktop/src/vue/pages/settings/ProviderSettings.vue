@@ -186,6 +186,7 @@ const currentFetched = computed(() => {
 
 // ── Load data ──────────────────────────────────────────────────────────
 const loadError = ref<string | null>(null)
+const saveError = ref<string | null>(null)  // surfaced inside the edit/create modal
 
 async function loadData() {
   loading.value = true
@@ -246,6 +247,54 @@ function applyPresetToEdit(preset: ProviderPreset) {
   editForm.value.auth_strategy = preset.authStrategy || 'api_key'
 }
 
+// B-3: Quick Connect — a 2-field fast path (preset + key) that hides the
+// 14-field modal behind "advanced". applyPreset already fills base_url /
+// api_format / auth_strategy defaults, so the user only sees name + key.
+const quickPreset = ref<ProviderPreset | null>(null)
+const quickKey = ref('')
+const quickTesting = ref(false)
+const quickResult = ref<{ ok: boolean; msg: string } | null>(null)
+
+function startQuickConnect(preset: ProviderPreset) {
+  quickPreset.value = preset
+  quickKey.value = ''
+  quickResult.value = null
+}
+
+async function doQuickConnect() {
+  if (!quickPreset.value || !quickKey.value.trim()) return
+  quickTesting.value = true
+  quickResult.value = null
+  try {
+    const pid = quickPreset.value.provider_id || quickPreset.value.id
+    const res = await fetch(getApiUrl('/api/settings'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider_id: pid,
+        label: quickPreset.value.label,
+        base_url: quickPreset.value.base_url,
+        api_key: quickKey.value.trim(),
+        model: quickPreset.value.default_model,
+        api_format: quickPreset.value.apiFormat || 'openai_chat',
+        auth_strategy: quickPreset.value.authStrategy || 'api_key',
+        make_active: true,
+      }),
+    })
+    if (!res.ok) {
+      quickResult.value = { ok: false, msg: `保存失败 (HTTP ${res.status})` }
+    } else {
+      quickResult.value = { ok: true, msg: '连接成功!' }
+      await loadData()
+      setTimeout(() => { quickPreset.value = null; quickKey.value = ''; quickResult.value = null }, 1000)
+    }
+  } catch (e: any) {
+    quickResult.value = { ok: false, msg: e?.message || '网络错误' }
+  } finally {
+    quickTesting.value = false
+  }
+}
+
 // ── Build payload ─────────────────────────────────────────────────────
 function buildPayload(form: typeof createForm.value | typeof editForm.value) {
   const base: any = {
@@ -278,12 +327,15 @@ function buildPayload(form: typeof createForm.value | typeof editForm.value) {
 // ── Create provider ───────────────────────────────────────────────────
 async function createProvider() {
   if (!createForm.value.label || !createForm.value.provider_id || !createForm.value.base_url) return
+  // Send a FLAT object — POST /api/settings expects a single ProviderInput,
+  // NOT a {providers:[...]} wrapper (that shape returned HTTP 422, which was
+  // why saving the API key silently dropped the key and broke every edit).
   const body = buildPayload(createForm.value)
   try {
     const res = await fetch(getApiUrl('/api/settings'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ providers: [body] }),
+      body: JSON.stringify(body),
     })
     if (res.ok) {
       showCreateModal.value = false
@@ -302,6 +354,7 @@ async function createProvider() {
 // ── Edit provider ─────────────────────────────────────────────────────
 function openEdit(provider: Provider) {
   editingProvider.value = provider
+  saveError.value = null  // clear any stale error from a prior save attempt
   editForm.value = {
     provider_id: provider.provider_id,
     label: provider.label || '',
@@ -324,13 +377,24 @@ function openEdit(provider: Provider) {
 
 async function saveEdit() {
   if (!editingProvider.value) return
-  const body = buildPayload(editForm.value)
+  // FLAT object — same fix as createProvider. The old {providers:[...]}
+  // wrapper caused a 422 every time the user clicked "Save" in the edit
+  // modal, so the typed API key was silently discarded. The editForm still
+  // carries provider_id, so we spread it on top to be explicit.
+  const body = { ...buildPayload(editForm.value), provider_id: editForm.value.provider_id }
   try {
-    await fetch(getApiUrl('/api/settings'), {
+    const res = await fetch(getApiUrl('/api/settings'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ providers: [{ ...body, provider_id: editForm.value.provider_id }] }),
+      body: JSON.stringify(body),
     })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      console.error('Failed to save provider:', res.status, detail)
+      saveError.value = `保存失败 (HTTP ${res.status})`
+      return
+    }
+    saveError.value = ''
     showEditModal.value = false
     editingProvider.value = null
     await loadData()
@@ -429,6 +493,37 @@ function fmtContext(n: number | null | undefined) {
 
 <template>
   <div style="max-width: 720px;">
+    <!-- B-3: Quick Connect card — 2-field fast path before the full list -->
+    <div v-if="!quickPreset" class="mb-5 rounded-xl border border-[var(--color-brand)]/30 bg-gradient-to-br from-[var(--color-brand)]/5 to-transparent p-4">
+      <div class="mb-2 text-[13px] font-semibold text-[var(--color-text-primary)]">⚡ 快速连接</div>
+      <div class="mb-3 text-[11px] text-[var(--color-text-tertiary)]">选择供应商,粘贴 Key 即可。高级设置可在编辑里调整。</div>
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-for="p in presetOptions.slice(0, 6)" :key="p.id"
+          type="button"
+          class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[12px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-brand)] hover:text-[var(--color-text-primary)]"
+          @click="startQuickConnect(p)"
+        >{{ p.label }}</button>
+      </div>
+    </div>
+    <!-- Quick connect active form -->
+    <div v-if="quickPreset" class="mb-5 rounded-xl border border-[var(--color-brand)] bg-[var(--color-surface)] p-4">
+      <div class="mb-3 flex items-center justify-between">
+        <span class="text-[13px] font-semibold text-[var(--color-text-primary)]">连接 {{ quickPreset.label }}</span>
+        <button type="button" class="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]" @click="quickPreset = null">取消</button>
+      </div>
+      <div class="mb-3">
+        <label class="mb-1 block text-[11px] text-[var(--color-text-tertiary)]">API Key</label>
+        <input v-model="quickKey" type="password" class="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-input-bg)] px-3 py-2 text-[13px] text-[var(--color-text-primary)]" placeholder="sk-..." @keyup.enter="doQuickConnect" />
+      </div>
+      <div v-if="quickResult" class="mb-2 text-[11px]" :class="quickResult.ok ? 'text-green-500' : 'text-red-400'">{{ quickResult.msg }}</div>
+      <button
+        type="button"
+        class="w-full rounded-lg bg-[var(--color-brand)] py-2 text-[13px] font-medium text-white transition hover:brightness-110 disabled:opacity-40"
+        :disabled="!quickKey.trim() || quickTesting"
+        @click="doQuickConnect"
+      >{{ quickTesting ? '连接中…' : '连接并设为默认' }}</button>
+    </div>
     <div
       v-if="activeProviderId"
       class="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-4 py-3"
@@ -791,6 +886,12 @@ function fmtContext(n: number | null | undefined) {
           <div class="modal-field">
             <label class="modal-label">备注</label>
             <input v-model="editForm.notes" type="text" class="modal-input" placeholder="可选" />
+          </div>
+
+          <div v-if="saveError" class="modal-field" style="margin-top: 12px;">
+            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; padding: 8px 12px; border-radius: 6px; font-size: 13px;">
+              ⚠ {{ saveError }}
+            </div>
           </div>
 
           <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">

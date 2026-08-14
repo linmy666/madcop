@@ -38,46 +38,28 @@ interface ModeOption {
 
 const MODES: ModeOption[] = [
   {
-    value: 'auto',
-    label: '自动',
-    shortLabel: '自动',
-    desc: '智能判断任务复杂度，自动选择策略',
-    icon: 'auto_awesome',
-    workflow: 'auto',
+    value: 'chat',
+    label: '对话',
+    shortLabel: '对话',
+    desc: '智能问答，自动判断是否需要搜索/工具',
+    icon: 'chat_bubble',
+    workflow: 'chat',
     effort: 'auto',
   },
   {
-    value: 'quick',
-    label: '快速',
-    shortLabel: '快速',
-    desc: '直接回答，不进推理循环，适合简单问答',
-    icon: 'bolt',
-    workflow: 'direct',
-    effort: 'low',
-  },
-  {
-    value: 'standard',
-    label: '标准',
-    shortLabel: '标准',
-    desc: 'ReAct 推理循环：读文件 → 分析 → 行动 → 观察',
-    icon: 'psychology',
-    workflow: 'react',
-    effort: 'medium',
-  },
-  {
-    value: 'deep',
-    label: '深度',
-    shortLabel: '深度',
-    desc: '多 Agent 协作：规划 → 编码 → 审查，全流程',
-    icon: 'hub',
-    workflow: 'multi_agent',
+    value: 'task',
+    label: '任务',
+    shortLabel: '任务',
+    desc: '实验性：MEA循环(Manager→Executor→Auditor)，适合长程任务，速度较慢',
+    icon: 'assignment',
+    workflow: 'mea_loop',
     effort: 'high',
   },
   {
     value: 'create',
     label: '创作',
     shortLabel: '创作',
-    desc: '源优先长文：联网检索 → 抓取 → 大纲 → 带引用正文',
+    desc: '联网检索 → 抓取 → 大纲 → 带引用正文',
     icon: 'edit_note',
     workflow: 'create',
     effort: 'high',
@@ -87,7 +69,7 @@ const MODES: ModeOption[] = [
 // ── Current selection ─────────────────────────────────────────────────
 
 const current = computed<string>(() => {
-  return runtimeStore.selections[props.selectionKey]?.agentMode ?? 'standard'
+  return runtimeStore.selections[props.selectionKey]?.agentMode ?? 'chat'
 })
 
 const currentMode = computed(() =>

@@ -1,0 +1,311 @@
+"""
+MadCop Harness — MEA Loop (Manage-Execute-Audit).
+
+Production harness built on the core types (SessionLog, Capabilities,
+Turn/Step state machine). The loop yields AgentStep events for SSE
+streaming while maintaining formal state machine transitions.
+
+Architecture:
+  Turn = user input → [Step₁, Step₂, ...] → final answer
+  Step = Manager(plan) → Executor(do) → Auditor(verify)
+
+Each step uses fresh, bounded contexts. State persists to SessionLog
+(JSONL). Failed steps don't advance verified state (soft revert).
+"""
+from __future__ import annotations
+
+import json
+import logging
+import re
+import time
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Iterator
+
+from madcop.agent.runtime import AgentStep, RunContext, StepKind
+from madcop.llm.client import Message
+from .core import (
+    SessionLog, Step, TurnState,
+    HarnessEvent, EventDomain,
+    reasoning_event, tool_event, answer_event, system_event,
+)
+
+logger = logging.getLogger(__name__)
+
+_HARNESS_ROOT = Path.home() / ".madcop" / "harness_runs"
+
+_THINK_RE = re.compile(r"<think>[\s\S]*?</think>", re.IGNORECASE)
+
+def _strip_think(text: str) -> str:
+    text = _THINK_RE.sub("", text)
+    text = re.sub(r"</?think>", "", text)
+    return text.strip()
+
+
+class MadCopHarness:
+    """MEA loop engine with formal state machine + session log.
+
+    Usage (as agent engine):
+        engine = MadCopHarness(ctx)
+        for step in engine.run(ctx):
+            yield step  # → SSE event
+
+    The loop produces three event domains:
+    - THOUGHT_* events → reasoning (Manager plans, Executor thinks, Auditor verifies)
+    - TOOL_* events → tool calls (file writes, searches)
+    - TEXT_DELTA/END → the final answer the user sees
+    """
+
+    def __init__(self, ctx: RunContext, max_steps: int = 5):
+        self.ctx = ctx
+        self.max_steps = max_steps
+        self.log = SessionLog(persist_dir=_HARNESS_ROOT)
+        self.goal = ""
+        self.verified_state = ""
+        self.steps: list[Step] = []
+        self._last_contract_desc = ""
+        self._last_executor_output = ""
+
+    def _llm_chat(self, system: str, user: str, temp: float = 0.3,
+                  max_tokens: int = 600) -> str:
+        """Single non-streaming LLM call with think-tag stripping."""
+        try:
+            resp = self.ctx.client.chat(
+                [Message(role="system", content=system),
+                 Message(role="user", content=user)],
+                model=self.ctx.model,
+                temperature=temp,
+                max_tokens=max_tokens,
+            )
+            return _strip_think(resp.content or "")
+        except Exception as e:
+            logger.warning("[harness] LLM call failed: %s", e)
+            return ""
+
+    def _llm_stream(self, system: str, user: str, temp: float = 0.3,
+                    max_tokens: int = 600) -> Iterator[str]:
+        """Streaming LLM call. Yields clean text chunks (think tags removed)."""
+        try:
+            if hasattr(self.ctx.client, "stream"):
+                for chunk in self.ctx.client.stream(
+                    [Message(role="system", content=system),
+                     Message(role="user", content=user)],
+                    model=self.ctx.model,
+                    temperature=temp,
+                    max_tokens=max_tokens,
+                ):
+                    text = getattr(chunk, "text", "") or ""
+                    if text:
+                        yield _strip_think(text)
+            else:
+                resp = self.ctx.client.chat(
+                    [Message(role="system", content=system),
+                     Message(role="user", content=user)],
+                    model=self.ctx.model,
+                    temperature=temp,
+                    max_tokens=max_tokens,
+                )
+                yield _strip_think(resp.content or "")
+        except Exception as e:
+            logger.warning("[harness] LLM stream failed: %s", e)
+
+    # ─── Manager: plan next subtask ───────────────────────────────
+
+    def _manager(self, step: Step) -> Iterator[AgentStep]:
+        """Manager: read goal + state → emit subtask contract. Streams reasoning."""
+        system = (
+            "You are the Manager in a Manage-Execute-Audit loop. "
+            "Given the user's goal and current verified state, decide the NEXT "
+            "concrete subtask for the Executor. Be practical and specific. "
+            "Output JSON: "
+            '{"description": "what to do", "acceptance_criteria": "how to verify"}. '
+            'If the overall task is complete, output: {"description": "TASK_COMPLETE"}'
+        )
+        audit_feedback = ""
+        if self.steps:
+            last = self.steps[-1]
+            if last.audit_status and last.audit_status != "complete":
+                audit_feedback = f"\n\nPrevious audit feedback: fix these issues → {last.audit_status}"
+
+        user_msg = (
+            f"Goal: {self.goal}\n\n"
+            f"Verified state so far:\n{self.verified_state or '(none yet)'}"
+            f"{audit_feedback}\n\n"
+            f"What should the Executor do next? (Step {step.index}/{self.max_steps})"
+        )
+
+        contract_text = ""
+        tid = f"mgr-{step.index}"
+        yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=tid)
+        yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
+                        content=f"📋 Step {step.index}/{self.max_steps}: 规划中...\n")
+
+        for text in self._llm_stream(system, user_msg, temp=0.3, max_tokens=400):
+            contract_text += text
+            if text:
+                yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid, content=text)
+
+        # Parse contract from JSON
+        desc = contract_text
+        m = re.search(r'\{[^{}]+\}', contract_text, re.DOTALL)
+        if m:
+            try:
+                data = json.loads(m.group(0))
+                desc = data.get("description", contract_text[:200])
+            except Exception:
+                pass
+
+        self._last_contract_desc = desc
+        yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
+                        content=f"\n→ 子任务: {desc[:100]}")
+        yield AgentStep(kind=StepKind.THOUGHT_END, thought_id=tid,
+                        elapsed_ms=step.duration_ms)
+
+        # Log reasoning
+        self.log.append(reasoning_event("manager_plan", contract_text, step=step.index))
+
+    # ─── Executor: do the work ────────────────────────────────────
+
+    def _executor(self, step: Step) -> Iterator[AgentStep]:
+        """Executor: run one bounded step using ReActEngineV4.
+
+        ReAct engine already separates: <think>→THOUGHT_*, tool calls→TOOL_*,
+        answer→TEXT_*. We forward all events — no mixing.
+        """
+        from madcop.agent.react_v4 import ReActEngineV4
+        engine = ReActEngineV4()
+
+        exec_ctx = RunContext(
+            messages=[Message(role="user", content=self._last_contract_desc)],
+            model=self.ctx.model,
+            agent_mode="standard",
+            client=self.ctx.client,
+            tool_schemas=self.ctx.tool_schemas,
+            tool_executor=self.ctx.tool_executor,
+            system_prefix=self.ctx.system_prefix,
+            work_dir=self.ctx.work_dir,
+            max_steps=4,
+        )
+
+        result_text = ""
+        for ev in engine.run(exec_ctx):
+            # D2 fix: do NOT forward the executor's terminal events.
+            # ReActEngineV4 emits TEXT_END/DONE when ITS loop finishes —
+            # but the MEA loop is still running. Forwarding them made the
+            # SSE stream emit `done` after every executor step (frontend
+            # set chatState=idle mid-run) and produced duplicate final
+            # answers. Only the MEA loop's own outermost completion emits
+            # terminal events.
+            if ev.kind in (StepKind.TEXT_END, StepKind.DONE):
+                continue
+            yield ev
+            if ev.kind == StepKind.TEXT_DELTA and ev.content:
+                result_text += ev.content
+            elif ev.kind == StepKind.TOOL_START:
+                self.log.append(tool_event("tool_call", ev.tool_name or "",
+                                           step=step.index))
+            elif ev.kind == StepKind.TOOL_END:
+                self.log.append(tool_event("tool_result", str(ev.tool_result or "")[:200],
+                                           step=step.index))
+
+        self._last_executor_output = _strip_think(result_text).strip()
+        step.executor_summary = self._last_executor_output[:300]
+        self.log.append(answer_event("executor_output", self._last_executor_output[:500],
+                                     step=step.index))
+
+    # ─── Auditor: verify ──────────────────────────────────────────
+
+    def _auditor(self, step: Step) -> str:
+        """Auditor: independently verify. Returns status string."""
+        system = (
+            "You are the Auditor. Verify if the Executor completed the subtask. "
+            "Be reasonable — correct output = complete. Output JSON: "
+            '{"status": "complete|incomplete|blocked", "feedback": "brief note"}.'
+        )
+        user_msg = (
+            f"Subtask: {self._last_contract_desc}\n\n"
+            f"Executor output:\n{self._last_executor_output[:1500]}\n\n"
+            f"Verified state:\n{self.verified_state or '(none)'}\n\n"
+            "Did the executor complete this subtask?"
+        )
+        result = self._llm_chat(system, user_msg, temp=0.1, max_tokens=300)
+        status = "incomplete"
+        m = re.search(r'"status"\s*:\s*"(complete|incomplete|blocked)"', result, re.IGNORECASE)
+        if m:
+            status = m.group(1).lower()
+        self.log.append(reasoning_event("audit", result, step=step.index, status=status))
+        return status
+
+    # ─── Main loop: Turn = [Step₁, Step₂, ...] ───────────────────
+
+    def run(self) -> Iterator[AgentStep]:
+        """Main MEA loop. Formal Turn/Step lifecycle with state machine."""
+        self.goal = self.ctx.messages[-1].content if self.ctx.messages else ""
+        logger.info("[harness %s] turn start: %s", self.log.run_id, self.goal[:60])
+
+        # Log turn start
+        self.log.append(system_event("turn_start", self.goal))
+        yield AgentStep(kind=StepKind.THOUGHT_START, thought_id="turn")
+        yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id="turn",
+                        content=f"🎯 任务: {self.goal[:100]}\n模式: MEA Harness ({self.max_steps} steps max)\n")
+
+        for i in range(1, self.max_steps + 1):
+            step = Step(index=i, state=TurnState.PLANNING)
+            self.steps.append(step)
+
+            # ── Manager ──
+            step.state = TurnState.PLANNING
+            yield from self._manager(step)
+
+            if "TASK_COMPLETE" in self._last_contract_desc.upper():
+                logger.info("[harness] manager declares complete at step %d", i)
+                break
+
+            # ── Executor ──
+            step.state = TurnState.EXECUTING
+            yield from self._executor(step)
+
+            # ── Auditor ──
+            step.state = TurnState.AUDITING
+            tid = f"aud-{i}"
+            yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=tid)
+            yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
+                            content=f"\n🔍 Step {i}: 验证中...")
+            audit_status = self._auditor(step)
+            step.audit_status = audit_status
+            icon = "✅" if audit_status == "complete" else ("🚫" if audit_status == "blocked" else "⚠️")
+            yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
+                            content=f"\n{icon} {audit_status.upper()}")
+            yield AgentStep(kind=StepKind.THOUGHT_END, thought_id=tid,
+                            elapsed_ms=step.duration_ms)
+
+            # ── State update (soft revert) ──
+            step.completed_at = time.time()
+            if audit_status == "complete":
+                self.verified_state = (
+                    f"{self.verified_state}\n\n"
+                    f"[Step {i} ✓]\n{step.executor_summary}"
+                ).strip()
+                step.state = TurnState.DONE
+            elif audit_status == "blocked":
+                step.state = TurnState.BLOCKED
+                break
+            else:
+                step.state = TurnState.DONE  # incomplete → retry next step
+
+        # ── Turn end ──
+        self.log.append(system_event("turn_end", self.verified_state[:500]))
+        yield AgentStep(kind=StepKind.THOUGHT_END, thought_id="turn")
+
+        # Output verified state as the answer
+        if self.verified_state:
+            yield AgentStep(kind=StepKind.TEXT_DELTA, content=self.verified_state)
+        else:
+            yield AgentStep(kind=StepKind.TEXT_DELTA,
+                            content="任务完成，但未产生已验证的输出。")
+        yield AgentStep(kind=StepKind.TEXT_END)
+        yield AgentStep(kind=StepKind.DONE, model=self.ctx.model or "")
+
+        logger.info("[harness %s] turn end: %d steps, %d events logged",
+                    self.log.run_id, len(self.steps), len(self.log.events()))

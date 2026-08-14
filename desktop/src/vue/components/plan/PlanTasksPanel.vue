@@ -35,7 +35,23 @@ const props = defineProps<{
   plan: PlanData | null
   /** Session is waiting for a plan (streaming/busy). When false and plan is null, show idle empty. */
   busy?: boolean
+  /** Session ID — used to read live thought/tool state from chatStore. */
+  sessionId?: string
 }>()
+
+// Read live agent state DIRECTLY from useLiveState (module-level reactive).
+// This bypasses chatStore entirely — V4ChatPanel writes to useLiveState
+// on every SSE event, PlanTasksPanel reads from it here.
+import { useLiveState } from '../../composables/useLiveState'
+const _live = useLiveState()
+const _liveThoughts = computed(() => _live.thoughts || [])
+const _liveTool = computed(() => {
+  const running = (_live.tools || []).find(t => !t.done)
+  return running?.name || null
+})
+const _hasLiveData = computed(() =>
+  _liveThoughts.value.length > 0 || !!_liveTool.value || _live.answerLength > 0
+)
 
 const queuedSteps = computed(() =>
   props.plan?.steps.filter((s) => s.status === 'pending') || []
@@ -92,19 +108,38 @@ function truncate(s: string | null, max = 36): string {
       </div>
     </header>
 
-    <!-- No plan yet: only show spinner while the session is actively running -->
-    <div v-if="!plan && busy" class="tp__body tp__body--loading">
-      <div class="tp__loading-row">
+    <!-- No plan yet: show live thought/tool state while running.
+         Use _live.isStreaming directly (not the busy prop) because
+         V4ChatPanel syncs to useLiveState on every event. -->
+    <div v-if="!plan && _live.isStreaming" class="tp__body tp__body--loading">
+      <!-- Live tool call -->
+      <div v-if="_liveTool" class="tp__live-row tp__live-row--tool">
+        <div class="tp__check tp__check--active"><div class="tp__spinner"></div></div>
+        <div class="tp__action">
+          <span class="tp__live-label">调用工具</span>
+          <span class="tp__live-name">{{ _liveTool }}</span>
+        </div>
+      </div>
+      <!-- Live thinking -->
+      <div v-else-if="_liveThoughts.length" class="tp__live-row tp__live-row--thought">
+        <div class="tp__check tp__check--active"><div class="tp__spinner"></div></div>
+        <div class="tp__action">
+          <span class="tp__live-label">思考中</span>
+          <span class="tp__live-preview">{{ _liveThoughts[_liveThoughts.length - 1]?.text?.slice(0, 60) || '...' }}</span>
+        </div>
+      </div>
+      <!-- Fallback: generic loading -->
+      <div v-else class="tp__loading-row">
         <div class="tp__check tp__check--active"><div class="tp__spinner"></div></div>
         <div class="tp__action">正在处理…</div>
       </div>
     </div>
 
-    <div v-else-if="!plan" class="tp__body tp__body--idle">
+    <div v-else-if="!plan && !_live.isStreaming" class="tp__body tp__body--idle">
       <div class="tp__idle">
         <span class="material-symbols-outlined tp__idle-icon">task_alt</span>
-        <div class="tp__idle-title">暂无执行计划</div>
-        <div class="tp__idle-desc">快速模式不会生成步骤。标准（ReAct）与深度模式运行时会显示在这里。</div>
+        <div class="tp__idle-title">准备就绪</div>
+        <div class="tp__idle-desc">发送消息后，思考过程和工具调用会实时显示在这里。</div>
       </div>
     </div>
 
@@ -488,6 +523,26 @@ function truncate(s: string | null, max = 36): string {
 }
 .tp__loading-row .tp__action {
   color: var(--color-text-secondary, #555);
+}
+/* Live state rows (tool call / thinking) */
+.tp__live-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 16px; font-size: 12.5px;
+}
+.tp__live-label {
+  display: inline-block; font-size: 10px; font-weight: 600;
+  color: var(--color-brand, #4a9eff); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-right: 6px;
+}
+.tp__live-name {
+  font-family: var(--font-mono, monospace); font-weight: 600;
+  color: var(--color-text-primary, #111);
+}
+.tp__live-preview {
+  display: block; margin-top: 2px; font-size: 11px;
+  color: var(--color-text-tertiary, #888); line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 240px;
 }
 .tp__count--loading {
   display: flex;

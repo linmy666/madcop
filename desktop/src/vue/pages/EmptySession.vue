@@ -167,11 +167,20 @@ const sendMessage = useChatStore().sendMessage
 const connectToSession = useChatStore().connectToSession
 const setActiveView = useUIStore().setActiveView
 const addToast = useUIStore().addToast
-const currentModel = useSettingsStore().currentModel
-const chatSendBehavior = useSettingsStore().chatSendBehavior
-const defaultPermissionMode = useSettingsStore().permissionMode
+const _settingsStore = useSettingsStore()
+const currentModel = _settingsStore.currentModel
+const chatSendBehavior = _settingsStore.chatSendBehavior
+const defaultPermissionMode = _settingsStore.permissionMode
 draftPermissionMode.value = defaultPermissionMode
 const lastPluginReloadSummary = usePluginStore().lastReloadSummary
+
+// B-1: context-aware hero. Detect setup gaps and guide the user inline
+// instead of letting them type → send → error with no recovery path.
+const heroState = computed<'no_provider' | 'no_workspace' | 'ready'>(() => {
+  if (!_settingsStore.activeProviderName && !currentModel) return 'no_provider'
+  if (typeof localStorage !== 'undefined' && !localStorage.getItem('madcop_workspace_dir')) return 'no_workspace'
+  return 'ready'
+})
 
 /* ────────────────────────────────────────────────────────────────────
    Computed values (useMemo / derived state)
@@ -259,6 +268,18 @@ onMounted(() => {
   nextTick(() => {
     textareaRef.value?.focus()
   })
+
+  // Onboarding suggestion chip → prefill composer (the wizard writes
+  // madcop_pending_input when the user clicks a suggestion; consume it
+  // once so the text lands in the input ready to send).
+  try {
+    const pending = localStorage.getItem('madcop_pending_input')
+    if (pending) {
+      input.value = pending
+      localStorage.removeItem('madcop_pending_input')
+      nextTick(() => textareaRef.value?.focus())
+    }
+  } catch { /* noop */ }
 
   // Initial slash command loads
   loadSlashCommands()
@@ -459,12 +480,29 @@ const handleSubmit = async () => {
 
 // Example prompt chips shown on the empty ("new chat") screen.
 // Clicking one prefills the composer and submits immediately.
-const suggestions = [
-  '帮我分析这个项目的代码结构',
-  '阅读 src/ 下的核心模块并总结',
-  '给当前目录里的代码写一份单元测试',
-  '解释这段报错日志的原因',
-]
+// #9: Dynamic suggestions — adapt to workspace + installed skills
+// instead of 4 hardcoded chips that feel static.
+const suggestions = computed(() => {
+  const ws = (() => { try { return localStorage.getItem('madcop_workspace_dir') || '' } catch { return '' } })()
+  const projectName = ws ? ws.split('/').pop() : ''
+  const list: string[] = []
+  if (projectName) {
+    list.push(`分析 ${projectName} 项目的代码结构`)
+    list.push(`给 ${projectName} 写一份单元测试`)
+  } else {
+    list.push('帮我分析一段代码')
+    list.push('给这段代码写单元测试')
+  }
+  // Add skill-based suggestions
+  try {
+    const skillCount = localStorage.getItem('madcop_skill_count')
+    if (skillCount && parseInt(skillCount) > 0) {
+      list.push(`查看我已保存的 ${skillCount} 个技能`)
+    }
+  } catch {}
+  list.push('搜一下最新的技术动态')
+  return list.slice(0, 5)
+})
 function useSuggestion(text: string) {
   input.value = text
   void handleSubmit()
@@ -715,15 +753,33 @@ const insertSlashCommand = () => {
           :class="isMobileComposer ? 'text-xl' : 'text-[1.65rem]'"
           :style="{ fontFamily: 'var(--font-headline)' }"
         >
-          {{ t('empty.title') }}
+          {{ heroState === 'no_provider' ? '欢迎来到 MadCop' : t('empty.title') }}
         </h1>
         <p
           class="mx-auto text-[var(--color-text-secondary)] leading-relaxed"
           :class="isMobileComposer ? 'max-w-[280px] text-sm' : 'max-w-sm text-[14px]'"
           :style="{ fontFamily: 'var(--font-body)' }"
         >
-          {{ t('empty.subtitle') }}
+          <template v-if="heroState === 'no_provider'">先配置一个 AI 模型供应商,即可开始对话。所有数据只存在本机。</template>
+          <template v-else-if="heroState === 'no_workspace'">选择你的项目文件夹,我会主动监控文件和终端,在异常时提醒你。</template>
+          <template v-else>{{ t('empty.subtitle') }}</template>
         </p>
+
+        <!-- B-1: setup CTAs when not ready -->
+        <div v-if="heroState !== 'ready'" class="mt-5 flex flex-col items-center gap-3">
+          <button
+            v-if="heroState === 'no_provider'"
+            type="button"
+            class="rounded-lg bg-[var(--color-brand)] px-5 py-2.5 text-sm font-medium text-white transition hover:brightness-110"
+            @click="() => { useUIStore().setPendingSettingsTab('providers'); useTabStore().openTab(SETTINGS_TAB_ID, '设置', 'settings') }"
+          >配置模型供应商 →</button>
+          <button
+            v-if="heroState === 'no_workspace'"
+            type="button"
+            class="rounded-lg bg-[var(--color-brand)] px-5 py-2.5 text-sm font-medium text-white transition hover:brightness-110"
+            @click="() => useTabStore().openTab('__observer__', '观察器', 'observer' as any)"
+          >选择项目文件夹 →</button>
+        </div>
 
         <!-- Example prompt chips — keep clear of absolute bottom composer -->
         <div class="mt-7 mb-2 flex max-w-lg flex-wrap justify-center gap-2">

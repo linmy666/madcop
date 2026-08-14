@@ -126,7 +126,12 @@ const atFilter = ref('')
 const atCursorPos = ref(-1)
 const plusMenuOpen = ref(false)
 const localSlashPanel = ref<LocalSlashCommandName | null>(null)
-const selectedModel = ref('sensenova-6.7-flash-lite')
+// BUG-FIX: previously hardcoded to 'sensenova-6.7-flash-lite'. When the user
+// set MiniMax (or any other provider) as active, the chat still sent the
+// Sensenova model string → MiniMax server returned 400 "unknown model
+// sensenova-6.7-flash-lite". Now starts empty and follows the active
+// provider's model via a watcher on settingsStore.currentModel + availableModels.
+const selectedModel = ref('')
 const composingRef = ref(false)
 const previousActiveTabIdRef = ref<string | null>(null)
 
@@ -184,6 +189,39 @@ const runtimeSelection = computed(() => {
 
 const currentModel = computed(() => settingsStore.currentModel)
 const chatSendBehavior = computed(() => settingsStore.chatSendBehavior)
+
+// BUG-FIX: keep selectedModel in sync with the active provider. When the
+// user switches provider in Settings (or sets a new active provider) we
+// must NOT keep sending the previous provider's model id — that produced
+// "unknown model 'sensenova-6.7-flash-lite'" from MiniMax earlier.
+//
+// IMPORTANT: selectedModel is a *plain model name* (NOT "provider:model"),
+// because the backend's POST body `model` field is forwarded verbatim to
+// the upstream LLM, and providers don't know about our internal prefix.
+// ModelSelector emits the plain id too, so we keep the same shape here.
+watch(
+  () => [settingsStore.activeProviderName, settingsStore.availableModels] as const,
+  () => {
+    const active = settingsStore.activeProviderName
+    if (!active) return
+    // If the user's current pick belongs to the active provider, keep it.
+    const cur = settingsStore.availableModels.find(
+      (m: any) => m.name === selectedModel.value && m.providerId === active,
+    )
+    if (cur) return
+    // Otherwise (empty OR stale pick from a different provider), snap to
+    // the active provider's first model. Falls back to currentModel.name.
+    const next = settingsStore.availableModels.find(
+      (m: any) => m.providerId === active,
+    )
+    if (next) {
+      selectedModel.value = next.name
+    } else if (settingsStore.currentModel) {
+      selectedModel.value = (settingsStore.currentModel as any).name || ''
+    }
+  },
+  { immediate: true },
+)
 
 const runtimeSelectionKey = computed(() =>
   runtimeSelection.value

@@ -44,82 +44,89 @@ function filterProtocol(text: string): string {
 // ─── Composable ──────────────────────────────────────────────────────────────
 
 export function useAgentState(events: Ref<SSEEvent[]>): AgentState {
-  // Thought blocks: walk events, build the list incrementally.
-  const thoughtBlocks = computed<ThoughtBlock[]>(() => {
-    const blocks: ThoughtBlock[] = []
-    let currentId = ''
-    let raw = ''
-    for (const ev of events.value) {
-      if (ev.kind === 'thought_start') {
-        currentId = ev.thought_id || `t-${blocks.length}`
-        raw = ''
-        blocks.push({ id: currentId, text: '', done: false })
-      } else if (ev.kind === 'thought_delta') {
-        if (!currentId) continue
-        raw += ev.content || ''
-        const last = blocks[blocks.length - 1]
-        if (last && last.id === currentId) last.text = filterProtocol(raw)
-      } else if (ev.kind === 'thought_end') {
-        const last = blocks[blocks.length - 1]
-        if (last) {
-          last.done = true
-          last.elapsedMs = ev.elapsed_ms
-        }
-        currentId = ''
-        raw = ''
-      }
-    }
-    return blocks
-  })
+  // BUG-FIX (批次2.1): the previous implementation used computed() that
+  // re-walked the entire events array on every token (O(n²) for a long
+  // turn). useSSEStream now maintains incremental refs (answerRef,
+  // thoughtBlocksRef, toolCallsRef) updated in O(1) per event. We forward
+  // them here as readonly computed so existing consumers
+  // (V4ChatPanel reads `.value`) keep working without changes.
+  //
+  // To preserve backwards compatibility for callers that still create
+  // useAgentState with just an events ref (e.g. unit tests), we fall back
+  // to the old full-scan computed ONLY when the incremental refs aren't
+  // attached to the events ref. In production, useSSEStream always attaches
+  // them.
+  const incremental = (events as any).__incremental as {
+    answerRef?: Ref<string>
+    thoughtBlocksRef?: Ref<ThoughtBlock[]>
+    toolCallsRef?: Ref<ToolCallState[]>
+  } | undefined
 
-  // Tool calls: similar incremental build, paired by tool_use_id.
-  const toolCalls = computed<ToolCallState[]>(() => {
-    const calls: ToolCallState[] = []
-    const lookup = new Map<string, ToolCallState>()
-    for (const ev of events.value) {
-      if (ev.kind === 'tool_start') {
-        const id = ev.tool_use_id || `tool-${calls.length}`
-        const call: ToolCallState = {
-          id,
-          name: ev.tool_name || '',
-          input: ev.tool_input,
-          result: undefined,
-          isError: false,
-          done: false,
+  const thoughtBlocks = incremental?.thoughtBlocksRef
+    ? computed<ThoughtBlock[]>(() => incremental!.thoughtBlocksRef!.value)
+    : computed<ThoughtBlock[]>(() => {
+        // Legacy fallback (full scan) — only used in unit tests.
+        const blocks: ThoughtBlock[] = []
+        let currentId = ''
+        let raw = ''
+        for (const ev of events.value) {
+          if (ev.kind === 'thought_start') {
+            currentId = ev.thought_id || `t-${blocks.length}`
+            raw = ''
+            blocks.push({ id: currentId, text: '', done: false })
+          } else if (ev.kind === 'thought_delta') {
+            if (!currentId) continue
+            raw += ev.content || ''
+            const last = blocks[blocks.length - 1]
+            if (last && last.id === currentId) last.text = filterProtocol(raw)
+          } else if (ev.kind === 'thought_end') {
+            const last = blocks[blocks.length - 1]
+            if (last) { last.done = true; last.elapsedMs = ev.elapsed_ms }
+            currentId = ''
+            raw = ''
+          }
         }
-        lookup.set(id, call)
-        calls.push(call)
-      } else if (ev.kind === 'tool_end') {
-        const id = ev.tool_use_id || calls[calls.length - 1]?.id
-        if (!id) continue
-        const call = lookup.get(id)
-        if (call) {
-          call.result = typeof ev.tool_result === 'string'
-            ? ev.tool_result.slice(0, 500)
-            : JSON.stringify(ev.tool_result)?.slice(0, 500)
-          call.isError = !!ev.is_error
-          call.done = true
-        }
-      }
-    }
-    return calls
-  })
+        return blocks
+      })
 
-  // Running answer = concatenation of all text_delta contents.
-  const answer = computed<string>(() => {
-    let buf = ''
-    for (const ev of events.value) {
-      if (ev.kind === 'text_delta') {
-        let chunk = ev.content || ''
-        chunk = chunk.replace(
-          /\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi,
-          '',
-        )
-        if (chunk) buf += chunk
-      }
-    }
-    return buf
-  })
+  const toolCalls = incremental?.toolCallsRef
+    ? computed<ToolCallState[]>(() => incremental!.toolCallsRef!.value)
+    : computed<ToolCallState[]>(() => {
+        const calls: ToolCallState[] = []
+        const lookup = new Map<string, ToolCallState>()
+        for (const ev of events.value) {
+          if (ev.kind === 'tool_start') {
+            const id = ev.tool_use_id || `tool-${calls.length}`
+            const call: ToolCallState = { id, name: ev.tool_name || '', input: ev.tool_input, result: undefined, isError: false, done: false }
+            lookup.set(id, call)
+            calls.push(call)
+          } else if (ev.kind === 'tool_end') {
+            const id = ev.tool_use_id || calls[calls.length - 1]?.id
+            if (!id) continue
+            const call = lookup.get(id)
+            if (call) {
+              call.result = typeof ev.tool_result === 'string' ? ev.tool_result.slice(0, 500) : JSON.stringify(ev.tool_result)?.slice(0, 500)
+              call.isError = !!ev.is_error
+              call.done = true
+            }
+          }
+        }
+        return calls
+      })
+
+  const answer = incremental?.answerRef
+    ? computed<string>(() => incremental!.answerRef!.value)
+    : computed<string>(() => {
+        let buf = ''
+        for (const ev of events.value) {
+          if (ev.kind === 'text_delta') {
+            let chunk = ev.content || ''
+            chunk = chunk.replace(/\b(Thought|Action\s*Input|Action|Observation|FINAL_ANSWER)\b\s*[:：]\s*/gi, '')
+            if (chunk) buf += chunk
+          }
+        }
+        return buf
+      })
 
   // Error flag: any error event with non-empty content.
   const hasError = computed<boolean>(() =>

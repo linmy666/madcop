@@ -148,6 +148,17 @@ class WebSearchTool(Tool):
         max_results = int(kwargs.get("max_results", 5))
         max_results = min(max(1, max_results), _MAX_RESULTS)
 
+        # BUG-FIX (批次4.3): normalize the query so Bing returns better
+        # results. The LLM usually writes good queries, but some patterns
+        # hurt Bing specifically:
+        #   - Leading year ("2026年 台风...") makes Bing match the year
+        #     heavily and return "2026年百科" entries. Move the year to
+        #     the end (lower weight) or drop it if a recency word exists.
+        #   - Colloquial filler ("看看", "帮我查一下", "的", "了") adds
+        #     noise. Strip it.
+        original_query = query
+        query = self._optimize_query(query)
+
         # v3.12 — Multi-strategy web search (inspired by Hermes).
         # Priority:
         # 0. visitproject (if VISITPROJECT_BIN env set — agentic MCP
@@ -173,7 +184,7 @@ class WebSearchTool(Tool):
                         "web_search '%s' [visitproject]: %d results",
                         query, len(results),
                     )
-                    return results
+                    return self._rerank(results, query)
             except Exception as e:
                 logger.warning("web_search [visitproject] failed: %s", e)
 
@@ -183,7 +194,7 @@ class WebSearchTool(Tool):
                 results = self._search_searxng(query, max_results, searxng_url)
                 if results:
                     logger.info("web_search '%s' [searxng]: %d results", query, len(results))
-                    return results
+                    return self._rerank(results, query)
             except Exception as e:
                 logger.warning("web_search [searxng] failed: %s", e)
 
@@ -193,23 +204,46 @@ class WebSearchTool(Tool):
                 results = self._search_tavily(query, max_results, tavily_key)
                 if results:
                     logger.info("web_search '%s' [tavily]: %d results", query, len(results))
-                    return results
+                    return self._rerank(results, query)
             except Exception as e:
                 logger.warning("web_search [tavily] failed: %s", e)
 
-        # Strategy 3+4: Playwright Baidu (best free option in China), then Bing, DDG
-        for engine, search_fn in [
-            ("baidu_pw", self._search_baidu_playwright),
+        # Strategy 3+4: cheap/free engines first (Bing HTML works from
+        # mainland China without VPN, <1s per request). Playwright Baidu
+        # is high-quality but heavy — runs LAST and only if module is
+        # actually importable (no point waiting on a 15s timeout if the
+        # user doesn't have Playwright installed at all).
+        #
+        # BUG-FIX: previous order put Playwright FIRST, so every search
+        # burned 15s on ModuleNotFoundError before falling through to
+        # Bing. Reordering + skip-on-ImportError makes the typical
+        # "user has just requests/urllib" case return results in <2s.
+        cheap_engines = [
             ("bing", self._search_bing),
             ("ddg", self._search_ddg),
-        ]:
+        ]
+        for engine, search_fn in cheap_engines:
             try:
                 results = search_fn(query, max_results)
                 if results and self._results_are_relevant(results, query):
                     logger.info("web_search '%s' [%s]: %d results", query, engine, len(results))
-                    return results
+                    return self._rerank(results, query)
             except Exception as e:
                 logger.warning("web_search [%s] failed: %s", engine, e)
+
+        # Playwright — only attempt if installed. Importing the module
+        # is what costs the 15s timeout when missing; we probe it with a
+        # try/except to skip silently on ImportError.
+        try:
+            import playwright  # noqa: F401
+            results = self._search_baidu_playwright(query, max_results)
+            if results and self._results_are_relevant(results, query):
+                logger.info("web_search '%s' [baidu_pw]: %d results", query, len(results))
+                return self._rerank(results, query)
+        except ImportError:
+            logger.info("web_search [baidu_pw] skipped: playwright not installed")
+        except Exception as e:
+            logger.warning("web_search [baidu_pw] failed: %s", e)
 
         # Strategy 5: LLM knowledge fallback — return a clear message
         # so the agent uses its own knowledge instead of looping.
@@ -218,6 +252,126 @@ class WebSearchTool(Tool):
         # without relying on the presence of an `error` key (which
         # could also appear in partial-failure backends).
         return [{"error": "搜索引擎不可用。请用你自己的知识回答，不要再尝试搜索。", "success": False}]
+
+    # ------------------------------------------------------------------ #
+    # Result quality: reranking + dictionary de-prioritization
+    # ------------------------------------------------------------------ #
+
+    # Colloquial filler words (Chinese) that add noise to search queries.
+    # These are stripped from the query before sending to the engine.
+    _FILLER_WORDS = {
+        "看看", "看一下", "帮我看", "帮我查", "帮我查一下", "帮我", "帮忙",
+        "查一下", "查下", "了解一下", "了解下", "想知道", "请问", "请帮我",
+        "告诉我", "说说", "讲讲", "聊聊", "聊一下",
+    }
+    # Recency indicators — if present, we keep the current year for
+    # freshness but move it to the end of the query.
+    _RECENCY_RE = re.compile(r"(最新|今天|今日|现在|目前|最近|近期|实时|current|latest|today|now|recent)", re.IGNORECASE)
+
+    @classmethod
+    def _optimize_query(cls, query: str) -> str:
+        """Lightweight query normalization for better Bing results.
+
+        1. Strip colloquial filler ("看看", "帮我查一下", ...).
+        2. If a recency word is present AND the query starts with a year,
+           move the year to the end (Bing over-weights leading years and
+           returns encyclopedia entries for "2026年 台风").
+        3. Collapse repeated whitespace.
+        Does NOT rewrite the query aggressively — the LLM's phrasing is
+        preserved; we only remove obvious noise.
+        """
+        q = query.strip()
+        # 1. Strip filler words (word-boundary-ish match for CJK).
+        for filler in cls._FILLER_WORDS:
+            q = q.replace(filler, " ")
+        # 2. Year repositioning.
+        m = re.match(r"^\s*(20\d{2})\s*年?\s*(.+)$", q)
+        if m and cls._RECENCY_RE.search(q):
+            year = m.group(1)
+            rest = m.group(2).strip()
+            q = f"{rest} {year}年"
+        # 3. Collapse whitespace.
+        q = re.sub(r"\s+", " ", q).strip()
+        return q or query  # never return empty — fall back to original
+
+    # Domains that are high-trust for news / official info.
+    _TRUSTED_DOMAINS = (
+        "news.cctv.com", "cctv.com", "gov.cn", "weather.com.cn",
+        "nmc.cn", "typhoon.nmc.cn", "slt.zj.gov.cn",
+        "xinhuanet.com", "people.com.cn", "chinanews.com",
+    )
+    # Domains / title patterns that signal dictionary / encyclopedia
+    # entries — useful when the query IS a definition, but usually noise
+    # for news / how-to / current-event queries.
+    _DICT_DOMAINS = ("baike.baidu.com", "baike.so.com", "zdic.net", "cnki.net",
+                     "iciba.com", "dict.cn", "youdao.com", "hujiang.com")
+    _DICT_TITLE_RE = re.compile(
+        r"(是什么意思|什么意思|汉语词语|百科|词典|翻译.*词典|"
+        r"_百度百科|_百度知道|_搜狗百科|维基百科|"
+        r"傻傻分不清楚|的翻译|的用法|的读音|音标|例句|"
+        r"wordreference|cambridge|merriam)",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _is_dict_result(cls, item: dict) -> bool:
+        """True if this result looks like a dictionary/encyclopedia entry."""
+        title = item.get("title", "") or ""
+        url = item.get("url", "") or ""
+        if cls._DICT_TITLE_RE.search(title):
+            return True
+        return any(d in url for d in cls._DICT_DOMAINS)
+
+    def _rerank(self, results: list[dict], query: str) -> list[dict]:
+        """Lightweight result reranking for better perceived quality.
+
+        Heuristics (each adds/subtracts a score):
+          + trusted news/official domain  → +3
+          + title contains a query keyword→ +2
+          + snippet contains a recent date (YYYY年 or 20YY) → +1
+          - dictionary / encyclopedia entry → -5 (deprioritize, not delete)
+        Stable sort preserves original order among equal scores.
+        """
+        if not results:
+            return results
+        # Don't rerank if the query itself looks like a definition lookup
+        # ("xxx是什么" / "xxx意思") — in that case dictionary results ARE
+        # what the user wants.
+        if re.search(r"(是什么|什么意思|意思|定义|含义)", query):
+            return results
+
+        query_lower = query.lower()
+        # Extract CJK chars + latin tokens for keyword matching
+        keywords: set[str] = set()
+        for w in query_lower.replace("+", " ").split():
+            if len(w) > 1:
+                keywords.add(w)
+            for ch in w:
+                if "\u4e00" <= ch <= "\u9fff":
+                    keywords.add(ch)
+        # Drop common stop chars so they don't over-match
+        keywords -= {"的", "了", "在", "是", "和", "与", "最", "新", "看"}
+
+        date_re = re.compile(r"(20\d{2}年|20\d{2}-\d{1,2})")
+
+        def score(item: dict) -> int:
+            s = 0
+            title = (item.get("title", "") or "").lower()
+            url = (item.get("url", "") or "").lower()
+            snippet = (item.get("snippet", "") or "").lower()
+            text = f"{title} {url} {snippet}"
+            if any(d in url for d in self._TRUSTED_DOMAINS):
+                s += 3
+            if any(k in text for k in keywords):
+                s += 2
+            if date_re.search(snippet):
+                s += 1
+            if self._is_dict_result(item):
+                s -= 5
+            return s
+
+        # Stable sort by descending score (Python's sort is stable)
+        return sorted(results, key=score, reverse=True)
 
     def _search_baidu_playwright(self, query: str, max_results: int) -> list[dict[str, str]]:
         """Search Baidu using Playwright (real browser, bypasses anti-bot).
@@ -283,6 +437,16 @@ class WebSearchTool(Tool):
     _visitproject_client: Any = None
     _visitproject_lock = __import__('threading').Lock()
     _visitproject_env: dict[str, str] | None = None
+    # BUG-FIX: circuit breaker. visitproject's MCP subprocess startup is
+    # unreliable on some machines (15s timeout per attempt). Without a
+    # breaker, every web_search call burned 15s retrying before falling
+    # through to Bing. After 1 consecutive failure we mark the engine
+    # "dead" for the rest of the process and skip it instantly. (Set to
+    # 1 because visitproject either works reliably or is broken — there's
+    # no value in retrying a 15s-timeout subprocess mid-conversation.)
+    _visitproject_fail_count: int = 0
+    _visitproject_dead: bool = False
+    _VISITPROJECT_MAX_FAILURES = 1
 
     def _search_visitproject(self, query: str, max_results: int) -> list[dict[str, str]]:
         """Search via visitproject (agentic MCP server — best quality).
@@ -302,6 +466,11 @@ class WebSearchTool(Tool):
             return []
 
         cls = self.__class__
+        # Circuit breaker: if visitproject has failed too many times, skip
+        # it instantly for the rest of the process. Avoids re-burning 15s
+        # on every web_search call when the subprocess is broken.
+        if cls._visitproject_dead:
+            return []
 
         # Build subprocess env once (cached on class).
         if cls._visitproject_env is None:
@@ -325,6 +494,14 @@ class WebSearchTool(Tool):
                     cls._visitproject_client = client
                 except Exception as e:
                     logger.warning("visitproject connect failed: %s", e)
+                    cls._visitproject_fail_count += 1
+                    if cls._visitproject_fail_count >= cls._VISITPROJECT_MAX_FAILURES:
+                        cls._visitproject_dead = True
+                        logger.warning(
+                            "visitproject marked DEAD after %d failures; "
+                            "skipping for rest of process",
+                            cls._visitproject_fail_count,
+                        )
                     return []
 
         # Call search — if it fails, reset singleton for next-call retry.
@@ -341,6 +518,14 @@ class WebSearchTool(Tool):
             except Exception:
                 pass
             cls._visitproject_client = None
+            cls._visitproject_fail_count += 1
+            if cls._visitproject_fail_count >= cls._VISITPROJECT_MAX_FAILURES:
+                cls._visitproject_dead = True
+                logger.warning(
+                    "visitproject marked DEAD after %d failures; "
+                    "skipping for rest of process",
+                    cls._visitproject_fail_count,
+                )
             return []
 
         if not result:
@@ -436,7 +621,22 @@ class WebSearchTool(Tool):
 
     def _results_are_relevant(self, results: list[dict], query: str) -> bool:
         """Heuristic: check if search results are actually relevant
-        to the query (not dictionary entries or unrelated content)."""
+        to the query (not dictionary entries or unrelated content).
+
+        BUG-FIX (P0): the previous version only checked whole "words"
+        (whitespace-split chunks with len > 2). For Chinese queries like
+        "台风的最新动态" that's a single chunk, so even when Bing returns
+        titles like "实时台风消息" that ARE about typhoons, the filter saw
+        "台风的最新动态" not present → returned False → Bing results got
+        thrown away, falling through to DDG/playwright, and ultimately
+        surfacing "搜索引擎不可用" to the user.
+
+        Now we also extract individual Chinese characters from the query
+        (CJK characters are treated as their own "words"). For "台风的
+        最新动态" we extract ['台', '风', '的', '新', '态', '动'] and check
+        for character overlap with titles/snippets. Mixed Chinese+English
+        queries work too.
+        """
         if not results:
             return False
         # If the first result's title is just a domain name, it's
@@ -444,15 +644,28 @@ class WebSearchTool(Tool):
         first_title = results[0].get("title", "")
         if first_title.startswith("http") or "." in first_title.split()[0:1][0] if first_title.split() else False:
             return False
-        # If query has meaningful words but titles look like dictionary
-        # entries (pinyin, word definitions), skip.
-        query_words = [w.lower() for w in query.replace("+", " ").split() if len(w) > 2]
+        # Build query tokens:
+        #   - whitespace-separated chunks (handles English + CJK phrases)
+        #   - each individual CJK character (handles queries like
+        #     "台风的最新动态" where Bing returns titles with overlapping
+        #     but non-identical characters like "实时台风消息")
+        query_words: list[str] = []
+        for w in query.replace("+", " ").split():
+            w = w.strip().lower()
+            if len(w) > 1:
+                query_words.append(w)
+            for ch in w:
+                # CJK Unified Ideographs (basic block + extensions)
+                if "\u4e00" <= ch <= "\u9fff":
+                    query_words.append(ch)
+        # Drop noise tokens (single Latin letters, digits-only, punctuation)
+        query_words = [w for w in query_words if len(w) >= 1 and w not in {"的", "了", "在", "是", "和", "与"}]
         if not query_words:
             return True
         # At least one query word should appear in titles or snippets
         all_text = " ".join(r.get("title", "") + r.get("snippet", "") for r in results).lower()
         matches = sum(1 for w in query_words if w in all_text)
-        return matches >= max(1, len(query_words) // 3)
+        return matches >= max(1, len(query_words) // 4)
 
     def _search_bing(self, query: str, max_results: int) -> list[dict[str, str]]:
         """Search Bing China HTML endpoint (reachable without VPN)."""
@@ -602,7 +815,6 @@ class WebFetchTool(Tool):
 
         if not url.startswith(("http://", "https://")):
             return {"error": f"URL must start with http:// or https:// (got: {url[:50]})", "success": False}
-            return {"error": f"URL must start with http:// or https:// (got: {url[:50]})"}
 
         max_chars = int(kwargs.get("max_chars", 4000))
 
@@ -619,6 +831,31 @@ class WebFetchTool(Tool):
                 html = raw.decode("utf-8", errors="replace")
                 text = self._html_to_text(html)
                 content_type = "html"
+
+            # BUG-FIX: detect JS-rendered SPA shells. Sites like
+            # typhoon.nmc.cn return a near-empty HTML skeleton whose real
+            # content is injected by JavaScript at runtime. After our
+            # tag-stripping the "text" is mostly whitespace + boilerplate.
+            # If the meaningful content is too thin, tell the model clearly
+            # so it falls back to search snippets instead of hallucinating
+            # "I couldn't find data" from the noise.
+            meaningful = re.sub(r"\s+", "", text)
+            if content_type == "html" and len(meaningful) < 200:
+                spa_hint = (
+                    f"[本页内容过少 ({len(meaningful)} 字符)，可能是 JavaScript 动态渲染的 SPA 页面，"
+                    f"无法直接抓取实时数据。请改用 web_search 查找该主题的摘要，"
+                    f"或引导用户访问该页面获取实时信息。URL: {url}]"
+                )
+                logger.info("web_fetch '%s': SPA shell detected (%d meaningful chars)", url, len(meaningful))
+                return {
+                    "url": url,
+                    "content": spa_hint,
+                    "chars": len(spa_hint),
+                    "truncated": False,
+                    "content_type": "spa_shell",
+                    "success": True,
+                    "is_spa": True,
+                }
 
             # Truncate
             truncated = len(text) > max_chars
@@ -643,14 +880,57 @@ class WebFetchTool(Tool):
 
         Removes scripts, styles, tags. Collapses whitespace.
         Not a full parser — good enough for article reading.
+
+        BUG-FIX: added extraction priority for <article>/<main>/<body>
+        content regions, and aggressive removal of nav/header/footer/
+        boilerplate so article text surfaces above site chrome.
         """
-        # Remove script and style blocks
+        # Remove script and style blocks (and their content)
         html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
         html = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL | re.IGNORECASE)
+        html = re.sub(r"<noscript[^>]*>.*?</noscript>", "", html, flags=re.DOTALL | re.IGNORECASE)
         html = re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
 
+        # Try to extract the main content region first — this avoids
+        # nav menus / cookie banners / footer boilerplate dominating the
+        # output. Priority: article > main > role=main > common content
+        # container names (covers CCTV's content_area, WordPress .entry,
+        # Medium, news templates).
+        main_html = ""
+        for pattern in (
+            r"<article[^>]*>(.*?)</article>",
+            r"<main[^>]*>(.*?)</main>",
+            r'<[^>]+role=["\']main["\'][^>]*>(.*?)</',
+            # id/class containing content-area / content_area / entry-content /
+            # post-content / article-body — common across news sites
+            r'<div[^>]+(?:id|class)=["\'][^"\']*(?:content_area|content-area|entry-content|post-content|article-body|cnt_bd|cont_txt)[^"\']*["\'][^>]*>(.*?)</div>\s*(?:<div[^>]+(?:id|class)=["\'][^"\']*(?:editor|share|comment|related)|$)',
+            r'<div[^>]+(?:id|class)=["\'](?:content|main|article|post)[^"\']*["\'][^>]*>(.*?)</div>',
+        ):
+            m = re.search(pattern, html, re.DOTALL | re.IGNORECASE)
+            if m:
+                main_html = m.group(1)
+                # Sanity check: if the extracted region is suspiciously
+                # short, it's probably a misfire (e.g. an empty content
+                # div that gets filled by JS). Fall through to full-doc.
+                if len(re.sub(r"\s+", "", re.sub(r"<[^>]+>", "", main_html))) > 100:
+                    break
+                main_html = ""
+        if main_html:
+            # Strip nav/header/footer/aside from within the main region
+            for tag in ("nav", "header", "footer", "aside", "form"):
+                main_html = re.sub(
+                    rf"<{tag}[^>]*>.*?</{tag}>", "", main_html,
+                    flags=re.DOTALL | re.IGNORECASE,
+                )
+            html = main_html
+
+        # Remove nav/header/footer from the whole doc too (helps when no
+        # main region matched)
+        for tag in ("nav", "header", "footer", "aside"):
+            html = re.sub(rf"<{tag}[^>]*>.*?</{tag}>", "", html, flags=re.DOTALL | re.IGNORECASE)
+
         # Convert common block elements to newlines
-        html = re.sub(r"<(?:p|div|br|h[1-6]|li|tr)[^>]*>", "\n", html, flags=re.IGNORECASE)
+        html = re.sub(r"<(?:p|div|br|h[1-6]|li|tr|td|th)[^>]*>", "\n", html, flags=re.IGNORECASE)
 
         # Strip all remaining tags
         text = re.sub(r"<[^>]+>", "", html)
@@ -660,15 +940,26 @@ class WebFetchTool(Tool):
             "&amp;": "&", "&lt;": "<", "&gt;": ">",
             "&quot;": '"', "&#39;": "'", "&nbsp;": " ",
             "&hellip;": "...", "&mdash;": "—", "&ndash;": "–",
+            "&ensp;": " ", "&emsp;": " ", "&middot;": "·",
         }
         for entity, char in entities.items():
             text = text.replace(entity, char)
+        # Numeric entities &#0183; etc.
+        text = re.sub(r"&#(\d+);", lambda m: chr(int(m.group(1))) if int(m.group(1)) < 0x10000 else "", text)
 
         # Collapse whitespace
         text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\r\n", "\n", text)
+        text = re.sub(r"\n[ \t]+", "\n", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
+        # Drop lines that are only whitespace/punctuation noise (common
+        # in news templates that have dozens of empty spacer rows)
+        lines = [ln.strip() for ln in text.split("\n")]
+        lines = [ln for ln in lines if ln and ln not in {">", "|", "·", "-"}]
+        text = "\n".join(lines)
 
         return text.strip()
+
 
 
 __all__ = ["WebSearchTool", "WebFetchTool"]
