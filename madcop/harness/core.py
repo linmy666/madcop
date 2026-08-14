@@ -32,6 +32,8 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+
+_HARNESS_ROOT = Path.home() / ".madcop" / "harness_runs"
 from typing import Any, Callable, Iterator, Protocol, runtime_checkable
 
 
@@ -87,6 +89,37 @@ class SessionLog:
             self._persist_dir.mkdir(parents=True, exist_ok=True)
             self._persist_path = self._persist_dir / "log.jsonl"
 
+    @classmethod
+    def for_session(cls, session_id: str) -> "SessionLog":
+        """Open (or create) the persistent log for a chat session.
+
+        run_id == session_id so every turn of one conversation lands in
+        the same directory and resume/fork/replay become possible.
+        Reloads prior events from disk into memory so derive_messages()
+        reflects the full conversation, not just this turn.
+        """
+        log = cls(run_id=session_id, persist_dir=_HARNESS_ROOT)
+        if log._persist_path and log._persist_path.exists():
+            try:
+                for line in log._persist_path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    ev = HarnessEvent(
+                        id=data.get("id") or uuid.uuid4().hex[:12],
+                        domain=EventDomain(data.get("domain", "system")),
+                        kind=data.get("kind", ""),
+                        content=data.get("content", ""),
+                        metadata=data.get("metadata", {}) or {},
+                        timestamp=data.get("timestamp", time.time()),
+                    )
+                    log._events.append(ev)
+            except Exception:
+                # Corrupted log line — keep what we parsed; never crash chat.
+                pass
+        return log
+
     def append(self, event: HarnessEvent) -> HarnessEvent:
         """Append an event. Also persists to JSONL if a path is set."""
         self._events.append(event)
@@ -107,39 +140,59 @@ class SessionLog:
         This is the key method — model context is ALWAYS derived from
         the log, never stored separately. This prevents drift between
         what the model saw and what the log records.
+
+        Rules (aligned with how chat_v4/mea_loop actually write events):
+        - ``turn_start`` (content = user query) opens a user message.
+        - ANSWER-domain events (text deltas + done) fold into one
+          assistant message per turn.
+        - REASONING events are EXCLUDED — execution trajectories are
+          discarded; only the verified answer survives (dsh principle).
+        - TOOL tool_call/tool_result pairs render as an assistant
+          narration ("Used <tool>") followed by a user-role observation,
+          keeping the message sequence valid for OpenAI-compatible APIs
+          (a bare role:"tool" without tool_calls would be rejected).
+        - ``turn_end`` closes the current message.
         """
         messages: list[dict[str, str]] = []
-        current_role = None
-        current_content = []
+        current_role: str | None = None
+        current_content: list[str] = []
+
+        def _flush() -> None:
+            nonlocal current_role, current_content
+            if current_role:
+                text = "".join(current_content).strip()
+                if text:
+                    messages.append({"role": current_role, "content": text})
+            current_role = None
+            current_content = []
+
+        def _start(role: str, content: str) -> None:
+            nonlocal current_role, current_content
+            if current_role != role:
+                _flush()
+                current_role = role
+                current_content = []
+            current_content.append(content)
 
         for ev in self._events:
             if ev.domain == EventDomain.SYSTEM:
-                if ev.kind == "user_input":
-                    if current_role:
-                        messages.append({"role": current_role, "content": "".join(current_content)})
-                    current_role = "user"
-                    current_content = [ev.content]
+                if ev.kind == "turn_start":
+                    _flush()
+                    _start("user", ev.content)
                 elif ev.kind == "turn_end":
-                    if current_role:
-                        messages.append({"role": current_role, "content": "".join(current_content)})
-                    current_role = None
-                    current_content = []
+                    _flush()
             elif ev.domain == EventDomain.ANSWER:
-                if current_role != "assistant":
-                    if current_role:
-                        messages.append({"role": current_role, "content": "".join(current_content)})
-                    current_role = "assistant"
-                    current_content = []
-                current_content.append(ev.content)
-            elif ev.domain == EventDomain.TOOL and ev.kind == "tool_result":
-                if current_role:
-                    messages.append({"role": current_role, "content": "".join(current_content)})
-                current_role = "tool"
-                current_content = [ev.content]
+                if ev.kind in ("text_delta", "done") and ev.content:
+                    _start("assistant", ev.content)
+            elif ev.domain == EventDomain.TOOL:
+                if ev.kind == "tool_call":
+                    name = ev.metadata.get("tool_name") or ev.content or "tool"
+                    _start("assistant", f"[used tool: {name}]")
+                elif ev.kind == "tool_result":
+                    _start("user", f"[tool result] {ev.content[:500]}")
+            # REASONING domain: deliberately ignored (trajectory discard).
 
-        if current_role:
-            messages.append({"role": current_role, "content": "".join(current_content)})
-
+        _flush()
         return messages
 
     def reasoning_summary(self) -> str:

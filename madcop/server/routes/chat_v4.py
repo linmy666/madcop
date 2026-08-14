@@ -110,6 +110,35 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     work_dir = body.get("work_dir")
     session_id = body.get("conversation_id") or ""
 
+    # Phase 2c — derive the conversation context from the session log
+    # (single source of truth). The request body's history is treated as
+    # a fallback for old sessions that predate logging. When a log with
+    # prior turns exists, REPLACE the body history with log-derived
+    # messages + this turn's fresh user message. This kills the
+    # three-sources-of-truth drift: what the model sees is exactly what
+    # the log recorded.
+    if session_id:
+        try:
+            from madcop.harness.core import SessionLog
+            _prior = SessionLog.for_session(session_id)
+            _derived = _prior.derive_messages()
+            if _derived:
+                _fresh_user = next(
+                    (m.content for m in reversed(messages) if m.role == "user"),
+                    "",
+                )
+                messages = [
+                    Message(role=d["role"], content=d["content"]) for d in _derived
+                ]
+                if _fresh_user:
+                    messages.append(Message(role="user", content=_fresh_user))
+                logger.info(
+                    "ctx from session log: %d derived msgs (+fresh user turn)",
+                    len(_derived),
+                )
+        except Exception as _e:
+            logger.debug("log-derived context unavailable, using body: %s", _e)
+
     # v4-5 — context compaction: if the conversation is very long (>20
     # messages or >30k chars), keep the system prompt + last N messages
     # and summarize the middle into a compact block. This prevents token
@@ -603,11 +632,58 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             # "every conclusion carries citation traceability" true.
             _citations_holder: list[dict] = []
 
+            # Phase 2a: SessionLog is now the persistent record of the MAIN
+            # chat path (not just MEA). run_id == session_id so all turns of
+            # one conversation share one log — enabling resume/fork later.
+            # "model-visible ⟺ logged": every AgentStep sent over SSE is
+            # also appended here.
+            from madcop.harness.core import (
+                SessionLog, EventDomain, HarnessEvent,
+            )
+
+            def _step_to_event(step: AgentStep) -> HarnessEvent:
+                kind_val = step.kind.value if hasattr(step.kind, "value") else str(step.kind)
+                if kind_val.startswith("thought_"):
+                    domain = EventDomain.REASONING
+                elif kind_val.startswith("tool_"):
+                    domain = EventDomain.TOOL
+                elif kind_val.startswith("text_") or kind_val == "done":
+                    domain = EventDomain.ANSWER
+                else:
+                    domain = EventDomain.SYSTEM
+                meta: dict = {}
+                if getattr(step, "tool_name", None):
+                    meta["tool_name"] = step.tool_name
+                if getattr(step, "tool_use_id", None):
+                    meta["tool_use_id"] = step.tool_use_id
+                if getattr(step, "is_error", None):
+                    meta["is_error"] = True
+                return HarnessEvent(
+                    domain=domain,
+                    kind=kind_val,
+                    content=step.content or "",
+                    metadata=meta,
+                )
+
+            _session_log = (
+                SessionLog.for_session(session_id) if session_id else None
+            )
+
             def worker():
                 try:
+                    # Log the user's input as the turn's opening event so
+                    # derive_messages can reconstruct the user turn.
+                    if _session_log:
+                        _session_log.append(HarnessEvent(
+                            domain=EventDomain.SYSTEM, kind="turn_start",
+                            content=_latest_user or "",
+                        ))
                     for step in engine.run(ctx):
                         if cancel_flag.is_set():
                             break
+                        # Phase 2a: persist every emitted step to the log.
+                        if _session_log:
+                            _session_log.append(_step_to_event(step))
                         # Capture assistant text for skill distill after the run.
                         if step.kind == StepKind.TEXT_DELTA and step.content:
                             _assistant_text_holder[0] += step.content
@@ -657,6 +733,16 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                     # This runs even if the SSE client disconnects after
                     # receiving `done`, because the thread is joined in the
                     # finally block below.
+
+                    # Phase 2a: close the turn in the session log.
+                    if _session_log:
+                        try:
+                            _session_log.append(HarnessEvent(
+                                domain=EventDomain.SYSTEM, kind="turn_end",
+                                content="",
+                            ))
+                        except Exception:
+                            pass
 
                     # v4-3 — mark trace root as done.
                     if _trace_root_id:
