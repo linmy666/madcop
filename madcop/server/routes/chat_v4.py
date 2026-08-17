@@ -91,6 +91,39 @@ def _get_client():
     return MockClient()
 
 
+
+
+def _gen_title(session_id: str, user_text: str, assistant_text: str,
+               client: Any, model: str | None) -> None:
+    """Generate a concise session title via the LLM and persist it.
+
+    Shared by the plan path and the standard worker path (previously
+    two copy-pasted blocks that drifted apart).
+    """
+    if not (session_id and user_text and assistant_text):
+        return
+    if not (client and hasattr(client, "chat")):
+        return
+    try:
+        _tp = (
+            "Generate a concise 3-6 word title (same language as "
+            "the conversation). Return ONLY the title.\n\n"
+            f"User: {user_text[:300]}\n\n"
+            f"Assistant: {assistant_text[:300]}\n\nTitle:"
+        )
+        _tr = client.chat(
+            [Message(role="system", content="Title generator."),
+             Message(role="user", content=_tp)],
+            model=model, temperature=0.3, max_tokens=30,
+        )
+        _title = (getattr(_tr, "content", "") or "").strip().strip('"').strip("'")
+        if _title and len(_title) <= 60:
+            from madcop.server.session_persist import update_session_title
+            update_session_title(session_id, _title)
+    except Exception as _e:
+        logger.debug("title gen failed: %s", _e)
+
+
 def _get_settings():
     """Get active settings."""
     try:
@@ -547,10 +580,21 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
 
                 _plan_thread.join(timeout=2.0)
 
-                # v4-1: persist assistant text collected during plan.
+                # v4-1: persist the plan-mode assistant reply. Previously a
+                # bare `pass` TODO — plan answers vanished on reload (only
+                # the title survived). Collect the final text event and
+                # persist it like any other turn.
                 if session_id and _plan_thread_result:
-                    # The last item should be the 'text' event. Persist it.
-                    pass  # TODO: collect text from events
+                    _plan_answer = ""
+                    for _ev in _plan_thread_result:
+                        if isinstance(_ev, dict) and _ev.get("type") == "text":
+                            _plan_answer = _ev.get("content", "") or _plan_answer
+                    if _plan_answer:
+                        try:
+                            from madcop.server.session_persist import append_assistant
+                            append_assistant(session_id, _plan_answer, model=model or "")
+                        except Exception:
+                            pass
 
                 # v4-2: auto-generate title (threaded path).
                 if session_id and _latest_user:
@@ -565,23 +609,8 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                             if isinstance(_e, dict) and _e.get("type") == "text":
                                 _first_text = _e.get("content", "")
                                 break
-                        if _first_text:
-                            _llm = ctx.client
-                            if _llm and hasattr(_llm, "chat"):
-                                _tp = (
-                                    "Generate a concise 3-6 word title (same language "
-                                    "as the conversation). Return ONLY the title.\n\n"
-                                    f"User: {_latest_user[:300]}\n\n"
-                                    f"Assistant: {_first_text[:300]}\n\nTitle:"
-                                )
-                                _tr = _llm.chat(
-                                    [Message(role="system", content="Title generator."),
-                                     Message(role="user", content=_tp)],
-                                    model=model, temperature=0.3, max_tokens=30,
-                                )
-                                _title = (getattr(_tr, "content", "") or "").strip().strip('"').strip("'")
-                                if _title and len(_title) <= 60:
-                                    update_session_title(session_id, _title)
+                        _gen_title(session_id, _latest_user, _first_text,
+                                   ctx.client, model)
                     except Exception:
                         pass
 
@@ -821,28 +850,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                         except Exception:
                             pass
                     # Auto-generate title (persist to session store).
-                    if session_id and _latest_user and _at:
-                        try:
-                            _llm = ctx.client
-                            if _llm and hasattr(_llm, "chat"):
-                                from madcop.llm.client import Message as _Msg
-                                _tp = (
-                                    "Generate a concise 3-6 word title (same language as "
-                                    "the conversation). Return ONLY the title.\n\n"
-                                    f"User: {_latest_user[:300]}\n\n"
-                                    f"Assistant: {_at[:300]}\n\nTitle:"
-                                )
-                                _tr = _llm.chat(
-                                    [_Msg(role="system", content="Title generator."),
-                                     _Msg(role="user", content=_tp)],
-                                    model=model, temperature=0.3, max_tokens=30,
-                                )
-                                _title = (getattr(_tr, "content", "") or "").strip().strip('"').strip("'")
-                                if _title and len(_title) <= 60:
-                                    from madcop.server.session_persist import update_session_title
-                                    update_session_title(session_id, _title)
-                        except Exception:
-                            pass
+                    _gen_title(session_id, _latest_user, _at, ctx.client, model)
                     q.put(sentinel)
 
             thread = threading.Thread(target=worker, daemon=True)
