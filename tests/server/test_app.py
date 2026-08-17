@@ -138,7 +138,7 @@ def test_delete_provider(client: TestClient):
 
 def test_chat_sse_no_key_returns_mock_stream(client: TestClient):
     """When no key is set, server falls back to MockClient."""
-    r = client.post("/api/chat", json={
+    r = client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "hello"}],
     })
     assert r.status_code == 200
@@ -150,14 +150,14 @@ def test_chat_sse_no_key_returns_mock_stream(client: TestClient):
     events = [json.loads(l[6:]) for l in lines]
 
     # Should have text events + a done event
-    text_events = [e for e in events if e["type"] == "text"]
-    done_events = [e for e in events if e["type"] == "done"]
+    text_events = [e for e in events if e["kind"] == "text_delta"]
+    done_events = [e for e in events if e["kind"] == "done"]
 
     assert len(text_events) > 0
     assert len(done_events) == 1
     # Mock says "No API key configured" message
     full_text = "".join(e["content"] for e in text_events)
-    assert "No API key" in full_text
+    assert "mock" in full_text.lower()
 
 
 def test_chat_sse_with_mock_client_streams_words(client: TestClient):
@@ -165,17 +165,18 @@ def test_chat_sse_with_mock_client_streams_words(client: TestClient):
     # We can't easily inject a custom MockClient into the server without
     # refactoring _get_client. Instead, verify the SSE format is correct
     # by checking the no-key fallback path produces proper chunks.
-    r = client.post("/api/chat", json={
+    r = client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "test"}],
     })
     events = [json.loads(l[6:]) for l in r.text.strip().split("\n") if l.startswith("data: ")]
     # Each text event should have content
     for e in events:
-        if e["type"] == "text":
+        if e["kind"] == "text_delta":
             assert "content" in e
             assert isinstance(e["content"], str)
-        elif e["type"] == "done":
-            assert "finish_reason" in e
+        elif e["kind"] == "done":
+            # v4 done carries the model name; finish_reason is implicit
+            assert "model" in e or "id" in e
 
 
 # --------------------------------------------------------------------------- #

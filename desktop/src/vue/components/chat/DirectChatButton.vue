@@ -24,7 +24,7 @@ async function directChat() {
   addLog(`📤 sending: "${text.slice(0, 40)}..."`)
   
   try {
-    const res = await fetch(getApiUrl('/api/chat'), {
+    const res = await fetch(getApiUrl('/api/v4/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -60,10 +60,10 @@ async function directChat() {
         if (!line.startsWith('data: ')) continue
         try {
           const event = JSON.parse(line.slice(6))
-          if (event.type === 'text' && event.content) {
+          if (event.kind === 'text_delta' && event.content) {
             fullText += event.content
             addLog(`📝 ${fullText.slice(-60)}`)
-          } else if (event.type === 'done') {
+          } else if (event.kind === 'done') {
             addLog(`✅ done. total chars: ${fullText.length}`)
             return
           }

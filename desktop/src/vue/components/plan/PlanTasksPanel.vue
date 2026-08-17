@@ -40,7 +40,7 @@ const props = defineProps<{
 }>()
 
 // Read live agent state DIRECTLY from useLiveState (module-level reactive).
-// This bypasses chatStore entirely — V4ChatPanel writes to useLiveState
+// This bypasses chatStore entirely — the chat store writes to useLiveState
 // on every SSE event, PlanTasksPanel reads from it here.
 import { useLiveState } from '../../composables/useLiveState'
 const _live = useLiveState()
@@ -110,7 +110,7 @@ function truncate(s: string | null, max = 36): string {
 
     <!-- No plan yet: show live thought/tool state while running.
          Use _live.isStreaming directly (not the busy prop) because
-         V4ChatPanel syncs to useLiveState on every event. -->
+         the chat store syncs to useLiveState on every event. -->
     <div v-if="!plan && _live.isStreaming" class="tp__body tp__body--loading">
       <!-- Live tool call -->
       <div v-if="_liveTool" class="tp__live-row tp__live-row--tool">

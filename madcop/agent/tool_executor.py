@@ -394,6 +394,22 @@ def build_default_registry(
     _reg(EditFileTool, allowed_dirs=_write_dirs)
     _reg(WriteXlsxTool, allowed_dirs=_write_dirs)
 
+    # Shell tool — the agent desktop finally HAS one. Runs through
+    # SubprocessSandbox (cwd allowlist + timeout + output cap); danger
+    # level is "destructive" so every call hits the HITL confirm card.
+    try:
+        from madcop.tools.sandbox import BashTool, SubprocessSandbox
+        _sandbox = SubprocessSandbox(allowed_dirs=[Path(d) for d in _write_dirs if d])
+        _bash = BashTool(_sandbox)
+        reg.register(ToolPlugin(
+            name=_bash.name,
+            handler=_bash,
+            schema=_bash.to_openai_schema(),
+            danger=danger_level(_bash.name),
+        ))
+    except Exception as e:  # pragma: no cover
+        logger.warning("bash tool registration failed: %s", e)
+
     # Memory tools (optional)
     if store is not None:
         from madcop.tools.memory import default_memory_tools

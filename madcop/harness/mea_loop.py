@@ -58,10 +58,17 @@ class MadCopHarness:
     """
 
     def __init__(self, ctx: RunContext, max_steps: int = 5,
-                 capabilities: dict | None = None):
+                 capabilities: dict | None = None,
+                 shared_log: "SessionLog | None" = None):
         self.ctx = ctx
         self.max_steps = max_steps
-        self.log = SessionLog(persist_dir=_HARNESS_ROOT)
+        # Double-write fix: when running under chat_v4 (production), the
+        # worker already logs every yielded AgentStep to the session log.
+        # MEA accepts that shared log and skips its own duplicate appends
+        # of step-level events (executor tools, turn markers) — it only
+        # appends its UNIQUE records (manager plans, audit verdicts).
+        self._shared = shared_log is not None
+        self.log = shared_log if shared_log is not None else SessionLog(persist_dir=_HARNESS_ROOT)
         self.goal = ""
         self.verified_state = ""
         self.steps: list[Step] = []
@@ -74,6 +81,11 @@ class MadCopHarness:
         self.fs: FileSystemCapability = (
             (capabilities or {}).get("fs") or LocalFileSystem()
         )
+
+    def _log_unique(self, event) -> None:
+        """Append only MEA-unique events (manager/audit) — safe under a
+        shared log. Step-level events are logged by the chat worker."""
+        self.log.append(event)
 
     def _llm_chat(self, system: str, user: str, temp: float = 0.3,
                   max_tokens: int = 600) -> str:
@@ -212,15 +224,17 @@ class MadCopHarness:
                 result_text += ev.content
             elif ev.kind == StepKind.TOOL_START:
                 _inp = ev.tool_input if isinstance(ev.tool_input, dict) else {}
-                self.log.append(tool_event(
-                    "tool_call", ev.tool_name or "",
-                    step=step.index,
-                    tool_name=ev.tool_name or "",
-                    path=str(_inp.get("path") or _inp.get("file") or ""),
-                ))
+                if not self._shared:
+                    self.log.append(tool_event(
+                        "tool_call", ev.tool_name or "",
+                        step=step.index,
+                        tool_name=ev.tool_name or "",
+                        path=str(_inp.get("path") or _inp.get("file") or ""),
+                    ))
             elif ev.kind == StepKind.TOOL_END:
-                self.log.append(tool_event("tool_result", str(ev.tool_result or "")[:200],
-                                           step=step.index))
+                if not self._shared:
+                    self.log.append(tool_event("tool_result", str(ev.tool_result or "")[:200],
+                                               step=step.index))
 
         self._last_executor_output = _strip_think(result_text).strip()
         step.executor_summary = self._last_executor_output[:300]
@@ -291,7 +305,8 @@ class MadCopHarness:
         logger.info("[harness %s] turn start: %s", self.log.run_id, self.goal[:60])
 
         # Log turn start
-        self.log.append(system_event("turn_start", self.goal))
+        if not self._shared:
+            self.log.append(system_event("turn_start", self.goal))
         yield AgentStep(kind=StepKind.THOUGHT_START, thought_id="turn")
         yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id="turn",
                         content=f"🎯 任务: {self.goal[:100]}\n模式: MEA Harness ({self.max_steps} steps max)\n")
@@ -350,7 +365,8 @@ class MadCopHarness:
                 step.transition(TurnState.DONE)  # incomplete → retry next step
 
         # ── Turn end ──
-        self.log.append(system_event("turn_end", self.verified_state[:500]))
+        if not self._shared:
+            self.log.append(system_event("turn_end", self.verified_state[:500]))
         yield AgentStep(kind=StepKind.THOUGHT_END, thought_id="turn")
 
         # Output verified state as the answer

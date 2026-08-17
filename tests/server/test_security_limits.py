@@ -84,7 +84,7 @@ def test_file_tmp_ok(client: TestClient, tmp_path: Path):
 def test_chat_rejects_oversized_content(client: TestClient):
     from madcop.server.app import _MAX_CHAT_CONTENT_CHARS
     huge = "x" * (_MAX_CHAT_CONTENT_CHARS + 1)
-    r = client.post("/api/chat", json={
+    r = client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": huge}],
     })
     assert r.status_code == 422  # pydantic validation error
@@ -94,7 +94,7 @@ def test_chat_accepts_content_at_limit(client: TestClient):
     from madcop.server.app import _MAX_CHAT_CONTENT_CHARS
     # At the limit should pass validation (may fail later if no provider).
     body = "y" * min(1000, _MAX_CHAT_CONTENT_CHARS)
-    r = client.post("/api/chat", json={
+    r = client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": body}],
     })
     # 200 SSE or 4xx from missing provider — but not 422 for content length

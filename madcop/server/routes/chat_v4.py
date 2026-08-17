@@ -64,13 +64,19 @@ async def confirm_tool(body: ConfirmRequest) -> dict[str, Any]:
 
 
 def _get_client():
-    """Get the active LLM client."""
+    """Get the active LLM client.
+
+    Graceful degradation: when no provider/key is configured, fall back
+    to MockClient (same policy the legacy handler had) so air-gapped
+    demos and tests keep working instead of hard-failing.
+    """
     from madcop.config.settings import load_settings, get_active_client_config
-    from madcop.llm.client import OpenAICompatClient
+    from madcop.llm.client import OpenAICompatClient, MockClient
     settings = load_settings()
     cfg = get_active_client_config(settings)
     if not cfg:
-        raise RuntimeError("No active LLM provider configured")
+        logger.warning("no active LLM provider — falling back to MockClient")
+        return MockClient()
     from madcop.config.settings import _decrypt
     # Find the provider to decrypt key
     for p in settings.providers:
@@ -81,7 +87,8 @@ def _get_client():
                 base_url=p.base_url,
                 model=p.model,
             )
-    raise RuntimeError(f"Active provider '{settings.active_provider}' not found")
+    logger.warning("active provider missing — falling back to MockClient")
+    return MockClient()
 
 
 def _get_settings():
@@ -101,9 +108,34 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     model, temperature, etc.) but outputs v4 SSE events (kind field
     instead of type field).
     """
+    # Input limits — mirror the legacy ChatRequest pydantic caps so the
+    # dict-typed body can't bypass them (oversized content previously
+    # returned 422; without this check it streamed straight through).
+    _MAX_CONTENT = 500_000
+    _MAX_MESSAGES = 200
+    _MAX_DATAURL = 2_500_000
+    _msgs_in = body.get("messages") or []
+    if not isinstance(_msgs_in, list):
+        raise HTTPException(422, "messages must be a list")
+    if len(_msgs_in) > _MAX_MESSAGES:
+        raise HTTPException(422, f"too many messages ({len(_msgs_in)} > {_MAX_MESSAGES})")
+    for _m in _msgs_in:
+        _c = (_m or {}).get("content") or ""
+        if len(_c) > _MAX_CONTENT:
+            raise HTTPException(422, f"message content too large ({len(_c)} > {_MAX_CONTENT})")
+    for _a in body.get("attachments") or []:
+        _d = (_a or {}).get("dataUrl") or ""
+        if len(_d) > _MAX_DATAURL:
+            raise HTTPException(422, f"attachment dataUrl too large ({len(_d)} > {_MAX_DATAURL})")
+
     messages = [
         Message(role=m.get("role", "user"), content=m.get("content", ""))
         for m in body.get("messages", [])
+        # The system prompt is owned by the backend (memory + workspace +
+        # tool instructions). Frontend-sent system messages are dropped —
+        # same policy the legacy handler enforced — so a client cannot
+        # override the agent's instructions.
+        if m.get("role") != "system"
     ]
     agent_mode = body.get("agent_mode") or "standard"
     model = body.get("model") or None
@@ -649,10 +681,19 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
 
             def _step_to_event(step: AgentStep) -> HarnessEvent:
                 kind_val = step.kind.value if hasattr(step.kind, "value") else str(step.kind)
+                # Vocabulary unification: the log's reader (derive_messages)
+                # speaks MEA vocabulary (tool_call/tool_result). The engine
+                # emits tool_start/tool_end. Map them so tool usage actually
+                # reconstructs into derived context — previously the
+                # mismatch silently voided 'model-visible ⟺ logged'.
                 if kind_val.startswith("thought_"):
                     domain = EventDomain.REASONING
                 elif kind_val.startswith("tool_"):
                     domain = EventDomain.TOOL
+                    if kind_val == "tool_start":
+                        kind_val = "tool_call"
+                    elif kind_val == "tool_end":
+                        kind_val = "tool_result"
                 elif kind_val.startswith("text_") or kind_val == "done":
                     domain = EventDomain.ANSWER
                 else:
@@ -664,16 +705,30 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                     meta["tool_use_id"] = step.tool_use_id
                 if getattr(step, "is_error", None):
                     meta["is_error"] = True
+                # tool_end carries the result in tool_result — persist it
+                # as the event content so derive_messages/replay can see it.
+                content = step.content or ""
+                if domain == EventDomain.TOOL and kind_val == "tool_result":
+                    content = str(getattr(step, "tool_result", "") or "")[:2000]
+                elif domain == EventDomain.TOOL and kind_val == "tool_call":
+                    try:
+                        import json as _json
+                        content = _json.dumps(step.tool_input, ensure_ascii=False)[:500]
+                    except Exception:
+                        content = ""
                 return HarnessEvent(
                     domain=domain,
                     kind=kind_val,
-                    content=step.content or "",
+                    content=content,
                     metadata=meta,
                 )
 
             _session_log = (
                 SessionLog.for_session(session_id) if session_id else None
             )
+            # Hand the log to engines via ctx so MEA reuses it instead of
+            # creating a duplicate orphan log (double-write fix).
+            ctx._shared_session_log = _session_log
 
             def worker():
                 try:

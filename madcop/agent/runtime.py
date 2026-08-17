@@ -592,7 +592,12 @@ class EngineFactory:
                     self._harness = None
 
                 def run(self, ctx: RunContext):
-                    self._harness = MadCopHarness(ctx, max_steps=5)
+                    # Pass the chat worker's session log so MEA doesn't
+                    # create a duplicate orphan log (double-write fix).
+                    self._harness = MadCopHarness(
+                        ctx, max_steps=5,
+                        shared_log=getattr(ctx, "_shared_session_log", None),
+                    )
                     yield from self._harness.run()
 
             return _HarnessEngineWrapper()

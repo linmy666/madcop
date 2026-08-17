@@ -1,9 +1,9 @@
 /**
- * useLiveState — module-level reactive state shared between V4ChatPanel
+ * useLiveState — module-level reactive state shared between the chat store
  * and PlanTasksPanel. Eliminates the fragile chatStore bridge that kept
  * breaking the task monitor + thinking display.
  *
- * V4ChatPanel writes to this on every SSE event.
+ * the chat store writes to this on every SSE event.
  * PlanTasksPanel reads from this directly — no indirection.
  */
 import { reactive } from 'vue'
@@ -37,7 +37,7 @@ const state = reactive<LiveState>({
   sessionId: null,
 })
 
-/** Called by V4ChatPanel on every state change. */
+/** Called by the chat store on every state change. */
 export function syncLiveState(data: Partial<LiveState>) {
   Object.assign(state, data)
 }

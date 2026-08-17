@@ -28,7 +28,6 @@ import {
   useTerminalPanelStore,
 } from '../stores/terminalPanelStore'
 import MessageList from '../components/chat/MessageList.vue'
-import V4ChatPanel from '../components/chat/V4ChatPanel.vue'
 import PlanPanel from '../components/plan/PlanPanel.vue'
 import PlanTasksPanel from '../components/plan/PlanTasksPanel.vue'
 import PlanArtifactsPanel from '../components/plan/PlanArtifactsPanel.vue'
@@ -461,8 +460,6 @@ const showDebugPanels = ref(
   typeof window !== 'undefined' && (window as any).__madcopShowDebug === true
 )
 // v4.0 — use legacy path by default (it has the full composer + rich UI).
-// V4ChatPanel is kept for future migration but NOT forced.
-const useV4 = ref(false)
 
 const isEmpty = computed(() =>
   messages.value.length === 0 &&
@@ -947,18 +944,10 @@ function openTerminalInTab() {
             {{ historyError }}
           </div>
 
-          <!-- Message list / V4 Chat Panel -->
+          <!-- Message list -->
           <template v-else>
-            <!-- V4 unified chat panel -->
-            <V4ChatPanel
-              v-if="useV4 && activeTabId"
-              :key="activeTabId"
-              :session-id="activeTabId"
-              class="v4-chat-wrap"
-            />
-            <!-- Legacy message list (only when v4 explicitly disabled via localStorage) -->
             <div
-              v-else-if="activeTabId"
+              v-if="activeTabId"
               class="flex-1 min-h-0 w-full overflow-y-auto pt-8"
             >
               <div class="mx-auto max-w-[860px] px-5">
@@ -1024,10 +1013,7 @@ function openTerminalInTab() {
           </div>
         </div>
 
-        <!-- Chat input: hidden when V4 is active (V4ChatPanel has its
-             own composer). Showing both causes the dual-textarea bug. -->
         <ChatInput
-          v-if="!useV4"
           :variant="isEmpty && !isMemberSession && !showRightPanel ? 'hero' : 'default'"
           :compact="showRightPanel"
         />

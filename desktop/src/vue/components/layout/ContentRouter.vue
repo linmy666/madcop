@@ -22,6 +22,10 @@ const AgentOverview = defineAsyncComponent(() => import('../../pages/AgentOvervi
 const ContinuousLearningSettings = defineAsyncComponent(() => import('../../pages/settings/ContinuousLearningSettings.vue'))
 const DesignPage = defineAsyncComponent(() => import('../../pages/DesignPage.vue'))
 const WorkbenchTab = defineAsyncComponent(() => import('../workbench/WorkbenchTab.vue'))
+// BUG-FIX: these two were referenced in the template but never imported —
+// opening a skill-builder or usage-stats tab would crash the router.
+const SkillBuilder = defineAsyncComponent(() => import('../../pages/SkillBuilder.vue'))
+const UsageStats = defineAsyncComponent(() => import('../../pages/UsageStats.vue'))
 
 const props = defineProps<{
   // These can be passed in; if omitted the component reads from the store directly.
@@ -112,6 +116,16 @@ const resolvedPage = computed(() => {
   }
   if (activeTabType.value === 'arena') {
     return { kind: 'arena' as const }
+  }
+  // BUG-FIX: these three kinds had template branches but were never
+  // produced by resolvedPage — the Sidebar's 观察器/记忆 buttons opened
+  // tabs of these types which fell through to the 'active' catch-all and
+  // rendered an empty chat page instead of the actual panels.
+  if (activeTabType.value === 'observer' || activeTabType.value === 'continuous-learning') {
+    return { kind: 'observer' as const }
+  }
+  if (activeTabType.value === 'memory') {
+    return { kind: 'memory' as const }
   }
   if (activeTabType.value !== 'terminal') {
     return { kind: 'active' as const }

@@ -109,6 +109,9 @@ def fake_client(monkeypatch: pytest.MonkeyPatch) -> FakeClient:
     """Inject a FakeClient into the server by patching MockClient."""
     fc = FakeClient()
     monkeypatch.setattr(app_module, "MockClient", lambda **kw: fc)
+    # v4 route builds its own client via _get_client — patch that too.
+    import madcop.server.routes.chat_v4 as chat_v4_module
+    monkeypatch.setattr(chat_v4_module, "_get_client", lambda: fc)
     return fc
 
 
@@ -118,7 +121,7 @@ def fake_client(monkeypatch: pytest.MonkeyPatch) -> FakeClient:
 
 def test_system_prompt_contains_identity(client: TestClient, fake_client):
     """The injected system prompt must include agent identity."""
-    client.post("/api/chat", json={
+    client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "hello"}],
     })
     # The first message sent to the LLM should be a system prompt
@@ -139,7 +142,7 @@ def test_system_prompt_includes_retrieved_memory(client: TestClient, fake_client
         tags=("user-profile",),
     )
 
-    client.post("/api/chat", json={
+    client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "who am I?"}],
     })
 
@@ -159,7 +162,7 @@ def test_system_prompt_includes_user_preferences(client: TestClient, fake_client
         tags=("style",),
     )
 
-    client.post("/api/chat", json={
+    client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "summarize the news"}],
     })
 
@@ -170,7 +173,7 @@ def test_system_prompt_includes_user_preferences(client: TestClient, fake_client
 
 def test_no_memory_still_has_identity(client: TestClient, fake_client):
     """With an empty memory DB, the system prompt still has identity."""
-    client.post("/api/chat", json={
+    client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "hello"}],
     })
     msgs = fake_client.all_calls[0]
@@ -182,7 +185,7 @@ def test_no_memory_still_has_identity(client: TestClient, fake_client):
 
 def test_existing_system_prompt_is_replaced(client: TestClient, fake_client):
     """If the client sends a system message, it's replaced (not duplicated)."""
-    client.post("/api/chat", json={
+    client.post("/api/v4/chat", json={
         "messages": [
             {"role": "system", "content": "You are a pirate."},
             {"role": "user", "content": "hello"},
@@ -254,7 +257,7 @@ def test_extract_preference_chinese(client: TestClient, fake_client):
 
 def test_no_extraction_for_plain_message(client: TestClient, fake_client):
     """A message with no name/preference pattern should not store anything."""
-    client.post("/api/chat", json={
+    client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "What is the weather?"}],
     })
     store = app_module.get_memory_store()
@@ -448,7 +451,7 @@ def test_cross_session_memory_flow(client: TestClient, fake_client):
     _store_extracted_facts([Message(role="user", content="My name is Bob.")])
 
     # Session 2: ask "who am I?" — memory should be injected
-    client.post("/api/chat", json={
+    client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "who am I?"}],
     })
 

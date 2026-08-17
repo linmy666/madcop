@@ -90,8 +90,12 @@ class TestProactiveBackend(unittest.TestCase):
         body = r.json()
         self.assertFalse(body["worth"])
         reason = body.get("reason", "")
-        self.assertTrue(reason == "no_llm" or reason.startswith("llm_error"),
-                        f"unexpected reason: {reason!r}")
+        # "judged" is also valid: the v4 route's MockClient fallback
+        # means a (mock) LLM actually judged and returned worth=false.
+        # The invariant is graceful 200 + worth=false, never a crash.
+        self.assertTrue(
+            reason in ("no_llm", "judged") or reason.startswith("llm_error"),
+            f"unexpected reason: {reason!r}")
 
     def test_prompt_contains_source_and_content(self):
         p = _build_proactive_prompt("file", "def hello(): pass", "/ws")

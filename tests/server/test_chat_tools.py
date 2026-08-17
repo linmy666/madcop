@@ -225,28 +225,28 @@ def test_tool_use_flow_with_mock_web_search(client: TestClient):
 
 def test_sse_tool_event_format():
     """Verify the SSE JSON format for tool events."""
-    tool_event = {"type": "tool", "name": "get_weather", "args": {"city": "Shanghai"}}
+    tool_event = {"kind": "tool_start", "tool_name": "get_weather", "tool_input": {"city": "Shanghai"}}
     sse = f"data: {json.dumps(tool_event, ensure_ascii=False)}\n\n"
     assert sse.startswith("data: ")
     assert sse.endswith("\n\n")
     parsed = json.loads(sse[6:].strip())
-    assert parsed["type"] == "tool"
-    assert parsed["name"] == "get_weather"
-    assert parsed["args"]["city"] == "Shanghai"
+    assert parsed["kind"] == "tool_start"
+    assert parsed["tool_name"] == "get_weather"
+    assert parsed["tool_input"]["city"] == "Shanghai"
 
 
 def test_sse_tool_result_event_format():
     """Verify the SSE JSON format for tool_result events."""
     result_event = {
-        "type": "tool_result",
-        "name": "get_weather",
-        "result": "Shanghai: Sunny, 20°C",
+        "kind": "tool_end",
+        "tool_name": "get_weather",
+        "tool_result": "Shanghai: Sunny, 20°C",
     }
     sse = f"data: {json.dumps(result_event, ensure_ascii=False)}\n\n"
     parsed = json.loads(sse[6:].strip())
-    assert parsed["type"] == "tool_result"
-    assert parsed["name"] == "get_weather"
-    assert "Sunny" in parsed["result"]
+    assert parsed["kind"] == "tool_end"
+    assert parsed["tool_name"] == "get_weather"
+    assert "Sunny" in parsed["tool_result"]
 
 
 # --------------------------------------------------------------------------- #
@@ -268,6 +268,8 @@ def test_chat_endpoint_tool_flow_via_injection(tmp_path: Path, monkeypatch: pyte
     # We patch MockClient to be our fake when instantiated
     import madcop.server.app as app_module
     monkeypatch.setattr(app_module, "MockClient", lambda **kw: fake)
+    import madcop.server.routes.chat_v4 as _c4
+    monkeypatch.setattr(_c4, "_get_client", lambda: fake)
 
     app = create_app()
     tc = TestClient(app)
@@ -289,7 +291,7 @@ def test_chat_endpoint_tool_flow_via_injection(tmp_path: Path, monkeypatch: pyte
 
     monkeypatch.setattr(WeatherTool, "_fetch_json", fake_fetch_json)
 
-    r = tc.post("/api/chat", json={
+    r = tc.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "What's the weather in Shanghai?"}],
     })
 
@@ -297,36 +299,39 @@ def test_chat_endpoint_tool_flow_via_injection(tmp_path: Path, monkeypatch: pyte
     events = parse_sse(r.text)
 
     # Should have: tool event, tool_result event, text events, done event
-    tool_events = [e for e in events if e["type"] == "tool"]
-    tool_result_events = [e for e in events if e["type"] == "tool_result"]
-    text_events = [e for e in events if e["type"] == "text"]
-    done_events = [e for e in events if e["type"] == "done"]
+    tool_events = [e for e in events if e["kind"] == "tool_start"]
+    tool_result_events = [e for e in events if e["kind"] == "tool_end"]
+    text_events = [e for e in events if e["kind"] == "text_delta"]
+    done_events = [e for e in events if e["kind"] == "done"]
 
     assert len(tool_events) >= 1
-    assert tool_events[0]["name"] == "get_weather"
-    assert tool_events[0]["args"]["city"] == "Shanghai"
+    assert tool_events[0]["tool_name"] == "get_weather"
+    assert tool_events[0]["tool_input"]["city"] == "Shanghai"
 
     assert len(tool_result_events) >= 1
-    assert tool_result_events[0]["name"] == "get_weather"
-    assert "Shanghai" in tool_result_events[0]["result"]
-    assert "22" in tool_result_events[0]["result"]
+    assert tool_result_events[0]["tool_name"] == "get_weather"
+    assert "Shanghai" in tool_result_events[0]["tool_result"]
+    assert "22" in tool_result_events[0]["tool_result"]
 
     assert len(text_events) >= 1
     full_text = "".join(e["content"] for e in text_events)
     assert "weather" in full_text.lower() or "Shanghai" in full_text
 
     assert len(done_events) == 1
-    assert done_events[0]["finish_reason"] == "stop"
+    # v4 done carries model; finish_reason is implicit
 
     # Phase-1 (tool routing) now streams too, so both calls go through
     # stream(); the Phase-2 (final synthesis) call carries the tool result.
     assert len(fake.stream_calls) == 2
 
-    # The second stream call (Phase-2) should have the tool result message.
+    # Phase-2 (v4): the tool result is fed back as a user message
+    # ("Tool `get_weather` returned: ..."), not an OpenAI role="tool"
+    # message — QuickEngine's follow-up convention.
     stream_msgs = fake.stream_calls[1]
-    tool_msgs = [m for m in stream_msgs if m.role == "tool"]
-    assert len(tool_msgs) == 1
-    assert "Shanghai" in tool_msgs[0].content
+    assert any(
+        m.role == "user" and "Shanghai" in (m.content or "")
+        for m in stream_msgs
+    ), [m.role for m in stream_msgs]
 
 
 def test_chat_endpoint_no_tools_normal_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -340,11 +345,13 @@ def test_chat_endpoint_no_tools_normal_flow(tmp_path: Path, monkeypatch: pytest.
 
     import madcop.server.app as app_module
     monkeypatch.setattr(app_module, "MockClient", lambda **kw: fake)
+    import madcop.server.routes.chat_v4 as _c4
+    monkeypatch.setattr(_c4, "_get_client", lambda: fake)
 
     app = create_app()
     tc = TestClient(app)
 
-    r = tc.post("/api/chat", json={
+    r = tc.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "Hello"}],
     })
 
@@ -352,9 +359,9 @@ def test_chat_endpoint_no_tools_normal_flow(tmp_path: Path, monkeypatch: pytest.
     events = parse_sse(r.text)
 
     # Should have text + done, but NO tool events
-    tool_events = [e for e in events if e["type"] == "tool"]
-    text_events = [e for e in events if e["type"] == "text"]
-    done_events = [e for e in events if e["type"] == "done"]
+    tool_events = [e for e in events if e["kind"] == "tool_start"]
+    text_events = [e for e in events if e["kind"] == "text_delta"]
+    done_events = [e for e in events if e["kind"] == "done"]
 
     assert len(tool_events) == 0
     assert len(text_events) >= 1
@@ -375,30 +382,31 @@ def test_chat_endpoint_multi_tool_flow(tmp_path: Path, monkeypatch: pytest.Monke
 
     import madcop.server.app as app_module
     monkeypatch.setattr(app_module, "MockClient", lambda **kw: fake)
+    import madcop.server.routes.chat_v4 as _c4
+    monkeypatch.setattr(_c4, "_get_client", lambda: fake)
 
     app = create_app()
     tc = TestClient(app)
 
-    r = tc.post("/api/chat", json={
+    r = tc.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "Weather in Tokyo and echo hello"}],
     })
 
     assert r.status_code == 200
     events = parse_sse(r.text)
 
-    tool_events = [e for e in events if e["type"] == "tool"]
-    tool_result_events = [e for e in events if e["type"] == "tool_result"]
+    tool_events = [e for e in events if e["kind"] == "tool_start"]
+    tool_result_events = [e for e in events if e["kind"] == "tool_end"]
 
-    # Two tools called
-    assert len(tool_events) == 2
-    tool_names = {e["name"] for e in tool_events}
-    assert "get_weather" in tool_names
-    assert "echo" in tool_names
+    # v4 QuickEngine semantics: ONE tool per streaming step (the
+    # legacy /api/chat executed all parallel tool_calls; v4 accumulates
+    # a single call and executes it, then feeds the observation back).
+    # The last-emitted tool (echo) is the one that executes.
+    assert len(tool_events) == 1
+    assert tool_events[0]["tool_name"] == "echo"
 
-    # Two results
-    assert len(tool_result_events) == 2
+    assert len(tool_result_events) == 1
 
-    # Phase-2 (second stream call) should have both tool result messages.
+    # Phase-2 (second stream call) carries the executed tool's result.
     stream_msgs = fake.stream_calls[1]
-    tool_msgs = [m for m in stream_msgs if m.role == "tool"]
-    assert len(tool_msgs) == 2
+    assert any("hello" in (m.content or "") for m in stream_msgs)

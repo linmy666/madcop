@@ -59,7 +59,7 @@ def test_branch_finds_client_message_id(client: TestClient):
 
 def test_chat_accepts_message_id_field(client: TestClient):
     """Pydantic model accepts optional id on ChatMessage (no 422)."""
-    r = client.post("/api/chat", json={
+    r = client.post("/api/v4/chat", json={
         "messages": [{"role": "user", "content": "hi", "id": "frontend-msg-1"}],
         "conversation_id": "cid-1",
     })
