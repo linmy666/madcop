@@ -168,6 +168,11 @@ class StepKind(str, Enum):
     SKILL_DISTILLED = "skill_distilled"
     # v4-2 — auto-generated session title after the first exchange.
     SESSION_TITLE = "session_title"
+    # MEA task mode: plan stepper updates for the task monitor panel.
+    # Carries the full plan object in `metadata.plan` + step status in
+    # `metadata.step` so the frontend's existing plan/plan_step handlers
+    # can render the Step N/M progress UI.
+    PLAN = "plan"
 
     # Terminal
     ERROR = "error"

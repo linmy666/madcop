@@ -828,6 +828,7 @@ export const useChatStore = defineStore('chat', {
                     session_title: 'session_title',
                     error: 'error',
                     done: 'done',
+                    plan: 'plan',
                   }
                   const mapped = KIND_TO_TYPE[event.kind]
                   if (mapped) {
@@ -859,6 +860,9 @@ export const useChatStore = defineStore('chat', {
                     // legacy uses top-level fields — normalize.
                     if (event.kind === 'memory_recall' && event.metadata?.memories) {
                       event.memories = event.metadata.memories
+                    }
+                    if (event.kind === 'plan' && event.metadata?.plan) {
+                      event.plan = event.metadata.plan
                     }
                     if (event.kind === 'skill_distilled' && event.metadata?.skillName) {
                       event.skillName = event.metadata.skillName

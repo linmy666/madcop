@@ -1,122 +1,3 @@
-<template>
-  <div class="thinking-indicator flex items-center gap-3 py-2.5">
-    <!-- Hand-drawn MadCop mascot — simple black line art, pose per phase -->
-    <div class="thinking-mascot" :class="`thinking-mascot--${currentPhase}`">
-      <svg
-        viewBox="0 0 64 64"
-        width="48"
-        height="48"
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="1.8"
-        class="mascot-svg"
-      >
-        <!-- Body: waterdrop shape -->
-        <path
-          d="M 32 10
-             C 18 16, 14 32, 14 42
-             C 14 52, 22 58, 32 58
-             C 42 58, 50 52, 50 42
-             C 50 32, 46 16, 32 10 Z"
-        />
-
-        <!-- Phase A: analyzing — pupils move around -->
-        <g v-if="currentPhase === 'analyzing'">
-          <circle cx="26" cy="34" r="2" fill="currentColor" stroke="none">
-            <animate attributeName="cx" values="24;28;24" dur="1.2s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="38" cy="34" r="2" fill="currentColor" stroke="none">
-            <animate attributeName="cx" values="40;36;40" dur="1.2s" repeatCount="indefinite" />
-          </circle>
-          <!-- neutral mouth -->
-          <line x1="28" y1="44" x2="36" y2="44" />
-        </g>
-
-        <!-- Phase B: reasoning — eyes closed.
-             v3.8.2 — removed the 3 animated thinking-bubble circles.
-             They pulsed at 1.5s while the text dots pulse at 1.2s,
-             creating a visually jarring mismatch. The mascot stays
-             static now; the 'thinking' motion is carried solely by
-             the .thinking-dots at the end of the reasoning text. -->
-        <g v-else-if="currentPhase === 'reasoning'">
-          <!-- closed eyes: gentle arcs -->
-          <path d="M 22 34 Q 26 31, 30 34" />
-          <path d="M 34 34 Q 38 31, 42 34" />
-          <!-- static small thinking bubble (no animation) -->
-          <circle cx="56" cy="18" r="1.5" fill="currentColor" stroke="none" opacity="0.5" />
-          <circle cx="60" cy="10" r="2.2" fill="currentColor" stroke="none" opacity="0.5" />
-        </g>
-
-        <!-- Phase C: generating — eyes bright, writing -->
-        <g v-else>
-          <!-- wide open eyes -->
-          <circle cx="26" cy="34" r="3.5" fill="none" />
-          <circle cx="38" cy="34" r="3.5" fill="none" />
-          <circle cx="26" cy="34" r="1.5" fill="currentColor" stroke="none" />
-          <circle cx="38" cy="34" r="1.5" fill="currentColor" stroke="none" />
-          <!-- excited smile -->
-          <path d="M 28 44 Q 32 48, 36 44" />
-          <!-- small pencil mark next to body -->
-          <g class="pencil">
-            <line x1="54" y1="44" x2="60" y2="50" />
-            <line x1="60" y1="50" x2="62" y2="52" />
-          </g>
-        </g>
-      </svg>
-    </div>
-
-    <!-- Phase label + hand-written hint + progress bar (all black) -->
-    <div class="flex-1 min-w-0 pt-0.5">
-      <div class="flex items-baseline gap-2">
-        <span class="text-[12px] font-semibold text-[var(--color-text-primary)]">
-          {{ statusLabel }}
-        </span>
-        <span class="text-[10px] text-[var(--color-text-tertiary)] tabular-nums ml-auto">
-          {{ elapsedText }}
-        </span>
-      </div>
-      <div class="text-[11px] text-[var(--color-text-secondary)] mt-0.5 italic font-hand">
-        {{ statusHint }}
-      </div>
-
-      <!-- v3.10 — Grok-Build-style thought blocks. Each segment is
-           rendered independently — no frame, no background, plain
-           gray text that flows inline. Tool calls between segments
-           create natural boundaries. -->
-      <template v-if="thoughtBlocks && thoughtBlocks.length > 0">
-        <div
-          v-for="(block, i) in thoughtBlocks"
-          :key="block.id"
-          class="zcode-stream-in mt-1 text-[12px] leading-[1.7] text-[var(--color-text-secondary)]"
-        >
-          <span class="whitespace-pre-wrap break-words">{{ block.text.trim() }}</span>
-          <!-- Pulse dots only on the last (active) block -->
-          <span v-if="i === thoughtBlocks.length - 1 && !block.done" class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-        </div>
-      </template>
-      <!-- Fallback: single reasoningContent (backward compat) -->
-      <div v-else-if="reasoningContent && reasoningContent.trim()" class="mt-1.5">
-        <button
-          type="button"
-          class="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] underline-offset-2 hover:underline"
-          @click="showReasoning = !showReasoning"
-        >
-          {{ showReasoning ? '收起思考过程' : '查看思考过程' }}
-        </button>
-        <div v-if="showReasoning" class="zcode-stream-in mt-1 text-[12px] leading-[1.7] text-[var(--color-text-secondary)]">
-          <span class="whitespace-pre-wrap break-words">{{ reasoningContent.trim() }}</span><span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-        </div>
-      </div>
-
-      <!-- v3.8.1 — removed the static progress bar. It didn't convey
-           real progress and broke the 'flowing' feel. The pulsing
-           dots above now carry the 'working' signal. -->
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
@@ -236,91 +117,47 @@ const elapsedText = computed(() => {
   return `${Math.floor(secs / 60)}m ${(secs % 60).toFixed(0)}s`
 })
 </script>
+<template>
+  <div v-if="isStreaming" class="thinking-hint" data-testid="thinking-hint">
+    <span class="thinking-hint__spinner" aria-hidden="true"></span>
+    <span class="thinking-hint__text">{{ statusLabel }}</span>
+    <span v-if="elapsedText" class="thinking-hint__elapsed">{{ elapsedText }}</span>
+  </div>
+</template>
 
 <style scoped>
-.thinking-mascot {
-  position: relative;
-  width: 48px;
-  height: 48px;
+.thinking-hint {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--color-text-primary, #1f2937);
+  gap: 8px;
+  padding: 4px 0 2px;
+  font-size: 11px;
+  color: var(--color-text-tertiary, #999);
+  /* Deliberately minimal: the interleaved tool-line timeline is the
+     primary streaming experience. This hint just confirms "still working"
+     between tool calls / during long reasoning gaps. */
 }
-
-.mascot-svg {
-  display: block;
-}
-
-/* Body sway per phase — gentle, hand-drawn feel */
-.thinking-mascot--analyzing .mascot-svg {
-  animation: sway-analyzing 2.4s ease-in-out infinite;
-  transform-origin: center;
-}
-.thinking-mascot--reasoning .mascot-svg {
-  animation: sway-reasoning 1.8s ease-in-out infinite;
-  transform-origin: center bottom;
-}
-.thinking-mascot--generating .mascot-svg {
-  animation: sway-generating 1.4s ease-in-out infinite;
-  transform-origin: center top;
-}
-
-@keyframes sway-analyzing {
-  0%, 100% { transform: rotate(-2.5deg); }
-  50%      { transform: rotate(2.5deg); }
-}
-@keyframes sway-reasoning {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50%      { transform: translateY(-1px) rotate(-1deg); }
-}
-@keyframes sway-generating {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(1.5px); }
-}
-
-.font-hand {
-  font-family: var(--font-body);
-  font-style: italic;
-  letter-spacing: 0.2px;
-}
-
-/* v3.8.1 — pulsing dots at the end of streaming reasoning.
- * Three dots that pulse in sequence, signaling 'still thinking'.
- * Defined here (scoped) with unhashed @keyframes name won't work,
- * so we use a vendor-prefixed name that Vue won't rewrite. */
-.thinking-dots {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 2px;
-  margin-left: 4px;
-  vertical-align: baseline;
-}
-.thinking-dots i {
-  width: 3px;
-  height: 3px;
+.thinking-hint__spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
   border-radius: 50%;
-  background: var(--color-text-secondary, #555);
-  opacity: 0.3;
-  animation: thinking-dot-pulse 1.2s ease-in-out infinite;
+  animation: thinking-hint-spin 0.9s linear infinite;
+  flex-shrink: 0;
 }
-.thinking-dots i:nth-child(2) { animation-delay: 0.15s; }
-.thinking-dots i:nth-child(3) { animation-delay: 0.30s; }
-
-/* Note: Vue scoped rewriter hashes @keyframes names. We work around
- * this by NOT using scoped for this keyframe — define it in the
- * global stylesheet instead. The class .thinking-dots stays scoped
- * (it's just element styling), only the animation name is global. */
-</style>
-
-<!-- Global keyframe (not scoped) so Vue doesn't hash the name -->
-<style>
-@keyframes thinking-dot-pulse {
-  0%, 100% { opacity: 0.25; transform: translateY(0); }
-  50%      { opacity: 0.9;  transform: translateY(-1px); }
+.thinking-hint__text {
+  font-weight: 400;
+}
+.thinking-hint__elapsed {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+}
+@keyframes thinking-hint-spin {
+  to { transform: rotate(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .thinking-dots i { animation: none; opacity: 0.5; }
+  .thinking-hint__spinner { animation: none; border-top-color: currentColor; }
 }
 </style>

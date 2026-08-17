@@ -167,6 +167,38 @@ class MadCopHarness:
 
     # ─── Manager: plan next subtask ───────────────────────────────
 
+
+    def _emit_plan(self, step: "Step", status: str) -> AgentStep:
+        """Emit a plan-stepper update for the task monitor.
+
+        The frontend's existing `plan` event handler stores the plan
+        object in session.plan; the `plan_step` handler updates one
+        step's status. We send ONE combined event carrying both.
+        """
+        steps_out = []
+        for s in self.steps:
+            st = "completed" if s.audit_status == "complete" else (
+                 "failed" if s.audit_status == "blocked" else (
+                 "in_progress" if s.index == step.index else "pending"))
+            steps_out.append({
+                "step": s.index,
+                "title": (s.contract_description or "")[:80],
+                "status": st,
+            })
+        return AgentStep(
+            kind=StepKind.PLAN,
+            metadata={
+                "plan": {
+                    "steps": steps_out,
+                    "total_steps": self.max_steps,
+                    "completed_steps": sum(1 for x in steps_out if x["status"] == "completed"),
+                    "current_step": step.index,
+                    "category": "mea_task",
+                    "category_label": "MEA 任务",
+                },
+            },
+        )
+
     def _manager(self, step: Step) -> Iterator[AgentStep]:
         """Manager: read goal + state → emit subtask contract. Streams reasoning."""
         system = (
@@ -378,6 +410,7 @@ class MadCopHarness:
             step = Step(index=i)
             step.transition(TurnState.PLANNING)  # IDLE → PLANNING (validated)
             self.steps.append(step)
+            yield self._emit_plan(step, "planning")
 
             # ── Manager ──
             yield from self._manager(step)
@@ -392,6 +425,7 @@ class MadCopHarness:
             # engine may pause on HITL — reflect that in the step state
             # around the call (WAITING_HUMAN is set while blocked inside).
             step.transition(TurnState.EXECUTING)
+            yield self._emit_plan(step, "executing")
             if self.ctx.confirm_handler is not None:
                 # Announce the wait window; the engine flips back to
                 # EXECUTING once the user responds.
@@ -401,6 +435,7 @@ class MadCopHarness:
 
             # ── Auditor ──
             step.transition(TurnState.AUDITING)
+            yield self._emit_plan(step, "auditing")
             tid = f"aud-{i}"
             yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=tid)
             yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
@@ -415,6 +450,7 @@ class MadCopHarness:
 
             # ── State update (soft revert) ──
             step.completed_at = time.time()
+            yield self._emit_plan(step, audit_status)
             if audit_status == "complete":
                 self.verified_state = (
                     f"{self.verified_state}\n\n"

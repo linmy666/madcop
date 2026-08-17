@@ -114,7 +114,6 @@ import ToolCallGroup from './ToolCallGroup.vue'
 import ToolResultBlock from './ToolResultBlock.vue'
 import PermissionDialog from './PermissionDialog.vue'
 import AskUserQuestion from './AskUserQuestion.vue'
-import ThinkingIndicator from './ThinkingIndicator.vue'
 import AgentPulse from './AgentPulse.vue'
 import InlineTaskSummary from './InlineTaskSummary.vue'
 import CurrentTurnChangeCard from './CurrentTurnChangeCard.vue'
@@ -1217,14 +1216,7 @@ function renderItemContent(item: RenderItem) {
         <!-- v3.7.6 — ZCode-style reasoning panel. Stays visible
              for the whole turn (busy / streaming) so the gradient
              "正在思考" label + streaming body are actually seen. -->
-        <ThinkingIndicator
-          v-if="isAIThinking"
-          :reasoning-content="reasoningContent"
-          :thought-blocks="sessionState?.thoughtBlocks"
-          :active-tool-name="liveToolName"
-          :plan-step="planStep"
-          :is-streaming="chatState !== 'idle' && chatState !== 'error'"
-        />
+
 
         <!-- Pending permission dialog -->
         <PermissionDialog
