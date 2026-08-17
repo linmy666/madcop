@@ -108,14 +108,12 @@ import {
   type SpriteDetail,
 } from '../../lib/spriteStudio'
 import { sanitizeAgentDisplayText } from '../../lib/agentDisplayText'
-import ThinkingBlock from './ThinkingBlock.vue'
 import ToolCallBlock from './ToolCallBlock.vue'
 import ToolCallInline from './ToolCallInline.vue'
 import ToolCallGroup from './ToolCallGroup.vue'
 import ToolResultBlock from './ToolResultBlock.vue'
 import PermissionDialog from './PermissionDialog.vue'
 import AskUserQuestion from './AskUserQuestion.vue'
-import StreamingIndicator from './StreamingIndicator.vue'
 import ThinkingIndicator from './ThinkingIndicator.vue'
 import AgentPulse from './AgentPulse.vue'
 import InlineTaskSummary from './InlineTaskSummary.vue'
@@ -166,23 +164,25 @@ function getActiveSessionCitations() {
 
 const messages = computed(() => sessionState.value?.messages ?? EMPTY_MESSAGES)
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
+const streamingText = computed(() => sessionState.value?.streamingText ?? '')
 const isAIThinking = computed(() => {
-  // v3.7.5 — the indicator should stay visible as long as the
-  // agent is producing output (busy / thinking / tool_executing /
-  // streaming). Previously it was hidden the moment streamingText
-  // became non-empty, which meant the streaming reasoning panel
-  // disappeared the instant the first answer token arrived — so
-  // the user never saw the 'thinking' animation we added.
+  // UED-FIX: gate on REAL activity, not on chatState alone. Sending
+  // "你好" used to flash the full thinking UI because chatState went
+  // busy regardless of whether the model produced any reasoning or
+  // tool calls. Require one of:
+  //   - an unfinished thought block (model actively reasoning)
+  //   - an unfinished tool call (model running a tool)
+  //   - streaming output past a small threshold (avoids flashing
+  //     the indicator on one-token acknowledgments)
   const s = chatState.value
-  if (s === 'busy' || s === 'thinking' || s === 'tool_executing' || s === 'streaming') {
-    return true
-  }
-  // If a clarification JSON is pending, the AI is "thinking about"
-  // what to ask — show the indicator too.
+  if (s === 'idle' || s === 'error') return false
   if (sessionState.value?.clarificationPending) return true
+  const blocks = sessionState.value?.thoughtBlocks || []
+  if (blocks.some((b: any) => !b.done)) return true
+  if (sessionState.value?.activeToolName) return true
+  if ((streamingText.value || '').length > 200) return true
   return false
 })
-const streamingText = computed(() => sessionState.value?.streamingText ?? '')
 const reasoningContent = computed(() => sessionState.value?.reasoningContent ?? null)
 const agentStreams = computed(() => sessionState.value?.agentStreams ?? {})
 // Live "what is the AI doing right now" context for the thinking indicator.
@@ -1046,9 +1046,6 @@ function renderItemContent(item: RenderItem) {
       onBranch: branchTarget ? () => { void handleBranchMessage(branchTarget) } : undefined,
     })
   }
-  if (msg.type === 'thinking') {
-    return h(ThinkingBlock, { message: msg })
-  }
   if (msg.type === 'tool_use') {
     // v3.8.3 — render as lightweight inline indicator instead of
     // a heavy bordered card. Reads as 'process metadata' in the
@@ -1227,11 +1224,6 @@ function renderItemContent(item: RenderItem) {
           :active-tool-name="liveToolName"
           :plan-step="planStep"
           :is-streaming="chatState !== 'idle' && chatState !== 'error'"
-        />
-
-        <!-- Streaming indicator (tool_executing or thinking with no active block) -->
-        <StreamingIndicator
-          v-if="chatState === 'tool_executing' || (chatState === 'thinking' && !activeThinkingId)"
         />
 
         <!-- Pending permission dialog -->

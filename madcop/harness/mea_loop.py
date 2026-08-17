@@ -66,7 +66,7 @@ class MadCopHarness:
     - TEXT_DELTA/END → the final answer the user sees
     """
 
-    def __init__(self, ctx: RunContext, max_steps: int = 5,
+    def __init__(self, ctx: RunContext, max_steps: int = 8,
                  capabilities: dict | None = None,
                  shared_log: "SessionLog | None" = None):
         self.ctx = ctx
@@ -170,9 +170,13 @@ class MadCopHarness:
     def _manager(self, step: Step) -> Iterator[AgentStep]:
         """Manager: read goal + state → emit subtask contract. Streams reasoning."""
         system = (
-            "You are the Manager in a Manage-Execute-Audit loop. "
+            "You are the Engineering Manager in a Manager→Coder→Tester→Reviewer "
+            "delivery loop for a coding task. "
             "Given the user's goal and current verified state, decide the NEXT "
-            "concrete subtask for the Executor. Be practical and specific. "
+            "concrete subtask. Decompose the goal in build order: "
+            "scaffold files → implement core logic → add tests/polish → verify. "
+            "Each subtask MUST be small enough for ONE executor step "
+            "(e.g. 'write index.html with the 5x9 grid' not 'build the game'). "
             "Output JSON: "
             '{"description": "what to do", "acceptance_criteria": "how to verify"}. '
             'If the overall task is complete, output: {"description": "TASK_COMPLETE"}'
@@ -240,6 +244,18 @@ class MadCopHarness:
         from madcop.agent.react_v4 import ReActEngineV4
         engine = ReActEngineV4()
 
+        # Executor receives the Coder brief: use tools to WRITE the
+        # deliverable (write_file/edit_file), not just describe it. The
+        # old generic prompt let the model answer in prose when the
+        # subtask asked for a file — now the system prefix mandates
+        # producing the artifact via tools.
+        _coder_prefix = (
+            (self.ctx.system_prefix or "")
+            + "\n[Coder role] You are the Coder in a Manager→Coder→Tester"
+            "→Reviewer loop. Complete the subtask by WRITING the actual"
+            " artifact with tools (write_file for new files, edit_file"
+            " for changes). Do NOT merely describe what you would write."
+        )
         exec_ctx = RunContext(
             messages=[Message(role="user", content=self._last_contract_desc)],
             model=self.ctx.model,
@@ -247,9 +263,9 @@ class MadCopHarness:
             client=self.ctx.client,
             tool_schemas=self.ctx.tool_schemas,
             tool_executor=self.ctx.tool_executor,
-            system_prefix=self.ctx.system_prefix,
+            system_prefix=_coder_prefix,
             work_dir=self.ctx.work_dir,
-            max_steps=4,
+            max_steps=6,
         )
 
         result_text = ""
@@ -319,10 +335,13 @@ class MadCopHarness:
     def _auditor(self, step: Step) -> str:
         """Auditor: independently verify. Returns status string."""
         system = (
-            "You are the Auditor. Verify if the Executor completed the subtask. "
+            "You are the Tester/Reviewer. Verify the Coder's work. "
             "Be reasonable — correct output = complete. When file evidence "
             "is provided, judge against the ACTUAL file content (read back "
-            "from disk), not the executor's claims. Output JSON: "
+            "from disk), not the coder's claims. If the subtask asked for a "
+            "file/artifact and the file evidence is missing or empty, the "
+            "status is INCOMPLETE with feedback telling the coder to use "
+            "write_file to actually create it. Output JSON: "
             '{"status": "complete|incomplete|blocked", "feedback": "brief note"}.'
         )
         file_evidence = self._collect_file_evidence()

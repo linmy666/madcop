@@ -156,13 +156,19 @@ const isToolPhase = computed(() => Boolean(props.activeToolName))
 // Plan steps being generated/executed.
 const isPlanPhase = computed(() => Boolean(props.planStep))
 
+// UED-FIX: event-driven phase, not elapsed-time-based. The old
+// 2.5s/3s/∞ timer guesses made the mascot animate 'generating' during
+// a 10s tool call and 'reasoning' during pure waiting. Phases now map
+// 1:1 to real SSE signals:
+//   reasoning  ← unfinished thought block
+//   generating ← a tool is executing OR plan steps running
+//   analyzing  ← busy with neither (pre-first-token wait)
 const currentPhase = computed<'analyzing' | 'reasoning' | 'generating'>(() => {
-  if (isToolPhase.value) return 'generating'
-  if (isPlanPhase.value) return 'reasoning'
-  const t = elapsedMs.value
-  if (t < 2500) return 'analyzing'
-  if (t < 5500) return 'reasoning'
-  return 'generating'
+  if (isToolPhase.value || isPlanPhase.value) return 'generating'
+  const blocks = props.thoughtBlocks || []
+  if (blocks.some((b: any) => !b.done)) return 'reasoning'
+  if ((props.reasoningContent || '').trim()) return 'reasoning'
+  return 'analyzing'
 })
 
 // Real, data-driven status line instead of fake rotating hints.

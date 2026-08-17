@@ -6,7 +6,22 @@ import { useSessionRuntimeStore } from './sessionRuntimeStore'
 import { useSettingsStore } from './settingsStore'
 import { useTabStore } from './tabs'
 import { useUIStore } from './uiStore'
-import { syncLiveState, resetLiveState, endLiveState } from '../composables/useLiveState'
+import {syncLiveState, resetLiveState, endLiveState, useLiveState} from '../composables/useLiveState'
+
+// DEDUP-FIX: merge tool entries by id instead of wholesale replacement,
+// so multi-step tool progress survives subsequent syncLiveState calls
+// (e.g. text_delta events that would otherwise wipe the running tool list).
+function _merge_tools(prev: any[] | null | undefined, next: any[]): any[] {
+  const seen = new Set<string>()
+  const out: any[] = []
+  for (const t of [...(next || []), ...(prev || [])]) {
+    if (!t || seen.has(t.id)) continue
+    seen.add(t.id)
+    out.push(t)
+  }
+  return out
+}
+
 import { getApiUrl } from '../api/client'
 
 // v3.0: local persistence for per-session messages. The chat API
@@ -973,7 +988,7 @@ export const useChatStore = defineStore('chat', {
                     syncLiveState({
                       isStreaming: true,
                       thoughts: (session.thoughtBlocks || []).map(tb => ({ id: tb.id, text: tb.text, done: tb.done })),
-                      tools: [],
+                      tools: _merge_tools(useLiveState().tools, []),
                       answerLength: (assistantMsg || '').length,
                       sessionId,
                     })
@@ -1070,6 +1085,12 @@ export const useChatStore = defineStore('chat', {
                       }))
                     }
                   } else if (event.type === 'reasoning' && event.content) {
+                    // DEDUP-FIX: a new thought_start begins a new round
+                    // — drop any unfinished thought blocks from the prior
+                    // round (their text would otherwise leak into this
+                    // round's reasoning and confuse the user). State
+                    // reset is centralized here; downstream paths read
+                    // fresh data.
                     // v3.10 — Grok-Build-style thought blocks.
                     // Each segment of reasoning is an independent block,
                     // thought_event tells us whether to start a new block,
@@ -1084,6 +1105,11 @@ export const useChatStore = defineStore('chat', {
                     // Per-chunk filtering misses markers split across
                     // chunks (e.g. 'Action' + ' Input:').
                     if (tev === 'thought_start' || (!tev && !sess._curThoughtId)) {
+                      // v3.10 — new round: clear last round's leftover
+                      // thought blocks so the user sees a fresh timeline.
+                      // This is the "round" boundary that resets elapsedMs
+                      // in the UI; the accumulator (curRawBlock) too.
+                      session.thoughtBlocks = []
                       sess._curThoughtId = tid || `t-${Date.now()}`
                       sess._curRawBlock = chunk
                     } else {
@@ -1121,7 +1147,7 @@ export const useChatStore = defineStore('chat', {
                     syncLiveState({
                       isStreaming: true,
                       thoughts: (session.thoughtBlocks || []).map(tb => ({ id: tb.id, text: tb.text, done: tb.done })),
-                      tools: [],
+                      tools: _merge_tools(useLiveState().tools, []),
                       answerLength: (assistantMsg || '').length,
                       sessionId,
                     })
@@ -1139,7 +1165,7 @@ export const useChatStore = defineStore('chat', {
                     syncLiveState({
                       isStreaming: true,
                       thoughts: (session.thoughtBlocks || []).map(tb => ({ id: tb.id, text: tb.text, done: tb.done })),
-                      tools: [],
+                      tools: _merge_tools(useLiveState().tools, []),
                       answerLength: (assistantMsg || '').length,
                       sessionId,
                     })
@@ -1207,7 +1233,7 @@ export const useChatStore = defineStore('chat', {
                     syncLiveState({
                       isStreaming: true,
                       thoughts: (session.thoughtBlocks || []).map(tb => ({ id: tb.id, text: tb.text, done: tb.done })),
-                      tools: [{ id: session.activeToolUseId, name: event.name, done: false, isError: false }],
+                      tools: _merge_tools(useLiveState().tools, [{ id: session.activeToolUseId, name: event.name, done: false, isError: false }]),
                       answerLength: (assistantMsg || '').length,
                       sessionId,
                     })
