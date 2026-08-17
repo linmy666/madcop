@@ -38,7 +38,16 @@ _HARNESS_ROOT = Path.home() / ".madcop" / "harness_runs"
 _THINK_RE = re.compile(r"<think>[\s\S]*?</think>", re.IGNORECASE)
 
 def _strip_think(text: str) -> str:
+    """Remove think blocks INCLUDING an unclosed <think> to end-of-string.
+
+    BUG-FIX: the old version only removed complete <think>...</think>
+    pairs and stray tags — an UNCLOSED <think> (stream cut mid-think)
+    had its tag deleted but its CONTENT kept, leaking thousands of
+    reasoning chars into the final answer.
+    """
     text = _THINK_RE.sub("", text)
+    # Unclosed think: everything after it is reasoning — drop it all.
+    text = re.sub(r"<think>[\s\S]*$", "", text)
     text = re.sub(r"</?think>", "", text)
     return text.strip()
 
@@ -74,6 +83,9 @@ class MadCopHarness:
         self.steps: list[Step] = []
         self._last_contract_desc = ""
         self._last_executor_output = ""
+        # Reasoning captured by _llm_stream's ThinkSeparator — drained by
+        # _manager and emitted as THOUGHT_DELTA (never into TEXT_DELTA).
+        self._pending_reasoning: list[str] = []
         # Capability seams (production pattern): swappable backends. Defaults to
         # the local filesystem; a sandboxed/remote implementation can be
         # injected without touching the loop.
@@ -105,9 +117,19 @@ class MadCopHarness:
 
     def _llm_stream(self, system: str, user: str, temp: float = 0.3,
                     max_tokens: int = 600) -> Iterator[str]:
-        """Streaming LLM call. Yields clean text chunks (think tags removed)."""
+        """Streaming LLM call. Yields clean text chunks (think tags removed).
+
+        BUG-FIX: per-chunk _strip_think cannot match a <think> tag split
+        across chunk boundaries ('<thi' + 'nk>'), so reasoning leaked
+        into TEXT_DELTA (15k chars of think content reached the user,
+        and the frontend's whole-stream strip then mangled it down to
+        stray '<<' heredoc fragments). Use the runtime's ThinkSeparator,
+        which holds back partial-tag tails across chunks.
+        """
+        from madcop.agent.runtime import ThinkSeparator
         try:
             if hasattr(self.ctx.client, "stream"):
+                sep = ThinkSeparator()
                 for chunk in self.ctx.client.stream(
                     [Message(role="system", content=system),
                      Message(role="user", content=user)],
@@ -117,7 +139,20 @@ class MadCopHarness:
                 ):
                     text = getattr(chunk, "text", "") or ""
                     if text:
-                        yield _strip_think(text)
+                        reasoning, answer = sep.feed(text)
+                        # Reasoning goes to the caller's THOUGHT channel via
+                        # a side-channel: stash it so _manager can emit it as
+                        # THOUGHT_DELTA instead of losing it.
+                        if reasoning:
+                            self._pending_reasoning.append(reasoning)
+                        if answer:
+                            yield answer
+                # Drain any remainder after the stream ends.
+                r_rest, a_rest = sep.flush()
+                if r_rest:
+                    self._pending_reasoning.append(r_rest)
+                if a_rest:
+                    yield a_rest
             else:
                 resp = self.ctx.client.chat(
                     [Message(role="system", content=system),
@@ -161,10 +196,19 @@ class MadCopHarness:
         yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
                         content=f"📋 Step {step.index}/{self.max_steps}: 规划中...\n")
 
+        self._pending_reasoning = []
         for text in self._llm_stream(system, user_msg, temp=0.3, max_tokens=400):
+            # Flush any reasoning the ThinkSeparator captured while the
+            # model was inside <think> — it belongs on the THOUGHT channel.
+            while self._pending_reasoning:
+                yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
+                                content=self._pending_reasoning.pop(0))
             contract_text += text
             if text:
                 yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid, content=text)
+        while self._pending_reasoning:
+            yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
+                            content=self._pending_reasoning.pop(0))
 
         # Parse contract from JSON
         desc = contract_text
