@@ -92,6 +92,9 @@ def test_derive_messages_excludes_reasoning():
 
 
 def test_derive_messages_tool_pair_valid_sequence():
+    """Tool events are EXCLUDED from derived context — they're execution
+    details, not conversation. Including them made the model echo
+    '[used tool: web_search]' instead of making real tool calls."""
     log = SessionLog()
     log.append(system_event("turn_start", "search it"))
     log.append(tool_event("tool_call", "", tool_name="web_search"))
@@ -101,12 +104,12 @@ def test_derive_messages_tool_pair_valid_sequence():
 
     msgs = log.derive_messages()
     roles = [m["role"] for m in msgs]
-    # No bare role:"tool" (invalid without tool_calls) — rendered as
-    # assistant note + user observation instead.
-    assert "tool" not in roles
-    assert roles == ["user", "assistant", "user", "assistant"]
-    assert "web_search" in msgs[1]["content"]
-    assert "results here" in msgs[2]["content"]
+    # Clean user/assistant alternation; no tool annotations at all.
+    assert roles == ["user", "assistant"]
+    flat = " ".join(m["content"] for m in msgs)
+    assert "web_search" not in flat, "tool annotation leaked into context!"
+    assert "results here" not in flat, "raw tool result leaked!"
+    assert "based on results" in msgs[1]["content"]
 
 
 def test_multi_turn_derive():

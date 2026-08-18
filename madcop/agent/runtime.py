@@ -456,7 +456,19 @@ class QuickEngine(AgentEngine):
                 try:
                     args_dict = json.loads(tc_args_acc) if tc_args_acc else {}
                 except Exception:
-                    args_dict = {"raw": tc_args_acc or ""}
+                    # Models sometimes emit MULTIPLE JSON objects concatenated
+                    # (parallel tool calls as text). Extract the FIRST valid
+                    # {...} block — the old {"raw": ...} fallback broke
+                    # web_search ("query: Field required").
+                    import re as _re
+                    _m = _re.search(r'\{[^{}]*\}', tc_args_acc or '', _re.DOTALL)
+                    if _m:
+                        try:
+                            args_dict = json.loads(_m.group(0))
+                        except Exception:
+                            args_dict = {"query": (tc_args_acc or "")[:200]}
+                    else:
+                        args_dict = {"query": (tc_args_acc or "")[:200]}
                 yield AgentStep(
                     kind=StepKind.TOOL_START,
                     tool_name=tc_name,
@@ -516,6 +528,12 @@ class QuickEngine(AgentEngine):
                         "answer with what you know."
                     )),
                 ]
+                # Route through ThinkSeparator — the follow-up response
+                # also contains <think> blocks that must go to THOUGHT_*
+                # not TEXT_DELTA.
+                _fu_sep = ThinkSeparator()
+                _fu_think_open = False
+                _fu_tid = "fu-think"
                 if hasattr(ctx.client, "stream"):
                     for chunk in ctx.client.stream(
                         follow_up,
@@ -524,8 +542,19 @@ class QuickEngine(AgentEngine):
                         max_tokens=ctx.max_tokens,
                     ):
                         text = getattr(chunk, "text", "") or ""
-                        if text:
-                            yield AgentStep(kind=StepKind.TEXT_DELTA, content=text)
+                        if not text:
+                            continue
+                        reasoning, answer = _fu_sep.feed(text)
+                        if reasoning:
+                            if not _fu_think_open:
+                                _fu_think_open = True
+                                yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=_fu_tid)
+                            yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=_fu_tid, content=reasoning)
+                        if answer:
+                            if _fu_think_open and not _fu_sep.in_think:
+                                yield AgentStep(kind=StepKind.THOUGHT_END, thought_id=_fu_tid)
+                                _fu_think_open = False
+                            yield AgentStep(kind=StepKind.TEXT_DELTA, content=answer)
                 else:
                     resp2 = ctx.client.chat(
                         follow_up,
@@ -535,7 +564,14 @@ class QuickEngine(AgentEngine):
                     )
                     text = getattr(resp2, "content", "") or str(resp2)
                     if text:
-                        yield AgentStep(kind=StepKind.TEXT_DELTA, content=text)
+                        # Non-streaming: feed whole response through separator
+                        r, a = _fu_sep.feed(text)
+                        r2, a2 = _fu_sep.flush()
+                        clean_answer = (a + a2).strip()
+                        if clean_answer:
+                            yield AgentStep(kind=StepKind.TEXT_DELTA, content=clean_answer)
+                if _fu_think_open:
+                    yield AgentStep(kind=StepKind.THOUGHT_END, thought_id=_fu_tid)
 
             yield AgentStep(kind=StepKind.TEXT_END)
             yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")

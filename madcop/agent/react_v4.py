@@ -101,6 +101,10 @@ class ReActEngineV4(AgentEngine):
             # path when present.
             oa_tc_name: str | None = None
             oa_tc_args: str = ""
+            # Track per-index args to handle parallel tool_calls — the
+            # engine executes ONE tool per step, so we use the FIRST
+            # tool call's args (index 0) and ignore later indices.
+            oa_tc_seen_indices: set[int] = set()
             oa_tc_id: str | None = None
 
             try:
@@ -120,7 +124,7 @@ class ReActEngineV4(AgentEngine):
                                 oa_tc_id = d["id"]
                             if d.get("name"):
                                 oa_tc_name = d["name"]
-                            if d.get("arguments"):
+                            if d.get("arguments") and d.get("index", 0) == 0:
                                 oa_tc_args += d["arguments"]
                         # Non-streaming fallback (some clients only emit
                         # the full tool_call at the end).

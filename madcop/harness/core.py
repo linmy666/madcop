@@ -186,11 +186,13 @@ class SessionLog:
                 if ev.kind in ("text_delta", "done") and ev.content:
                     _start("assistant", ev.content)
             elif ev.domain == EventDomain.TOOL:
-                if ev.kind == "tool_call":
-                    name = ev.metadata.get("tool_name") or ev.content or "tool"
-                    _start("assistant", f"[used tool: {name}]")
-                elif ev.kind == "tool_result":
-                    _start("user", f"[tool result] {ev.content[:500]}")
+                # Tool calls are execution details, NOT conversation
+                # content. Including them in derived context made the
+                # model echo "[used tool: web_search]" verbatim in its
+                # next answer instead of making a REAL tool call. The
+                # assistant's final answer already incorporates the tool's
+                # findings, so we skip the tool domain entirely.
+                pass
             # REASONING domain: deliberately ignored (trajectory discard).
 
         _flush()
