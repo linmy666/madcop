@@ -119,8 +119,10 @@ class WebSearchTool(Tool):
 
     name = "web_search"
     description = (
-        "Search the web for a query. Returns top results with "
-        "title, URL, and snippet. Use this to find current information."
+        "Search the web. Returns top results with title, URL, and snippet. "
+        "IMPORTANT: use SHORT queries (2-4 keywords, e.g. '台风 最新') "
+        "for best results. Long specific queries return irrelevant results. "
+        "Use this for any time-sensitive or factual question."
     )
 
     @property

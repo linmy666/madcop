@@ -297,7 +297,17 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     )
 
     # Build system prefix from memory (same as old handler)
-    sys_prefix = ""
+    sys_prefix = ''
+    # Always tell the model what today is — without this, the model's
+    # internal date guess leaks and users see 'time confusion' (the AI
+    # talking about last month as 'recent').
+    from datetime import datetime as _dt
+    _today = _dt.now()
+    sys_prefix += (
+        f"Today is {_today.strftime('%A, %B %d, %Y')}. "
+        f"Current time: {_today.strftime('%H:%M')}. "
+        "All 'today/recent/latest' references are relative to this date. "
+    )
     if mem_store:
         try:
             from madcop.server.app import _build_memory_system_prompt
@@ -347,7 +357,10 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                     "— do NOT answer in prose first. NEVER say 'I can't search "
                     "the web' or recommend external sites — you CAN search via "
                     "the tools. After the tool returns, summarise the result. "
-                    "ONE tool call only — for complex multi-step tasks, tell "
+                    "ONE tool call only. For web_search use SHORT queries "
+                    "(2-4 Chinese words like '台风 最新', NOT long sentences "
+                    "like '2026年最新台风消息 西北太平洋'). Long queries return "
+                    "irrelevant results. For complex multi-step tasks, tell "
                     "the user to switch to standard mode."
                 )
         except Exception:
