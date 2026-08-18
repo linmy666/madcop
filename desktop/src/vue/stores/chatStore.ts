@@ -175,6 +175,8 @@ export type PerSessionState = {
   streamingToolInput: string
   activeToolUseId: string | null
   activeToolName: string | null
+  /** HITL confirm card (tool_confirm_request SSE). */
+  pendingToolConfirm: { toolUseId: string; toolName: string; input: any } | null
   /** Sprint 2 — memories the LLM drew on for this turn. */
   memoryRecalls?: { id: string; kind: string; title: string; preview: string; layer: string }[]
   /** Sprint 4 — source citations from the creation engine (DONE.metadata.citations). */
@@ -273,6 +275,7 @@ function createDefaultSessionState(): PerSessionState {
   citations: [],
     activeToolUseId: null,
     activeToolName: null,
+    pendingToolConfirm: null,
     activeThinkingId: null,
     // Default OFF: plan sidebar "生成执行计划" confuses normal chat / file Q&A.
     // Multi-step planning still works when the user enables plan mode explicitly.
@@ -829,6 +832,7 @@ export const useChatStore = defineStore('chat', {
                     error: 'error',
                     done: 'done',
                     plan: 'plan',
+                    tool_confirm_request: 'tool_confirm_request',
                   }
                   const mapped = KIND_TO_TYPE[event.kind]
                   if (mapped) {
@@ -895,6 +899,16 @@ export const useChatStore = defineStore('chat', {
                     preview = String(event.content).slice(0, 60)
                   } else if (event.type === 'error' && event.message) {
                     preview = String(event.message).slice(0, 120)
+                  } else if (event.type === 'tool_confirm_request') {
+                    // HITL: backend BLOCKED waiting for user approve/deny.
+                    // Without this handler the confirm event was silently
+                    // dropped and the reply stalled forever after intro text.
+                    const reqId = (event as any).tool_use_id || `confirm-${Date.now()}`
+                    session.pendingToolConfirm = {
+                      toolUseId: reqId,
+                      toolName: (event as any).tool_name || '',
+                      input: (event as any).tool_input || {},
+                    }
                   } else if (event.type === 'plan' && event.plan) {
                     preview = `steps=${event.plan.steps?.length ?? 0} status=${event.plan.status}`
                   } else if (event.type === 'tool' && event.name) {
@@ -1478,6 +1492,21 @@ export const useChatStore = defineStore('chat', {
       session.activeToolUseId = null
       session.activeToolName = null
       session.activeThinkingId = null
+    },
+
+    /** HITL: respond to a pending tool confirmation (Approve/Deny). */
+    async respondToolConfirm(sessionId: string, approved: boolean) {
+      const session = this.sessions[sessionId]
+      if (!session?.pendingToolConfirm) return
+      const req = session.pendingToolConfirm
+      session.pendingToolConfirm = null
+      try {
+        await fetch(getApiUrl('/api/v4/chat/confirm'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool_use_id: req.toolUseId, approved }),
+        })
+      } catch { /* network error — backend timeout rejects safely */ }
     },
 
     /**

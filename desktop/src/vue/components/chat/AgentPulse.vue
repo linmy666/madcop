@@ -65,21 +65,9 @@ const phase = computed<{ label: string; icon: string } | null>(() => {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.agent-pulse__dot--think {
-  background: #6b8afd;
+.agent-pulse__dot {
+  background: var(--color-text-tertiary, #888);
   animation: pulse-dot 1.2s ease-in-out infinite;
-}
-.agent-pulse__dot--tool {
-  background: #e8a838;
-  animation: pulse-dot 1.2s ease-in-out infinite 0.2s;
-}
-.agent-pulse__dot--write {
-  background: #3ecf8e;
-  animation: pulse-dot 1.2s ease-in-out infinite 0.4s;
-}
-.agent-pulse__dot--wait {
-  background: #aaa;
-  animation: pulse-dot 1.5s ease-in-out infinite;
 }
 .agent-pulse__label {
   font-variant-numeric: tabular-nums;

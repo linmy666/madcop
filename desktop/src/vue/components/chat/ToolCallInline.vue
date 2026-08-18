@@ -96,10 +96,10 @@ const statusIcon = computed(() => {
 </script>
 
 <template>
-  <div class="tool-inline">
-    <span v-if="isPending" class="zcode-spinner tool-inline__spinner" aria-hidden="true"></span>
-    <span v-else class="material-symbols-outlined tool-inline__status" :class="{ 'tool-inline__status--failed': isFailed }" aria-hidden="true">{{ statusIcon }}</span>
-    <span class="material-symbols-outlined tool-inline__icon" aria-hidden="true">{{ meta.icon }}</span>
+  <div class="tool-inline" data-testid="tool-inline">
+    <span v-if="isPending" class="tool-inline__spinner" aria-hidden="true"></span>
+    <svg v-else-if="isFailed" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="tool-inline__status--failed" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tool-inline__status--ok" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
     <span class="tool-inline__verb">{{ meta.verb }}</span>
     <span v-if="target" class="tool-inline__target">{{ target }}</span>
   </div>
@@ -126,7 +126,15 @@ const statusIcon = computed(() => {
   flex-shrink: 0;
 }
 
-.tool-inline__status {
+.tool-inline__status--ok {
+  color: inherit;
+  opacity: 0.5;
+}
+.tool-inline__status--failed {
+  color: inherit;
+  opacity: 0.7;
+}
+.tool-inline__legacy-status {
   font-size: 13px;
   flex-shrink: 0;
   /* Same gray as the rest — no green/red */

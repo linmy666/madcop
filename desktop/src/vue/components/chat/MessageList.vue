@@ -115,6 +115,7 @@ import ToolResultBlock from './ToolResultBlock.vue'
 import PermissionDialog from './PermissionDialog.vue'
 import AskUserQuestion from './AskUserQuestion.vue'
 import AgentPulse from './AgentPulse.vue'
+import ToolConfirmCard from './ToolConfirmCard.vue'
 import InlineTaskSummary from './InlineTaskSummary.vue'
 import CurrentTurnChangeCard from './CurrentTurnChangeCard.vue'
 import { ConfirmDialog } from '../shared/ConfirmDialog.vue'
@@ -1208,6 +1209,14 @@ function renderItemContent(item: RenderItem) {
         <CitationList
           v-if="getActiveSessionCitations().length > 0"
           :citations="getActiveSessionCitations()"
+        />
+
+        <!-- HITL: tool confirmation card (backend blocked waiting) -->
+        <ToolConfirmCard
+          v-if="sessionState?.pendingToolConfirm"
+          :tool-name="sessionState.pendingToolConfirm.toolName"
+          :input="sessionState.pendingToolConfirm.input"
+          @respond="(ok: boolean) => chatStore.respondToolConfirm(activeTabId, ok)"
         />
 
         <!-- AgentPulse: live phase indicator (思考中/调用工具/输出中) -->

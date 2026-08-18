@@ -1314,7 +1314,7 @@ const projectMenuData = computed(() => {
         <span
           v-if="expanded"
           class="ml-auto w-2 h-2 rounded-full shrink-0"
-          :class="observerActive ? 'bg-green-500 animate-pulse' : 'bg-[var(--color-border)]'"
+          :class="observerActive ? 'bg-[var(--color-text-secondary)] animate-pulse' : 'bg-[var(--color-border)]'"
           :title="observerActive ? '观察器运行中' : '观察器未开启'"
         ></span>
       </button>
