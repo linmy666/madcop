@@ -19,7 +19,8 @@ from madcop.llm.client import Message
 
 class _Stream:
     """Fake LLM client. Pretends the LLM decided to call ask_user."""
-    def stream(self, messages, model=None, temperature=0.1, max_tokens=2048):
+    def stream(self, messages, model=None, temperature=0.1, max_tokens=2048,
+               tools=None):
         # Phase 1: emit a thought + the ask_user call wrapped in the
         # standard ReAct protocol text (parsed by react_v4 the same
         # way as for any tool).
@@ -34,7 +35,7 @@ class _Stream:
         yield SimpleNamespace(text="", finish_reason="stop")
 
 
-def _tool_executor(name: str, raw_input: str, work_dir=None):
+def _tool_executor(name: str, raw_input: str, work_dir=None, pre_approved=False):
     """Mimic react_v4's expected tool-executor contract.
 
     react_v4 inspects the return with `hasattr(raw_result, 'to_observation')

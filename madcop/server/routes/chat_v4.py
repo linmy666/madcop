@@ -86,6 +86,11 @@ def _get_client():
                 api_key=key,
                 base_url=p.base_url,
                 model=p.model,
+                # 300s: build tasks stream one large artifact with long
+                # inter-chunk thinking pauses — the 30s class default
+                # killed those streams mid-generation ("The read
+                # operation timed out").
+                timeout=300.0,
             )
     logger.warning("active provider missing — falling back to MockClient")
     return MockClient()
@@ -366,6 +371,34 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         except Exception:
             pass
 
+    # Build-request action bias: "做个植物大战僵尸的游戏" previously
+    # produced a wall of clarifying options and zero work — the model
+    # treated a build order as a requirements interview. When the user
+    # asks to CREATE something, mandate immediate action with sensible
+    # defaults instead. (Routing to the tool-capable ReAct engine is
+    # handled by EngineFactory.BUILD_SIGNALS; this directive fixes the
+    # model's *behavior* once it's there.)
+    try:
+        from madcop.agent.runtime import EngineFactory
+        _last_user_lc = next(
+            ((m.content or "").lower() for m in reversed(messages) if m.role == "user"),
+            "",
+        )
+        if agent_mode in ("chat", "standard") and any(
+            sig in _last_user_lc for sig in EngineFactory.BUILD_SIGNALS
+        ):
+            sys_prefix += (
+                "\n[Build-request directive] The user asked you to CREATE "
+                "something. Do NOT ask clarifying questions — they block all "
+                "progress. Pick the smallest workable scope yourself "
+                "(default: one self-contained HTML file, no build step, no "
+                "dependencies), state your choice in ONE short line, then "
+                "call write_file to produce it right away. A working minimal "
+                "version now beats questions; iterate later if asked."
+            )
+    except Exception as _e:
+        logger.debug("build-intent directive skipped: %s", _e)
+
     # Build run context
     ctx = RunContext(
         messages=messages,
@@ -381,9 +414,12 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     # Set up tool executor as a callable for ReActEngineV4.
     # Return the structured ToolResult so the engine can branch on
     # is_validation_error / is_timeout / needs_confirmation flags for
-    # the SSE tool_end event metadata.
-    def tool_call(name: str, raw_input: str, wd: str | None = None):
-        return tool_executor.execute(name, raw_input, wd)
+    # the SSE tool_end event metadata. ``pre_approved`` passes the
+    # engine's HITL approval through so the executor's destructive
+    # gate doesn't reject an already-user-approved call.
+    def tool_call(name: str, raw_input: str, wd: str | None = None,
+                  pre_approved: bool = False):
+        return tool_executor.execute(name, raw_input, wd, pre_approved=pre_approved)
 
     ctx.tool_executor = tool_call
 

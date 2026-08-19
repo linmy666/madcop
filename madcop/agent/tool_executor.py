@@ -140,8 +140,9 @@ class ToolExecutor:
     def execute(
         self,
         tool_name: str,
-        raw_input: str | dict,
+        raw_input: Any,
         work_dir: str | None = None,
+        pre_approved: bool = False,
     ) -> ToolResult:
         """Execute synchronously (called from ReAct engine thread).
 
@@ -188,10 +189,16 @@ class ToolExecutor:
         #    table (e.g. plugins registered at runtime). This way
         #    ToolPlugin.danger actually has an effect for custom tools,
         #    while built-in tools still get the curated safety policy.
+        #
+        #    ``pre_approved`` is set when the calling engine ALREADY ran
+        #    a HITL gate (e.g. the ReAct engine's confirm card → user
+        #    clicked approve). Without this pass-through the executor
+        #    rejected the call again after approval and told the model
+        #    to use ask_user — a dead end that blocked every build task.
         plugin = self._registry.get(tool_name)
         plugin_default = plugin.danger if plugin and getattr(plugin, 'danger', None) else None
         level = danger_level(tool_name) or plugin_default or 'safe'
-        if level == "destructive":
+        if level == "destructive" and not pre_approved:
             return ToolResult(
                 tool_name=tool_name,
                 error=(

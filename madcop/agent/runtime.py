@@ -596,6 +596,19 @@ class EngineFactory:
     - deep → ReActEngineV4 with max_steps=20
     """
 
+    # Build-intent signals: requests to CREATE an artifact (game/site/
+    # script/app). These must route to the tool-capable ReAct engine —
+    # previously "做个植物大战僵尸的游戏" matched nothing and fell to
+    # QuickEngine, which answered with clarifying questions and no
+    # tool timeline (the single most-complained demo failure).
+    BUILD_SIGNALS = [
+        "做个", "做一个", "写一个", "写个", "生成一个", "生成个",
+        "实现一个", "实现个", "开发一个", "开发个", "搭建", "搭一个",
+        "帮我做个", "帮我写个", "做一个", "新建一个",
+        "build a", "make a", "make me", "create a", "implement a",
+        "write a ", "write me",
+    ]
+
     @staticmethod
     def _should_use_tools(ctx: RunContext) -> bool:
         """Heuristic: does this query need tools (search/file/etc)?"""
@@ -609,7 +622,7 @@ class EngineFactory:
             "文件", "读取", "修改", "创建", "file", "read", "write",
             "帮我写", "帮我做", "帮我创建", "帮我分析",
         ]
-        return any(sig in last_msg for sig in tool_signals)
+        return any(sig in last_msg for sig in tool_signals + EngineFactory.BUILD_SIGNALS)
 
     @staticmethod
     def create(ctx: RunContext) -> AgentEngine:

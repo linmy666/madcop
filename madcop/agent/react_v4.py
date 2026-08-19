@@ -113,7 +113,7 @@ class ReActEngineV4(AgentEngine):
                         messages,
                         model=ctx.model,
                         temperature=0.1,
-                        max_tokens=2048,
+                        max_tokens=8192,
                         tools=ctx.tool_schemas or None,
                     ):
                         # Capture OpenAI-style tool_call deltas if any.
@@ -234,7 +234,15 @@ class ReActEngineV4(AgentEngine):
                             continue
 
                         if stream_state == 0:
-                            if _FA_MARKER.search(raw):
+                            # BUG-FIX: scan the ANSWER buffer (post-think
+                            # text only), never `raw` — raw also contains
+                            # <think> content, and a model that merely
+                            # *mentions* "FINAL_ANSWER" while thinking
+                            # used to hijack the stream into answer mode,
+                            # then dump raw thinking + <think> tags into
+                            # TEXT_DELTA (duplicated thinking, leaked tags).
+                            _abuf = getattr(self, '_v4_answer_buf', '')
+                            if _FA_MARKER.search(_abuf):
                                 stream_state = 2
                                 # Close current thought block
                                 if thought_active:
@@ -245,9 +253,9 @@ class ReActEngineV4(AgentEngine):
                                         elapsed_ms=int((time.time() - step_start) * 1000),
                                     )
                                 # Emit post-marker tail as answer
-                                m = _FA_MARKER.search(raw)
+                                m = _FA_MARKER.search(_abuf)
                                 if m:
-                                    tail = raw[m.end():].lstrip(" \t\n")
+                                    tail = _abuf[m.end():].lstrip(" \t\n")
                                     # BUG: models write "Action: FINAL_ANSWER
                                     # \nAction Input:\n\n<answer>" — the tail
                                     # then starts with a stray "Action Input:"
@@ -262,6 +270,11 @@ class ReActEngineV4(AgentEngine):
                                         yield AgentStep(kind=StepKind.TEXT_DELTA, content=tail)
                             else:
                                 emit = _PROTOCOL_RE.sub("", text)
+                                # Strip stray think-tag fragments — tag-close
+                                # chunks produce empty separator output and
+                                # fall through here, leaking "</think>" into
+                                # the visible thought stream.
+                                emit = re.sub(r'</?think>', '', emit)
                                 if emit:
                                     if not thought_active:
                                         thought_active = True
@@ -277,6 +290,16 @@ class ReActEngineV4(AgentEngine):
                                         content=emit,
                                     )
                         elif stream_state == 2:
+                            # If the separator is holding back a partial
+                            # "<thi"/"</thi" prefix across a chunk boundary,
+                            # DON'T emit this chunk — the tag resolves on the
+                            # next chunk and leaking the fragment as answer
+                            # text corrupts the stream.
+                            if getattr(_think_sep, '_buf', ''):
+                                fr = getattr(chunk, "finish_reason", None)
+                                if fr:
+                                    break
+                                continue
                             clean = text
                             if not fa_streamed:
                                 clean = clean.lstrip(" \t\n")
@@ -480,13 +503,24 @@ class ReActEngineV4(AgentEngine):
                 messages.append(Message(role="user", content=f"Observation: {observation}"))
                 continue
 
-            # Execute tool
+            # Execute tool. _approved carries the HITL decision (True
+            # when no confirmation was needed OR the user approved the
+            # card) — forward it so the executor's destructive gate
+            # doesn't reject an already-approved call.
             observation = ""
             is_error = False
             tool_meta: dict[str, Any] = {}
             try:
                 if ctx.tool_executor:
-                    raw_result = ctx.tool_executor(action, action_input, ctx.work_dir)
+                    try:
+                        raw_result = ctx.tool_executor(
+                            action, action_input, ctx.work_dir,
+                            pre_approved=_approved,
+                        )
+                    except TypeError:
+                        # Executor doesn't accept pre_approved (older
+                        # bridge) — call without it.
+                        raw_result = ctx.tool_executor(action, action_input, ctx.work_dir)
                     # Allow executors to return either a str (legacy) or a
                     # ``ToolResult`` dataclass with structured fields. We
                     # prefer the structured form so the frontend can show
