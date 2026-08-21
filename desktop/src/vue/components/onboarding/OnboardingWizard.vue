@@ -137,18 +137,26 @@ function pickSuggestion(text: string) {
 
 function skipAll() {
   try { localStorage.setItem('madcop_onboarded', '1') } catch {}
+  dismissed.value = true
   emit('close')
 }
 
 function complete() {
   try { localStorage.setItem('madcop_onboarded', '1') } catch {}
+  dismissed.value = true
   emit('close')
 }
 
 onMounted(loadPresets)
 
 // ── Visibility trigger ─────────────────────────────────────────────
+// localStorage isn't reactive, so skipping only updated the stored
+// flag and the computed below never re-evaluated — the overlay stayed
+// on screen (blocking the composer) until a full page reload. Track
+// dismissal in a ref so shouldShow flips immediately.
+const dismissed = ref(false)
 const shouldShow = computed(() => {
+  if (dismissed.value) return false
   try {
     if (localStorage.getItem('madcop_onboarded') === '1') return false
     return true

@@ -39,6 +39,7 @@ import FileSearchMenu from './FileSearchMenu.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ModelSelector from '../controls/ModelSelector.vue'
 import AgentModeSelector from '../controls/AgentModeSelector.vue'
+import IntensitySlider from '../controls/IntensitySlider.vue'
 import VoiceButton from './VoiceButton.vue'
 import LocalSlashCommandPanel from './LocalSlashCommandPanel.vue'
 import ComposerDropOverlay from './ComposerDropOverlay.vue'
@@ -1548,6 +1549,13 @@ watch(input, (v) => {
                 :selection-key="activeTabId || DRAFT_RUNTIME_SELECTION_KEY"
                 :compact="useCompactControls"
                 :disabled="isSubmitting"
+              />
+              <IntensitySlider
+                :selection-key="activeTabId || DRAFT_RUNTIME_SELECTION_KEY"
+                :selected-model="selectedModel"
+                :compact="useCompactControls"
+                :disabled="isSubmitting"
+                @update:selected-model="(m: string) => { selectedModel = m }"
               />
             </template>
 
