@@ -678,11 +678,14 @@ class ReActEngineV4(AgentEngine):
         """
         from datetime import datetime, timezone, timedelta
         tz_cn = timezone(timedelta(hours=8))
-        now_str = datetime.now(tz_cn).strftime("%Y年%m月%d日 %H:%M 北京时间 (UTC+8)")
-        utc_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        now_str = datetime.now(tz_cn).strftime('%Y年%m月%d日 %H:%M 北京时间 (UTC+8)')
+        utc_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+        # P1-7 (Claude SDK exclude_dynamic_sections): the system prompt
+        # stays byte-stable within a session for provider prefix caches.
+        # Volatile context (time) is injected on the last user message
+        # by the chat route — once for ALL engines, single source.
         sys_text = REACT_SYSTEM_PROMPT.format(
             tools_desc=self._format_tools(ctx.tool_schemas),
-            current_time=f"{now_str} / {utc_str}",
         )
         if ctx.system_prefix:
             sys_text = f"{ctx.system_prefix}\n\n{sys_text}"

@@ -343,17 +343,23 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         store=mem_store,
     )
 
-    # Build system prefix from memory (same as old handler)
+    # P1-7 — prompt-cache-friendly prefix split (Claude SDK
+    # exclude_dynamic_sections). The SYSTEM prompt carries only
+    # session-stable content (memory persona / output style / mode
+    # directives) so providers can hit their prefix cache across turns.
+    # Volatile context — date/time and per-turn directives — rides on
+    # the LAST USER message instead.
+    _user_ctx_parts: list[str] = []
     sys_prefix = ''
-    # Always tell the model what today is — without this, the model's
-    # internal date guess leaks and users see 'time confusion' (the AI
-    # talking about last month as 'recent').
+    # Time awareness still matters (without it the model's internal
+    # date guess leaks as 'time confusion') — but it now lives on the
+    # user turn, not the system prompt.
     from datetime import datetime as _dt
     _today = _dt.now()
-    sys_prefix += (
-        f"Today is {_today.strftime('%A, %B %d, %Y')}. "
+    _user_ctx_parts.append(
+        f"[Context] Today is {_today.strftime('%A, %B %d, %Y')}. "
         f"Current time: {_today.strftime('%H:%M')}. "
-        "All 'today/recent/latest' references are relative to this date. "
+        "All 'today/recent/latest' references are relative to this date."
     )
     if mem_store:
         try:
@@ -419,7 +425,8 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     # asks to CREATE something, mandate immediate action with sensible
     # defaults instead. (Routing to the tool-capable ReAct engine is
     # handled by EngineFactory.BUILD_SIGNALS; this directive fixes the
-    # model's *behavior* once it's there.)
+    # model's *behavior* once it's there.) P1-7: per-turn directive →
+    # user message, not the system prefix.
     try:
         from madcop.agent.runtime import EngineFactory
         _last_user_lc = next(
@@ -429,8 +436,8 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         if agent_mode in ("chat", "standard") and any(
             sig in _last_user_lc for sig in EngineFactory.BUILD_SIGNALS
         ):
-            sys_prefix += (
-                "\n[Build-request directive] The user asked you to CREATE "
+            _user_ctx_parts.append(
+                "[Build-request directive] The user asked you to CREATE "
                 "something. Do NOT ask clarifying questions — they block all "
                 "progress. Pick the smallest workable scope yourself "
                 "(default: one self-contained HTML file, no build step, no "
@@ -440,6 +447,18 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             )
     except Exception as _e:
         logger.debug("build-intent directive skipped: %s", _e)
+
+    # P1-7: prepend the volatile context block to the last user message
+    # (single injection point for ALL engines; keeps the system prompt
+    # byte-stable within a session). The block is stripped back out
+    # before the log/persist layer records the user turn.
+    _user_ctx_block: str = ""
+    if _user_ctx_parts and messages and messages[-1].role == "user":
+        _user_ctx_block = "\n\n".join(_user_ctx_parts) + "\n\n"
+        messages[-1] = Message(
+            role="user",
+            content=_user_ctx_block + (messages[-1].content or ""),
+        )
 
     # Build run context
     ctx = RunContext(
@@ -630,6 +649,11 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 if m.role == "user":
                     _latest_user = m.content or ""
                     break
+            # P1-7: strip the volatile [Context]/directive block we
+            # prepended to the user turn — the log (turn_start) and the
+            # session store must record the user's actual words only.
+            if _user_ctx_block and _latest_user.startswith(_user_ctx_block):
+                _latest_user = _latest_user[len(_user_ctx_block):]
 
             # v4-7 — Plan-and-Execute mode: a separate flow that runs the
             # planner → step executor → verifier loop and emits legacy

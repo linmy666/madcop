@@ -73,8 +73,6 @@ class ReActResult:
 REACT_SYSTEM_PROMPT = """\
 你是 MadCop 的智能体。通过"思考-行动-观察"循环解决用户问题。
 
-⏰ 当前时间: {current_time}
-
 每一步严格按以下格式输出:
 
 Thought: <一句话描述你的推理，比如"用户需要X，我先查Y">
