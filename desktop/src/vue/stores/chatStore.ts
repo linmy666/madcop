@@ -175,8 +175,9 @@ export type PerSessionState = {
   streamingToolInput: string
   activeToolUseId: string | null
   activeToolName: string | null
-  /** HITL confirm card (tool_confirm_request SSE). */
-  pendingToolConfirm: { toolUseId: string; toolName: string; input: any } | null
+  /** HITL confirm queue (tool_confirm_request SSE). Parallel tools
+   *  emit several cards; they render ONE at a time (head of queue). */
+  pendingToolConfirms: { toolUseId: string; toolName: string; input: any }[]
   /** Sprint 2 — memories the LLM drew on for this turn. */
   memoryRecalls?: { id: string; kind: string; title: string; preview: string; layer: string }[]
   /** Sprint 4 — source citations from the creation engine (DONE.metadata.citations). */
@@ -275,7 +276,7 @@ function createDefaultSessionState(): PerSessionState {
   citations: [],
     activeToolUseId: null,
     activeToolName: null,
-    pendingToolConfirm: null,
+    pendingToolConfirms: [],
     activeThinkingId: null,
     // Default OFF: plan sidebar "生成执行计划" confuses normal chat / file Q&A.
     // Multi-step planning still works when the user enables plan mode explicitly.
@@ -902,12 +903,16 @@ export const useChatStore = defineStore('chat', {
                   } else if (event.type === 'tool_confirm_request') {
                     // HITL: backend BLOCKED waiting for user approve/deny.
                     // Without this handler the confirm event was silently
-                    // dropped and the reply stalled forever after intro text.
+                    // dropped and the reply stalled forever after intro
+                    // text. P0-3: parallel tools queue several cards —
+                    // dedupe by tool_use_id, render head-of-queue first.
                     const reqId = (event as any).tool_use_id || `confirm-${Date.now()}`
-                    session.pendingToolConfirm = {
-                      toolUseId: reqId,
-                      toolName: (event as any).tool_name || '',
-                      input: (event as any).tool_input || {},
+                    if (!session.pendingToolConfirms.some((c: any) => c.toolUseId === reqId)) {
+                      session.pendingToolConfirms.push({
+                        toolUseId: reqId,
+                        toolName: (event as any).tool_name || '',
+                        input: (event as any).tool_input || {},
+                      })
                     }
                   } else if (event.type === 'plan' && event.plan) {
                     preview = `steps=${event.plan.steps?.length ?? 0} status=${event.plan.status}`
@@ -1494,17 +1499,22 @@ export const useChatStore = defineStore('chat', {
       session.activeThinkingId = null
     },
 
-    /** HITL: respond to a pending tool confirmation (Approve/Deny). */
+    /** HITL: respond to the head-of-queue tool confirmation (Approve/Deny).
+     *  Parallel tools queue several cards; answering resolves the current
+     *  one and the next card (if any) slides in. */
     async respondToolConfirm(sessionId: string, approved: boolean) {
       const session = this.sessions[sessionId]
-      if (!session?.pendingToolConfirm) return
-      const req = session.pendingToolConfirm
-      session.pendingToolConfirm = null
+      if (!session?.pendingToolConfirms?.length) return
+      const req = session.pendingToolConfirms.shift()!
       try {
         await fetch(getApiUrl('/api/v4/chat/confirm'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tool_use_id: req.toolUseId, approved }),
+          body: JSON.stringify({
+            conversation_id: sessionId,
+            tool_use_id: req.toolUseId,
+            approved,
+          }),
         })
       } catch { /* network error — backend timeout rejects safely */ }
     },

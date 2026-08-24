@@ -398,15 +398,15 @@ def test_chat_endpoint_multi_tool_flow(tmp_path: Path, monkeypatch: pytest.Monke
     tool_events = [e for e in events if e["kind"] == "tool_start"]
     tool_result_events = [e for e in events if e["kind"] == "tool_end"]
 
-    # v4 QuickEngine semantics: ONE tool per streaming step (the
-    # legacy /api/chat executed all parallel tool_calls; v4 accumulates
-    # a single call and executes it, then feeds the observation back).
-    # The last-emitted tool (echo) is the one that executes.
-    assert len(tool_events) == 1
-    assert tool_events[0]["tool_name"] == "echo"
+    # P0-3 batch semantics: ALL parallel tool_calls execute (the old
+    # engine dropped every call after index 0 — this test previously
+    # pinned that limitation). Both weather + echo run now.
+    assert len(tool_events) == 2
+    assert {t["tool_name"] for t in tool_events} == {"get_weather", "echo"}
 
-    assert len(tool_result_events) == 1
+    assert len(tool_result_events) == 2
 
-    # Phase-2 (second stream call) carries the executed tool's result.
+    # Phase-2 (second stream call) carries the executed tools' results
+    # (combined observation when N > 1).
     stream_msgs = fake.stream_calls[1]
     assert any("hello" in (m.content or "") for m in stream_msgs)

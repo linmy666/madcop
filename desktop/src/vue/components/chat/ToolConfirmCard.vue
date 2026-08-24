@@ -11,6 +11,8 @@ import { computed } from 'vue'
 const props = defineProps<{
   toolName: string
   input: Record<string, unknown>
+  /** P0-3: total queued confirmations — >1 shows a waiting counter. */
+  queueCount?: number
 }>()
 
 const emit = defineEmits<{
@@ -47,6 +49,7 @@ const sizeHint = computed(() => {
       </span>
       <span class="tcc__label">需要确认</span>
       <span class="tcc__tool">{{ toolName }}</span>
+      <span v-if="queueCount && queueCount > 1" class="tcc__queue">+{{ queueCount - 1 }} 待确认</span>
       <span v-if="sizeHint" class="tcc__size">{{ sizeHint }}</span>
     </div>
     <div v-if="detail" class="tcc__detail">{{ detail }}</div>
@@ -83,6 +86,13 @@ const sizeHint = computed(() => {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
   color: var(--color-text-secondary, #555);
+}
+.tcc__queue {
+  font-size: 10px;
+  color: var(--color-text-tertiary, #999);
+  padding: 1px 6px;
+  border: 1px solid var(--color-border, rgba(128,128,128,0.25));
+  border-radius: 999px;
 }
 .tcc__size {
   margin-left: auto;

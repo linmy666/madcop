@@ -96,6 +96,9 @@ class ReActEngineV4(AgentEngine):
             oa_tc_name: str | None = None
             oa_tc_args: str = ""
             oa_tc_id: str | None = None
+            # P0-3: accumulate ALL tool_calls by index so parallel calls
+            # execute instead of being dropped after index 0.
+            oa_calls: dict[int, dict] = {}
             # P0-1: providers report length-stops via finish_reason on the
             # final chunk. Tracked so the parse stage can void tool calls
             # whose arguments may have been cut mid-stream.
@@ -114,31 +117,48 @@ class ReActEngineV4(AgentEngine):
                         if _fr_chunk:
                             _finish_reason = _fr_chunk
                         # Capture OpenAI-style tool_call deltas if any.
+                        # P0-3: accumulate per-index so parallel calls all
+                        # reach execution; oa_tc_name/oa_tc_args keep the
+                        # index-0 view for the existing single-call logic.
                         for d in (getattr(chunk, "tool_call_deltas", None) or ()):
                             if not isinstance(d, dict):
                                 continue
+                            _slot = oa_calls.setdefault(
+                                d.get("index", 0) or 0,
+                                {"id": None, "name": None, "args": ""},
+                            )
                             if d.get("id"):
+                                _slot["id"] = d["id"]
                                 oa_tc_id = d["id"]
                             if d.get("name"):
-                                oa_tc_name = d["name"]
-                            if d.get("arguments") and d.get("index", 0) == 0:
-                                oa_tc_args += d["arguments"]
+                                _slot["name"] = d["name"]
+                            if d.get("arguments"):
+                                _slot["args"] += d["arguments"]
                         # Non-streaming fallback (some clients only emit
                         # the full tool_call at the end).
                         end_tc = getattr(chunk, "tool_call", None)
-                        if end_tc is not None and not oa_tc_name:
+                        if end_tc is not None and not oa_calls:
                             if hasattr(end_tc, "name"):
-                                oa_tc_name = end_tc.name
-                                oa_tc_args = (
-                                    json.dumps(end_tc.arguments, ensure_ascii=False)
-                                    if not isinstance(end_tc.arguments, str)
-                                    else end_tc.arguments
-                                )
+                                oa_calls[0] = {
+                                    "id": getattr(end_tc, "id", None),
+                                    "name": end_tc.name,
+                                    "args": (
+                                        json.dumps(end_tc.arguments, ensure_ascii=False)
+                                        if not isinstance(end_tc.arguments, str)
+                                        else end_tc.arguments
+                                    ),
+                                }
                             elif isinstance(end_tc, dict):
-                                oa_tc_name = end_tc.get("function", {}).get("name") or oa_tc_name
-                                a = end_tc.get("function", {}).get("arguments")
-                                if a:
-                                    oa_tc_args = a if isinstance(a, str) else json.dumps(a, ensure_ascii=False)
+                                _fn = end_tc.get("function", {}) or {}
+                                a = _fn.get("arguments")
+                                oa_calls[0] = {
+                                    "id": end_tc.get("id"),
+                                    "name": _fn.get("name"),
+                                    "args": a if isinstance(a, str) or a is None else json.dumps(a, ensure_ascii=False),
+                                }
+                        if 0 in oa_calls:
+                            oa_tc_name = oa_calls[0]["name"] or oa_tc_name
+                            oa_tc_args = oa_calls[0]["args"] or oa_tc_args
 
                         text = getattr(chunk, "text", "") or ""
                         if not text:
@@ -373,197 +393,232 @@ class ReActEngineV4(AgentEngine):
                 yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")
                 return
 
-            # --- Tool call ---
-            tool_use_id = f"tool-{step_num}"
-            # Parse args. BUG-FIX: some models (MiniMax in ReAct mode)
-            # occasionally emit MULTIPLE JSON objects concatenated
-            # (e.g. {"query":"a"}{"query":"b"}) when they want to fire
-            # two searches at once. json.loads rejects that, and the old
-            # fallback stuffed the whole blob into {"path": ...} which
-            # broke web_search ("path" is not a valid param). Now we try
-            # to extract the FIRST valid JSON object via regex; only if
-            # that also fails do we fail CLEANLY with a validation error
-            # the model can fix on retry.
-            args: dict = {}
-            args_error = ""
-            _ai = action_input.strip()
-            if _ai:
-                try:
-                    args = json.loads(_ai)
-                except json.JSONDecodeError:
-                    # Nested-brace extraction: a first {...} block that
-                    # BALANCES braces (the flat [^{}]* regex can't match
-                    # tool args whose content contains braces — e.g.
-                    # write_file HTML/JS payloads — and the old fallback
-                    # then stuffed the raw blob into `path`, executing a
-                    # garbage 200-char path).
-                    _m = re.search(r'\{.*\}', _ai, re.DOTALL)
-                    _parsed = False
-                    if _m:
-                        try:
-                            args = json.loads(_m.group(0))
-                            _parsed = True
-                        except json.JSONDecodeError:
-                            # Concat JSON ({"a":1}{"b":2}) or surrounding
-                            # prose: fall back to the first flat block.
-                            _m2 = re.search(r'\{[^{}]*\}', _m.group(0), re.DOTALL)
-                            if _m2:
-                                try:
-                                    args = json.loads(_m2.group(0))
-                                    _parsed = True
-                                except json.JSONDecodeError:
-                                    pass
-                    if not _parsed:
-                        # Malformed JSON (typical cause: unescaped quotes
-                        # inside a large string value). Do NOT execute
-                        # with stuffed defaults — tell the model exactly
-                        # what broke so it resends properly escaped JSON.
-                        args_error = (
-                            "[error] 工具参数 JSON 解析失败（常见原因：字符串值内"
-                            "的引号/换行未转义）。请重新调用并用合法 JSON 传参，"
-                            "大段文本内容请确保内部双引号转义为 \\\" 。"
-                        )
-                        args = {"_raw": _ai[:200]}
-
-            if args_error:
-                yield AgentStep(
-                    kind=StepKind.TOOL_START,
-                    tool_name=action,
-                    tool_input=args,
-                    tool_use_id=tool_use_id,
+            # --- Tool calls — batch execution (P0-3) ---
+            # The batch is ALL native tool_calls when the provider sent
+            # any, else the single text-protocol call. Free (non-danger)
+            # calls run in a bounded concurrent pool; confirm-needed
+            # calls run sequentially, one HITL card at a time (Claude
+            # Code style). A single failing call never cancels its
+            # siblings (failure isolation, cf. OpenAI Agents SDK
+            # tool_execution.py).
+            _native = [
+                {"name": c["name"], "raw": c["args"]}
+                for _, c in sorted(oa_calls.items()) if c.get("name")
+            ]
+            _calls = _native if _native else [{"name": action, "raw": action_input}]
+            for _i, _c in enumerate(_calls):
+                _c["use_id"] = (
+                    f"tool-{step_num}" if len(_calls) == 1
+                    else f"tool-{step_num}-{_i + 1}"
                 )
-                yield AgentStep(
-                    kind=StepKind.TOOL_END,
-                    tool_name=action,
-                    tool_use_id=tool_use_id,
-                    tool_result=args_error,
-                    is_error=True,
-                    metadata={"is_validation_error": True},
-                )
-                messages.append(Message(role="assistant", content=_context_clean(raw)))
-                messages.append(Message(role="user", content=f"Observation: {args_error}"))
-                continue
 
-            yield AgentStep(
-                kind=StepKind.TOOL_START,
-                tool_name=action,
-                tool_input=args,
-                tool_use_id=tool_use_id,
+            # If the batch contains ask_user/clarify it PAUSES the loop —
+            # run only that call (the user's next send re-enters run()).
+            _clarify_idx = next(
+                (i for i, c in enumerate(_calls)
+                 if (c["name"] or "").strip().lower() in ("ask_user", "clarify")),
+                None,
             )
+            if _clarify_idx is not None:
+                _calls = [_calls[_clarify_idx]]
 
-            # HITL confirmation: if the tool is mutating AND confirm_handler
-            # is set, ask the user before executing.
-            _approved = True
+            def _parse_call_args(raw_args: str) -> tuple[dict, str]:
+                """Parse one call's args → (args, error).
+
+                Clean JSON → nested-brace extraction (HTML/JS payloads)
+                → first flat block (concat JSON) → CLEAN failure (never
+                execute with stuffed defaults).
+                """
+                args: dict = {}
+                ai = (raw_args or "").strip()
+                if not ai:
+                    return {}, ""
+                try:
+                    return json.loads(ai), ""
+                except json.JSONDecodeError:
+                    pass
+                m = re.search(r'\{.*\}', ai, re.DOTALL)
+                if m:
+                    try:
+                        return json.loads(m.group(0)), ""
+                    except json.JSONDecodeError:
+                        m2 = re.search(r'\{[^{}]*\}', m.group(0), re.DOTALL)
+                        if m2:
+                            try:
+                                return json.loads(m2.group(0)), ""
+                            except json.JSONDecodeError:
+                                pass
+                return (
+                    {"_raw": ai[:200]},
+                    "[error] 工具参数 JSON 解析失败（常见原因：字符串值内的"
+                    "引号/换行未转义）。请重新调用并用合法 JSON 传参，大段"
+                    "文本内容请确保内部双引号转义为 \\\" 。",
+                )
+
+            def _exec_one(name: str, args: dict, approved: bool):
+                """Execute one tool via ctx.tool_executor → (obs, is_err, meta)."""
+                obs, is_err, meta = "", False, {}
+                try:
+                    if ctx.tool_executor:
+                        _exec_input = (
+                            json.dumps(args, ensure_ascii=False) if args else ""
+                        )
+                        try:
+                            raw_result = ctx.tool_executor(
+                                name, _exec_input, ctx.work_dir,
+                                pre_approved=approved,
+                            )
+                        except TypeError:
+                            raw_result = ctx.tool_executor(name, _exec_input, ctx.work_dir)
+                        if hasattr(raw_result, "to_observation") and hasattr(raw_result, "is_error"):
+                            from madcop.agent.tool_executor import ToolResult as _TR
+                            if isinstance(raw_result, _TR):
+                                obs = raw_result.to_observation()
+                                is_err = bool(raw_result.is_error)
+                                meta = {
+                                    "is_validation_error": raw_result.is_validation_error,
+                                    "is_timeout": raw_result.is_timeout,
+                                    "needs_confirmation": raw_result.needs_confirmation,
+                                    "elapsed_ms": raw_result.elapsed_ms,
+                                }
+                            else:
+                                obs = str(raw_result)
+                        else:
+                            obs = str(raw_result)
+                    else:
+                        obs = f"[Tool '{name}' not available]"
+                except Exception as e:  # failure isolation for the pool
+                    obs, is_err = f"[error] {e}", True
+                return obs, is_err, meta
+
+            # Phase A — parse args, split free vs confirm-needed.
+            _results: list[tuple[dict, str, bool, dict]] = []  # (call, obs, is_err, meta)
+            _free: list[tuple[dict, dict]] = []
+            _confirm: list[tuple[dict, dict]] = []
+            _needs_conf_fn = None
             if ctx.confirm_handler:
                 try:
-                    from madcop.tools.safety import needs_confirmation
-                    if needs_confirmation(action):
+                    from madcop.tools.safety import needs_confirmation as _needs_conf_fn
+                except Exception:
+                    _needs_conf_fn = None
+
+            for _c in _calls:
+                _args, _perr = _parse_call_args(_c["raw"])
+                if _perr:
+                    yield AgentStep(
+                        kind=StepKind.TOOL_START,
+                        tool_name=_c["name"], tool_input=_args,
+                        tool_use_id=_c["use_id"],
+                    )
+                    yield AgentStep(
+                        kind=StepKind.TOOL_END,
+                        tool_name=_c["name"], tool_use_id=_c["use_id"],
+                        tool_result=_perr, is_error=True,
+                        metadata={"is_validation_error": True},
+                    )
+                    _results.append((_c, _perr, True, {"is_validation_error": True}))
+                elif _needs_conf_fn and _needs_conf_fn(_c["name"]):
+                    _confirm.append((_c, _args))
+                else:
+                    _free.append((_c, _args))
+
+            # Phase B — free calls run concurrently (bounded pool).
+            if _free:
+                for _c, _a in _free:
+                    yield AgentStep(
+                        kind=StepKind.TOOL_START,
+                        tool_name=_c["name"], tool_input=_a,
+                        tool_use_id=_c["use_id"],
+                    )
+                import concurrent.futures as _cf
+                with _cf.ThreadPoolExecutor(max_workers=min(4, len(_free))) as _pool:
+                    _futs = {
+                        _pool.submit(_exec_one, _c["name"], _a, True): _c
+                        for _c, _a in _free
+                    }
+                    for _fut in _cf.as_completed(_futs):
+                        _c = _futs[_fut]
+                        _obs, _ierr, _meta = _fut.result()
                         yield AgentStep(
-                            kind=StepKind.TOOL_CONFIRM_REQUEST,
-                            tool_name=action,
-                            tool_input=args,
-                            tool_use_id=tool_use_id,
+                            kind=StepKind.TOOL_END,
+                            tool_name=_c["name"], tool_use_id=_c["use_id"],
+                            tool_result=(_obs or "")[:2000],
+                            is_error=_ierr, metadata=_meta,
                         )
-                        _approved = ctx.confirm_handler(action, args, tool_use_id)
+                        _results.append((_c, _obs, _ierr, _meta))
+
+            # Phase C — confirm-needed calls: one HITL card at a time.
+            for _c, _a in _confirm:
+                yield AgentStep(
+                    kind=StepKind.TOOL_START,
+                    tool_name=_c["name"], tool_input=_a,
+                    tool_use_id=_c["use_id"],
+                )
+                yield AgentStep(
+                    kind=StepKind.TOOL_CONFIRM_REQUEST,
+                    tool_name=_c["name"], tool_input=_a,
+                    tool_use_id=_c["use_id"],
+                )
+                _approved = True
+                try:
+                    _approved = ctx.confirm_handler(_c["name"], _a, _c["use_id"])
                 except Exception:
                     _approved = True
-
-            if not _approved:
-                observation = "[用户拒绝了此操作]"
-                is_error = True
+                if not _approved:
+                    yield AgentStep(
+                        kind=StepKind.TOOL_END,
+                        tool_name=_c["name"], tool_use_id=_c["use_id"],
+                        tool_result="[用户拒绝了此操作]", is_error=True,
+                    )
+                    _results.append((_c, "[用户拒绝了此操作]", True, {}))
+                    continue
+                _obs, _ierr, _meta = _exec_one(_c["name"], _a, True)
                 yield AgentStep(
                     kind=StepKind.TOOL_END,
-                    tool_name=action,
-                    tool_use_id=tool_use_id,
-                    tool_result=observation,
-                    is_error=True,
+                    tool_name=_c["name"], tool_use_id=_c["use_id"],
+                    tool_result=(_obs or "")[:2000],
+                    is_error=_ierr, metadata=_meta,
                 )
-                messages.append(Message(role="assistant", content=_context_clean(raw)))
-                messages.append(Message(role="user", content=f"Observation: {observation}"))
-                continue
+                _results.append((_c, _obs, _ierr, _meta))
 
-            # Execute tool. _approved carries the HITL decision (True
-            # when no confirmation was needed OR the user approved the
-            # card) — forward it so the executor's destructive gate
-            # doesn't reject an already-approved call. Pass the CLEAN
-            # serialized args (already parsed above, incl. nested-brace
-            # extraction) so the executor's json.loads can't re-fail on
-            # concat JSON / prose-wrapped payloads.
-            observation = ""
-            is_error = False
-            tool_meta: dict[str, Any] = {}
-            try:
-                if ctx.tool_executor:
-                    _exec_input = (
-                        json.dumps(args, ensure_ascii=False) if args else action_input
-                    )
-                    try:
-                        raw_result = ctx.tool_executor(
-                            action, _exec_input, ctx.work_dir,
-                            pre_approved=_approved,
-                        )
-                    except TypeError:
-                        # Executor doesn't accept pre_approved (older
-                        # bridge) — call without it.
-                        raw_result = ctx.tool_executor(action, _exec_input, ctx.work_dir)
-                    # Allow executors to return either a str (legacy) or a
-                    # ``ToolResult`` dataclass with structured fields. We
-                    # prefer the structured form so the frontend can show
-                    # the failure category (validation / timeout / etc).
-                    if hasattr(raw_result, "to_observation") and hasattr(raw_result, "is_error"):
-                        from madcop.agent.tool_executor import ToolResult as _TR
-                        if isinstance(raw_result, _TR):
-                            observation = raw_result.to_observation()
-                            is_error = bool(raw_result.is_error)
-                            tool_meta = {
-                                "is_validation_error": raw_result.is_validation_error,
-                                "is_timeout": raw_result.is_timeout,
-                                "needs_confirmation": raw_result.needs_confirmation,
-                                "elapsed_ms": raw_result.elapsed_ms,
-                            }
-                        else:
-                            observation = str(raw_result)
-                    else:
-                        observation = str(raw_result)
-                else:
-                    observation = f"[Tool '{action}' not available]"
-            except Exception as e:
-                observation = f"[error] {e}"
-                is_error = True
+            # loop-detection bookkeeping for parallel calls
+            for _c, *_rest in _results[1:]:
+                steps_log.append(_c["name"])
 
-            yield AgentStep(
-                kind=StepKind.TOOL_END,
-                tool_name=action,
-                tool_use_id=tool_use_id,
-                tool_result=observation[:2000],
-                is_error=is_error,
-                metadata=tool_meta,
-            )
-
-            # P2-4 — ask_user / clarify: yield a CLARIFY AgentStep so the
-            # frontend can render a question + options bubble, then break
-            # out of the loop so the user can actually answer. The
-            # legacy ReAct path emits `clarification_request` SSE (see
-            # app.py:2599); v4 emits CLARIFY AgentStep which useSSEStream
-            # already knows how to render.
-            if action.strip().lower() in ("ask_user", "clarify") and not is_error:
+            # P2-4 — ask_user / clarify: render the question bubble and
+            # PAUSE the loop; the user's next send re-enters run().
+            if (
+                len(_results) == 1
+                and (_results[0][0]["name"] or "").strip().lower() in ("ask_user", "clarify")
+                and not _results[0][2]
+            ):
                 try:
-                    _clarify_payload = json.loads(observation)
+                    _clarify_payload = json.loads(_results[0][1])
                 except Exception:
                     _clarify_payload = {}
                 if isinstance(_clarify_payload, dict) and _clarify_payload.get("__clarify_pending__"):
                     yield AgentStep(
                         kind=StepKind.CLARIFY,
-                        tool_name=action,
-                        tool_use_id=tool_use_id,
+                        tool_name=_results[0][0]["name"],
+                        tool_use_id=_results[0][0]["use_id"],
                         question=_clarify_payload.get("question", ""),
                         options=list(_clarify_payload.get("options", []) or []),
                     )
-                    return  # pause the loop; the user's next send re-enters run()
+                    return
 
-            # Feed observation back to LLM
+            # Feed observations back to the LLM (combined when N > 1).
             messages.append(Message(role="assistant", content=_context_clean(raw)))
-            messages.append(Message(role="user", content=f"Observation: {observation}"))
+            if len(_results) == 1:
+                messages.append(Message(
+                    role="user",
+                    content=f"Observation: {(_results[0][1] or '')[:2000]}",
+                ))
+            elif _results:
+                _combined = "Observation: " + f"{len(_results)} 个工具调用结果：\n" + "\n".join(
+                    f"[{i + 1}] {c['name']}: {(obs or '')[:800]}"
+                    for i, (c, obs, _e, _m) in enumerate(_results)
+                )
+                messages.append(Message(role="user", content=_combined))
 
         # --- Max steps exhausted ---
         yield AgentStep(

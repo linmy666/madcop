@@ -1211,11 +1211,15 @@ function renderItemContent(item: RenderItem) {
           :citations="getActiveSessionCitations()"
         />
 
-        <!-- HITL: tool confirmation card (backend blocked waiting) -->
+        <!-- HITL: tool confirmation card (backend blocked waiting).
+             P0-3: parallel tools queue several cards — render the head
+             of the queue ONE at a time, plus a small counter when more
+             are waiting behind it. -->
         <ToolConfirmCard
-          v-if="sessionState?.pendingToolConfirm"
-          :tool-name="sessionState.pendingToolConfirm.toolName"
-          :input="sessionState.pendingToolConfirm.input"
+          v-if="sessionState?.pendingToolConfirms?.length"
+          :tool-name="sessionState.pendingToolConfirms[0].toolName"
+          :input="sessionState.pendingToolConfirms[0].input"
+          :queue-count="sessionState.pendingToolConfirms.length"
           @respond="(ok: boolean) => chatStore.respondToolConfirm(activeTabId, ok)"
         />
 
