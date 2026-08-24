@@ -632,7 +632,45 @@ class ReActEngineV4(AgentEngine):
                         metadata={"is_validation_error": True},
                     )
                     _results.append((_c, _perr, True, {"is_validation_error": True}))
-                elif _needs_conf_fn and _needs_conf_fn(_c["name"]):
+                    continue
+                # P2-12: PreToolUse hooks fire BEFORE the free/confirm
+                # split so they can veto ANY tool call (including the
+                # HITL-confirm ones, where the engine would otherwise
+                # block on user approval for a destructive op).
+                _veto = False
+                if getattr(ctx, "hooks", None):
+                    from .hooks import HookEvent, HookContext
+                    _hr = ctx.hooks.run(HookContext(
+                        event=HookEvent.PRE_TOOL_USE,
+                        tool_name=_c["name"],
+                        tool_input=dict(_args),
+                        turn_id=str(step_num),
+                        conversation_id=ctx.session_id or "",
+                    ))
+                    if not _hr.continue_:
+                        _err = _hr.error or "[hook] 调用被拒绝"
+                        yield AgentStep(
+                            kind=StepKind.TOOL_START,
+                            tool_name=_c["name"], tool_input=_args,
+                            tool_use_id=_c["use_id"],
+                        )
+                        yield AgentStep(
+                            kind=StepKind.TOOL_END,
+                            tool_name=_c["name"], tool_use_id=_c["use_id"],
+                            tool_result=_err, is_error=True,
+                            metadata={"is_hook_rejected": True},
+                        )
+                        _results.append((_c, _err, True, {"is_hook_rejected": True}))
+                        _veto = True
+                    else:
+                        if _hr.modified_input is not None:
+                            _args = _hr.modified_input
+                            _c["raw"] = json.dumps(_args, ensure_ascii=False)
+                        if _hr.extra_observation:
+                            _c["hook_obs"] = _hr.extra_observation
+                if _veto:
+                    continue
+                if _needs_conf_fn and _needs_conf_fn(_c["name"]):
                     _confirm.append((_c, _args))
                 else:
                     _free.append((_c, _args))
@@ -654,6 +692,18 @@ class ReActEngineV4(AgentEngine):
                     for _fut in _cf.as_completed(_futs):
                         _c = _futs[_fut]
                         _obs, _ierr, _meta = _fut.result()
+                        # P2-12: PostToolUse hooks may append observations
+                        if getattr(ctx, "hooks", None):
+                            from .hooks import HookEvent, HookContext as _HC
+                            _pr = ctx.hooks.run(_HC(
+                                event=HookEvent.POST_TOOL_USE,
+                                tool_name=_c["name"], tool_input=dict(_a),
+                                tool_result=_obs, is_error=_ierr,
+                                turn_id=str(step_num),
+                                conversation_id=ctx.session_id or "",
+                            ))
+                            if _pr.extra_observation and _obs is not None:
+                                _obs = str(_obs) + "\n" + _pr.extra_observation
                         yield AgentStep(
                             kind=StepKind.TOOL_END,
                             tool_name=_c["name"], tool_use_id=_c["use_id"],
@@ -688,6 +738,21 @@ class ReActEngineV4(AgentEngine):
                     _results.append((_c, "[用户拒绝了此操作]", True, {}))
                     continue
                 _obs, _ierr, _meta = _exec_one(_c["name"], _a, True)
+                # P2-12: PostToolUse hooks may append observations
+                # (e.g. "the file just changed — consider formatting").
+                if getattr(ctx, "hooks", None):
+                    from .hooks import HookEvent, HookContext
+                    _pctx = HookContext(
+                        event=HookEvent.POST_TOOL_USE,
+                        tool_name=_c["name"],
+                        tool_input=dict(_a),
+                        tool_result=_obs, is_error=_ierr,
+                        turn_id=str(step_num),
+                        conversation_id=ctx.session_id or "",
+                    )
+                    _pr = ctx.hooks.run(_pctx)
+                    if _pr.extra_observation and _obs is not None:
+                        _obs = str(_obs) + "\n" + _pr.extra_observation
                 yield AgentStep(
                     kind=StepKind.TOOL_END,
                     tool_name=_c["name"], tool_use_id=_c["use_id"],

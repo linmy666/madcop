@@ -472,6 +472,31 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         system_prefix=sys_prefix,
     )
 
+    # P2-12: ship the two demo hooks. A future plugin layer can swap
+    # this for a settings-driven chain (per-session overrides, etc.).
+    try:
+        from madcop.agent.hooks import HookChain, Hook, SafetyHook, FormatterHook
+        ctx.hooks = HookChain(hooks=[
+            Hook(name="safety:dangerous-bash",
+                 event="PreToolUse",
+                 fn=SafetyHook(),
+                 tool_filter="bash",
+                 priority=0),
+            Hook(name="fmt:notice",
+                 event="PostToolUse",
+                 fn=FormatterHook(),
+                 tool_filter="write_file",
+                 priority=10),
+            Hook(name="fmt:notice",
+                 event="PostToolUse",
+                 fn=FormatterHook(),
+                 tool_filter="edit_file",
+                 priority=10),
+        ])
+    except Exception as _e:
+        logger.debug("hook chain init failed (continuing without hooks): %s", _e)
+        ctx.hooks = None
+
     # Set up tool executor as a callable for ReActEngineV4.
     # Return the structured ToolResult so the engine can branch on
     # is_validation_error / is_timeout / needs_confirmation flags for

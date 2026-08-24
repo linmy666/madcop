@@ -271,6 +271,10 @@ class RunContext:
     # Conversation history as context text
     context: str = ""
 
+    # P2-12: optional HookChain (Pre/PostToolUse veto / rewrite /
+    # observe). None = no hooks = identical baseline behavior.
+    hooks: Any = None
+
     # Max ReAct steps
     max_steps: int = 12
 
