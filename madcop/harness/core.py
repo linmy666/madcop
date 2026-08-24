@@ -88,6 +88,10 @@ class SessionLog:
         self.run_id = run_id or uuid.uuid4().hex[:8]
         self._events: list[HarnessEvent] = []
         self._persist_path: Path | None = None
+        # remember the dir we were constructed under so for_session() can
+        # round-trip without callers having to re-supply it (used by tests
+        # + sidechain logs living under the parent session's dir).
+        self._persist_dir = persist_dir
 
         if persist_dir:
             self._persist_dir = persist_dir / self.run_id
@@ -95,15 +99,20 @@ class SessionLog:
             self._persist_path = self._persist_dir / "log.jsonl"
 
     @classmethod
-    def for_session(cls, session_id: str) -> "SessionLog":
+    def for_session(cls, session_id: str, persist_dir: Path | None = None) -> "SessionLog":
         """Open (or create) the persistent log for a chat session.
 
         run_id == session_id so every turn of one conversation lands in
         the same directory and resume/fork/replay become possible.
         Reloads prior events from disk into memory so derive_messages()
         reflects the full conversation, not just this turn.
+
+        ``persist_dir`` overrides the default ``~/.madcop/harness_runs``
+        (used by tests + sidechain forks living under the main session's
+        run directory).
         """
-        log = cls(run_id=session_id, persist_dir=_HARNESS_ROOT)
+        log = cls(run_id=session_id,
+                  persist_dir=persist_dir if persist_dir is not None else _HARNESS_ROOT)
         if log._persist_path and log._persist_path.exists():
             try:
                 for line in log._persist_path.read_text(encoding="utf-8").splitlines():

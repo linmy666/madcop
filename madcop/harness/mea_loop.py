@@ -272,15 +272,36 @@ class MadCopHarness:
 
         ReAct engine already separates: <think>→THOUGHT_*, tool calls→TOOL_*,
         answer→TEXT_*. We forward all events — no mixing.
+
+        P2-11 — subagent isolation (Claude Task-tool semantics): the
+        Coder gets a FRESH context (contract + goal only, never the
+        main conversation history), and its full trajectory lands in a
+        dedicated SIDECHAIN session log; the main log only receives the
+        bounded subagent_result summary. The sidechain is replayable
+        on its own (fork/inspect) without polluting the main transcript.
         """
         from madcop.agent.react_v4 import ReActEngineV4
         engine = ReActEngineV4()
+
+        sidechain: SessionLog | None = None
+        try:
+            _sc_id = f"{self.log.run_id}-sc{step.index}"
+            sidechain = SessionLog(_sc_id, persist_dir=_HARNESS_ROOT)
+            sidechain.append(HarnessEvent(
+                domain=EventDomain.SYSTEM, kind="sidechain_of",
+                content=self.log.run_id,
+                metadata={"role": "coder", "step": step.index,
+                          "contract": (self._last_contract_desc or "")[:500]},
+            ))
+        except Exception:
+            sidechain = None
 
         # Executor receives the Coder brief: use tools to WRITE the
         # deliverable (write_file/edit_file), not just describe it. The
         # old generic prompt let the model answer in prose when the
         # subtask asked for a file — now the system prefix mandates
-        # producing the artifact via tools.
+        # producing the artifact via tools. The goal is included so the
+        # fresh context still knows what the overall task is.
         _coder_prefix = (
             (self.ctx.system_prefix or "")
             + "\n[Coder role] You are the Coder in a Manager→Coder→Tester"
@@ -289,7 +310,13 @@ class MadCopHarness:
             " for changes). Do NOT merely describe what you would write."
         )
         exec_ctx = RunContext(
-            messages=[Message(role="user", content=self._last_contract_desc)],
+            messages=[Message(
+                role="user",
+                content=(
+                    f"总体任务：{self.goal}\n\n"
+                    f"你的子任务合约：{self._last_contract_desc}"
+                ),
+            )],
             model=self.ctx.model,
             agent_mode="standard",
             client=self.ctx.client,
@@ -309,6 +336,19 @@ class MadCopHarness:
             # set chatState=idle mid-run) and produced duplicate final
             # answers. Only the MEA loop's own outermost completion emits
             # terminal events.
+            if sidechain is not None:
+                try:
+                    _d = EventDomain.REASONING if ev.kind.value.startswith("thought_") else (
+                        EventDomain.TOOL if ev.kind.value.startswith("tool_") else
+                        EventDomain.ANSWER)
+                    sidechain.append(HarnessEvent(
+                        domain=_d, kind=ev.kind.value,
+                        content=(ev.content or str(ev.tool_result or ""))[:800],
+                        metadata={"step": step.index,
+                                  "tool_name": ev.tool_name or ""},
+                    ))
+                except Exception:
+                    pass
             if ev.kind in (StepKind.TEXT_END, StepKind.DONE):
                 continue
             yield ev
@@ -332,6 +372,18 @@ class MadCopHarness:
         step.executor_summary = self._last_executor_output[:300]
         self.log.append(answer_event("executor_output", self._last_executor_output[:500],
                                      step=step.index))
+        # P2-11: bounded summary back to the main log + close sidechain.
+        if sidechain is not None:
+            try:
+                self.log.append(HarnessEvent(
+                    domain=EventDomain.SYSTEM, kind="subagent_result",
+                    content=self._last_executor_output[:2000],
+                    metadata={"sidechain": sidechain.run_id, "step": step.index},
+                ))
+                sidechain.append(HarnessEvent(
+                    domain=EventDomain.SYSTEM, kind="turn_end", content=""))
+            except Exception:
+                pass
 
     # ─── Auditor: verify ──────────────────────────────────────────
 
