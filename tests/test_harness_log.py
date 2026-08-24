@@ -139,3 +139,75 @@ def test_corrupt_jsonl_line_does_not_crash(tmp_path, monkeypatch):
 
     log2 = SessionLog.for_session("corrupt")  # must not raise
     assert any(e.content == "good" for e in log2.events())
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# P2-10 — session tree: parent chain, fork, crash recovery
+# ═══════════════════════════════════════════════════════════════════════
+
+import unittest
+from pathlib import Path
+class TestSessionTree(unittest.TestCase):
+    def _write_turns(self, tmpdir, sid, turns):
+        log = SessionLog.for_session(sid) if False else SessionLog(sid, persist_dir=Path(tmpdir))
+        for user, ans in turns:
+            log.append(system_event("turn_start", user))
+            log.append(answer_event("text_delta", ans))
+            log.append(system_event("turn_end", ""))
+        return log
+
+    def test_parent_chain_autolinked(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            log = self._write_turns(d, "chain", [("q1", "a1")])
+            evs = log.events()
+            self.assertIsNone(evs[0].parent_id)
+            for prev, cur in zip(evs, evs[1:]):
+                self.assertEqual(cur.parent_id, prev.id)
+
+    def test_fork_snaps_to_turn_boundary_and_preserves_ids(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            log = self._write_turns(d, "src", [("q1", "a1"), ("q2", "a2")])
+            log.append(system_event("turn_start", "q3"))  # half-finished turn
+            log.append(answer_event("text_delta", "a3-partial"))
+
+            fork = SessionLog.fork_session("src", source=log)  # no target → last complete turn
+            # forked under a fresh fork- id with lineage marker
+            self.assertTrue(fork.run_id.startswith("fork-"))
+            kinds = [e.kind for e in fork.events()]
+            self.assertIn("forked_from", kinds)
+            # q3's partial events did NOT carry over
+            contents = [e.content for e in fork.events()]
+            self.assertFalse(any("q3" in c for c in contents))
+            self.assertFalse(any("a3-partial" in c for c in contents))
+            # event ids preserved (stable replay)
+            src_ids = {e.id for e in log.events() if e.kind != "turn_start" or e.content != "q3"}
+            fork_ids = {e.id for e in fork.events()}
+            self.assertTrue(src_ids & fork_ids)
+            # derive works on the fork
+            msgs = fork.derive_messages()
+            self.assertTrue(any("q2" in m["content"] for m in msgs))
+            self.assertFalse(any("q3" in m["content"] for m in msgs))
+
+    def test_fork_at_specific_event(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            log = self._write_turns(d, "src2", [("q1", "a1"), ("q2", "a2")])
+            first_turn_end = next(e for e in log.events()
+                                  if e.kind == "turn_end")
+            # target an event in turn 2 → snap back to turn 1's end
+            t2_start = next(e for e in log.events()
+                            if e.kind == "turn_start" and e.content == "q2")
+            fork = SessionLog.fork_session("src2", t2_start.id, source=log)
+            msgs = fork.derive_messages()
+            self.assertTrue(any("q1" in m["content"] for m in msgs))
+            self.assertFalse(any("q2" in m["content"] for m in msgs))
+
+    def test_unclosed_turn_hint(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            log = self._write_turns(d, "crash", [("q1", "a1")])
+            self.assertIsNone(log.unclosed_turn())
+            log.append(system_event("turn_start", "died here"))
+            self.assertEqual(log.unclosed_turn(), "died here")

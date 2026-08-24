@@ -1162,10 +1162,17 @@ async def session_events(session_id: str) -> dict[str, Any]:
             "content": e.content,
             "metadata": e.metadata,
             "timestamp": e.timestamp,
+            "parent_id": e.parent_id,
         }
         for e in log.events()
     ]
-    return {"session_id": session_id, "events": events}
+    # P2-10 — crash-recovery hint: the last turn that never closed
+    # (process died mid-turn). The UI can offer "resume this turn".
+    return {
+        "session_id": session_id,
+        "events": events,
+        "unclosed_turn": log.unclosed_turn(),
+    }
 
 
 class ForkBody(BaseModel):
@@ -1181,49 +1188,28 @@ async def session_fork(session_id: str, body: ForkBody | None = None) -> dict[st
     Copies the log prefix (up to `until_event_id`, or the last complete
     turn when omitted) into a NEW session's log. The new session's
     context derives entirely from that prefix — the dsh fork primitive.
+    P2-10: delegates to SessionLog.fork_session, which SNAPS the cut
+    back to the last complete turn (never forks mid-turn), preserves
+    event ids + the parent chain verbatim (stable replay), and records
+    a forked_from lineage marker.
     """
-    import shutil
-    from madcop.harness.core import SessionLog, EventDomain, HarnessEvent
+    from madcop.harness.core import SessionLog
 
     body = body or ForkBody()
     src = SessionLog.for_session(session_id)
-    src_events = src.events()
-    if not src_events:
+    if not src.events():
         raise HTTPException(404, f"no event log for session '{session_id}'")
 
-    # Determine the cut point.
-    if body.until_event_id:
-        cut_idx = next(
-            (i for i, e in enumerate(src_events) if e.id == body.until_event_id),
-            None,
-        )
-        if cut_idx is None:
-            raise HTTPException(404, f"event id '{body.until_event_id}' not found")
-        prefix = src_events[: cut_idx + 1]
-    else:
-        # Default: up to and including the LAST turn_end (complete turns only).
-        last_end = max(
-            (i for i, e in enumerate(src_events)
-             if e.domain == EventDomain.SYSTEM and e.kind == "turn_end"),
-            default=None,
-        )
-        prefix = src_events[: last_end + 1] if last_end is not None else []
-
-    if not prefix:
+    dst = SessionLog.fork_session(session_id, body.until_event_id)
+    copied = len(dst.events()) - 1  # minus the forked_from marker
+    if copied <= 0:
         raise HTTPException(400, "fork boundary produced an empty prefix")
 
-    new_session_id = body.new_session_id or f"{session_id}-fork-{uuid.uuid4().hex[:6]}"
-    dst = SessionLog.for_session(new_session_id)
-    for e in prefix:
-        dst.append(HarnessEvent(
-            domain=e.domain, kind=e.kind, content=e.content,
-            metadata=e.metadata, timestamp=e.timestamp,
-        ))
     return {
         "ok": True,
         "source_session": session_id,
-        "new_session_id": new_session_id,
-        "events_copied": len(prefix),
+        "new_session_id": dst.run_id,
+        "events_copied": copied,
     }
 
 

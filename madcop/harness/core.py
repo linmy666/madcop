@@ -58,6 +58,10 @@ class HarnessEvent:
     content: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
+    # P2-10 — tree linkage: the event this one replies to (append()
+    # auto-links to the previous event, so the default log is a linear
+    # chain; forks/branches create diverging chains that share a root).
+    parent_id: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -114,6 +118,7 @@ class SessionLog:
                         content=data.get("content", ""),
                         metadata=data.get("metadata", {}) or {},
                         timestamp=data.get("timestamp", time.time()),
+                        parent_id=data.get("parent_id"),
                     )
                     log._events.append(ev)
             except Exception:
@@ -122,7 +127,13 @@ class SessionLog:
         return log
 
     def append(self, event: HarnessEvent) -> HarnessEvent:
-        """Append an event. Also persists to JSONL if a path is set."""
+        """Append an event. Also persists to JSONL if a path is set.
+
+        P2-10: auto-links parent_id to the previous event when unset —
+        the default log is a linear chain; forks diverge from any node.
+        """
+        if event.parent_id is None and self._events:
+            event.parent_id = self._events[-1].id
         self._events.append(event)
         if self._persist_path:
             with open(self._persist_path, "a", encoding="utf-8") as f:
@@ -134,6 +145,71 @@ class SessionLog:
         if domain:
             return [e for e in self._events if e.domain == domain]
         return list(self._events)
+
+    # ------------------------------------------------------------------ #
+    # P2-10 — fork / crash recovery
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    def fork_session(cls, session_id: str, at_event_id: str | None = None,
+                     source: "SessionLog | None" = None) -> "SessionLog":
+        """Fork a session: copy events up to a boundary into a NEW session.
+
+        The cut snaps back to the last complete turn (turn_end at or
+        before ``at_event_id``, else end of log) so the fork never
+        starts from a half-finished turn. Event ids/parent chain are
+        preserved verbatim (Claude-Code-style uuid stability); the new
+        file is created atomically (O_EXCL) under a ``fork-`` id.
+
+        Returns the new session's SessionLog (empty copy semantics if
+        the source has no events). ``source`` lets callers fork from
+        an in-memory log (tests); default re-opens from disk.
+        """
+        src = source or cls.for_session(session_id)
+        evs = src.events()
+        # resolve cut index
+        cut = len(evs)
+        if at_event_id:
+            for i, e in enumerate(evs):
+                if e.id == at_event_id:
+                    cut = i + 1  # include the target event
+                    break
+        # snap back to the last turn_end within the kept prefix
+        for i in range(cut - 1, -1, -1):
+            if evs[i].kind == "turn_end":
+                cut = i + 1
+                break
+        else:
+            cut = 0  # no complete turn — fork from empty
+
+        new_id = f"fork-{uuid.uuid4().hex[:10]}"
+        dst = cls(run_id=new_id, persist_dir=_HARNESS_ROOT)
+        for e in evs[:cut]:
+            # keep ids + parent chain; reset nothing else — replay must
+            # be deterministic and identical to the original prefix.
+            dst._events.append(e)
+            if dst._persist_path:
+                with open(dst._persist_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(e.to_dict(), ensure_ascii=False) + "\n")
+        # lineage marker: the fork records its parent session
+        dst.append(HarnessEvent(
+            domain=EventDomain.SYSTEM, kind="forked_from",
+            content=session_id,
+            metadata={"source_event_count": cut},
+        ))
+        return dst
+
+    def unclosed_turn(self) -> str | None:
+        """Crash-recovery hint: content of the last turn_start that has
+        no matching turn_end (the process died mid-turn). None when the
+        log ends cleanly."""
+        last_start: str | None = None
+        for e in self._events:
+            if e.kind == "turn_start":
+                last_start = e.content or last_start
+            elif e.kind == "turn_end":
+                last_start = None
+        return last_start
 
     def derive_messages(self) -> list[dict[str, str]]:
         """Derive model-visible messages from the log.
