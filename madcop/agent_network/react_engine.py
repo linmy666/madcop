@@ -106,7 +106,10 @@ Action Input: <工具参数JSON；FINAL_ANSWER 时直接写答案>
 # ── Parser ─────────────────────────────────────────────────────────── #
 
 _THOUGHT_RE = re.compile(r"Thought:\s*(.*?)(?=\nAction:|$)", re.DOTALL)
-_ACTION_RE = re.compile(r"Action:\s*(.*?)(?=\nAction Input:|$)", re.DOTALL)
+_ACTION_RE = re.compile(
+    r"Action:\s*(.*?)(?=\nAction Input:|\nFINAL_ANSWER\s*[:：]|$)",
+    re.DOTALL,
+)
 _ACTION_INPUT_RE = re.compile(r"Action Input:\s*(.*)", re.DOTALL)
 
 
@@ -147,6 +150,19 @@ def parse_react_response(text: str) -> tuple[str, str, str]:
             # Prefer the bare marker's body over any earlier (mismatched)
             # Action Input capture.
             action_input = _bare.group(1).strip()
+
+    # 'Action: FINAL_ANSWER\nFINAL_ANSWER: <text>' — the reflection
+    # prompt itself teaches this shape, but the Action regex used to
+    # glue both lines into a bogus tool name ('FINAL_ANSWER\nFINAL_
+    # ANSWER: ...') which the engine then tried to EXECUTE, looping
+    # until max_steps. Normalize: FINAL_ANSWER action + trailing body
+    # as the answer text.
+    if action.upper().startswith("FINAL_ANSWER"):
+        if not action_input:
+            _bare = _BARE_FA_RE.search(text)
+            if _bare:
+                action_input = _bare.group(1).strip()
+        action = "FINAL_ANSWER"
 
     # Fallback: if no structured format found, treat whole thing as final answer
     if not action and not thought:

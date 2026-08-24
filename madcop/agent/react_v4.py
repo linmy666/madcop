@@ -106,6 +106,10 @@ class ReActEngineV4(AgentEngine):
             # tool call's args (index 0) and ignore later indices.
             oa_tc_seen_indices: set[int] = set()
             oa_tc_id: str | None = None
+            # P0-1: providers report length-stops via finish_reason on the
+            # final chunk. Tracked so the parse stage can void tool calls
+            # whose arguments may have been cut mid-stream.
+            _finish_reason: str | None = None
 
             try:
                 if hasattr(ctx.client, "stream"):
@@ -116,6 +120,9 @@ class ReActEngineV4(AgentEngine):
                         max_tokens=8192,
                         tools=ctx.tool_schemas or None,
                     ):
+                        _fr_chunk = getattr(chunk, "finish_reason", None)
+                        if _fr_chunk:
+                            _finish_reason = _fr_chunk
                         # Capture OpenAI-style tool_call deltas if any.
                         for d in (getattr(chunk, "tool_call_deltas", None) or ()):
                             if not isinstance(d, dict):
@@ -384,6 +391,25 @@ class ReActEngineV4(AgentEngine):
                     thought_id=cur_tid,
                     elapsed_ms=int((time.time() - step_start) * 1000),
                 )
+
+            # P0-1 — truncation safety: a length-stopped response may carry
+            # tool-call arguments that were cut mid-stream; executing them
+            # (e.g. writing half a file) is worse than asking the model to
+            # resend. Void ALL tool calls this turn and feed the error back
+            # as an observation so the model retries in the next step.
+            # (Same policy as pi agent-loop.ts:208-214.)
+            if (
+                _finish_reason == "length"
+                and action.strip()
+                and action.upper() != "FINAL_ANSWER"
+            ):
+                messages.append(Message(role="assistant", content=_context_clean(raw)))
+                messages.append(Message(role="user", content=(
+                    "Observation: [error] 本次响应因长度上限被截断"
+                    "（finish_reason=length），工具调用参数可能不完整，未执行。"
+                    "请重新发起该工具调用，可适当精简参数或分步完成。"
+                )))
+                continue
 
             # --- COT enforcement ---
             if action.upper() != "FINAL_ANSWER" and not thought.strip():
