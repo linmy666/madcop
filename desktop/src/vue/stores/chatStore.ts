@@ -1499,6 +1499,32 @@ export const useChatStore = defineStore('chat', {
       session.activeThinkingId = null
     },
 
+    /** P0-4: rehydrate live HITL confirm cards for a session.
+     *  Covers tab switches / UI refreshes while the turn streams in
+     *  another connection — the backend keeps pending confirmations
+     *  keyed by session. Dedupes against cards already in the queue. */
+    async rehydratePendingConfirms(sessionId: string) {
+      if (!sessionId) return
+      try {
+        const res = await fetch(getApiUrl(
+          `/api/v4/chat/confirm/pending?conversation_id=${encodeURIComponent(sessionId)}`))
+        if (!res.ok) return
+        const data = await res.json()
+        const items: any[] = data?.pending || []
+        const session = this.sessions[sessionId]
+        if (!session) return
+        for (const it of items) {
+          if (!it?.tool_use_id) continue
+          if (session.pendingToolConfirms.some((c: any) => c.toolUseId === it.tool_use_id)) continue
+          session.pendingToolConfirms.push({
+            toolUseId: it.tool_use_id,
+            toolName: it.tool_name || '',
+            input: it.tool_input || {},
+          })
+        }
+      } catch { /* offline / server restart — nothing to rehydrate */ }
+    },
+
     /** HITL: respond to the head-of-queue tool confirmation (Approve/Deny).
      *  Parallel tools queue several cards; answering resolves the current
      *  one and the next card (if any) slides in. */

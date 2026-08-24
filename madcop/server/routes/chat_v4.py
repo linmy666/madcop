@@ -41,6 +41,33 @@ router = APIRouter()
 # creates a Future and blocks on it; the POST /api/v4/chat/confirm route
 # resolves it when the user clicks Approve/Reject.
 _PENDING_CONFIRMS: dict[str, asyncio.Future] = {}
+# P0-4 — metadata for the pending-confirm GET endpoint (session-scoped
+# rehydration of HITL cards). Keyed by tool_use_id, same lifecycle as
+# the futures above.
+_PENDING_META: dict[str, dict] = {}
+
+
+@router.get("/api/v4/chat/confirm/pending")
+async def pending_confirms(conversation_id: str = "") -> dict[str, Any]:
+    """Live HITL confirmations for a session (P0-4 rehydration).
+
+    The frontend polls this when a session becomes active so cards
+    survive a tab switch or a UI refresh while the turn is still
+    streaming in another connection. Server-restart durability is NOT
+    covered here (the turn itself dies with the process) — that lands
+    with session-tree/checkpoint work.
+    """
+    items = [
+        {
+            "tool_use_id": tid,
+            "conversation_id": meta.get("conversation_id", ""),
+            "tool_name": meta.get("tool_name", ""),
+            "tool_input": meta.get("tool_input", {}),
+        }
+        for tid, meta in _PENDING_META.items()
+        if not conversation_id or meta.get("conversation_id") == conversation_id
+    ]
+    return {"pending": items}
 
 
 class ConfirmRequest(BaseModel):
@@ -440,20 +467,40 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     # a TOOL_CONFIRM_REQUEST event to the frontend, and block until the
     # user responds via POST /api/v4/chat/confirm (which sets the future).
     # We use concurrent.futures.Future (NOT asyncio.Future) because:
-    #   1. The worker thread blocks on fut.result(timeout=120) — only
+    #   1. The worker thread blocks on fut.result(timeout=…) — only
     #      concurrent.futures.Future supports the timeout param.
     #   2. The POST route runs in the event loop thread, so it uses
     #      fut.set_result() which is thread-safe on concurrent.futures.
+    #
+    # P0-4: the old blind fut.result(timeout=120) auto-REJECTED after two
+    # minutes — a user still reading a large write_file card would come
+    # back to a silently-rejected turn. Now we wait as long as the SSE
+    # connection is alive: the poll loop wakes every 5s to check
+    # `turn_cancelled` (set when the stream aborts/disconnects), so an
+    # aborted turn still rejects its pending confirm promptly and the
+    # worker never leaks.
+    turn_cancelled = threading.Event()
+
     def confirm_handler(tool_name: str, tool_input: dict, tool_use_id: str) -> bool:
-        """Block until the user responds to the confirmation card."""
+        """Block until the user responds, or the turn is cancelled."""
         fut: concurrent.futures.Future = concurrent.futures.Future()
         _PENDING_CONFIRMS[tool_use_id] = fut
+        _PENDING_META[tool_use_id] = {
+            "conversation_id": session_id,
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+            "created_at": time.time(),
+        }
         try:
-            return fut.result(timeout=120)
-        except concurrent.futures.TimeoutError:
-            return False  # timeout = reject
+            while True:
+                try:
+                    return fut.result(timeout=5.0)
+                except concurrent.futures.TimeoutError:
+                    if turn_cancelled.is_set():
+                        return False  # turn aborted while waiting
         finally:
             _PENDING_CONFIRMS.pop(tool_use_id, None)
+            _PENDING_META.pop(tool_use_id, None)
 
     ctx.confirm_handler = confirm_handler
 
@@ -733,7 +780,11 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             # Run engine in a thread (it's synchronous) and bridge to async
             q: queue.SimpleQueue = queue.SimpleQueue()
             sentinel = object()
-            cancel_flag = threading.Event()
+            # P0-4: reuse the route-scoped cancel event so the HITL
+            # confirm_handler's poll loop also wakes on abort/disconnect
+            # (it used to be a blind 120s future timeout that silently
+            # rejected cards while the user was still reading them).
+            cancel_flag = turn_cancelled
             _assistant_text_holder: list[str] = [""]
             # D2 fix: in task (MEA) mode, the executor's inner TEXT_DELTAs
             # must NOT be accumulated as the turn's assistant message —

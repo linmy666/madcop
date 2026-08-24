@@ -608,6 +608,10 @@ watch(
       const snapshot = sessionScrollSnapshots.get(newId)
       const container = scrollContainerRef.value
 
+      // P0-4: rehydrate any live HITL confirm cards for this session
+      // (tab switch / refresh while the turn streams elsewhere).
+      chatStore.rehydratePendingConfirms(newId)
+
       if (snapshot && container) {
         setScrollTopWithoutLayoutRead(container, snapshot.scrollTop)
       }
