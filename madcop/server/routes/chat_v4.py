@@ -443,7 +443,13 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 "(default: one self-contained HTML file, no build step, no "
                 "dependencies), state your choice in ONE short line, then "
                 "call write_file to produce it right away. A working minimal "
-                "version now beats questions; iterate later if asked."
+                "version now beats questions; iterate later if asked.\n"
+                "[Markdown] Use GFM tables (`| col | col |`) for status/feature "
+                "tables. NEVER put a GFM table INSIDE a ```mermaid code block — "
+                "mermaid's parser reads `|` as a flow-arrow label and the "
+                "diagram will fail to render. Mermaid blocks are ONLY for "
+                "graph/flowchart/sequence diagrams; everything else uses "
+                "regular Markdown."
             )
     except Exception as _e:
         logger.debug("build-intent directive skipped: %s", _e)

@@ -916,6 +916,12 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'plan' && event.plan) {
                     preview = `steps=${event.plan.steps?.length ?? 0} status=${event.plan.status}`
+                    // Persist the plan onto the session so PlanTasksPanel
+                    // (right sidebar) can render live task steps — without
+                    // this the sidebar stays blank ("准备就绪") because
+                    // the panel reads from session.plan, not from the
+                    // streaming events.
+                    session.plan = event.plan
                   } else if (event.type === 'tool' && event.name) {
                     preview = event.name
                   }

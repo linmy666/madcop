@@ -820,10 +820,18 @@ onBeforeUnmount(() => {
       Mermaid Error
     </div>
     <div
-      class="bg-[var(--color-error-container)]/30 px-3 py-2 font-[var(--font-mono)] text-[11px] text-[var(--color-error)]"
+      class="bg-[var(--color-error-container)]/30 px-3 py-2 font-[var(--font-mono)] text-[11px] text-[var(--color-error)] whitespace-pre-wrap"
     >
       {{ error }}
     </div>
+    <!-- Show the original code so the user can still read the model's
+         malformed flowchart (better than a red error swallowing it). -->
+    <details class="bg-[var(--color-surface-container-low)] px-3 py-2 text-[11px]">
+      <summary class="cursor-pointer select-none text-[var(--color-text-secondary)]">
+        Show original code
+      </summary>
+      <pre class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap font-[var(--font-mono)] text-[11px] text-[var(--color-text-secondary)]">{{ code }}</pre>
+    </details>
   </div>
 
   <!-- Loading state -->
