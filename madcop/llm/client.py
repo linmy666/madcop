@@ -86,6 +86,10 @@ class StreamChunk:
     finish_reason: str | None = None
     model: str = ""
     tool_call_deltas: tuple = ()
+    # P1-5 — token usage; providers report it on the final chunk. The
+    # client forwards it on a trailing StreamChunk (possibly with an
+    # empty finish_reason) so engines can drain-and-collect.
+    usage: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -472,19 +476,35 @@ class OpenAICompatClient(ChatClient):
             effort=effort,
             stream=True,
         )
+        # P1-5: ask for token usage on the final chunk. Providers that
+        # reject the param get one clean retry without it.
+        kwargs.setdefault("stream_options", {"include_usage": True})
+        try:
+            stream_obj = self._client.chat.completions.create(**kwargs)
+        except Exception:
+            kwargs.pop("stream_options", None)
+            stream_obj = self._client.chat.completions.create(**kwargs)
         # `stream=True` makes the SDK return a Stream iterator rather
         # than a single ChatCompletion.
-        stream_obj = self._client.chat.completions.create(**kwargs)
         emitted_model = ""
         saw_finish = False
+        final_usage: dict[str, int] = {}
         for event in stream_obj:
+            # Usage chunk (OpenAI sends it last, with empty choices).
+            ev_usage = getattr(event, "usage", None)
+            if ev_usage is not None:
+                final_usage = {
+                    "prompt_tokens": getattr(ev_usage, "prompt_tokens", 0) or 0,
+                    "completion_tokens": getattr(ev_usage, "completion_tokens", 0) or 0,
+                    "total_tokens": getattr(ev_usage, "total_tokens", 0) or 0,
+                }
             # Newer SDK (>=1.50) yields ChatCompletionChunk objects.
             # Each has .choices[0].delta with .content and a model id.
             try:
                 choice = event.choices[0]
                 delta = choice.delta
             except (AttributeError, IndexError):
-                # Malformed chunk — skip it but keep streaming.
+                # Malformed/usage-only chunk — skip it but keep streaming.
                 continue
             text = getattr(delta, "content", None) or ""
             reasoning = getattr(delta, "reasoning_content", None) or ""
@@ -518,9 +538,16 @@ class OpenAICompatClient(ChatClient):
                 tool_call_deltas=tc_deltas,
             )
         # Defensive: if the provider forgot to emit a finish_reason,
-        # synthesise one so downstream consumers can finalise.
-        if not saw_finish:  # pragma: no cover
-            yield StreamChunk(finish_reason="stop", model=emitted_model)
+        # synthesise one so downstream consumers can finalise. This
+        # final chunk also carries the run's token usage (P1-5) so the
+        # engine can attach it to the DONE step without waiting on a
+        # separate channel.
+        if not saw_finish or final_usage:  # pragma: no branch
+            yield StreamChunk(
+                finish_reason="stop" if not saw_finish else None,
+                model=emitted_model,
+                usage=final_usage,
+            )
 
 
 # --------------------------------------------------------------------------- #

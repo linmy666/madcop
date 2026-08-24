@@ -71,9 +71,13 @@ class ReActEngineV4(AgentEngine):
         cur_tid = ""
         steps_log: list[str] = []  # for loop detection
         fa_streamed = False
+        # P1-5: token usage summed across this run's LLM calls; attached
+        # to the DONE step for the UI's context budget indicator.
+        _run_usage: dict[str, Any] = {}
 
         for step_num in range(1, max_steps + 1):
             step_start = time.time()
+            _step_usage: dict[str, Any] = {}
 
             # --- LLM call with streaming + FINAL_ANSWER detection ---
             raw = ""
@@ -161,10 +165,23 @@ class ReActEngineV4(AgentEngine):
                             oa_tc_args = oa_calls[0]["args"] or oa_tc_args
 
                         text = getattr(chunk, "text", "") or ""
+                        # P1-5: capture token usage (providers send it on
+                        # the final chunk; we drain the stream instead of
+                        # breaking on finish_reason so it isn't missed).
+                        _u = getattr(chunk, "usage", None)
+                        if _u:
+                            if isinstance(_u, dict):
+                                _step_usage = dict(_u)
+                            else:  # dataclass-style usage object
+                                _step_usage = {
+                                    "prompt_tokens": getattr(_u, "prompt_tokens", 0) or 0,
+                                    "completion_tokens": getattr(_u, "completion_tokens", 0) or 0,
+                                    "total_tokens": getattr(_u, "total_tokens", 0) or 0,
+                                }
                         if not text:
                             fr = getattr(chunk, "finish_reason", None)
                             if fr:
-                                break
+                                _finish_reason = fr
                             continue
                         raw += text
 
@@ -223,9 +240,12 @@ class ReActEngineV4(AgentEngine):
                             # else: markers present → keep buffering for
                             # the stream-end text-protocol parse.
 
+                        # Drain to the iterator's natural end (the client
+                        # appends a final usage-bearing chunk after
+                        # finish_reason — breaking here used to miss it).
                         fr = getattr(chunk, "finish_reason", None)
                         if fr:
-                            break
+                            _finish_reason = fr
                 else:
                     resp = ctx.client.chat(
                         messages, model=ctx.model,
@@ -239,6 +259,23 @@ class ReActEngineV4(AgentEngine):
                 )
                 return
 
+            # P1-5: fold this call's usage into the run total (prompt
+            # tokens of later calls already include earlier context —
+            # the LAST call's prompt_tokens + sum(completion) is the
+            # closest proxy for live context size; we keep both views).
+            if _step_usage:
+                _prev_prompt = _run_usage.get("prompt_tokens", 0)
+                _run_usage = {
+                    "prompt_tokens": max(_prev_prompt, _step_usage.get("prompt_tokens", 0)),
+                    "completion_tokens": (
+                        _run_usage.get("completion_tokens", 0)
+                        + _step_usage.get("completion_tokens", 0)
+                    ),
+                }
+                _run_usage["total_tokens"] = (
+                    _run_usage["prompt_tokens"] + _run_usage["completion_tokens"]
+                )
+
             # --- Parse response ---
             # BUG-FIX: if ThinkSeparator already streamed the answer (model
             # used <think> tags), DON'T run parse_react_response — the answer
@@ -251,7 +288,8 @@ class ReActEngineV4(AgentEngine):
             # the user got neither the search nor a correct answer.
             if fa_streamed and not oa_tc_name:
                 yield AgentStep(kind=StepKind.TEXT_END)
-                yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")
+                yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
+                        metadata={"usage": _run_usage})
                 return
 
             # If ThinkSeparator buffered post-think text but didn't stream it
@@ -271,7 +309,8 @@ class ReActEngineV4(AgentEngine):
                     if _clean:
                         yield AgentStep(kind=StepKind.TEXT_DELTA, content=_clean)
                     yield AgentStep(kind=StepKind.TEXT_END)
-                    yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")
+                    yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
+                        metadata={"usage": _run_usage})
                     return
 
             thought, action, action_input = parse_react_response(raw)
@@ -390,7 +429,8 @@ class ReActEngineV4(AgentEngine):
                 if answer and not fa_streamed:
                     yield AgentStep(kind=StepKind.TEXT_DELTA, content=answer)
                 yield AgentStep(kind=StepKind.TEXT_END)
-                yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")
+                yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
+                        metadata={"usage": _run_usage})
                 return
 
             # --- Tool calls — batch execution (P0-3) ---
@@ -626,7 +666,8 @@ class ReActEngineV4(AgentEngine):
             content=f"我已经连续尝试了 {max_steps} 步但仍未收敛。请换用「深度」模式重试。",
         )
         yield AgentStep(kind=StepKind.TEXT_END)
-        yield AgentStep(kind=StepKind.DONE, model=ctx.model or "")
+        yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
+                        metadata={"usage": _run_usage})
 
     def _build_messages(self, ctx: RunContext) -> list:
         """Build initial [system, user] messages.

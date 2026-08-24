@@ -985,7 +985,13 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                         item = AgentStep(
                             kind=StepKind.DONE,
                             model=item.model,
-                            metadata={"citations": _deduped},
+                            # Keep the run's token usage (P1-5) alongside
+                            # the citations we're attaching.
+                            metadata={
+                                "citations": _deduped,
+                                **({"usage": item.metadata["usage"]}
+                                   if item.metadata.get("usage") else {}),
+                            },
                         )
 
                 yield emitter.emit(item)

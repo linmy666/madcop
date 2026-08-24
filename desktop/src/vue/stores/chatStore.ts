@@ -1040,6 +1040,15 @@ export const useChatStore = defineStore('chat', {
                     // Sprint 4 — capture creation-engine citations from
                     // DONE.metadata (only present in create mode).
                     const _meta = (event as any)?.metadata
+                    // P1-5 — token usage from the run's final DONE step:
+                    // feeds the context budget indicator.
+                    const _usage = _meta?.usage
+                    if (_usage && (typeof _usage.prompt_tokens === 'number')) {
+                      session.tokenUsage = {
+                        input_tokens: _usage.prompt_tokens || 0,
+                        output_tokens: _usage.completion_tokens || 0,
+                      }
+                    }
                     if (_meta && Array.isArray(_meta.citations) && _meta.citations.length > 0) {
                       session.citations = _meta.citations.map((c: any) => ({
                         url: String(c.url || ''),
