@@ -34,11 +34,6 @@ _PROTOCOL_RE = re.compile(
     r"\s*[:：]\s*",
     re.IGNORECASE,
 )
-_FA_MARKER = re.compile(
-    r"(?:Action\s*[:：]\s*)?FINAL_ANSWER\b\s*[:：\n]"
-    r"(?:\s*Action\s*Input\s*[:：]\s*)?",  # also consume a following "Action Input:" line
-    re.IGNORECASE,
-)
 _AI_MARKER = re.compile(r"Action\s*Input\s*[:：]", re.IGNORECASE)
 _BARE_FA_RE = re.compile(r"FINAL_ANSWER\s*[:：]\s*(.*)", re.DOTALL | re.IGNORECASE)
 
@@ -82,7 +77,6 @@ class ReActEngineV4(AgentEngine):
 
             # --- LLM call with streaming + FINAL_ANSWER detection ---
             raw = ""
-            stream_state = 0  # 0=reasoning, 1=saw FA, 2=answer body
             # ThinkSeparator: MiniMax/DeepSeek/Qwen put reasoning in
             # <think>...</think> tags in content. Split them so reasoning
             # goes to THOUGHT_DELTA (visible thinking) and the answer goes
@@ -101,10 +95,6 @@ class ReActEngineV4(AgentEngine):
             # path when present.
             oa_tc_name: str | None = None
             oa_tc_args: str = ""
-            # Track per-index args to handle parallel tool_calls — the
-            # engine executes ONE tool per step, so we use the FIRST
-            # tool call's args (index 0) and ignore later indices.
-            oa_tc_seen_indices: set[int] = set()
             oa_tc_id: str | None = None
             # P0-1: providers report length-stops via finish_reason on the
             # final chunk. Tracked so the parse stage can void tool calls
@@ -158,23 +148,24 @@ class ReActEngineV4(AgentEngine):
                             continue
                         raw += text
 
-                        # BUG-FIX: MiniMax after </think> often outputs
-                        # "Action: web_search\nAction Input: {...}" as TEXT
-                        # (not OpenAI tool_calls). ThinkSeparator would route
-                        # this as answer text. Instead, detect ReAct protocol
-                        # markers in the post-think output and let the legacy
-                        # state-0 ReAct parser handle them (which knows how to
-                        # extract Action/Action Input and emit tool calls).
-                        #
-                        # Strategy: feed to ThinkSeparator, but if the ANSWER
-                        # portion contains Action:/FINAL_ANSWER:, DON'T stream
-                        # it — accumulate it so parse_react_response at stream
-                        # end can extract the tool call.
+                        # P0-2: text flows through exactly ONE router —
+                        # the ThinkSeparator. <think> content goes to the
+                        # THOUGHT channel live; post-think text buffers
+                        # and streams out progressively while it stays
+                        # free of text-protocol markers. The old state-0/
+                        # state-2 machine (FA-marker scanning, mid-stream
+                        # protocol stripping) is deleted: native
+                        # tool_calls are the PRIMARY protocol, and the
+                        # text protocol is parsed once at stream end as a
+                        # fallback for providers without function calling.
                         _reasoning_chunk, _answer_chunk = _think_sep.feed(text)
 
                         # Route reasoning → THOUGHT_DELTA (visible thinking)
                         if _reasoning_chunk:
-                            _emit_r = _PROTOCOL_RE.sub("", _reasoning_chunk)
+                            _emit_r = re.sub(
+                                r'</?think>', '',
+                                _PROTOCOL_RE.sub("", _reasoning_chunk),
+                            )
                             if _emit_r:
                                 if not _think_block_open:
                                     _think_block_open = True
@@ -184,30 +175,18 @@ class ReActEngineV4(AgentEngine):
                                     yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=cur_tid)
                                 yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=cur_tid, content=_emit_r)
 
-                        # If we just exited <think>, close the thought block
-                        # and switch to answer streaming (state 2).
+                        # If we just exited <think>, close the thought block.
                         if _answer_chunk and _think_block_open and not _think_sep.in_think:
                             yield AgentStep(kind=StepKind.THOUGHT_END, thought_id=cur_tid,
                                             elapsed_ms=int((time.time() - step_start) * 1000))
                             thought_active = False
                             _think_block_open = False
-                            stream_state = 2  # switch to answer mode
 
-                        # Route answer → TEXT_DELTA
-                        # BUG-FIX: MiniMax after </think> may output a MIX of
-                        # prose (": 用户想知道...") AND ReAct protocol
-                        # ("Action: web_search\nAction Input: {...}"). We can't
-                        # know if it's answer or protocol until we've seen the
-                        # full post-think output. So: BUFFER all post-think
-                        # text, and only stream it as answer IF we're confident
-                        # it's NOT protocol text.
-                        #
-                        # Strategy: buffer until we either (a) see a protocol
-                        # marker (→ keep buffering, let parse_react_response
-                        # handle at stream end), or (b) accumulate >30 chars
-                        # with NO markers (→ flush buffer as answer, switch to
-                        # direct streaming). This prevents the race where "T"
-                        # gets streamed before "Thought:" arrives.
+                        # Post-think text → buffered answer, streamed
+                        # progressively ONLY while free of protocol
+                        # markers (buffered protocol text is parsed at
+                        # stream end — streaming it raw would leak
+                        # "Action: ..." into the answer).
                         if _answer_chunk:
                             self._v4_answer_buf = getattr(self, '_v4_answer_buf', '') + _answer_chunk
                             _full_answer = self._v4_answer_buf
@@ -215,105 +194,14 @@ class ReActEngineV4(AgentEngine):
                                 r'(Action\s*[:：]|Action\s*Input\s*[:：]|FINAL_ANSWER\s*[:：]|Thought\s*[:：])',
                                 _full_answer, re.IGNORECASE
                             ))
-                            if _has_react_markers:
-                                # Protocol text detected — buffer everything.
-                                # parse_react_response at stream end handles it.
-                                pass
-                            elif len(_full_answer) > 30:
-                                # 30+ chars with NO protocol markers → this is
-                                # a real answer. Flush the buffer and switch to
-                                # direct streaming for the rest.
-                                if not fa_streamed:
+                            if not _has_react_markers:
+                                if not fa_streamed and len(_full_answer) > 30:
                                     fa_streamed = True
                                     yield AgentStep(kind=StepKind.TEXT_DELTA, content=_full_answer.lstrip(" \t\n"))
-                                else:
+                                elif fa_streamed:
                                     yield AgentStep(kind=StepKind.TEXT_DELTA, content=_answer_chunk)
-                                stream_state = 2
-                            # else: <30 chars, no markers yet — keep buffering.
-
-                        # If ThinkSeparator handled this chunk (reasoning or
-                        # answer), skip state-0 ReAct logic.
-                        _handled = bool(_reasoning_chunk) or bool(_answer_chunk)
-                        if _handled:
-                            fr = getattr(chunk, "finish_reason", None)
-                            if fr:
-                                break
-                            continue
-
-                        if stream_state == 0:
-                            # BUG-FIX: scan the ANSWER buffer (post-think
-                            # text only), never `raw` — raw also contains
-                            # <think> content, and a model that merely
-                            # *mentions* "FINAL_ANSWER" while thinking
-                            # used to hijack the stream into answer mode,
-                            # then dump raw thinking + <think> tags into
-                            # TEXT_DELTA (duplicated thinking, leaked tags).
-                            _abuf = getattr(self, '_v4_answer_buf', '')
-                            if _FA_MARKER.search(_abuf):
-                                stream_state = 2
-                                # Close current thought block
-                                if thought_active:
-                                    thought_active = False
-                                    yield AgentStep(
-                                        kind=StepKind.THOUGHT_END,
-                                        thought_id=cur_tid,
-                                        elapsed_ms=int((time.time() - step_start) * 1000),
-                                    )
-                                # Emit post-marker tail as answer
-                                m = _FA_MARKER.search(_abuf)
-                                if m:
-                                    tail = _abuf[m.end():].lstrip(" \t\n")
-                                    # BUG: models write "Action: FINAL_ANSWER
-                                    # \nAction Input:\n\n<answer>" — the tail
-                                    # then starts with a stray "Action Input:"
-                                    # line that leaked into the answer. Strip
-                                    # any leading protocol lines from the tail.
-                                    tail = re.sub(
-                                        r'^(Action\s*Input|Input|Action|Observation)\s*[:：]\s*',
-                                        '', tail, flags=re.IGNORECASE
-                                    ).lstrip(" \t\n")
-                                    if tail:
-                                        fa_streamed = True
-                                        yield AgentStep(kind=StepKind.TEXT_DELTA, content=tail)
-                            else:
-                                emit = _PROTOCOL_RE.sub("", text)
-                                # Strip stray think-tag fragments — tag-close
-                                # chunks produce empty separator output and
-                                # fall through here, leaking "</think>" into
-                                # the visible thought stream.
-                                emit = re.sub(r'</?think>', '', emit)
-                                if emit:
-                                    if not thought_active:
-                                        thought_active = True
-                                        thought_counter += 1
-                                        cur_tid = f"thought-{thought_counter}"
-                                        yield AgentStep(
-                                            kind=StepKind.THOUGHT_START,
-                                            thought_id=cur_tid,
-                                        )
-                                    yield AgentStep(
-                                        kind=StepKind.THOUGHT_DELTA,
-                                        thought_id=cur_tid,
-                                        content=emit,
-                                    )
-                        elif stream_state == 2:
-                            # If the separator is holding back a partial
-                            # "<thi"/"</thi" prefix across a chunk boundary,
-                            # DON'T emit this chunk — the tag resolves on the
-                            # next chunk and leaking the fragment as answer
-                            # text corrupts the stream.
-                            if getattr(_think_sep, '_buf', ''):
-                                fr = getattr(chunk, "finish_reason", None)
-                                if fr:
-                                    break
-                                continue
-                            clean = text
-                            if not fa_streamed:
-                                clean = clean.lstrip(" \t\n")
-                                if clean:
-                                    fa_streamed = True
-                            if clean:
-                                yield AgentStep(kind=StepKind.TEXT_DELTA, content=clean)
+                            # else: markers present → keep buffering for
+                            # the stream-end text-protocol parse.
 
                         fr = getattr(chunk, "finish_reason", None)
                         if fr:
@@ -389,6 +277,27 @@ class ReActEngineV4(AgentEngine):
                 yield AgentStep(
                     kind=StepKind.THOUGHT_END,
                     thought_id=cur_tid,
+                    elapsed_ms=int((time.time() - step_start) * 1000),
+                )
+
+            # Text-protocol fallback only: surface the parsed Thought as a
+            # visible thought block. Live streaming isn't possible for
+            # buffered protocol text, but the reasoning shouldn't vanish
+            # from the timeline either. (<think>-tag models streamed theirs
+            # above; this is only for providers without function calling.)
+            # The oa-override stuffs raw (tag-bearing) text into `thought`
+            # for the COT check — strip think tags before displaying.
+            _fb_thought = _context_clean(thought).strip()
+            if _fb_thought and not _think_block_open and not fa_streamed:
+                thought_counter += 1
+                cur_tid = f"thought-{thought_counter}"
+                yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=cur_tid)
+                yield AgentStep(
+                    kind=StepKind.THOUGHT_DELTA, thought_id=cur_tid,
+                    content=_fb_thought[:2000],
+                )
+                yield AgentStep(
+                    kind=StepKind.THOUGHT_END, thought_id=cur_tid,
                     elapsed_ms=int((time.time() - step_start) * 1000),
                 )
 
@@ -473,23 +382,67 @@ class ReActEngineV4(AgentEngine):
             # fallback stuffed the whole blob into {"path": ...} which
             # broke web_search ("path" is not a valid param). Now we try
             # to extract the FIRST valid JSON object via regex; only if
-            # that also fails do we fall back to the path/query shape.
+            # that also fails do we fail CLEANLY with a validation error
+            # the model can fix on retry.
             args: dict = {}
+            args_error = ""
             _ai = action_input.strip()
             if _ai:
                 try:
                     args = json.loads(_ai)
                 except json.JSONDecodeError:
-                    # Try to find the first {...} block (handles concat JSON
-                    # and surrounding ReAct prose like 'Input: {"query":...}')
-                    _m = re.search(r'\{[^{}]*\}', _ai, re.DOTALL)
+                    # Nested-brace extraction: a first {...} block that
+                    # BALANCES braces (the flat [^{}]* regex can't match
+                    # tool args whose content contains braces — e.g.
+                    # write_file HTML/JS payloads — and the old fallback
+                    # then stuffed the raw blob into `path`, executing a
+                    # garbage 200-char path).
+                    _m = re.search(r'\{.*\}', _ai, re.DOTALL)
+                    _parsed = False
                     if _m:
                         try:
                             args = json.loads(_m.group(0))
+                            _parsed = True
                         except json.JSONDecodeError:
-                            args = {"query": _ai[:200], "path": _ai[:200]}
-                    else:
-                        args = {"query": _ai[:200], "path": _ai[:200]}
+                            # Concat JSON ({"a":1}{"b":2}) or surrounding
+                            # prose: fall back to the first flat block.
+                            _m2 = re.search(r'\{[^{}]*\}', _m.group(0), re.DOTALL)
+                            if _m2:
+                                try:
+                                    args = json.loads(_m2.group(0))
+                                    _parsed = True
+                                except json.JSONDecodeError:
+                                    pass
+                    if not _parsed:
+                        # Malformed JSON (typical cause: unescaped quotes
+                        # inside a large string value). Do NOT execute
+                        # with stuffed defaults — tell the model exactly
+                        # what broke so it resends properly escaped JSON.
+                        args_error = (
+                            "[error] 工具参数 JSON 解析失败（常见原因：字符串值内"
+                            "的引号/换行未转义）。请重新调用并用合法 JSON 传参，"
+                            "大段文本内容请确保内部双引号转义为 \\\" 。"
+                        )
+                        args = {"_raw": _ai[:200]}
+
+            if args_error:
+                yield AgentStep(
+                    kind=StepKind.TOOL_START,
+                    tool_name=action,
+                    tool_input=args,
+                    tool_use_id=tool_use_id,
+                )
+                yield AgentStep(
+                    kind=StepKind.TOOL_END,
+                    tool_name=action,
+                    tool_use_id=tool_use_id,
+                    tool_result=args_error,
+                    is_error=True,
+                    metadata={"is_validation_error": True},
+                )
+                messages.append(Message(role="assistant", content=_context_clean(raw)))
+                messages.append(Message(role="user", content=f"Observation: {args_error}"))
+                continue
 
             yield AgentStep(
                 kind=StepKind.TOOL_START,
@@ -532,21 +485,27 @@ class ReActEngineV4(AgentEngine):
             # Execute tool. _approved carries the HITL decision (True
             # when no confirmation was needed OR the user approved the
             # card) — forward it so the executor's destructive gate
-            # doesn't reject an already-approved call.
+            # doesn't reject an already-approved call. Pass the CLEAN
+            # serialized args (already parsed above, incl. nested-brace
+            # extraction) so the executor's json.loads can't re-fail on
+            # concat JSON / prose-wrapped payloads.
             observation = ""
             is_error = False
             tool_meta: dict[str, Any] = {}
             try:
                 if ctx.tool_executor:
+                    _exec_input = (
+                        json.dumps(args, ensure_ascii=False) if args else action_input
+                    )
                     try:
                         raw_result = ctx.tool_executor(
-                            action, action_input, ctx.work_dir,
+                            action, _exec_input, ctx.work_dir,
                             pre_approved=_approved,
                         )
                     except TypeError:
                         # Executor doesn't accept pre_approved (older
                         # bridge) — call without it.
-                        raw_result = ctx.tool_executor(action, action_input, ctx.work_dir)
+                        raw_result = ctx.tool_executor(action, _exec_input, ctx.work_dir)
                     # Allow executors to return either a str (legacy) or a
                     # ``ToolResult`` dataclass with structured fields. We
                     # prefer the structured form so the frontend can show
