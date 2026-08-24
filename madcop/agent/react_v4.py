@@ -110,13 +110,24 @@ class ReActEngineV4(AgentEngine):
 
             try:
                 if hasattr(ctx.client, "stream"):
-                    for chunk in ctx.client.stream(
-                        messages,
-                        model=ctx.model,
-                        temperature=0.1,
-                        max_tokens=8192,
-                        tools=ctx.tool_schemas or None,
-                    ):
+                    # P1-8 — replay-safe retry: connection-level
+                    # failures (zero chunks received) retry with backoff;
+                    # mid-stream failures propagate and surface as a
+                    # resumable ERROR instead of silently restarting the
+                    # stream (duplicated content). cf. OpenAI Agents SDK
+                    # retry.py's approve_unsafe_replay split.
+                    from madcop.llm.retry import stream_with_retry
+                    _chunk_iter = stream_with_retry(
+                        lambda: ctx.client.stream(
+                            messages,
+                            model=ctx.model,
+                            temperature=0.1,
+                            max_tokens=8192,
+                            tools=ctx.tool_schemas or None,
+                        ),
+                        label=f"react-step-{step_num}",
+                    )
+                    for chunk in _chunk_iter:
                         _fr_chunk = getattr(chunk, "finish_reason", None)
                         if _fr_chunk:
                             _finish_reason = _fr_chunk
@@ -253,9 +264,18 @@ class ReActEngineV4(AgentEngine):
                     )
                     raw = getattr(resp, "content", "") or str(resp)
             except Exception as e:
+                from madcop.llm.retry import classify_stream_error
+                _err_info = classify_stream_error(e)
                 yield AgentStep(
                     kind=StepKind.ERROR,
-                    content=f"LLM call failed: {e}",
+                    content=f"LLM call failed ({_err_info.category}): {e}",
+                    # P1-8: mid-stream failures are replayable-by-user —
+                    # the frontend can offer a retry button knowing the
+                    # category; the engine never auto-replays them.
+                    metadata={
+                        "error_category": _err_info.category,
+                        "replay_safe": False,
+                    },
                 )
                 return
 
