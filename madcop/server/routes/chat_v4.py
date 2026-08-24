@@ -46,6 +46,13 @@ _PENDING_CONFIRMS: dict[str, asyncio.Future] = {}
 # the futures above.
 _PENDING_META: dict[str, dict] = {}
 
+# P1-6 — per-session live context signals: last provider usage (token
+# ground truth, from DONE steps) and the latest compaction checkpoint
+# (for incremental UPDATE summaries). In-process only; the durable
+# record lives in the session log's compaction events.
+_SESSION_LAST_USAGE: dict[str, dict] = {}
+_SESSION_SUMMARIES: dict[str, str] = {}
+
 
 @router.get("/api/v4/chat/confirm/pending")
 async def pending_confirms(conversation_id: str = "") -> dict[str, Any]:
@@ -236,40 +243,48 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         except Exception as _e:
             logger.debug("log-derived context unavailable, using body: %s", _e)
 
-    # Meta-Harness knob: compaction threshold (D5 — previously loaded
-    # AFTER compaction ran, so the knob never took effect). Loaded here
-    # so the condition below actually consumes it.
-    _compact_threshold = 20
+    # P1-6 — token-driven compaction (pi-mono design). The old policy
+    # (message-count trigger + 200-char truncation of the middle)
+    # destroyed long-session context quality. Now: trigger on token
+    # budget (provider usage when fresh, chars/4 otherwise), summarize
+    # the head into a structured checkpoint via a dedicated LLM call,
+    # cut ONLY at user-message boundaries, and persist the checkpoint
+    # as a `compaction` event so future derives reuse it instead of
+    # re-compacting every turn.
     try:
-        from madcop.meta_harness.task_harness import load_active_harness
-        _compact_threshold = load_active_harness().compact_threshold_messages or 20
-    except Exception:
-        pass
-
-    # v4-5 — context compaction: if the conversation is very long
-    # (> _compact_threshold messages or >30k chars), keep the system
-    # prompt + last N messages and summarize the middle into a compact
-    # block. This prevents token overflow on long sessions.
-    _total_chars = sum(len(m.content or "") for m in messages)
-    if len(messages) > _compact_threshold or _total_chars > 30000:
-        _keep_first = 2   # system + first user
-        _keep_last = 12   # recent context
-        if len(messages) > _keep_first + _keep_last:
-            _head = messages[:_keep_first]
-            _tail = messages[-_keep_last:]
-            _middle = messages[_keep_first:-_keep_last]
-            _summary_parts = []
-            for m in _middle:
-                role = m.role or "user"
-                content = (m.content or "")[:200]
-                _summary_parts.append(f"[{role}] {content}")
-            _compact = Message(
-                role="user",
-                content=f"--- 对话摘要 (前 {len(_middle)} 条消息已压缩) ---\n"
-                        + "\n".join(_summary_parts)
-                        + "\n--- 最近对话 ---",
+        from madcop.agent.compaction import (
+            should_compact as _should_compact,
+            compact_messages as _compact_messages,
+        )
+        _msgs_dicts = [{"role": m.role or "user", "content": m.content or ""}
+                       for m in messages]
+        _last_usage = _SESSION_LAST_USAGE.get(session_id) if session_id else None
+        if _should_compact(_msgs_dicts, _last_usage):
+            _prev_summary = _SESSION_SUMMARIES.get(session_id, "") if session_id else ""
+            _new_dicts, _record = _compact_messages(
+                _msgs_dicts, _get_client(), model,
+                prev_summary=_prev_summary,
             )
-            messages = [*_head, _compact, *_tail]
+            if _record.get("compacted"):
+                messages = [Message(role=d["role"], content=d["content"])
+                            for d in _new_dicts]
+                if session_id:
+                    _SESSION_SUMMARIES[session_id] = _record["summary"]
+                    try:
+                        from madcop.harness.core import SessionLog, EventDomain, HarnessEvent
+                        SessionLog.for_session(session_id).append(HarnessEvent(
+                            domain=EventDomain.SYSTEM, kind="compaction",
+                            content=_record["summary"],
+                            metadata={"keep_tail_n": _record.get("keep_tail_n", 0)},
+                        ))
+                    except Exception as _e:
+                        logger.debug("compaction event persist failed: %s", _e)
+                logger.info(
+                    "context compacted: %d→%d msgs (head %d summarized)",
+                    len(_msgs_dicts), len(_new_dicts), _record.get("head_turns", 0),
+                )
+    except Exception as _e:
+        logger.debug("compaction skipped: %s", _e)
 
     # P3-G — attachment injection (parity with legacy app.py:1799-1858).
     # When the user attaches files, their text content is appended to
@@ -860,6 +875,10 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             ctx._shared_session_log = _session_log
 
             def worker():
+                # P1-6: the overflow-retry path below REBINDS `engine`
+                # (fresh factory after compaction) — declare it nonlocal
+                # or the rebind silently makes it an unbound local.
+                nonlocal engine
                 try:
                     # Log the user's input as the turn's opening event so
                     # derive_messages can reconstruct the user turn.
@@ -868,53 +887,96 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                             domain=EventDomain.SYSTEM, kind="turn_start",
                             content=_latest_user or "",
                         ))
-                    for step in engine.run(ctx):
-                        if cancel_flag.is_set():
-                            break
-                        # Phase 2a: persist every emitted step to the log.
-                        if _session_log:
-                            _session_log.append(_step_to_event(step))
-                        # Capture assistant text for skill distill after the run.
-                        if step.kind == StepKind.TEXT_DELTA and step.content:
-                            _assistant_text_holder[0] += step.content
-                        elif step.kind == StepKind.DONE:
-                            # D2: MEA executor emits inner DONEs (now filtered
-                            # at the harness layer, but guard here too for any
-                            # engine that terminates mid-run). Text after the
-                            # last DONE is the authoritative outer answer.
-                            _last_done_len[0] = len(_assistant_text_holder[0])
-                            _saw_done[0] = True
-                        # Resume-Claim-4: capture web tool results as citations
-                        if step.kind == StepKind.TOOL_END and step.tool_name in ("web_search", "web_fetch"):
+                    # P1-6 — overflow retry: a provider context-length
+                    # ERROR force-compacts the context and reruns the
+                    # engine ONCE (pi's overflow recovery path).
+                    _overflow_attempted = False
+                    while True:
+                        _overflowed = False
+                        for step in engine.run(ctx):
+                            if cancel_flag.is_set():
+                                break
+                            # Phase 2a: persist every emitted step to the log.
+                            if _session_log:
+                                _session_log.append(_step_to_event(step))
+                            # Capture assistant text for skill distill after the run.
+                            if step.kind == StepKind.TEXT_DELTA and step.content:
+                                _assistant_text_holder[0] += step.content
+                            elif step.kind == StepKind.DONE:
+                                # D2: MEA executor emits inner DONEs (now filtered
+                                # at the harness layer, but guard here too for any
+                                # engine that terminates mid-run). Text after the
+                                # last DONE is the authoritative outer answer.
+                                _last_done_len[0] = len(_assistant_text_holder[0])
+                                _saw_done[0] = True
+                                # P1-6: remember the run's usage as the session's
+                                # live token ground truth for compaction triggers.
+                                if session_id and step.metadata.get("usage"):
+                                    _SESSION_LAST_USAGE[session_id] = dict(step.metadata["usage"])
+                            if step.kind == StepKind.ERROR:
+                                from madcop.agent.compaction import is_overflow_error as _is_ovf
+                                if _is_ovf(Exception(step.content or "")):
+                                    _overflowed = True
+                            # Resume-Claim-4: capture web tool results as citations
+                            if step.kind == StepKind.TOOL_END and step.tool_name in ("web_search", "web_fetch"):
+                                try:
+                                    _raw_result = step.tool_result
+                                    if isinstance(_raw_result, str):
+                                        import json as _json
+                                        try:
+                                            _parsed = _json.loads(_raw_result)
+                                        except Exception:
+                                            _parsed = None
+                                    else:
+                                        _parsed = _raw_result
+                                    # web_search returns a list of {title,url,snippet}
+                                    if isinstance(_parsed, list):
+                                        for _hit in _parsed:
+                                            if isinstance(_hit, dict) and _hit.get("url"):
+                                                _citations_holder.append({
+                                                    "url": str(_hit.get("url", "")),
+                                                    "title": str(_hit.get("title", "") or _hit.get("url", ""))[:120],
+                                                    "snippet": str(_hit.get("snippet", ""))[:200],
+                                                })
+                                    # web_fetch returns {url, content}
+                                    elif isinstance(_parsed, dict) and _parsed.get("url") and not _parsed.get("is_spa"):
+                                        _citations_holder.append({
+                                            "url": str(_parsed.get("url", "")),
+                                            "title": str(_parsed.get("title", "") or _parsed.get("url", ""))[:120],
+                                            "snippet": str(_parsed.get("content", ""))[:200],
+                                        })
+                                except Exception:
+                                    pass
+                            q.put(step)
+                        # end of `for step in engine.run(ctx)` — overflow
+                        # retry decision at the while-body level.
+                        if _overflowed and not _overflow_attempted and session_id:
+                            _overflow_attempted = True
                             try:
-                                _raw_result = step.tool_result
-                                if isinstance(_raw_result, str):
-                                    import json as _json
-                                    try:
-                                        _parsed = _json.loads(_raw_result)
-                                    except Exception:
-                                        _parsed = None
-                                else:
-                                    _parsed = _raw_result
-                                # web_search returns a list of {title,url,snippet}
-                                if isinstance(_parsed, list):
-                                    for _hit in _parsed:
-                                        if isinstance(_hit, dict) and _hit.get("url"):
-                                            _citations_holder.append({
-                                                "url": str(_hit.get("url", "")),
-                                                "title": str(_hit.get("title", "") or _hit.get("url", ""))[:120],
-                                                "snippet": str(_hit.get("snippet", ""))[:200],
-                                            })
-                                # web_fetch returns {url, content}
-                                elif isinstance(_parsed, dict) and _parsed.get("url") and not _parsed.get("is_spa"):
-                                    _citations_holder.append({
-                                        "url": str(_parsed.get("url", "")),
-                                        "title": str(_parsed.get("title", "") or _parsed.get("url", ""))[:120],
-                                        "snippet": str(_parsed.get("content", ""))[:200],
-                                    })
-                            except Exception:
-                                pass
-                        q.put(step)
+                                from madcop.agent.compaction import compact_messages as _cm
+                                _dmsgs = [{"role": m.role or "user", "content": m.content or ""}
+                                          for m in ctx.messages]
+                                _cmsgs, _crec = _cm(
+                                    _dmsgs, ctx.client, ctx.model,
+                                    prev_summary=_SESSION_SUMMARIES.get(session_id, ""),
+                                )
+                                if _crec.get("compacted"):
+                                    ctx.messages = [Message(role=d["role"], content=d["content"])
+                                                    for d in _cmsgs]
+                                    _SESSION_SUMMARIES[session_id] = _crec["summary"]
+                                    if _session_log:
+                                        _session_log.append(HarnessEvent(
+                                            domain=EventDomain.SYSTEM, kind="compaction",
+                                            content=_crec["summary"],
+                                            metadata={"keep_tail_n": _crec.get("keep_tail_n", 0)},
+                                        ))
+                                    engine = EngineFactory.create(ctx)
+                                    logger.info("overflow: compacted %d→%d msgs, retrying",
+                                                len(_dmsgs), len(_cmsgs))
+                                    continue  # retry once with the compacted ctx
+                            except Exception as _oe:
+                                logger.warning("overflow compaction failed: %s", _oe)
+                        break  # normal exit of the retry loop
                 except Exception as e:
                     q.put(AgentStep(kind=StepKind.ERROR, content=str(e)))
                 finally:

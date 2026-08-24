@@ -182,6 +182,21 @@ class SessionLog:
                     _start("user", ev.content)
                 elif ev.kind == "turn_end":
                     _flush()
+                elif ev.kind == "compaction":
+                    # P1-6 — a compaction event REPLACES everything
+                    # derived before it with the checkpoint summary +
+                    # the recorded tail (pi-mono semantics: the summary
+                    # is the only surviving representation of the head).
+                    _flush()
+                    keep_n = int(ev.metadata.get("keep_tail_n", 0) or 0)
+                    tail = messages[-keep_n:] if keep_n > 0 else []
+                    messages = [{
+                        "role": "user",
+                        "content": (
+                            "<summary>以下是本会话早期内容的压缩检查点：\n\n"
+                            f"{ev.content}\n</summary>"
+                        ),
+                    }] + tail
             elif ev.domain == EventDomain.ANSWER:
                 if ev.kind in ("text_delta", "done") and ev.content:
                     _start("assistant", ev.content)
