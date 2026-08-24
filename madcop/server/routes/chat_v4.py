@@ -897,6 +897,9 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             # Hand the log to engines via ctx so MEA reuses it instead of
             # creating a duplicate orphan log (double-write fix).
             ctx._shared_session_log = _session_log
+            # P2-9: engines parent their llm/tool spans to this turn's
+            # user_input root node.
+            ctx._trace_root_id = _trace_root_id
 
             def worker():
                 # P1-6: the overflow-retry path below REBINDS `engine`

@@ -74,10 +74,33 @@ class ReActEngineV4(AgentEngine):
         # P1-5: token usage summed across this run's LLM calls; attached
         # to the DONE step for the UI's context budget indicator.
         _run_usage: dict[str, Any] = {}
+        # P2-9: trace root for this turn (the chat route creates a
+        # user_input root and passes its id via ctx; MEA/fallbacks get
+        # their own turn node). All llm/tool spans parent to it.
+        _trace_root_id = getattr(ctx, "_trace_root_id", None)
+        if not _trace_root_id:
+            try:
+                from madcop.agent.trace import start_span
+                _trace_root_id = start_span(
+                    ctx.session_id or "", None, "turn",
+                    label=(ctx.messages[-1].content or "")[:60] if ctx.messages else "",
+                )
+            except Exception:
+                _trace_root_id = None
 
         for step_num in range(1, max_steps + 1):
             step_start = time.time()
             _step_usage: dict[str, Any] = {}
+            # P2-9: one llm_call span per engine step.
+            try:
+                from madcop.agent.trace import start_span as _ts
+                _llm_span_id = _ts(
+                    ctx.session_id or "", _trace_root_id, "llm_call",
+                    label=f"step {step_num}",
+                    input_data={"messages": len(messages)},
+                )
+            except Exception:
+                _llm_span_id = None
 
             # --- LLM call with streaming + FINAL_ANSWER detection ---
             raw = ""
@@ -295,6 +318,18 @@ class ReActEngineV4(AgentEngine):
                 _run_usage["total_tokens"] = (
                     _run_usage["prompt_tokens"] + _run_usage["completion_tokens"]
                 )
+
+            # P2-9: close this step's llm_call span with its summary.
+            try:
+                from madcop.agent.trace import finish_span as _fs
+                _fs(_llm_span_id, {
+                    "finish_reason": _finish_reason,
+                    "usage": _step_usage,
+                    "tool_calls": [c.get("name") for c in oa_calls.values() if c.get("name")],
+                    "answer_chars": len(getattr(self, "_v4_answer_buf", "") or ""),
+                })
+            except Exception:
+                pass
 
             # --- Parse response ---
             # BUG-FIX: if ThinkSeparator already streamed the answer (model
@@ -518,6 +553,17 @@ class ReActEngineV4(AgentEngine):
             def _exec_one(name: str, args: dict, approved: bool):
                 """Execute one tool via ctx.tool_executor → (obs, is_err, meta)."""
                 obs, is_err, meta = "", False, {}
+                # P2-9: tool_call span under this step's llm span.
+                try:
+                    from madcop.agent.trace import start_span as _ts2
+                    _tool_span = _ts2(
+                        ctx.session_id or "",
+                        _llm_span_id or _trace_root_id,
+                        "tool_call", label=name, input_data=args,
+                    )
+                except Exception:
+                    _tool_span = None
+                _t0 = time.time()
                 try:
                     if ctx.tool_executor:
                         _exec_input = (
@@ -549,6 +595,15 @@ class ReActEngineV4(AgentEngine):
                         obs = f"[Tool '{name}' not available]"
                 except Exception as e:  # failure isolation for the pool
                     obs, is_err = f"[error] {e}", True
+                try:
+                    from madcop.agent.trace import finish_span as _fs2
+                    _fs2(_tool_span, {
+                        "ok": not is_err,
+                        "elapsed_ms": int((time.time() - _t0) * 1000),
+                        "output": (obs or "")[:300],
+                    })
+                except Exception:
+                    pass
                 return obs, is_err, meta
 
             # Phase A — parse args, split free vs confirm-needed.

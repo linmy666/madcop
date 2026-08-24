@@ -340,6 +340,52 @@ def reset_trace_store(store: TraceStore | None) -> None:
     _trace_store = store
 
 
+# ─── P2-9: engine-facing span helpers ───────────────────────────────────────
+# OpenAI-Agents-SDK-style span emission for engines: every LLM call and
+# tool call lands in the trace tree under the turn's root node. Tracing
+# must NEVER break the engine — every helper swallows its own errors.
+
+def start_span(
+    conversation_id: str,
+    parent_id: str | None,
+    node_type: str,
+    label: str = "",
+    input_data: Any = None,
+) -> str | None:
+    """Create + mark running. Returns span id (None on any failure)."""
+    try:
+        node = get_trace_store().create_node(
+            conversation_id=conversation_id or "_anon",
+            parent_id=parent_id,
+            node_type=node_type,
+            label=label,
+            input_data=input_data,
+        )
+        get_trace_store().mark_running(node.id)
+        return node.id
+    except Exception:
+        return None
+
+
+def finish_span(span_id: str | None, output_data: Any = None,
+                error: str | None = None) -> None:
+    """Complete a span with its output (or error). No-op on failure."""
+    if not span_id:
+        return
+    try:
+        store = get_trace_store()
+        payload = (
+            json.dumps(output_data, ensure_ascii=False, default=str)[:2000]
+            if output_data is not None else ""
+        )
+        if error:
+            store.mark_error(span_id, str(error)[:500])
+        else:
+            store.mark_done(span_id, output=payload)
+    except Exception:
+        pass
+
+
 # ───────────────────────────────────────────────────────────────────
 # LLM-callable trace operations (pure functions, no Tool dependency)
 # ───────────────────────────────────────────────────────────────────
