@@ -160,3 +160,32 @@ class TestOverflowError(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestThinkStrip(unittest.TestCase):
+    """E2E regression: the summarizer's <think> leakage used to be stored
+    verbatim in the checkpoint — after compaction the model lost ALL
+    session facts because the summary was reasoning fragments."""
+
+    def test_think_stripped_from_summary(self):
+        class _Thinky:
+            def chat(self, messages, model=None, temperature=0.3, max_tokens=2000):
+                return SimpleNamespace(
+                    content="<think>让我想想怎么合并……</think>\n\n## 目标\n做笔记应用 Phoenix")
+
+        msgs = [{"role": "user", "content": "z" * 8000},
+                {"role": "assistant", "content": "z" * 8000}] * 6
+        new_msgs, record = C.compact_messages(msgs, _Thinky(), keep_recent_tokens=1500)
+        self.assertNotIn("<think>", record["summary"])
+        self.assertIn("Phoenix", record["summary"])
+
+    def test_unclosed_think_truncated_generation(self):
+        class _Truncated:
+            def chat(self, *a, **k):
+                return SimpleNamespace(content="## 目标\nX\n<think>未写完的推理")
+
+        msgs = [{"role": "user", "content": "z" * 8000},
+                {"role": "assistant", "content": "z" * 8000}] * 6
+        _, record = C.compact_messages(msgs, _Truncated(), keep_recent_tokens=1500)
+        self.assertNotIn("<think>", record["summary"])
+        self.assertIn("X", record["summary"])

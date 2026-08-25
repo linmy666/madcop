@@ -196,10 +196,22 @@ def compact_messages(
     except Exception as e:
         logger.warning("compaction summary failed, keeping note: %s", e)
 
+    # Strip reasoning leakage: MiniMax-class models emit <think>…</think>
+    # inside chat responses. A think-polluted checkpoint re-enters the
+    # context on every later turn (E2E caught exactly this: after
+    # compaction the model lost ALL session facts because the stored
+    # summary was reasoning fragments). Also handle an UNCLOSED <think>
+    # (truncated generation) by dropping everything after the tag.
+    import re as _re
+    summary = _re.sub(r"<think>[\s\S]*?</think>", "", summary).strip()
+    _open_think = summary.find("<think>")
+    if _open_think != -1:
+        summary = summary[:_open_think].strip()
+
     if not summary:
         if prev_summary:
-            summary = prev_summary
-        else:
+            summary = _re.sub(r"<think>[\s\S]*?(</think>|$)", "", prev_summary).strip()
+        if not summary:
             summary = (
                 "--- 早期对话已压缩（摘要生成失败，仅保留要点）---\n"
                 + _render_history(head, limit_chars=1500)
