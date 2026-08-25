@@ -3726,6 +3726,16 @@ def register(app: FastAPI) -> None:
         title = body.get("title") or (
             (original.get("title") or "New Session") + " (branch)"
         )
+        # P2-10 acceptance: ALSO fork the v4 event log (thoughts, tool
+        # trajectories, compaction checkpoints) into the new session id —
+        # the legacy branch only copied plain messages, so branched
+        # sessions lost their full history. Best-effort: a session
+        # without an event log (pre-v4) branches as before.
+        try:
+            from madcop.harness.core import SessionLog
+            SessionLog.fork_session(session_id, new_id=new_sid)
+        except Exception:
+            pass
         new_sess = {
             "id": new_sid, "title": title,
             "createdAt": now, "modifiedAt": now,

@@ -1333,13 +1333,31 @@ export const useChatStore = defineStore('chat', {
                   } else if (event.type === 'tool_result') {
                     // Tool returned — pair it with the matching pending
                     // tool_use and mark it as resolved so the UI shows ✓
-                    // instead of "正在准备工具".
-                    const prev = session.messages.find((m: any) =>
-                      m.type === 'tool_use' && m.isPending === true
-                    )
+                    // instead of "正在准备工具". P0-3 made parallel tools
+                    // real: results arrive in COMPLETION order, so pairing
+                    // by "first pending" mispooled sibling calls — match by
+                    // tool_use_id, fall back to first pending (legacy SSE).
+                    const evTid = (event as any).tool_use_id
+                    let prev = evTid
+                      ? session.messages.find((m: any) =>
+                          m.type === 'tool_use' && m.isPending === true &&
+                          (m as any).toolUseId === evTid)
+                      : undefined
+                    if (!prev) {
+                      prev = session.messages.find((m: any) =>
+                        m.type === 'tool_use' && m.isPending === true)
+                    }
                     if (prev) {
                       prev.isPending = false
                       ;(prev as any).result = event.result
+                      // SDK-standard display data (Claude Code tool rows):
+                      // duration + error flag from the v4 tool_end metadata.
+                      const _meta = (event as any).metadata || {}
+                      ;(prev as any).elapsedMs = typeof _meta.elapsed_ms === 'number'
+                        ? _meta.elapsed_ms : undefined
+                      if (typeof (event as any).is_error === 'boolean') {
+                        ;(prev as any).isError = (event as any).is_error
+                      }
                     } else {
                       // Orphan result (no matching pending tool_use)
                       session.messages.push({

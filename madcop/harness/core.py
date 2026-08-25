@@ -161,7 +161,8 @@ class SessionLog:
 
     @classmethod
     def fork_session(cls, session_id: str, at_event_id: str | None = None,
-                     source: "SessionLog | None" = None) -> "SessionLog":
+                     source: "SessionLog | None" = None,
+                     new_id: str | None = None) -> "SessionLog":
         """Fork a session: copy events up to a boundary into a NEW session.
 
         The cut snaps back to the last complete turn (turn_end at or
@@ -191,8 +192,8 @@ class SessionLog:
         else:
             cut = 0  # no complete turn — fork from empty
 
-        new_id = f"fork-{uuid.uuid4().hex[:10]}"
-        dst = cls(run_id=new_id, persist_dir=_HARNESS_ROOT)
+        fork_id = new_id or f"fork-{uuid.uuid4().hex[:10]}"
+        dst = cls(run_id=fork_id, persist_dir=_HARNESS_ROOT)
         for e in evs[:cut]:
             # keep ids + parent chain; reset nothing else — replay must
             # be deterministic and identical to the original prefix.

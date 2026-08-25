@@ -154,12 +154,17 @@ class SafetyHook:
 
 
 class FormatterHook:
-    """PostToolUse hook for `write_file` / `edit_file` — surface a
-    formatting advisory as extra_observation. The actual formatter
-    execution stays opt-in; the advisory lets the user / next-step
-    model know the file just changed."""
+    """PostToolUse hook for `write_file` / `edit_file` — actually RUN a
+    formatter on the written file (best-effort): prettier via npx for
+    web files, black for Python. Opt-in via MADCOP_AUTO_FORMAT=1; off
+    by default so demos never stall on a missing formatter. Failures
+    (missing binary, parse error) degrade to an advisory observation.
+    """
 
-    name = "fmt:notice"
+    name = "fmt:run"
+
+    _WEB_EXT = {".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs",
+                ".html", ".htm", ".css", ".scss", ".less", ".json", ".md", ".yaml", ".yml"}
 
     def __call__(self, ctx: HookContext) -> HookResult | None:
         if ctx.event != HookEvent.POST_TOOL_USE:
@@ -169,10 +174,44 @@ class FormatterHook:
         path = ctx.tool_input.get("path") or ctx.tool_input.get("file")
         if not path:
             return None
-        return HookResult(
-            continue_=True,
-            extra_observation=f"[fmt] {path} 已写入；UI 可提示运行 prettier/black 自动格式化。",
-        )
+
+        import os
+        if os.environ.get("MADCOP_AUTO_FORMAT", "").strip() != "1":
+            return HookResult(
+                continue_=True,
+                extra_observation=f"[fmt] {path} 已写入（自动格式化未开启，设 MADCOP_AUTO_FORMAT=1 启用）。",
+            )
+
+        import subprocess
+        from pathlib import Path as _P
+        p = _P(str(path))
+        suffix = p.suffix.lower()
+        try:
+            if suffix == ".py":
+                cmd = ["black", "-q", str(p)]
+            elif suffix in self._WEB_EXT:
+                # --no-install: fail fast when prettier isn't a local dep
+                cmd = ["npx", "--no-install", "prettier", "--write", str(p)]
+            else:
+                return HookResult(continue_=True,
+                                  extra_observation=f"[fmt] {path} 已写入（无匹配格式化器）。")
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=10,
+            )
+            if proc.returncode == 0:
+                return HookResult(
+                    continue_=True,
+                    extra_observation=f"[fmt] {path} 已格式化（{cmd[0]}）。",
+                )
+            return HookResult(
+                continue_=True,
+                extra_observation=f"[fmt] {path} 格式化跳过（{cmd[0]} 不可用或解析失败）。",
+            )
+        except Exception as e:
+            return HookResult(
+                continue_=True,
+                extra_observation=f"[fmt] {path} 格式化跳过（{type(e).__name__}）。",
+            )
 
 
 __all__ = [

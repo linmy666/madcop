@@ -14,9 +14,12 @@ const props = withDefaults(defineProps<{
   input?: unknown
   isPending?: boolean
   result?: { content: unknown; isError?: boolean } | null
+  /** v4 tool_end metadata.elapsed_ms — SDK-standard tool-row duration. */
+  durationMs?: number
 }>(), {
   isPending: false,
   result: null,
+  durationMs: undefined,
 })
 
 interface ToolMeta { verb: string; icon: string }
@@ -93,6 +96,41 @@ const statusIcon = computed(() => {
   if (props.result) return 'check'
   return ''
 })
+
+// SDK-standard tool-row suffix (Claude Code style): duration + result
+// size/hit-count, e.g. "编辑 …/index.html · 23.9KB · 1.2s".
+const durationLabel = computed(() => {
+  if (props.isPending || props.durationMs == null) return ''
+  const ms = props.durationMs
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.max(1, Math.round(ms))}ms`
+})
+
+const resultSummary = computed(() => {
+  if (props.isPending || !props.result) return ''
+  const c = props.result.content
+  const text = typeof c === 'string' ? c : ''
+  if (!text) return ''
+  // write_file/edit_file: tool_result JSON carries byte length
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object') {
+      const bytes = parsed.bytes ?? parsed.size ?? (typeof parsed.content === 'string' ? parsed.content.length : undefined)
+      if (typeof bytes === 'number') return formatBytes(bytes)
+      if (Array.isArray(parsed.results)) return `${parsed.results.length} 条结果`
+      if (Array.isArray(parsed)) return `${parsed.length} 条结果`
+    } else if (Array.isArray(parsed)) {
+      return `${parsed.length} 条结果`
+    }
+  } catch { /* not JSON */ }
+  if (text.startsWith('[')) return ''
+  return ''
+})
+
+function formatBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)}MB`
+  if (n >= 1024) return `${(n / 1024).toFixed(1)}KB`
+  return `${n}B`
+}
 </script>
 
 <template>
@@ -102,6 +140,8 @@ const statusIcon = computed(() => {
     <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tool-inline__status--ok" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
     <span class="tool-inline__verb">{{ meta.verb }}</span>
     <span v-if="target" class="tool-inline__target">{{ target }}</span>
+    <span v-if="resultSummary" class="tool-inline__meta">{{ resultSummary }}</span>
+    <span v-if="durationLabel" class="tool-inline__meta">· {{ durationLabel }}</span>
   </div>
 </template>
 
@@ -124,6 +164,12 @@ const statusIcon = computed(() => {
   border-width: 1.5px;
   color: var(--color-text-tertiary, #999);
   flex-shrink: 0;
+}
+
+.tool-inline__meta {
+  font-size: 11px;
+  color: var(--color-text-tertiary, #aaa);
+  opacity: 0.85;
 }
 
 .tool-inline__status--ok {
