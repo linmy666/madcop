@@ -2090,6 +2090,7 @@ export const en = {
   'permission.acceptEdits.desc': 'Auto-approve file edits',
   'permission.bypass.label': 'Bypass',
   'permission.bypass.desc': 'Run everything without asking',
+  'runItem.composing': 'composing…',
 } as const
 
 export type TranslationKey = keyof typeof en

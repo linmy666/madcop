@@ -172,6 +172,20 @@ class ReActEngineV4(AgentEngine):
                                 _slot["name"] = d["name"]
                             if d.get("arguments"):
                                 _slot["args"] += d["arguments"]
+                                # Long-task liveness (P0-UX): while the model
+                                # composes a big payload (20KB game HTML ≈
+                                # minutes of streaming), emit a throttled
+                                # progress hint so the pending card shows
+                                # forward motion. 1 event per ~4KB.
+                                if len(_slot["args"]) - _slot.get("_last_progress", 0) >= 4096:
+                                    _slot["_last_progress"] = len(_slot["args"])
+                                    yield AgentStep(
+                                        kind=StepKind.TOOL_PROGRESS,
+                                        tool_name=_slot.get("name") or "",
+                                        tool_use_id=f"tool-{step_num}",
+                                        content=str(len(_slot["args"])),
+                                        metadata={"chars": len(_slot["args"]), "step": step_num},
+                                    )
                         # Non-streaming fallback (some clients only emit
                         # the full tool_call at the end).
                         end_tc = getattr(chunk, "tool_call", None)
@@ -504,6 +518,7 @@ class ReActEngineV4(AgentEngine):
             # Code style). A single failing call never cancels its
             # siblings (failure isolation, cf. OpenAI Agents SDK
             # tool_execution.py).
+            _step_meta = {"step": step_num, "max_steps": max_steps}
             _native = [
                 {"name": c["name"], "raw": c["args"]}
                 for _, c in sorted(oa_calls.items()) if c.get("name")
@@ -690,6 +705,7 @@ class ReActEngineV4(AgentEngine):
                         kind=StepKind.TOOL_START,
                         tool_name=_c["name"], tool_input=_a,
                         tool_use_id=_c["use_id"],
+                        metadata=dict(_step_meta),
                     )
                 import concurrent.futures as _cf
                 with _cf.ThreadPoolExecutor(max_workers=min(4, len(_free))) as _pool:
@@ -726,6 +742,7 @@ class ReActEngineV4(AgentEngine):
                     kind=StepKind.TOOL_START,
                     tool_name=_c["name"], tool_input=_a,
                     tool_use_id=_c["use_id"],
+                    metadata=dict(_step_meta),
                 )
                 yield AgentStep(
                     kind=StepKind.TOOL_CONFIRM_REQUEST,

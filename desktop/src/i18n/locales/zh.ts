@@ -2092,4 +2092,5 @@ export const zh: Record<TranslationKey, string> = {
   'permission.acceptEdits.desc': '文件编辑无需确认',
   'permission.bypass.label': '跳过',
   'permission.bypass.desc': '完全自主执行',
+  'runItem.composing': '生成中…',
 }

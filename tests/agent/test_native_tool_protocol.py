@@ -295,3 +295,53 @@ class TestThinkPollutedProtocol(unittest.TestCase):
         # And it executed (not a '工具 不存在' error round-trip).
         ends = [s for s in steps if s.kind == StepKind.TOOL_END]
         self.assertTrue(ends and not ends[0].is_error)
+
+
+class TestToolProgress(unittest.TestCase):
+    """Long-task liveness: while the model streams a big tool payload,
+    the engine emits throttled tool_progress events (1 per ~4KB) so the
+    pending card can show 'composing… N KB' instead of a frozen spinner."""
+
+    def test_progress_emitted_for_large_payload(self):
+        from madcop.agent.react_v4 import ReActEngineV4
+
+        big = "x" * 10000
+        class _C:
+            def __init__(self):
+                self.calls = 0
+
+            def stream(self, messages, model=None, temperature=0.1,
+                       max_tokens=2048, tools=None):
+                self.calls += 1
+                if self.calls == 1:
+                    # stream the big payload in 1KB slices
+                    for i in range(0, len(big), 1024):
+                        yield SimpleNamespace(
+                            tool_call_deltas=({"index": 0, "id": "t",
+                                                "name": "write_file",
+                                                "arguments": json.dumps({"path": "/tmp/big.txt", "content": big[i:i+1024]})},
+                            ),
+                            text="", finish_reason=None)
+                    yield SimpleNamespace(text="", finish_reason="stop")
+                else:
+                    yield SimpleNamespace(text="写入完成。", finish_reason=None)
+                    yield SimpleNamespace(text="", finish_reason="stop")
+
+        executed = []
+        def ex(name, raw, work_dir=None, pre_approved=False):
+            executed.append(name)
+            return '{"ok": true}'
+
+        ctx = RunContext(messages=[Message(role="user", content="写大文件")],
+                         model="f", agent_mode="standard", client=_C())
+        ctx.tool_executor = ex
+        steps = list(ReActEngineV4().run(ctx))
+        progress = [s for s in steps if s.kind == StepKind.TOOL_PROGRESS]
+        self.assertGreaterEqual(len(progress), 1,
+                                "no tool_progress emitted for a 10KB payload")
+        # monotonic char counts
+        chars = [int(s.content) for s in progress]
+        self.assertEqual(chars, sorted(chars))
+        # and the file still executed cleanly
+        self.assertEqual(executed, ["write_file"])
+        self.assertIn(StepKind.DONE, [s.kind for s in steps])

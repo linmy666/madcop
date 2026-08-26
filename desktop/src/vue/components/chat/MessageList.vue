@@ -1031,6 +1031,9 @@ function renderItemContent(item: RenderItem) {
         isPending: tc.isPending,
         result: result ? { content: result.content, isError: result.isError } : null,
         durationMs: (tc as any).elapsedMs,
+        streamingChars: (tc as any).streamingChars,
+        step: (tc as any).step,
+        maxSteps: (tc as any).maxSteps,
       })
     }))
   }
@@ -1106,6 +1109,9 @@ function renderItemContent(item: RenderItem) {
       isPending: msg.isPending,
       result: resultProp,
       durationMs: (msg as any).elapsedMs,
+      streamingChars: (msg as any).streamingChars,
+      step: (msg as any).step,
+      maxSteps: (msg as any).maxSteps,
     })
   }
   // v3.8.3 — tool_result messages are now absorbed by the

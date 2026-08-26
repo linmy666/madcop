@@ -20,6 +20,11 @@ interface Props {
   result?: { content: unknown; isError?: boolean } | null
   durationMs?: number
   error?: string
+  /** Bytes streamed so far while the model composes big tool args. */
+  streamingChars?: number
+  /** Engine step chip, e.g. 3 of 8. */
+  step?: number
+  maxSteps?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -27,11 +32,56 @@ const props = withDefaults(defineProps<Props>(), {
   result: null,
   durationMs: undefined,
   error: undefined,
+  streamingChars: undefined,
+  step: undefined,
+  maxSteps: undefined,
 })
 
 const t = useTranslation()
 
 const expanded = ref(false)
+
+// Long-task liveness: a pending card ticks elapsed seconds so the user
+// sees time moving during the minutes a big write_file takes to compose.
+import { watch, onBeforeUnmount } from 'vue'
+const nowTick = ref(Date.now())
+let tickTimer: ReturnType<typeof setInterval> | null = null
+const startedAt = ref<number | null>(null)
+watch(
+  () => props.isPending,
+  (pending) => {
+    if (pending && startedAt.value == null) startedAt.value = Date.now()
+    if (pending && !tickTimer) {
+      tickTimer = setInterval(() => { nowTick.value = Date.now() }, 1000)
+    } else if (!pending && tickTimer) {
+      clearInterval(tickTimer)
+      tickTimer = null
+    }
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
+
+const elapsedLabel = computed(() => {
+  if (!props.isPending || startedAt.value == null) return ''
+  const s = Math.max(0, Math.floor((nowTick.value - startedAt.value) / 1000))
+  return s >= 60
+    ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+    : `${s}s`
+})
+
+const streamingLabel = computed(() => {
+  if (props.isPending && props.streamingChars && props.streamingChars > 0) {
+    const kb = props.streamingChars / 1024
+    return kb >= 1 ? `${kb.toFixed(1)} KB` : `${props.streamingChars} B`
+  }
+  return ''
+})
+
+const stepLabel = computed(() => {
+  if (props.step == null) return ''
+  return props.maxSteps ? `Step ${props.step}/${props.maxSteps}` : `Step ${props.step}`
+})
 
 interface ToolMeta { verb: string; icon: string; labelKey?: string }
 const TOOL_META: Record<string, ToolMeta> = {
@@ -178,8 +228,13 @@ const errorText = computed(() => {
       </span>
       <span class="run-item__verb">{{ meta.verb }}</span>
       <code v-if="target" class="run-item__target">{{ target }}</code>
+      <span v-if="stepLabel" class="run-item__meta">{{ stepLabel }}</span>
+      <span v-if="streamingLabel" class="run-item__meta run-item__meta--live">
+        {{ t('runItem.composing', 'composing…') }} {{ streamingLabel }}
+      </span>
       <span v-if="resultSummary" class="run-item__meta">{{ resultSummary }}</span>
       <span v-if="durationLabel" class="run-item__meta">· {{ durationLabel }}</span>
+      <span v-if="elapsedLabel" class="run-item__meta run-item__elapsed">{{ elapsedLabel }}</span>
       <svg class="run-item__chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
         <polyline v-if="!expanded" points="6 9 12 15 18 9" />
         <polyline v-else points="6 15 12 9 18 15" />
@@ -274,6 +329,15 @@ const errorText = computed(() => {
   color: var(--color-text-tertiary, #888);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+.run-item__meta--live {
+  color: var(--color-primary, #7c5cff);
+  font-variant-numeric: tabular-nums;
+}
+.run-item__elapsed {
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: right;
 }
 .run-item__chev {
   color: var(--color-text-tertiary, #888);

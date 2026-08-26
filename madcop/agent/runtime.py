@@ -154,6 +154,11 @@ class StepKind(str, Enum):
     # Frontend shows an inline approval card; user responds via
     # POST /api/v4/chat/confirm → confirm_handler returns True/False.
     TOOL_CONFIRM_REQUEST = "tool_confirm_request"
+    # Long-task liveness: emitted while the model is still STREAMING
+    # tool-call arguments (e.g. a 20KB write_file payload takes minutes
+    # to compose). Frontend shows "composing… N KB" on the pending
+    # card so the user sees forward motion instead of a frozen spinner.
+    TOOL_PROGRESS = "tool_progress"
 
     # Answer text
     TEXT_DELTA = "text_delta"

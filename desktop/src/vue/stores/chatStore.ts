@@ -876,6 +876,7 @@ export const useChatStore = defineStore('chat', {
                     done: 'done',
                     plan: 'plan',
                     tool_confirm_request: 'tool_confirm_request',
+                    tool_progress: 'tool_progress',
                   }
                   const mapped = KIND_TO_TYPE[event.kind]
                   if (mapped) {
@@ -1352,6 +1353,9 @@ export const useChatStore = defineStore('chat', {
                       id: nextId(),
                       timestamp: Date.now(),
                       isPending: true,
+                      // Long-task liveness: step chip on the card.
+                      step: (event as any).metadata?.step,
+                      maxSteps: (event as any).metadata?.max_steps,
                     }
                     // Insert BEFORE the assistant text placeholder if it was
                     // already pushed (Phase-1 now streams text before deciding
@@ -1384,6 +1388,20 @@ export const useChatStore = defineStore('chat', {
                       } as any
                       session.messages.push(assistantMsgObj)
                       assistantPushed = true
+                    }
+                  } else if (event.type === 'tool_progress') {
+                    // Long-task liveness: the model is still STREAMING
+                    // tool arguments (a 20KB write_file takes minutes to
+                    // compose). Update the pending card's byte counter so
+                    // the user sees forward motion instead of a frozen
+                    // spinner.
+                    const tid = (event as any).tool_use_id
+                    const pendingMsg = session.messages.find((m: any) =>
+                      m.type === 'tool_use' && m.isPending === true &&
+                      (!tid || (m as any).toolUseId === tid))
+                    if (pendingMsg) {
+                      const chars = Number((event as any).content) || (event as any).metadata?.chars || 0
+                      ;(pendingMsg as any).streamingChars = chars
                     }
                   } else if (event.type === 'tool_result') {
                     // Tool returned — pair it with the matching pending
