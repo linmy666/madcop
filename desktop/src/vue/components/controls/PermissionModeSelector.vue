@@ -49,7 +49,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
           stroke="currentColor" stroke-width="1.2" opacity="0.7"/>
         <path v-if="current.id !== 'bypass'" d="M5.5 8L7 9.5L10.5 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      {{ current.label }}
+      {{ t('permission.' + current.id + '.label', current.label) }}
       <svg width="10" height="10" viewBox="0 0 12 12" fill="none" class="opacity-50">
         <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
