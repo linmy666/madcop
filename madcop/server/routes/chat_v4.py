@@ -449,7 +449,11 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 "mermaid's parser reads `|` as a flow-arrow label and the "
                 "diagram will fail to render. Mermaid blocks are ONLY for "
                 "graph/flowchart/sequence diagrams; everything else uses "
-                "regular Markdown."
+                "regular Markdown. "
+                "[No decorative emoji] Do NOT use emoji in headings, list "
+                "bullets, or table cells (🌀✈️🌟 etc.) — the UI is a minimal "
+                "thin-line design; plain text reads cleaner. Emoji inside "
+                "actual game/chat content the user asked for is fine."
             )
     except Exception as _e:
         logger.debug("build-intent directive skipped: %s", _e)

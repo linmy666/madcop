@@ -8,6 +8,7 @@ import { ref, onMounted } from 'vue'
 import { useAppearance } from '../../composables/useAppearance'
 import { getApiUrl } from '../../api/client'
 import { useTranslation } from '../../i18n'
+import LanguageSwitcher from '../../components/controls/LanguageSwitcher.vue'
 
 const t = useTranslation()
 
@@ -164,6 +165,13 @@ onMounted(loadSettings)
           step="0.05"
           @input="onZoomChange"
         />
+      </div>
+      <div class="gs-row">
+        <div class="gs-row__info">
+          <div class="gs-row__label">语言 / Language</div>
+          <div class="gs-row__desc">界面显示语言 — switches the whole UI</div>
+        </div>
+        <LanguageSwitcher />
       </div>
     </section>
 

@@ -89,7 +89,11 @@ const dashOffset = computed(() => circumference * (1 - percent.value / 100))
 </script>
 
 <template>
-  <div :class="['context-indicator', compact ? 'context-indicator--compact' : '']">
+  <div
+    :class="['context-indicator', compact ? 'context-indicator--compact' : '']"
+    :title="`${formattedPercent} context used`"
+    data-testid="context-usage"
+  >
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" class="flex-shrink-0">
       <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" opacity="0.2" fill="none"/>
       <circle
