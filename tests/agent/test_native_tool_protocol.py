@@ -252,3 +252,46 @@ class TestToolArgParsing(unittest.TestCase):
         ex = _Exec()
         steps = self._run(self._one_shot_tc("web_search", concat), ex)
         self.assertEqual(ex.calls[0][1], {"query": "台风 最新"})
+
+
+class TestThinkPollutedProtocol(unittest.TestCase):
+    """E2E regression: a model that writes format explanations INSIDE
+    <think> ("Action: write_file\\n- Action Input: JSON with path...")
+    made the text-protocol parser glue everything from the in-think
+    'Action:' to end-of-string into one giant bogus tool name."""
+
+    def test_think_explanations_do_not_pollute_tool_name(self):
+        from madcop.agent.react_v4 import ReActEngineV4
+
+        class _C:
+            def __init__(self):
+                self.calls = 0
+
+            def stream(self, messages, model=None, temperature=0.1,
+                       max_tokens=2048, tools=None):
+                self.calls += 1
+                if self.calls == 1:
+                    yield SimpleNamespace(
+                        text=(
+                            "<think>用户要写一首短诗到指定路径，我直接调用 write_file。\n"
+                            "Action: write_file\n"
+                            "- Action Input: JSON with path and content</think>\n\n"
+                            "Thought: 直接写文件。\n"
+                            "Action: write_file\n"
+                            'Action Input: {"path": "/tmp/poem.txt", "content": "夜深"}'
+                        ),
+                        finish_reason=None,
+                    )
+                    yield SimpleNamespace(text="", finish_reason="stop")
+                else:
+                    yield SimpleNamespace(text="已写入。", finish_reason=None)
+                    yield SimpleNamespace(text="", finish_reason="stop")
+
+        ex = _Exec()
+        steps = list(ReActEngineV4().run(_ctx(_C(), ex)))
+        # The tool name must be clean 'write_file', not the glued blob.
+        self.assertEqual(ex.calls[0][0], "write_file")
+        self.assertEqual(ex.calls[0][1], {"path": "/tmp/poem.txt", "content": "夜深"})
+        # And it executed (not a '工具 不存在' error round-trip).
+        ends = [s for s in steps if s.kind == StepKind.TOOL_END]
+        self.assertTrue(ends and not ends[0].is_error)

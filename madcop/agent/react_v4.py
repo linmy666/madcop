@@ -368,7 +368,15 @@ class ReActEngineV4(AgentEngine):
                         metadata={"usage": _run_usage})
                     return
 
-            thought, action, action_input = parse_react_response(raw)
+            # Text-protocol fallback parses the THINK-STRIPPED raw only.
+            # E2E regression: a model that writes format explanations
+            # INSIDE <think> ("Action: write_file\n- Action Input: JSON
+            # with path...") made the Action regex glue everything from
+            # the in-think "Action:" to end-of-string into one giant
+            # bogus tool name, which the executor then rejected with
+            # "工具 '...' 不存在". parse on the cleaned text; think
+            # content is trajectory, never protocol.
+            thought, action, action_input = parse_react_response(_context_clean(raw))
 
             # BUG-FIX: if the LLM emitted a proper OpenAI tool_calls object
             # (via `tools=ctx.tool_schemas` we now pass to client.stream),
