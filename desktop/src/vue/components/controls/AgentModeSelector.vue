@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
+const t = useTranslation()
 /**
  * AgentModeSelector — unified execution-mode picker.
  *
@@ -36,7 +38,7 @@ interface ModeOption {
   effort: string
 }
 
-const MODES: ModeOption[] = [
+const MODES_RAW: ModeOption[] = [
   {
     value: 'chat',
     label: '对话',
@@ -72,9 +74,10 @@ const current = computed<string>(() => {
   return runtimeStore.selections[props.selectionKey]?.agentMode ?? 'chat'
 })
 
-const currentMode = computed(() =>
-  MODES.find(m => m.value === current.value) ?? MODES[2], // default to standard
-)
+const currentMode = computed(() => {
+  const m = MODES_RAW.find(m => m.value === current.value) ?? MODES_RAW[2]
+  return { ...m, label: t('agentMode.' + m.value + '.label', m.label), shortLabel: t('agentMode.' + m.value + '.shortLabel', m.shortLabel || m.label), desc: t('agentMode.' + m.value + '.desc', m.desc) }
+})
 
 // ── Dropdown state ────────────────────────────────────────────────────
 
@@ -114,7 +117,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
     <button
       @click.stop="toggle"
       :disabled="disabled"
-      :aria-label="currentMode.label + '模式'"
+      :aria-label="t('agentMode.aria', 'mode') + ': ' + currentMode.label"
       class="agent-mode-selector__trigger"
       :class="{
         'agent-mode-selector__trigger--compact': compact,

@@ -1,64 +1,50 @@
+import { ref } from 'vue'
+import { defineStore } from 'pinia'
+import { zh as ZH_FULL } from '../i18n/locales/zh'
+import { en as EN_FULL } from '../i18n/locales/en'
+
 // v3.0 — Vue i18n bridge (with real translations from React locale files)
 // Loads the actual Chinese/English translation texts so sidebar buttons show
 // proper labels ("新建会话") instead of i18n keys ("sidebar.newSession").
 
-import { ref } from 'vue'
-import { zh as ZH_FULL } from '../i18n/locales/zh'
-import { en as EN_FULL } from '../i18n/locales/en'
-
-// P2-10 — Locale trimmed to the two values that actually have a
-// translation table. 'jp'/'kr'/'zh-TW' fell through to the default
-// (zh-CN) without warning, so declaring them as type values just
-// invited bugs (e.g. settingsStore.locale='jp' looked valid but showed
-// Chinese). Add a real locale here when a translation table lands.
 export type Locale = 'zh' | 'en'
 export type TranslationKey = string
 
 // Load the full translation tables from the real locale files.
-// These are the same .ts files that the React app uses.
 const ZH: Record<string, string> = ZH_FULL as any
 const EN: Record<string, string> = EN_FULL as any
 
-// Module-level locale and translation table
-const currentLocale = ref<Locale>('zh')
-const translations = ref<Record<string, string>>(ZH)
+// Pinia-backed locale: useI18nStore().locale is reactive state, so
+// every component that calls useTranslation() inside a template
+// re-renders when the user switches language. The module ref is
+// kept as a side channel for non-React callers (chatStore) that
+// need the current locale synchronously without going through Pinia.
+const _activeLocale = ref<Locale>('en')
 
+export const useI18nStore = defineStore('i18n', {
+  state: () => ({ locale: 'en' as Locale }),
+  actions: {
+    setLocale(l: Locale) {
+      this.locale = l
+      _activeLocale.value = l
+    },
+  },
+})
+
+// Legacy module-level setter (settingsStore + chatStore use this).
 export function setLocale(locale: Locale) {
-  currentLocale.value = locale
-  switch (locale) {
-    case 'en': translations.value = EN; break
-    default: translations.value = ZH; break
-  }
+  _activeLocale.value = locale
 }
 
-// Public: read the current locale (used by stores that need to
-// resolve the right table without importing settingsStore — breaks a
-// build-time cycle).
 export function getCurrentLocale(): Locale {
-  return currentLocale.value
+  return _activeLocale.value
 }
 
-// Boot sync deferred: settingsStore.setLocale() drives the table
-// switch, and the LanguageSwitcher calls setLocale() explicitly. We
-// avoid a static import of settingsStore so the Vite production
-// build doesn't trip on a circular dep. The dynamic import here is
-// only fired on the first t() call as a safety net.
-
-// Module-level t (callable as plain function)
-export function t(key: TranslationKey, params?: Record<string, string | number>): string {
-  let text = translations.value[key] || key
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      text = text.replace(`{${k}}`, String(v)).replace(`{count}`, String(v))
-    }
-  }
-  return text
-}
-
-export function translate(locale: Locale, key: TranslationKey, params?: Record<string, string | number>): string {
-  // v4 fix: previously this ignored the locale arg entirely and
-  // always read the current module-level translations. Now it
-  // selects the right table based on the passed locale.
+export function translate(
+  locale: Locale,
+  key: TranslationKey,
+  params?: Record<string, string | number>,
+): string {
   let table: Record<string, string>
   switch (locale) {
     case 'en': table = EN; break
@@ -73,12 +59,34 @@ export function translate(locale: Locale, key: TranslationKey, params?: Record<s
   return text
 }
 
-// Returns a callable function — `const t = useTranslation(); t('key')` works
+// Plain t() — reads the current locale from the Pinia store when
+// available, falls back to the module ref. Returns the supplied
+// fallback (instead of the raw key) when the table doesn't have it.
+export function t(
+  key: TranslationKey,
+  fallback: string = key,
+  params?: Record<string, string | number>,
+): string {
+  let locale: Locale = 'en'
+  try { locale = useI18nStore().locale } catch { locale = _activeLocale.value }
+  const text = translate(locale, key, params)
+  return text && text !== key ? text : fallback
+}
+
+// Returns a callable function that auto-re-renders on locale change.
+// Reading the Pinia state inside this composable registers the
+// dependency with Vue's reactivity system, so a locale change in
+// the store triggers a re-render in every component that called it.
 export function useTranslation(): ((key: TranslationKey, params?: Record<string, string | number>) => string) & {
   t: typeof t
   translate: typeof translate
 } {
-  const fn = t as any
+  // Touch the reactive state so this composable participates in
+  // the component's render scope (Vue 3 dependency tracking).
+  const i18n = useI18nStore()
+  void i18n.locale
+  const fn = ((key: TranslationKey, params?: Record<string, string | number>) =>
+    translate(i18n.locale, key, params) || key) as any
   fn.t = t
   fn.translate = translate
   return fn

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
+const t = useTranslation()
 /**
  * IntensitySlider — 强度校准滑杆.
  *
@@ -103,9 +105,11 @@ const position = computed(() =>
   posForIndex(currentIndex.value, combos.value.length),
 )
 
+const _stageT = (s: { label: string; hint: string }) => ({ label: t('intensity.' + s.label + '.label', s.label), hint: t('intensity.' + s.label + '.hint', s.hint) })
 const stage = computed(() => {
   const s = Math.round(position.value / (NOTCHES / (STAGES.length - 1)))
-  return STAGES[Math.min(STAGES.length - 1, Math.max(0, s))]
+  const _s = STAGES[Math.min(STAGES.length - 1, Math.max(0, s))]
+  return _dstageT(_s)
 })
 
 const activeCombo = computed(() =>
@@ -137,9 +141,11 @@ const trackRef = ref<HTMLElement | null>(null)
 const dragPos = ref<number | null>(null) // live notch while dragging
 
 const displayPos = computed(() => dragPos.value ?? position.value)
+const _dstageT = (s: { label: string; hint: string }) => ({ label: t('intensity.' + s.label + '.label', s.label), hint: t('intensity.' + s.label + '.hint', s.hint) })
 const displayStage = computed(() => {
   const s = Math.round(displayPos.value / (NOTCHES / (STAGES.length - 1)))
-  return STAGES[Math.min(STAGES.length - 1, Math.max(0, s))]
+  const _s = STAGES[Math.min(STAGES.length - 1, Math.max(0, s))]
+  return _dstageT(_s)
 })
 
 function toggle() {
@@ -226,7 +232,7 @@ function isStageNotch(n: number): boolean {
     <button
       @click.stop="toggle"
       :disabled="disabled"
-      :aria-label="'强度校准：' + stage.label"
+      :aria-label="t('intensity.title', 'Calibration') + '：' + stage.label"
       :title="`${stage.label} · ${activeCombo.effortLabel}推理`"
       class="intensity-slider__trigger"
       :class="{ 'intensity-slider__trigger--compact': compact }"

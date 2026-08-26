@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
+const t = useTranslation()
 /**
  * v3.2 — ModelSelector (Vue 3)
  *
@@ -46,7 +48,7 @@ const open = ref(false)
 const providers = ref<Provider[]>([])
 const allModels = ref<ModelInfo[]>([])
 const loading = ref(false)
-const currentLabel = ref('选择模型')
+const currentLabel = ref(t('settings.modelPicker.label', '选择模型'))
 const currentContextWindow = ref<number | null>(null)
 const loadError = ref<string | null>(null)
 

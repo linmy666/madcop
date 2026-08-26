@@ -4,16 +4,19 @@
  * settingsStore locale so every useTranslation() consumer re-renders
  * instantly on change.
  */
-import { useSettingsStore } from '../../stores/settingsStore'
 import { setLocale as i18nSetLocale } from '../../i18n'
 
-const settings = useSettingsStore()
+import { useI18nStore } from '../../i18n'
+const i18n = useI18nStore()
 const t = (lang: 'zh' | 'en') => (lang === 'zh' ? '中文' : 'EN')
 
 function pick(lang: 'zh' | 'en') {
-  if (settings.locale === lang) return
-  settings.setLocale(lang)
+  if (i18n.locale === lang) return
+  // Pinia store drives the reactive render. settingsStore.setLocale
+  // persists to localStorage so the next session boot starts here.
+  i18n.setLocale(lang)
   i18nSetLocale(lang)
+  try { settings.setLocale(lang) } catch { /* store not yet active */ }
 }
 </script>
 
@@ -22,16 +25,16 @@ function pick(lang: 'zh' | 'en') {
     <button
       type="button"
       class="lang-switch__btn"
-      :class="{ 'lang-switch__btn--active': settings.locale === 'zh' }"
-      :aria-pressed="settings.locale === 'zh'"
+      :class="{ 'lang-switch__btn--active': i18n.locale === 'zh' }"
+      :aria-pressed="i18n.locale === 'zh'"
       data-testid="lang-zh"
       @click="pick('zh')"
     >{{ t('zh') }}</button>
     <button
       type="button"
       class="lang-switch__btn"
-      :class="{ 'lang-switch__btn--active': settings.locale === 'en' }"
-      :aria-pressed="settings.locale === 'en'"
+      :class="{ 'lang-switch__btn--active': i18n.locale === 'en' }"
+      :aria-pressed="i18n.locale === 'en'"
       data-testid="lang-en"
       @click="pick('en')"
     >{{ t('en') }}</button>
