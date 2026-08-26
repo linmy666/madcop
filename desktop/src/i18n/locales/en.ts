@@ -2057,6 +2057,11 @@ export const en = {
   'agentMode.aria': 'Agent mode',
   'intensity.title': 'Calibration',
   'composer.placeholder': 'Ask MadCop to write, debug or explain…',
+  // ---- file completion card ----
+  'fileCompletion.count': '{count} file generated | {count} files generated',
+  'fileCompletion.reveal': 'Reveal in Finder',
+  'fileCompletion.download': 'Download',
+  'fileCompletion.openFolder': 'Open folder',
 } as const
 
 export type TranslationKey = keyof typeof en

@@ -2059,4 +2059,9 @@ export const zh: Record<TranslationKey, string> = {
   'agentMode.aria': '模式',
   'intensity.title': '强度校准',
   'composer.placeholder': '让 MadCop 编写、调试或解释代码…',
+  // ---- file completion card ----
+  'fileCompletion.count': '已生成 {count} 个文件',
+  'fileCompletion.reveal': '在 Finder 中显示',
+  'fileCompletion.download': '下载',
+  'fileCompletion.openFolder': '打开文件夹',
 }

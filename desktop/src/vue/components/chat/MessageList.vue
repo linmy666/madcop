@@ -96,6 +96,7 @@ import { clearWindowSelection, useSelectionPopoverDismiss } from '../../hooks/us
 // ─── Child components ─────────────────────────────────────────
 import UserMessage from './UserMessage.vue'
 import AssistantMessage from './AssistantMessage.vue'
+import FileCompletionCard from './FileCompletionCard.vue'
 import MemoryRecallBadge from './MemoryRecallBadge.vue'
 import CreationProgress from './CreationProgress.vue'
 import CitationList from './CitationList.vue'
@@ -166,6 +167,16 @@ function getActiveSessionCitations() {
 const messages = computed(() => sessionState.value?.messages ?? EMPTY_MESSAGES)
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
 const streamingText = computed(() => sessionState.value?.streamingText ?? '')
+
+// P2-12: FileCompletionCard data source. workingFiles is populated
+// by the chatStore when write_file / edit_file complete; reset at
+// turn start. Hide the card mid-stream so it doesn't visually fight
+// the live typing indicator.
+const lastFilePaths = computed<string[]>(() => {
+  if (chatState.value === 'busy' || chatState.value === 'streaming') return []
+  return sessionState.value?.workingFiles ?? []
+})
+const activeTabWorkDir = computed(() => sessionState.value?.workDir ?? undefined)
 const isAIThinking = computed(() => {
   // UED-FIX: gate on REAL activity, not on chatState alone. Sending
   // "你好" used to flash the full thinking UI because chatState went
@@ -1236,6 +1247,18 @@ function renderItemContent(item: RenderItem) {
         <!-- v3.7.6 — ZCode-style reasoning panel. Stays visible
              for the whole turn (busy / streaming) so the gradient
              "正在思考" label + streaming body are actually seen. -->
+
+
+        <!-- P2-12: top-of-message delivery card. Shows after any turn
+             that produced write_file / edit_file results, so the user
+             has a real "✅ Done — open it here" affordance instead of
+             a buried 200-line code block. Reads from chatStore.workingFiles
+             which is reset at the start of every new turn. -->
+        <FileCompletionCard
+          v-if="lastFilePaths.length"
+          :paths="lastFilePaths"
+          :work-dir="activeTabWorkDir"
+        />
 
 
         <!-- Pending permission dialog -->
