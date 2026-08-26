@@ -149,11 +149,13 @@ All three are mounted inside `/api/chat` behind an `agent_mode` field, and each 
 The tool system is the surface where "agent" stops being marketing and becomes real. MadCop's design is **a single registry that everything reads from**, with three extension points:
 
 1. **Built-in tools** — registered in `madcop/tools/__init__.py::default_registry()`. These include:
-   - `web_search` (DuckDuckGo, no API key needed)
+   - `web_search` (DuckDuckGo, no API key needed; optionally adds You.com when `YDC_API_KEY` is set)
    - `web_fetch` (httpx + BeautifulSoup-style HTML→text)
    - `read_file` / `write_file` / `edit_file` (path-confined to allowlisted dirs)
    - `weather` (wttr.in, no key)
    - `clarify` (returns a structured question back to the user)
+
+   To enable the You.com path, set `YDC_API_KEY` to a key from [you.com/platform](https://you.com/platform?utm_source=linmy666-madcop&utm_medium=oss_integration&utm_campaign=2026-08-oss-integrations).
 
 2. **MCP servers** — any external Model Context Protocol server can be registered at startup via `madcop/tools/mcp.py`. The bridge translates MCP `tools/call` into internal `Tool.__call__` invocations. This means a user can add a private internal API or a database client without forking MadCop.
 

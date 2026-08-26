@@ -11,6 +11,8 @@ can invoke them like any other tool.
 Why no external dependency?
   - DuckDuckGo's HTML endpoint is free, no API key, no rate limit
     for personal use.
+  - You.com is optional via YDC_API_KEY and adds a structured search API
+    path before the scraping fallbacks.
   - ``web_fetch`` uses stdlib ``urllib`` + a tiny HTML-to-text
     converter. For production you'd swap in ``httpx`` + ``selectolax``
     or an MCP server, but stdlib is enough for v1.6.
@@ -22,6 +24,7 @@ Design (Qian control theory):
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import urllib.parse
@@ -36,6 +39,8 @@ _DEFAULT_TIMEOUT = 10
 _MAX_CONTENT_BYTES = 200_000  # 200 KB cap — LLMs don't need more
 _MAX_RESULTS = 8
 _USER_AGENT = "madcop/1.6 (+https://github.com/linmy666/madcop)"
+_YOUCOM_USER_AGENT = "youdotcom-integration/linmy666-madcop"
+_YOUCOM_SEARCH_URL = "https://ydc-index.io/v1/search"
 
 # macOS Python sometimes lacks certs; create a fallback SSL context.
 import ssl as _ssl
@@ -105,6 +110,34 @@ def _http_get(url: str, timeout: int = _DEFAULT_TIMEOUT) -> bytes:
         return resp.read(_MAX_CONTENT_BYTES)
 
 
+def _http_post_json(
+    url: str,
+    payload: dict[str, Any],
+    timeout: int = _DEFAULT_TIMEOUT,
+    headers: dict[str, str] | None = None,
+) -> bytes:
+    """POST JSON to a URL with the same SSRF guard as the GET helper."""
+    if _is_ssrf_url(url):
+        raise ValueError(
+            f"URL blocked by SSRF guard (private/loopback/link-local): {url[:100]}"
+        )
+    req_headers = {
+        "User-Agent": _YOUCOM_USER_AGENT,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if headers:
+        req_headers.update(headers)
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=req_headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx_fallback) as resp:
+        return resp.read(_MAX_CONTENT_BYTES)
+
+
 # --------------------------------------------------------------------------- #
 # WebSearchTool
 # --------------------------------------------------------------------------- #
@@ -168,14 +201,16 @@ class WebSearchTool(Tool):
         #    See https://github.com/linmy666/visitproject for the source.)
         # 1. SearXNG (if SEARXNG_URL env set — self-hosted, free, good quality)
         # 2. Tavily API (if TAVILY_API_KEY env set — paid but reliable)
-        # 3. Bing cn.bing.com (free, low quality in China)
-        # 4. DuckDuckGo lite (blocked in China, kept for VPN users)
-        # 5. LLM knowledge fallback (uses active provider's model)
+        # 3. You.com Search API (if YDC_API_KEY env set — structured web/news API)
+        # 4. Bing cn.bing.com (free, low quality in China)
+        # 5. DuckDuckGo lite (blocked in China, kept for VPN users)
+        # 6. LLM knowledge fallback (uses active provider's model)
 
         import os
         visitproject_bin = os.environ.get("VISITPROJECT_BIN", "").strip()
         searxng_url = os.environ.get("SEARXNG_URL", "").strip()
         tavily_key = os.environ.get("TAVILY_API_KEY", "").strip()
+        youcom_key = os.environ.get("YDC_API_KEY", "").strip()
 
         # Strategy 0: visitproject (highest priority — best quality)
         if visitproject_bin:
@@ -209,6 +244,17 @@ class WebSearchTool(Tool):
                     return self._rerank(results, query)
             except Exception as e:
                 logger.warning("web_search [tavily] failed: %s", e)
+
+        # Strategy 2.5: You.com Search API. Optional and only enabled when
+        # YDC_API_KEY is set.
+        if youcom_key:
+            try:
+                results = self._search_youcom(query, max_results, youcom_key)
+                if results:
+                    logger.info("web_search '%s' [youcom]: %d results", query, len(results))
+                    return self._rerank(results, query)
+            except Exception as e:
+                logger.warning("web_search [youcom] failed: %s", e)
 
         # Strategy 3+4: cheap/free engines first (Bing HTML works from
         # mainland China without VPN, <1s per request). Playwright Baidu
@@ -620,6 +666,57 @@ class WebSearchTool(Tool):
                 "snippet": item.get("content", "")[:200],
             })
         return results
+
+    def _search_youcom(self, query: str, max_results: int, api_key: str) -> list[dict[str, str]]:
+        """Search You.com via the structured Search API."""
+        payload = {
+            "query": query,
+            "count": max_results,
+            "safesearch": "moderate",
+        }
+        raw = _http_post_json(
+            _YOUCOM_SEARCH_URL,
+            payload,
+            headers={"X-API-Key": api_key},
+        )
+        data = json.loads(raw.decode("utf-8"))
+        if not isinstance(data, dict):
+            return []
+
+        results = data.get("results") or {}
+        if not isinstance(results, dict):
+            return []
+
+        flattened: list[dict[str, str]] = []
+        for section_name in ("web", "news"):
+            items = results.get(section_name) or []
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                url = str(item.get("url") or "").strip()
+                title = str(item.get("title") or "").strip()
+                description = str(item.get("description") or "").strip()
+                snippets = item.get("snippets") or []
+                snippet_text = description
+                if isinstance(snippets, list):
+                    snippet_text = " ".join(
+                        str(snippet).strip()
+                        for snippet in snippets
+                        if str(snippet).strip()
+                    ) or description
+                if not url or not title:
+                    continue
+                flattened.append(
+                    {
+                        "title": title[:120],
+                        "url": url,
+                        "snippet": (snippet_text or description or title)[:240],
+                    }
+                )
+
+        return flattened[:max_results]
 
     def _results_are_relevant(self, results: list[dict], query: str) -> bool:
         """Heuristic: check if search results are actually relevant
