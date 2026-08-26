@@ -839,6 +839,18 @@ export const useChatStore = defineStore('chat', {
                   const mapped = KIND_TO_TYPE[event.kind]
                   if (mapped) {
                     event.type = mapped
+                    // P2-v4 wire-shape shim: tool_start/tool_end carry
+                    // tool_name/tool_input/tool_result, NOT name/args/
+                    // result. Mirror onto the legacy keys so the rest of
+                    // this store's branches (which were written for the
+                    // legacy SSE vocabulary) keep working without a full
+                    // rewrite. Without this, tool rows NEVER render in
+                    // the UI even when the backend emitted real tool
+                    // calls (the E2E browser test caught this).
+                    if (event.tool_name && !event.name) event.name = event.tool_name
+                    if (event.tool_input !== undefined && event.args === undefined) event.args = event.tool_input
+                    if (event.tool_result !== undefined && event.result === undefined) event.result = event.tool_result
+                    if (event.tool_use_id && !event.tool_use_id) {} // already correct field name
                     // P3-G/fix — preserve thought sub-type so the
                     // reasoning handler below can distinguish
                     // thought_start / thought_delta / thought_end.
