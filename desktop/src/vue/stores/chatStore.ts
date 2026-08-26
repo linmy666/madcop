@@ -587,8 +587,9 @@ export const useChatStore = defineStore('chat', {
         body: JSON.stringify({
           // Prefer the model the user picked in the session selector
           // (_options.model, set from ChatInput's selectedModel). If none is
-          // selected, omit it and let the backend use its active provider model.
-          model: _options?.model || '',
+          // selected, OMIT the field — an empty string would reach the
+          // upstream LLM as the model id and produce 'unknown model ""'.
+          ...(_options?.model ? { model: _options.model } : {}),
           messages: requestMessages,
           attachments: _attachments?.map((a) => ({
             id: (a as any).id || `att-${Date.now()}`,

@@ -194,9 +194,14 @@ function applyContextOverride() {
     editingContext.value = false
     return
   }
-  // Find the current model id
+  // Find the current model id. BUGFIX: previously fell back to
+  // currentLabel.value (a Chinese display string like "当前模型"),
+  // which then got sent to the LLM as the model id and produced
+  // 'unknown model 当前模型 (2013)'. Now: if no real id resolves,
+  // return empty so the caller can omit the field and the backend
+  // falls back to its active provider.
   const current = allModels.value.find((m) => m.label === currentLabel.value)
-  const modelId = current?.id || props.selectedModel || currentLabel.value
+  const modelId = current?.id || props.selectedModel || ''
   saveContextOverride(modelId, num)
   currentContextWindow.value = num
   // Update the model in the list too

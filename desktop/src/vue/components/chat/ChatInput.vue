@@ -808,7 +808,10 @@ const handleSubmit = async () => {
           ? t('chat.contextReferencesOnly', { count: workspaceReferences.value.length })
           : ''),
         displayAttachments: visibleAttachmentPayload,
-        model: selectedModel.value,
+        // BUGFIX: empty/blank selectedModel (default ref('')) used to
+        // become model="" on the wire; the backend then had no model
+        // to dispatch. Forward the real value OR omit when unset.
+        model: selectedModel.value || undefined,
       },
     )
   }
