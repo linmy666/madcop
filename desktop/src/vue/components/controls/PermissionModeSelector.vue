@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
+const t = useTranslation()
 // v3.1 — PermissionModeSelector — click-outside to close dropdown
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
@@ -68,8 +70,8 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
             <path d="M8 1.5L2.5 3.5V7.5C2.5 10.8 4.8 13.5 8 14.5C11.2 13.5 13.5 10.8 13.5 7.5V3.5L8 1.5Z" stroke="currentColor" stroke-width="1.2"/>
           </svg>
           <div class="min-w-0">
-            <div class="text-xs font-medium text-[var(--color-text-primary)]">{{ mode.label }}</div>
-            <div class="text-[10px] text-[var(--color-text-tertiary)]">{{ mode.desc }}</div>
+            <div class="text-xs font-medium text-[var(--color-text-primary)]">{{ t('permission.' + mode.id + '.label', mode.label) }}</div>
+            <div class="text-[10px] text-[var(--color-text-tertiary)]">{{ t('permission.' + mode.id + '.desc', mode.desc) }}</div>
           </div>
           <span v-if="mode.id === current.id" class="ml-auto material-symbols-outlined text-[14px] text-[var(--color-primary)]">check</span>
         </button>

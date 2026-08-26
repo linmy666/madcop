@@ -2081,4 +2081,9 @@ export const zh: Record<TranslationKey, string> = {
   // ---- unanswered turn ----
   'chat.noReply': '这一轮没有产生回复。',
   'chat.retry': '重试',
+  'permission.plan.label': '计划',
+  'permission.plan.desc': '只读分析模式',
+  'chat.copied': '已复制',
+  'chat.copy': '复制',
+  'chat.regenerate': '重新生成',
 }

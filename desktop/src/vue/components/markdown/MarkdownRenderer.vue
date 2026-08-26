@@ -466,11 +466,22 @@ const COMPACT_PROSE_CLASSES = `
   [&_.md-math-display]:my-2 [&_.md-math-display]:py-1 [&_.md-math-display_.katex]:text-[1.04em]
   [&_.md-table-wrap]:my-2`
 
+// Chat-scope heading downgrade: an H1 inside a chat bubble competed
+// visually with the window title (both read as "page heading").
+// Chat answers keep hierarchy via size steps 18/15/14 and lose the
+// document-style h2 underline.
+const CHAT_PROSE_CLASSES = `
+  prose-h1:mt-5 prose-h1:mb-2 prose-h1:text-[18px] prose-h1:leading-snug
+  prose-h2:mt-4 prose-h2:mb-2 prose-h2:text-[15px] prose-h2:leading-snug prose-h2:border-b-0 prose-h2:pb-0
+  prose-h3:mt-3 prose-h3:mb-1.5 prose-h3:text-[14px]
+  prose-h4:mt-3 prose-h4:mb-1.5 prose-h4:text-[13px]`
+
 function getProseClasses(variant: 'default' | 'document' | 'compact', cls?: string): string {
   return [
     BASE_PROSE_CLASSES,
     variant === 'document' ? DOCUMENT_PROSE_CLASSES : '',
     variant === 'compact' ? COMPACT_PROSE_CLASSES : '',
+    variant === 'default' ? CHAT_PROSE_CLASSES : '',
     cls ?? '',
   ]
     .filter(Boolean)

@@ -1765,9 +1765,9 @@ const projectMenuData = computed(() => {
           <div class="flex items-start gap-2">
             <span class="material-symbols-outlined text-[18px] text-[var(--color-text-tertiary)] shrink-0">rocket_launch</span>
             <div class="min-w-0 flex-1">
-              <div class="text-[12px] font-medium text-[var(--color-text-primary)]">开始使用 MadCop</div>
+              <div class="text-[12px] font-medium text-[var(--color-text-primary)]">{{ t('onboarding.title', '开始使用 MadCop') }}</div>
               <p class="mt-1 text-[10.5px] leading-snug text-[var(--color-text-tertiary)]">
-                选择你的项目文件夹，AI 就会自动开始监控文件改动、终端报错，异常时主动提醒。
+                {{ t('onboarding.desc', '选择你的项目文件夹，AI 就会自动开始监控文件改动、终端报错，异常时主动提醒。') }}
               </p>
               <button
                 type="button"
@@ -1775,7 +1775,7 @@ const projectMenuData = computed(() => {
                 @click="openWorkspacePanel()"
               >
                 <span class="material-symbols-outlined text-[14px]">folder_open</span>
-                选择项目文件夹
+                {{ t('onboarding.chooseFolder', '选择项目文件夹') }}
               </button>
             </div>
           </div>

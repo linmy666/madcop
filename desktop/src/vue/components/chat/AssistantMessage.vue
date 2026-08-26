@@ -76,10 +76,10 @@
 
       <!-- Hover actions -->
       <div class="assistant-message__actions mt-2 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
-        <button type="button" class="msg-action" :title="copied ? '已复制' : '复制'" @click="copy">
+        <button type="button" class="msg-action" :title="copied ? t('chat.copied', '已复制') : t('chat.copy', '复制')" @click="copy">
           <span class="material-symbols-outlined text-[16px]">{{ copied ? 'check' : 'content_copy' }}</span>
         </button>
-        <button v-if="!isStreaming" type="button" class="msg-action" title="重新生成" @click="regenerate">
+        <button v-if="!isStreaming" type="button" class="msg-action" :title="t('chat.regenerate', '重新生成')" @click="regenerate">
           <span class="material-symbols-outlined text-[16px]">refresh</span>
         </button>
         <button
@@ -134,12 +134,14 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
 import { ref, computed, watch } from 'vue'
 import { useChatStore } from '../../stores/chatStore'
 import { useTabStore } from '../../stores/tabs'
 import { useSkillStore } from '../../stores/skillStore'
 import { useUIStore } from '../../stores/uiStore'
 import MarkdownRenderer from '../markdown/MarkdownRenderer.vue'
+const t = useTranslation()
 import MascotAvatar from '../common/MascotAvatar.vue'
 
 interface ClarifyPayload {

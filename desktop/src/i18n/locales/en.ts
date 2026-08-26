@@ -2079,6 +2079,11 @@ export const en = {
   // ---- unanswered turn ----
   'chat.noReply': 'This turn produced no reply.',
   'chat.retry': 'Retry',
+  'permission.plan.label': 'Plan',
+  'permission.plan.desc': 'Read-only analysis mode',
+  'chat.copied': 'Copied',
+  'chat.copy': 'Copy',
+  'chat.regenerate': 'Regenerate',
 } as const
 
 export type TranslationKey = keyof typeof en
