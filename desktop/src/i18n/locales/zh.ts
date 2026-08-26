@@ -2086,4 +2086,10 @@ export const zh: Record<TranslationKey, string> = {
   'chat.copied': '已复制',
   'chat.copy': '复制',
   'chat.regenerate': '重新生成',
+  'permission.ask.label': '询问',
+  'permission.ask.desc': '每次操作前确认',
+  'permission.acceptEdits.label': '自动编辑',
+  'permission.acceptEdits.desc': '文件编辑无需确认',
+  'permission.bypass.label': '跳过',
+  'permission.bypass.desc': '完全自主执行',
 }

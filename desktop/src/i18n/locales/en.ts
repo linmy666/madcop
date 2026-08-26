@@ -2084,6 +2084,12 @@ export const en = {
   'chat.copied': 'Copied',
   'chat.copy': 'Copy',
   'chat.regenerate': 'Regenerate',
+  'permission.ask.label': 'Ask',
+  'permission.ask.desc': 'Confirm before each action',
+  'permission.acceptEdits.label': 'Accept edits',
+  'permission.acceptEdits.desc': 'Auto-approve file edits',
+  'permission.bypass.label': 'Bypass',
+  'permission.bypass.desc': 'Run everything without asking',
 } as const
 
 export type TranslationKey = keyof typeof en
