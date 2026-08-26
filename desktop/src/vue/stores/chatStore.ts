@@ -24,6 +24,17 @@ function _merge_tools(prev: any[] | null | undefined, next: any[]): any[] {
 
 import { getApiUrl } from '../api/client'
 
+
+// P2-12-i18n: minimal translation helper for user-facing strings the
+// chatStore emits (toasts, default question). i18n.ts exports pure
+// functions so a static import here is safe (no circular dep with
+// settingsStore, which itself imports ../i18n lazily).
+import * as i18nMod from '../i18n'
+function _t(key: string, fallback: string): string {
+  try {
+    return i18nMod.translate(i18nMod.getCurrentLocale() as any, key as any, undefined) || fallback
+  } catch { return fallback }
+}
 // v3.0: local persistence for per-session messages. The chat API
 // doesn't round-trip every send (we keep state in memory) so without
 // this, reloading the app forgets every conversation. The payload is
@@ -303,6 +314,11 @@ function createDefaultSessionState(): PerSessionState {
     composerDraft: null,
     queuedUserMessages: [],
     reasoningContent: null,
+    // Chat-mode file inventory: every write_file/edit_file path the
+    // engine has produced this turn (capped at the last 6). Drives
+    // FileCompletionCard when the run ends. Distinct from the plan-
+    // mode workingFiles in ActiveSession, which is heuristic-on-plan.
+    workingFiles: [] as string[],
     agentStreams: {},
   }
 }
@@ -429,7 +445,7 @@ export const useChatStore = defineStore('chat', {
         try {
           useUIStore().addToast({
             type: 'info',
-            message: '会话超时未收到完成信号，已自动重置',
+            message: _t('chat.timeoutReset', '会话超时未收到完成信号，已自动重置'),
           })
         } catch { /* ignore */ }
       }, 5 * 60 * 1000)
@@ -561,7 +577,7 @@ export const useChatStore = defineStore('chat', {
         const errId = nextId()
         session.messages.push({
           type: 'assistant_text',
-          content: `错误: ${message}`,
+          content: _t('chat.errorPrefix', '错误: ') + message,
           id: errId,
           transcriptMessageId: errId,
           timestamp: Date.now(),
@@ -663,7 +679,7 @@ export const useChatStore = defineStore('chat', {
                 }
               }
             } catch {}
-            pushChatError(reason || `请求失败 (HTTP ${res.status})`)
+            pushChatError(reason || _t('chat.httpFail', '请求失败 (HTTP ${res.status})'))
             if (!session.debugSSELog) session.debugSSELog = []
             session.debugSSELog.push({
               t: Date.now(), type: 'HTTP_ERROR',
@@ -674,7 +690,7 @@ export const useChatStore = defineStore('chat', {
           // Read the SSE stream
           const reader = res.body?.getReader()
           if (!reader) {
-            pushChatError('无法读取服务器返回的数据流')
+            pushChatError(_t('chat.cannotReadStream', '无法读取服务器返回的数据流'))
             if (!session.debugSSELog) session.debugSSELog = []
             session.debugSSELog.push({ t: Date.now(), type: 'NO_READER', preview: 'res.body null' })
             return
@@ -1324,7 +1340,7 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'clarification_request') {
                     // Agent asked the user a clarifying question (ask_user tool).
-                    const q = event.question || '需要你补充信息'
+                    const q = event.question || _t('chat.needMoreInfo', '需要你补充信息')
                     const opts = Array.isArray(event.options) ? event.options : []
                     session.clarificationPending = { question: q, options: opts }
                     // Ensure a visible assistant message even if no text event follows
@@ -1390,6 +1406,21 @@ export const useChatStore = defineStore('chat', {
                     // preview_update SSE event; v4 folds it into tool_result.)
                     if (['write_file', 'edit_file', 'write_xlsx'].includes(tname)) {
                       session.previewRefreshKey = (session.previewRefreshKey || 0) + 1
+                      // P3-X: collect the written path for the FileCompletionCard
+                      // rendered at run end. Cover all three parameter spellings
+                      // (write_file uses 'path', 'file_path'; some tools send 'file').
+                      const _written = (event as any).tool_use_args
+                        || (event as any).input
+                        || {}
+                      const _p = (prev as any)?.input || _written
+                      const _file = _p?.path || _p?.file_path || _p?.file
+                      if (typeof _file === 'string' && _file) {
+                        if (!session.workingFiles) session.workingFiles = []
+                        if (!session.workingFiles.includes(_file)) {
+                          session.workingFiles.push(_file)
+                          if (session.workingFiles.length > 6) session.workingFiles.shift()
+                        }
+                      }
                     }
                     if ((tname === 'ask_user' || tname === 'clarify') && !session.clarificationPending) {
                       try {
@@ -1403,7 +1434,7 @@ export const useChatStore = defineStore('chat', {
                           }
                           if (raw.question || raw.__clarify_pending__) {
                             session.clarificationPending = {
-                              question: String(raw.question || '需要你补充信息'),
+                              question: String(raw.question || _t('chat.needMoreInfo', '需要你补充信息')),
                               options: Array.isArray(raw.options) ? raw.options.map(String) : [],
                             }
                           }

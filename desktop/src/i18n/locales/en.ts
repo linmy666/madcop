@@ -1986,6 +1986,48 @@ export const en = {
   'tabs.hideWorkspace': 'Hide Workspace',
   'tabs.showBrowser': 'Show Browser',
   'tabs.hideBrowser': 'Hide Browser',
+
+  // ---- chatStore + RunItem strings ----
+  'common.dismiss': 'Dismiss',
+  
+  'common.tool': 'Tool',
+  
+  'plan.artifacts': 'Artifacts',
+  
+  'plan.thinking': 'Thinking',
+  
+  'chat.timeoutReset': 'Session reset: no completion signal received in time.',
+  
+  'chat.cannotReadStream': 'Could not read the server data stream.',
+  
+  'chat.needMoreInfo': 'I need a bit more information to continue.',
+  
+  'chat.httpFail': 'Request failed (HTTP ${status})',
+  
+  'chat.errorPrefix': 'Error: ',
+  
+  'runItem.running': 'Running…',
+  
+  'runItem.showDetails': 'Show details',
+  // ---- runItem verbs ----
+  'runItem.verb.readFile': 'Reading file',
+  'runItem.verb.writeFile': 'Writing file',
+  'runItem.verb.writeXlsx': 'Creating spreadsheet',
+  'runItem.verb.editFile': 'Editing file',
+  'runItem.verb.webSearch': 'Searching the web',
+  'runItem.verb.webFetch': 'Fetching page',
+  'runItem.verb.bash': 'Running command',
+  'runItem.verb.getCurrentTime': 'Getting time',
+  'runItem.verb.getWeather': 'Checking weather',
+  'runItem.verb.queryRag': 'Querying memory',
+  'runItem.verb.recallMemory': 'Recalling memory',
+  'runItem.verb.remember': 'Remembering',
+  'runItem.verb.route': 'Routing',
+  'runItem.verb.askUser': 'Asking user',
+  'runItem.verb.echo': 'Echoing',
+  'runItem.verb.call': 'Calling',
+  'runItem.execFailed': 'Execution failed',
+  'mermaid.showOriginal': 'Show original code',
 } as const
 
 export type TranslationKey = keyof typeof en

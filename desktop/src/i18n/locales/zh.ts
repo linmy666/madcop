@@ -1988,4 +1988,46 @@ export const zh: Record<TranslationKey, string> = {
   'tabs.hideWorkspace': '隐藏工作区',
   'tabs.showBrowser': '显示浏览器',
   'tabs.hideBrowser': '隐藏浏览器',
+
+  // ---- chatStore + RunItem strings ----
+  'common.dismiss': '忽略',
+  
+  'common.tool': '工具',
+  
+  'plan.artifacts': '产物',
+  
+  'plan.thinking': '思考中',
+  
+  'chat.timeoutReset': '会话超时未收到完成信号，已自动重置',
+  
+  'chat.cannotReadStream': '无法读取服务器返回的数据流',
+  
+  'chat.needMoreInfo': '需要你补充信息',
+  
+  'chat.httpFail': '请求失败 (HTTP ${status})',
+  
+  'chat.errorPrefix': '错误: ',
+  
+  'runItem.running': '运行中…',
+  
+  'runItem.showDetails': '显示详情',
+  // ---- runItem verbs ----
+  'runItem.verb.readFile': '读取文件',
+  'runItem.verb.writeFile': '写入文件',
+  'runItem.verb.writeXlsx': '生成表格',
+  'runItem.verb.editFile': '编辑文件',
+  'runItem.verb.webSearch': '搜索网络',
+  'runItem.verb.webFetch': '抓取页面',
+  'runItem.verb.bash': '执行命令',
+  'runItem.verb.getCurrentTime': '获取时间',
+  'runItem.verb.getWeather': '查询天气',
+  'runItem.verb.queryRag': '查询记忆',
+  'runItem.verb.recallMemory': '回忆记忆',
+  'runItem.verb.remember': '记住',
+  'runItem.verb.route': '路由',
+  'runItem.verb.askUser': '提问',
+  'runItem.verb.echo': '输出',
+  'runItem.verb.call': '调用',
+  'runItem.execFailed': '执行失败',
+  'mermaid.showOriginal': '显示原始代码',
 }

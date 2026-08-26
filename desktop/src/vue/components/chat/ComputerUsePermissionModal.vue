@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
+const t = useTranslation()
 // ComputerUsePermissionModal — asks the user to approve a Computer Use
 // (screen / accessibility) action the agent wants to perform.
 // Displays the requested action and tool name; emits approve/close.
@@ -29,7 +31,7 @@ function deny() { emit('close') }
 
       <div v-if="request.toolName || request.description" class="cu-perm__detail">
         <div v-if="request.toolName" class="cu-perm__row">
-          <span class="cu-perm__label">工具</span>
+          <span class="cu-perm__label">{{ t('common.tool', '工具') }}</span>
           <span class="cu-perm__value">{{ request.toolName }}</span>
         </div>
         <div v-if="request.description" class="cu-perm__row">

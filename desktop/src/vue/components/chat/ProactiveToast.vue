@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
+const t = useTranslation()
 /**
  * Sprint 5 — ProactiveToast: a bottom-right toast that surfaces a
  * proactive observation from the observer. Offers "采纳" (paste the
@@ -54,7 +56,7 @@ function onAdopt() {
           {{ proactiveObservation.suggestion }}
         </p>
         <div class="pt-actions">
-          <button class="pt-btn pt-btn--ghost" @click="dismiss">忽略</button>
+          <button class="pt-btn pt-btn--ghost" @click="dismiss">{{ t('common.dismiss', '忽略') }}</button>
           <!-- P2-6 — only offer "采纳" when there's a concrete suggestion;
                otherwise the button would silently no-op. -->
           <button

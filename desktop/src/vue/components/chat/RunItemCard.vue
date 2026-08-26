@@ -11,6 +11,7 @@
  *   - failed:  ✗ + tool · target + error snippet
  */
 import { computed, ref } from 'vue'
+import { useTranslation } from '../../i18n'
 
 interface Props {
   toolName: string
@@ -28,30 +29,34 @@ const props = withDefaults(defineProps<Props>(), {
   error: undefined,
 })
 
+const t = useTranslation()
+
 const expanded = ref(false)
 
-interface ToolMeta { verb: string; icon: string }
+interface ToolMeta { verb: string; icon: string; labelKey?: string }
 const TOOL_META: Record<string, ToolMeta> = {
-  read_file:         { verb: '读取文件', icon: 'description' },
-  write_file:        { verb: '写入文件', icon: 'edit_note' },
-  write_xlsx:        { verb: '生成表格', icon: 'table_chart' },
-  edit_file:         { verb: '编辑文件', icon: 'edit' },
-  web_search:        { verb: '搜索网络', icon: 'search' },
-  web_fetch:         { verb: '抓取页面', icon: 'download' },
-  bash:              { verb: '执行命令', icon: 'terminal' },
-  get_current_time:  { verb: '获取时间', icon: 'schedule' },
-  get_weather:       { verb: '查询天气', icon: 'cloud' },
-  query_rag:         { verb: '查询记忆', icon: 'memory' },
-  recall_memory:     { verb: '回忆记忆', icon: 'history' },
-  remember:          { verb: '记住',     icon: 'bookmark' },
-  route:             { verb: '路由',     icon: 'alt_route' },
-  ask_user:          { verb: '提问',     icon: 'help_outline' },
-  echo:              { verb: '输出',     icon: 'format_quote' },
+  read_file:         { verb: '读取文件', labelKey: 'runItem.verb.readFile', icon: 'description' },
+  write_file:        { verb: '写入文件', labelKey: 'runItem.verb.writeFile', icon: 'edit_note' },
+  write_xlsx:        { verb: '生成表格', labelKey: 'runItem.verb.writeXlsx', icon: 'table_chart' },
+  edit_file:         { verb: '编辑文件', labelKey: 'runItem.verb.editFile', icon: 'edit' },
+  web_search:        { verb: '搜索网络', labelKey: 'runItem.verb.webSearch', icon: 'search' },
+  web_fetch:         { verb: '抓取页面', labelKey: 'runItem.verb.webFetch', icon: 'download' },
+  bash:              { verb: '执行命令', labelKey: 'runItem.verb.bash', icon: 'terminal' },
+  get_current_time:  { verb: '获取时间', labelKey: 'runItem.verb.getCurrentTime', icon: 'schedule' },
+  get_weather:       { verb: '查询天气', labelKey: 'runItem.verb.getWeather', icon: 'cloud' },
+  query_rag:         { verb: '查询记忆', labelKey: 'runItem.verb.queryRag', icon: 'memory' },
+  recall_memory:     { verb: '回忆记忆', labelKey: 'runItem.verb.recallMemory', icon: 'history' },
+  remember:          { verb: '记住', labelKey: 'runItem.verb.remember',     icon: 'bookmark' },
+  route:             { verb: '路由', labelKey: 'runItem.verb.route',     icon: 'alt_route' },
+  ask_user:          { verb: '提问', labelKey: 'runItem.verb.askUser',     icon: 'help_outline' },
+  echo:              { verb: '输出', labelKey: 'runItem.verb.echo',     icon: 'format_quote' },
 }
-const meta = computed<ToolMeta>(() =>
-  TOOL_META[(props.toolName || '').toLowerCase()]
-  || { verb: props.toolName, icon: 'settings' },
-)
+const meta = computed<ToolMeta>(() => {
+  const m = TOOL_META[(props.toolName || '').toLowerCase()]
+    || { verb: props.toolName, icon: 'settings' }
+  if (m.labelKey) m.verb = t(m.labelKey as any, m.verb)
+  return m
+})
 
 const target = computed(() => {
   const input = props.input
@@ -183,7 +188,7 @@ const errorText = computed(() => {
     <div v-if="expanded" class="run-item__body" :class="{ 'run-item__body--error': isFailed }">
       <div v-if="isPending" class="run-item__pending-row">
         <div class="run-item__bar"><div class="run-item__bar-fill"></div></div>
-        <span class="run-item__pending-text">运行中…</span>
+        <span class="run-item__pending-text">{{ t('runItem.running', '运行中…') }}</span>
       </div>
       <div v-else-if="isFailed" class="run-item__error-pre">
         <pre>{{ errorText || '执行失败' }}</pre>

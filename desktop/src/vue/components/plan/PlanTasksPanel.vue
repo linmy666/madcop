@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
 import { computed } from 'vue'
+const t = useTranslation()
 
 export interface PlanStepData {
   step: number
@@ -124,7 +126,7 @@ function truncate(s: string | null, max = 36): string {
       <div v-else-if="_liveThoughts.length" class="tp__live-row tp__live-row--thought">
         <div class="tp__check tp__check--active"><div class="tp__spinner"></div></div>
         <div class="tp__action">
-          <span class="tp__live-label">思考中</span>
+          <span class="tp__live-label">{{ t('plan.thinking', '思考中') }}</span>
           <span class="tp__live-preview">{{ _liveThoughts[_liveThoughts.length - 1]?.text?.slice(0, 60) || '...' }}</span>
         </div>
       </div>

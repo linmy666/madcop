@@ -31,6 +31,19 @@ export function setLocale(locale: Locale) {
   }
 }
 
+// Public: read the current locale (used by stores that need to
+// resolve the right table without importing settingsStore — breaks a
+// build-time cycle).
+export function getCurrentLocale(): Locale {
+  return currentLocale.value
+}
+
+// Boot sync deferred: settingsStore.setLocale() drives the table
+// switch, and the LanguageSwitcher calls setLocale() explicitly. We
+// avoid a static import of settingsStore so the Vite production
+// build doesn't trip on a circular dep. The dynamic import here is
+// only fired on the first t() call as a safety net.
+
 // Module-level t (callable as plain function)
 export function t(key: TranslationKey, params?: Record<string, string | number>): string {
   let text = translations.value[key] || key

@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
 import { computed } from 'vue'
 import Tooltip from '../common/Tooltip.vue'
+const t = useTranslation()
 
 const props = defineProps<{
   workspaceDir?: string | null
@@ -30,7 +32,7 @@ const workingFilesList = computed(() => props.workingFiles || [])
   <aside class="artifacts-panel">
     <header class="ap__head">
       <div class="ap__head-left">
-        <h3 class="ap__title">产物</h3>
+        <h3 class="ap__title">{{ t('plan.artifacts', '产物') }}</h3>
         <span class="ap__count">{{ workingFilesList.length + 1 }}</span>
       </div>
       <Tooltip label="关闭产物面板">
