@@ -111,6 +111,7 @@ import { sanitizeAgentDisplayText } from '../../lib/agentDisplayText'
 import ToolCallBlock from './ToolCallBlock.vue'
 import ToolCallInline from './ToolCallInline.vue'
 import ToolCallGroup from './ToolCallGroup.vue'
+import RunItemCard from './RunItemCard.vue'
 import ToolResultBlock from './ToolResultBlock.vue'
 import PermissionDialog from './PermissionDialog.vue'
 import AskUserQuestion from './AskUserQuestion.vue'
@@ -989,19 +990,19 @@ const VirtualSpacer = defineComponent({
 // ─── Render item content ──────────────────────────────────────
 function renderItemContent(item: RenderItem) {
   if (item.kind === 'tool_group') {
-    // v3.8.4 — render tool groups as inline indicators too.
-    // Previously this used ToolCallGroup (heavy bordered cards).
-    // Now each tool call in the group renders as a lightweight
-    // gray inline line, matching the single tool_use path.
+    // Render each tool call as a RunItem card (OpenAI Agents SDK
+    // style) — pending spinner / done ✓ / failed ✗, with target +
+    // duration + expandable result body. The old inline indicator
+    // buried every tool call in a single gray line; users had no idea
+    // what was running, what was done, and where the file landed.
     const toolResultMap = new Map<string, any>()
-    // Build result lookup from the group's toolCalls
     for (const tc of item.toolCalls) {
       const result = (tc as any).result
       if (result) toolResultMap.set(tc.toolUseId, result)
     }
-    return h('div', { class: 'tool-inline-group' }, item.toolCalls.map(tc => {
+    return h('div', { class: 'run-item-stack' }, item.toolCalls.map(tc => {
       const result = toolResultMap.get(tc.toolUseId)
-      return h(ToolCallInline, {
+      return h(RunItemCard, {
         toolName: tc.toolName,
         input: tc.input,
         isPending: tc.isPending,
@@ -1052,10 +1053,10 @@ function renderItemContent(item: RenderItem) {
     })
   }
   if (msg.type === 'tool_use') {
-    // v3.8.3 — render as lightweight inline indicator instead of
-    // a heavy bordered card. Reads as 'process metadata' in the
-    // streaming narrative, not as 'content'. AskUserQuestion still
-    // gets the special clarification treatment above.
+    // RunItem card — pending spinner / done ✓ / failed ✗, with target
+    // + duration + expandable result body. The previous inline indicator
+    // was too quiet — users couldn't tell which tool was running or
+    // when a multi-step build actually finished.
     const rawResult = (msg as any).result
     const resultProp =
       rawResult == null
@@ -1063,7 +1064,7 @@ function renderItemContent(item: RenderItem) {
         : typeof rawResult === 'object' && rawResult !== null && 'content' in (rawResult as object)
           ? (rawResult as { content: unknown; isError?: boolean })
           : { content: rawResult, isError: !!(msg as any).isError }
-    return h(ToolCallInline, {
+    return h(RunItemCard, {
       toolName: msg.toolName,
       input: msg.input,
       isPending: msg.isPending,
