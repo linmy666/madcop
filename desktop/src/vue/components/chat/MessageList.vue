@@ -999,6 +999,18 @@ const VirtualSpacer = defineComponent({
 })
 
 // ─── Render item content ──────────────────────────────────────
+// Content of the trailing user message (for the unanswered-turn
+// Retry button). Reads the live session, not the virtual window.
+function findTrailingUserContent(): string | null {
+  const msgs = sessionState.value?.messages ?? []
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m: any = msgs[i]
+    if (m.type === 'user_text') return m.content || null
+    if (m.type === 'assistant_text' || m.type === 'tool_use' || m.type === 'error') return null
+  }
+  return null
+}
+
 function renderItemContent(item: RenderItem) {
   if (item.kind === 'tool_group') {
     // Render each tool call as a RunItem card (OpenAI Agents SDK
@@ -1041,12 +1053,25 @@ function renderItemContent(item: RenderItem) {
   const userishType = msg.type === 'user_text' || msg.type === 'user'
   const assistantishType = msg.type === 'assistant_text' || msg.type === 'assistant'
   if (userishType) {
-    return h(UserMessage, {
+    const repeat = item.kind === 'message' ? item.repeatCount : undefined
+    const bubble = h(UserMessage, {
       content: msg.content || '',
       attachments: (msg as any).attachments,
       sessionId: msg.sessionId,
       compact: props.compact,
     })
+    if (repeat && repeat > 1) {
+      // Merge badge: identical consecutive resends collapse into one
+      // bubble with a small "×N resent" tag under it.
+      return h('div', { class: 'user-msg-merged' }, [
+        bubble,
+        h('div', {
+          class: 'user-msg-merged__badge',
+          'data-testid': 'user-msg-repeat-badge',
+        }, `×${repeat}`),
+      ])
+    }
+    return bubble
   }
   if (assistantishType) {
     const branchTarget = branchableMessageTargets.value.get(msg.id)
@@ -1099,6 +1124,26 @@ function renderItemContent(item: RenderItem) {
     return h(BackgroundTaskEventCard, { message: msg })
   }
   if (msg.type === 'error') {
+    // Unanswered-turn marker: the run ended without producing any
+    // reply for the trailing user message. Offer a one-click Retry
+    // instead of leaving the message looking ignored.
+    if (msg.message === '__unanswered__') {
+      const retryTarget = findTrailingUserContent()
+      return h('div', {
+        class: 'mb-3 px-4 py-2.5 rounded-lg border border-[var(--color-error)]/25 bg-[var(--color-error-container)]/30 text-sm text-[var(--color-error)] flex items-center gap-3 flex-wrap',
+        'data-testid': 'unanswered-turn-card',
+      }, [
+        h('span', null, t('chat.noReply', '这一轮没有产生回复。')),
+        retryTarget != null
+          ? h('button', {
+              type: 'button',
+              class: 'px-2.5 py-1 rounded-md border border-[var(--color-error)]/40 text-xs font-medium hover:bg-[var(--color-error)]/10',
+              'data-testid': 'unanswered-retry',
+              onClick: () => { void chatStore.sendMessage(activeTabId, retryTarget) },
+            }, t('chat.retry', '重试'))
+          : null,
+      ])
+    }
     return h('div', {
       class: 'mb-3 px-4 py-2.5 rounded-lg border border-[var(--color-error)]/20 bg-[var(--color-error-container)]/28 text-sm text-[var(--color-error)]',
     }, `${t('common.error')}: ${msg.message || t('common.unknownError')}`)
@@ -1335,5 +1380,17 @@ function renderItemContent(item: RenderItem) {
   margin: 0;
   font-size: 12px;
   color: var(--color-text-tertiary);
+}
+.user-msg-merged {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.user-msg-merged__badge {
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
 }
 </style>

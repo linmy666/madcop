@@ -2062,6 +2062,23 @@ export const en = {
   'fileCompletion.reveal': 'Reveal in Finder',
   'fileCompletion.download': 'Download',
   'fileCompletion.openFolder': 'Open folder',
+  // ---- sidebar + onboarding + permission ----
+  'sidebar.observer': 'Observer',
+  'sidebar.memory': 'Memory',
+  'sidebar.knowledgeCanvas': 'Knowledge Canvas',
+  'sidebar.usageStats': 'Usage',
+  'onboarding.title': 'Get started with MadCop',
+  'onboarding.desc': 'Pick your project folder and MadCop watches file changes and terminal errors, alerting you proactively.',
+  'onboarding.chooseFolder': 'Choose project folder',
+  'permission.ask': 'Ask',
+  'permission.askDesc': 'Confirm before each action',
+  'permission.acceptEdits': 'Accept edits',
+  'permission.acceptEditsDesc': 'Auto-approve file edits',
+  'permission.bypass': 'Bypass',
+  'permission.bypassDesc': 'Run everything without asking',
+  // ---- unanswered turn ----
+  'chat.noReply': 'This turn produced no reply.',
+  'chat.retry': 'Retry',
 } as const
 
 export type TranslationKey = keyof typeof en

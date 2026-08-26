@@ -16,7 +16,7 @@ export type CompactSummaryEvent = Extract<UIMessage, { type: 'compact_summary' }
 
 export type RenderItem =
   | { kind: 'tool_group'; toolCalls: ToolCall[]; id: string }
-  | { kind: 'message'; message: UIMessage }
+  | { kind: 'message'; message: UIMessage; repeatCount?: number }
 
 export type RenderModel = {
   renderItems: RenderItem[]
@@ -543,6 +543,20 @@ export function buildRenderModel(
       }
     } else {
       flushGroup()
+      // Merge consecutive identical user messages into one bubble with
+      // a ×N badge. Rapid resends / fork replay used to stack three
+      // identical "最近有台风吗" bubbles with no replies between them,
+      // which read as corrupted history.
+      const last = items[items.length - 1]
+      if (
+        msg.type === 'user_text' &&
+        last?.kind === 'message' &&
+        last.message.type === 'user_text' &&
+        last.message.content === msg.content
+      ) {
+        last.repeatCount = (last.repeatCount ?? 1) + 1
+        continue
+      }
       items.push({ kind: 'message', message: msg })
     }
   }

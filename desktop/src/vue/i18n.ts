@@ -77,7 +77,7 @@ export function t(
 // Reading the Pinia state inside this composable registers the
 // dependency with Vue's reactivity system, so a locale change in
 // the store triggers a re-render in every component that called it.
-export function useTranslation(): ((key: TranslationKey, params?: Record<string, string | number>) => string) & {
+export function useTranslation(): ((key: TranslationKey, fallback?: string | Record<string, string | number>, params?: Record<string, string | number>) => string) & {
   t: typeof t
   translate: typeof translate
 } {
@@ -85,8 +85,18 @@ export function useTranslation(): ((key: TranslationKey, params?: Record<string,
   // the component's render scope (Vue 3 dependency tracking).
   const i18n = useI18nStore()
   void i18n.locale
-  const fn = ((key: TranslationKey, params?: Record<string, string | number>) =>
-    translate(i18n.locale, key, params) || key) as any
+  // Signature matches t(): (key, fallback?, params?). Callers all over
+  // the app pass a display string as the 2nd arg — the old signature
+  // treated it as `params`, so a missing catalog key leaked the raw
+  // key into the UI (sidebar.observer etc.).
+  const fn = ((key: TranslationKey, fallback?: string | Record<string, string | number>,
+               params?: Record<string, string | number>) => {
+    if (typeof fallback === 'string') {
+      const text = translate(i18n.locale, key, params)
+      return text && text !== key ? text : fallback
+    }
+    return translate(i18n.locale, key, fallback) || key
+  }) as any
   fn.t = t
   fn.translate = translate
   return fn

@@ -2064,4 +2064,21 @@ export const zh: Record<TranslationKey, string> = {
   'fileCompletion.reveal': '在 Finder 中显示',
   'fileCompletion.download': '下载',
   'fileCompletion.openFolder': '打开文件夹',
+  // ---- sidebar + onboarding + permission ----
+  'sidebar.observer': '观察器',
+  'sidebar.memory': '记忆',
+  'sidebar.knowledgeCanvas': '知识画布',
+  'sidebar.usageStats': '用量统计',
+  'onboarding.title': '开始使用 MadCop',
+  'onboarding.desc': '选择你的项目文件夹，AI 就会自动开始监控文件改动、终端报错，异常时主动提醒。',
+  'onboarding.chooseFolder': '选择项目文件夹',
+  'permission.ask': '询问',
+  'permission.askDesc': '每次操作前确认',
+  'permission.acceptEdits': '接受编辑',
+  'permission.acceptEditsDesc': '自动批准文件编辑',
+  'permission.bypass': '跳过',
+  'permission.bypassDesc': '不询问执行所有操作',
+  // ---- unanswered turn ----
+  'chat.noReply': '这一轮没有产生回复。',
+  'chat.retry': '重试',
 }

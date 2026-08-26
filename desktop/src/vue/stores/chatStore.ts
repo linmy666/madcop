@@ -35,6 +35,31 @@ function _t(key: string, fallback: string): string {
     return i18nMod.translate(i18nMod.getCurrentLocale() as any, key as any, undefined) || fallback
   } catch { return fallback }
 }
+
+// C1 — unanswered-turn detection: after a turn ends (done/error), if
+// the LAST user message has no assistant/tool/error response after it,
+// push a silent error marker so the UI can offer a Retry affordance.
+// Product bug this fixes: "查杭州天气" sat in history with zero reply
+// and no way to recover, reading as "the assistant ignored me".
+function _markUnansweredTurn(session: PerSessionState) {
+  const msgs = session.messages
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m: any = msgs[i]
+    if (m.type === 'assistant_text' || m.type === 'tool_use' || m.type === 'error') return
+    if (m.type === 'user_text') {
+      // Found the trailing user turn with no response after it.
+      if ((m as any)._unansweredMarked) return
+      ;(m as any)._unansweredMarked = true
+      msgs.push({
+        type: 'error',
+        message: '__unanswered__',
+        id: nextId(),
+        timestamp: Date.now(),
+      } as any)
+      return
+    }
+  }
+}
 // v3.0: local persistence for per-session messages. The chat API
 // doesn't round-trip every send (we keep state in memory) so without
 // this, reloading the app forgets every conversation. The payload is
@@ -1137,6 +1162,7 @@ export const useChatStore = defineStore('chat', {
                     // so the ClarificationPanel doesn't sit stuck above
                     // the composer with no way to dismiss it.
                     session.clarificationPending = null
+                    _markUnansweredTurn(session)
                   } else if (event.type === 'skill_distilled' && (event.skillName || event.skill_name)) {
                     const skillName = event.skillName || event.skill_name
                     try {
