@@ -97,6 +97,7 @@ import { clearWindowSelection, useSelectionPopoverDismiss } from '../../hooks/us
 import UserMessage from './UserMessage.vue'
 import AssistantMessage from './AssistantMessage.vue'
 import FileCompletionCard from './FileCompletionCard.vue'
+import ThoughtLine from './ThoughtLine.vue'
 import MemoryRecallBadge from './MemoryRecallBadge.vue'
 import CreationProgress from './CreationProgress.vue'
 import CitationList from './CitationList.vue'
@@ -1173,6 +1174,18 @@ function renderItemContent(item: RenderItem) {
   }
   if (msg.type === 'background_task') {
     return h(BackgroundTaskEventCard, { message: msg })
+  }
+  if (msg.type === 'thought_line') {
+    // ZCode-style one-line thinking phase: icon + label + duration,
+    // collapsed by default, click to expand the reasoning text.
+    const block = (sessionState.value?.thoughtBlocks || []).find(
+      (b: any) => b.id === (msg as any).thoughtId)
+    const body = block?.text || ''
+    return h(ThoughtLine, {
+      pending: !!msg.isPending,
+      elapsedMs: (msg as any).elapsedMs,
+      text: body,
+    })
   }
   if (msg.type === 'error') {
     // Unanswered-turn marker: the run ended without producing any

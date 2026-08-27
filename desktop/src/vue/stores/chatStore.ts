@@ -1248,6 +1248,15 @@ export const useChatStore = defineStore('chat', {
                         text: filtered,
                         done: false,
                       })
+                      // ZCode-style inline timeline line (kept in arrival
+                      // order so it interleaves with tool cards).
+                      session.messages.push({
+                        type: 'thought_line',
+                        id: nextId(),
+                        timestamp: Date.now(),
+                        thoughtId: sess._curThoughtId,
+                        isPending: true,
+                      } as any)
                     } else {
                       if (!session.thoughtBlocks) session.thoughtBlocks = []
                       const block = session.thoughtBlocks[session.thoughtBlocks.length - 1]
@@ -1272,6 +1281,14 @@ export const useChatStore = defineStore('chat', {
                     if (session.thoughtBlocks && session.thoughtBlocks.length > 0) {
                       const block = session.thoughtBlocks[session.thoughtBlocks.length - 1]
                       if (block) block.done = true
+                    }
+                    {
+                      const tms = Number((event as any).elapsed_ms)
+                      const marker = [...session.messages].reverse().find((m: any) => m.type === 'thought_line' && m.isPending)
+                      if (marker) {
+                        marker.isPending = false
+                        ;(marker as any).elapsedMs = Number.isFinite(tms) ? tms : undefined
+                      }
                     }
                     sess._curThoughtId = null
                     sess._curRawBlock = ''  // v3.10.2 — reset for next block

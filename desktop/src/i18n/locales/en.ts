@@ -2091,6 +2091,9 @@ export const en = {
   'permission.bypass.label': 'Bypass',
   'permission.bypass.desc': 'Run everything without asking',
   'runItem.composing': 'composing…',
+  'chat.thinkingProcess': 'Thinking',
+  'chat.thinkingNow': 'Thinking…',
+  'chat.lasted': 'lasted',
 } as const
 
 export type TranslationKey = keyof typeof en

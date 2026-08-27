@@ -2093,4 +2093,7 @@ export const zh: Record<TranslationKey, string> = {
   'permission.bypass.label': '跳过',
   'permission.bypass.desc': '完全自主执行',
   'runItem.composing': '生成中…',
+  'chat.thinkingProcess': '思考过程',
+  'chat.thinkingNow': '思考中…',
+  'chat.lasted': '持续了',
 }

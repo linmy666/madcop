@@ -382,6 +382,10 @@ const errorText = computed(() => {
   border-radius: 2px;
   animation: run-item-progress 1.4s ease-in-out infinite;
 }
+@media (prefers-reduced-motion: reduce) {
+  .run-item--pending .run-item__icon,
+  .run-item__bar-fill { animation: none !important; }
+}
 @keyframes run-item-progress {
   0%   { transform: translateX(-100%); }
   50%  { transform: translateX(60%); }
