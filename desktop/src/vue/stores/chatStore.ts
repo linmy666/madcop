@@ -1144,6 +1144,12 @@ export const useChatStore = defineStore('chat', {
                     // chatState=idle' glitch that pure frame batching
                     // would cause.
                     _flushTerminal()
+                    // Kill ANY lingering typing-caret: multi-step turns used
+                    // to leave an older assistant bubble with isStreaming=true
+                    // while content continued in later bubbles ('灰色光标还在').
+                    for (const m of session.messages) {
+                      if ((m as any).type === 'assistant_text') (m as any).isStreaming = false
+                    }
                     if (assistantMsgObj) {
                       assistantMsgObj.isStreaming = false
                     } else if (assistantMsg) {
@@ -1562,6 +1568,15 @@ export const useChatStore = defineStore('chat', {
                       ws.openPanel(sessionId)
                       ws.setMode(sessionId, 'browser')
                     } catch {}
+                    // Target the iframe at the ACTUAL written file, not the
+                    // directory root index.html (which may hold an older page).
+                    const _pvPath = String((event as any).metadata?.path || (event as any).content || '')
+                    const _pvMarker = '/preview/'
+                    if (_pvPath && _pvPath.includes(_pvMarker)) {
+                      ;(session as any).previewFile = _pvPath.slice(_pvPath.lastIndexOf(_pvMarker) + _pvMarker.length)
+                    } else if (_pvPath) {
+                      ;(session as any).previewFile = _pvPath.split('/').pop()
+                    }
                     if ((session as any)._pvTimer) clearTimeout((session as any)._pvTimer)
                     ;(session as any)._pvTimer = setTimeout(() => {
                       session.previewRefreshKey = (session.previewRefreshKey || 0) + 1

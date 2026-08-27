@@ -4,6 +4,8 @@ import { getApiUrl } from '../../api/client'
 
 const props = defineProps<{
   refreshKey?: number
+  /** Written-file override, e.g. 'hello.html' (relative to /preview/). */
+  filePath?: string
 }>()
 
 const previewUrl = ref(getApiUrl('/preview/'))
@@ -16,8 +18,11 @@ const error = ref<string | null>(null)
 function reloadPreview() {
   loading.value = true
   error.value = null
-  previewUrl.value = getApiUrl('/preview/') + '?t=' + Date.now()
+  const base = getApiUrl('/preview/')
+  const target = props.filePath ? base + props.filePath : base
+  previewUrl.value = target + (target.includes('?') ? '&' : '?') + 't=' + Date.now()
 }
+watch(() => props.filePath, () => reloadPreview())
 
 onMounted(() => {
   reloadPreview()

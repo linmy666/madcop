@@ -1110,7 +1110,7 @@ function openTerminalInTab() {
               <WorkspacePanel :session-id="sessionId" embedded />
             </template>
             <template #browser>
-              <PreviewPanel :refresh-key="previewRefreshKey" />
+              <PreviewPanel :refresh-key="previewRefreshKey" :file-path="(sessionState as any)?.previewFile" />
             </template>
           </WorkbenchPanel>
         </aside>

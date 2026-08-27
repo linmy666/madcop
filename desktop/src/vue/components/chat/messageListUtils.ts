@@ -561,8 +561,29 @@ export function buildRenderModel(
     }
   }
 
+
+  // Coalesce adjacent assistant_text fragments: multi-step turns emit
+  // several text runs around tool groups; each previously rendered as
+  // its own bubble with a mascot avatar, chopping sentences mid-word
+  // ('saved t' | 'o the preview directory'). Strictly-adjacent runs
+  // collapse into the first bubble's content.
   flushGroup()
-  return { renderItems: items, toolResultMap, childToolCallsByParent }
+  const merged: RenderItem[] = []
+  for (const item of items) {
+    const prev = merged[merged.length - 1]
+    if (
+      item.kind === 'message' && item.message.type === 'assistant_text' &&
+      prev?.kind === 'message' && prev.message.type === 'assistant_text'
+    ) {
+      const pm: any = prev.message
+      const cm: any = item.message
+      pm.content = `${pm.content || ''}\n\n${cm.content || ''}`
+      continue
+    }
+    merged.push(item)
+  }
+  void items
+  return { renderItems: merged, toolResultMap, childToolCallsByParent }
 }
 
 // ─── Branchable / turn targets ───────────────────────────────
