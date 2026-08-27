@@ -63,7 +63,9 @@ const providerModels = computed<string[]>(() => {
   // Provider model list not loaded yet — fall back to the current pick
   // (or a single placeholder) so the slider still spans the effort axis
   // from 实习生, instead of collapsing to the rightmost notch.
-  return [props.selectedModel || '当前模型']
+  // Placeholder carries an impossible id (leading space) so it can
+  // never be sent to the LLM as a model name ('unknown model 当前模型').
+  return [props.selectedModel || ' __placeholder__']
 })
 
 interface Combo { model: string; effort: string; effortLabel: string }
@@ -121,15 +123,18 @@ function commitPosition(p: number) {
   const idx = indexForPos(p, combos.value.length)
   const combo = combos.value[idx]
   if (!combo) return
+  const isPlaceholder = combo.model.startsWith(' ')
   const cur = runtimeStore.selections[props.selectionKey]
   runtimeStore.setSelection(props.selectionKey, {
     providerId: cur?.providerId ?? settingsStore.activeProviderName ?? 'official',
-    modelId: combo.model,
+    // Placeholder combo: adjust effort only — never write the fake
+    // id into modelId or emit it upward.
+    modelId: isPlaceholder ? (cur?.modelId ?? '') : combo.model,
     effortLevel: combo.effort,
     agentMode: cur?.agentMode,
     workDir: cur?.workDir ?? null,
   })
-  if (combo.model !== props.selectedModel) {
+  if (!isPlaceholder && combo.model !== props.selectedModel) {
     emit('update:selectedModel', combo.model)
   }
 }
