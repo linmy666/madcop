@@ -48,7 +48,8 @@ _PROACTIVE_PROMPT = """\
 不值得提醒（False）：正常的文件保存、普通日志输出、成功的命令、无关紧要的改动、常规代码修改。
 
 只返回一个 JSON 对象，不要任何额外文字：
-{{"worth": true/false, "summary": "一句话概括发生了什么(≤30字)", "suggestion": "若值得提醒，给一句≤40字的建议；否则空字符串"}}
+{{"worth": true/false, "summary": "一句话概括发生了什么(≤30字) | one-line English summary (≤20 words)", "suggestion": "若值得提醒，给一句≤40字的建议，格式同 summary 用 " | " 分隔中英双语；否则空字符串"}}
+summary 和 suggestion 都必须是「中文 | English」双语格式，用 " | " 分隔。
 """
 
 

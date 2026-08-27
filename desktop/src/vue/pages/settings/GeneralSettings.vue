@@ -92,34 +92,34 @@ onMounted(loadSettings)
     <header class="gs__header">
       <div class="gs__eyebrow">{{ t('settings.nav.core') || '核心' }}</div>
       <h2 class="gs__title">{{ t('settings.nav.general') || '通用设置' }}</h2>
-      <p class="gs__desc">语言、主题、发送行为与网络偏好</p>
+      <p class="gs__desc">{{ t('general.desc') }}</p>
     </header>
 
     <!-- Language -->
     <section class="gs-card">
       <div class="gs-card__head">
         <span class="material-symbols-outlined gs-card__icon">translate</span>
-        <h3 class="gs-card__title">语言与回复</h3>
+        <h3 class="gs-card__title">{{ t('general.langReply') }}</h3>
       </div>
       <div class="gs-row">
         <div class="gs-row__info">
-          <div class="gs-row__label">界面语言</div>
-          <div class="gs-row__desc">应用 UI 显示语言</div>
+          <div class="gs-row__label">{{ t('general.uiLanguage') }}</div>
+          <div class="gs-row__desc">{{ t('general.uiLanguageDesc') }}</div>
         </div>
         <select :value="locale" class="gs-select" @change="onLocaleChange">
-          <option value="zh">中文</option>
+          <option value="zh">{{ t('general.langZh') }}</option>
           <option value="en">English</option>
         </select>
       </div>
       <div class="gs-row">
         <div class="gs-row__info">
-          <div class="gs-row__label">回复语言</div>
-          <div class="gs-row__desc">AI 回复时使用的语言</div>
+          <div class="gs-row__label">{{ t('general.replyLanguage') }}</div>
+          <div class="gs-row__desc">{{ t('general.replyLanguageDesc') }}</div>
         </div>
         <select :value="responseLanguage" class="gs-select" @change="onResponseLanguageChange">
-          <option value="follow">跟随用户</option>
-          <option value="zh">始终中文</option>
-          <option value="en">始终英文</option>
+          <option value="follow">{{ t('general.followUser') }}</option>
+          <option value="zh">{{ t('general.alwaysZh') }}</option>
+          <option value="en">{{ t('general.alwaysEn') }}</option>
         </select>
       </div>
     </section>
@@ -128,32 +128,32 @@ onMounted(loadSettings)
     <section class="gs-card">
       <div class="gs-card__head">
         <span class="material-symbols-outlined gs-card__icon">tune</span>
-        <h3 class="gs-card__title">交互与外观</h3>
+        <h3 class="gs-card__title">{{ t('general.interaction') }}</h3>
       </div>
       <div class="gs-row">
         <div class="gs-row__info">
-          <div class="gs-row__label">发送快捷键</div>
-          <div class="gs-row__desc">发送消息的快捷键方式</div>
+          <div class="gs-row__label">{{ t('general.sendKey') }}</div>
+          <div class="gs-row__desc">{{ t('general.sendKeyDesc') }}</div>
         </div>
         <select :value="chatSendBehavior" class="gs-select" @change="onSendBehaviorChange">
-          <option value="enter">Enter 发送 / Shift+Enter 换行</option>
-          <option value="ctrlEnter">Ctrl+Enter 发送</option>
+          <option value="enter">{{ t('general.enterSend') }}</option>
+          <option value="ctrlEnter">{{ t('general.ctrlEnterSend') }}</option>
         </select>
       </div>
       <div class="gs-row">
         <div class="gs-row__info">
-          <div class="gs-row__label">主题</div>
-          <div class="gs-row__desc">界面主题风格</div>
+          <div class="gs-row__label">{{ t('general.theme') }}</div>
+          <div class="gs-row__desc">{{ t('general.themeDesc') }}</div>
         </div>
         <select :value="theme" class="gs-select" @change="onThemeChange">
-          <option value="light">浅色</option>
-          <option value="dark">深色</option>
-          <option value="sepia">暖色</option>
+          <option value="light">{{ t('general.themeLight') }}</option>
+          <option value="dark">{{ t('general.themeDark') }}</option>
+          <option value="sepia">{{ t('general.themeSepia') }}</option>
         </select>
       </div>
       <div class="gs-row">
         <div class="gs-row__info">
-          <div class="gs-row__label">界面缩放</div>
+          <div class="gs-row__label">{{ t('general.uiZoom') }}</div>
           <div class="gs-row__desc">{{ Math.round(uiZoom * 100) }}%</div>
         </div>
         <input
@@ -168,8 +168,8 @@ onMounted(loadSettings)
       </div>
       <div class="gs-row">
         <div class="gs-row__info">
-          <div class="gs-row__label">语言 / Language</div>
-          <div class="gs-row__desc">界面显示语言 — switches the whole UI</div>
+          <div class="gs-row__label">{{ t('general.langToggle') }}</div>
+          <div class="gs-row__desc">{{ t('general.langToggleDesc') }}</div>
         </div>
         <LanguageSwitcher />
       </div>
@@ -179,12 +179,12 @@ onMounted(loadSettings)
     <section class="gs-card">
       <div class="gs-card__head">
         <span class="material-symbols-outlined gs-card__icon">public</span>
-        <h3 class="gs-card__title">网络</h3>
+        <h3 class="gs-card__title">{{ t('general.network') }}</h3>
       </div>
       <div class="gs-row">
         <div class="gs-row__info">
-          <div class="gs-row__label">联网搜索</div>
-          <div class="gs-row__desc">Agent 是否可以使用网页搜索</div>
+          <div class="gs-row__label">{{ t('general.webSearch') }}</div>
+          <div class="gs-row__desc">{{ t('general.webSearchDesc') }}</div>
         </div>
         <button
           type="button"
@@ -199,8 +199,8 @@ onMounted(loadSettings)
       </div>
       <div class="gs-row">
         <div class="gs-row__info">
-          <div class="gs-row__label">超时 (秒)</div>
-          <div class="gs-row__desc">AI 请求超时时间</div>
+          <div class="gs-row__label">{{ t('general.timeout') }}</div>
+          <div class="gs-row__desc">{{ t('general.timeoutDesc') }}</div>
         </div>
         <input
           type="number"

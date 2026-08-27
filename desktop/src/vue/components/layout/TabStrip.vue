@@ -215,7 +215,7 @@ onBeforeUnmount(() => window.removeEventListener('click', closeContextMenu))
         <button
           class="tab-close"
           @click="closeTab(tab, $event)"
-          :aria-label="`关闭 ${tabTitle(tab)}`"
+          :aria-label="`${t('common.close', '关闭')} ${tabTitle(tab)}`"
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>

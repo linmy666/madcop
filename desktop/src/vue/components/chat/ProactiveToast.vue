@@ -19,6 +19,8 @@ const emit = defineEmits<{
   (e: 'adopt', suggestion: string): void
 }>()
 
+import { pickLocaleText } from '../../composables/useProactive'
+
 const tabStore = useTabStore()
 
 const sourceIcon = computed(() =>
@@ -30,9 +32,16 @@ const watchTitle = computed(() =>
     : t('proactive.fileWatch', '文件观察'),
 )
 
+const localizedSummary = computed(() =>
+  pickLocaleText(proactiveObservation.value?.summary ?? ''),
+)
+const localizedSuggestion = computed(() =>
+  pickLocaleText(proactiveObservation.value?.suggestion ?? ''),
+)
+
 function onAdopt() {
   const suggestion = adoptInto('')
-  if (suggestion) emit('adopt', suggestion)
+  if (suggestion) emit('adopt', pickLocaleText(suggestion))
   dismiss()
 }
 </script>
@@ -53,9 +62,9 @@ function onAdopt() {
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
-        <p class="pt-summary">{{ proactiveObservation.summary }}</p>
+        <p class="pt-summary">{{ localizedSummary }}</p>
         <p v-if="proactiveObservation.suggestion" class="pt-suggestion">
-          {{ proactiveObservation.suggestion }}
+          {{ localizedSuggestion }}
         </p>
         <div class="pt-actions">
           <button class="pt-btn pt-btn--ghost" @click="dismiss">{{ t('common.dismiss', '忽略') }}</button>

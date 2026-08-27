@@ -5,7 +5,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, type Ref } from 'vue'
 import { useTranslation, type TranslationKey } from '../../i18n'
 import OpenWithMenu from '../common/OpenWithMenu.vue'
-import type { OpenWithItem } from '../../../lib/openWithItems'
+import type { OpenWithItem } from '../../lib/openWithItems'
 
 // ── Props ─────────────────────────────────────────────────────────────
 export interface CurrentTurnChangeCardProps {

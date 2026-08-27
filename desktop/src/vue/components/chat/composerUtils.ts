@@ -33,11 +33,11 @@ function slashTokenBounds(value: string, cursorPos: number): { start: number; en
   const before = value.slice(0, cursorPos)
   const slashIdx = before.lastIndexOf('/')
   if (slashIdx === -1) return null
-  if (slashIdx > 0 && !/\s/.test(before[slashIdx - 1])) return null
+  if (slashIdx > 0 && !/\s/.test(before[slashIdx - 1] ?? "")) return null
   const tokenText = before.slice(slashIdx + 1)
   if (/\s/.test(tokenText)) return null
   let endIdx = slashIdx + 1
-  while (endIdx < value.length && !/\s/.test(value[endIdx])) endIdx++
+  while (endIdx < value.length && !/\s/.test(value[endIdx] ?? "")) endIdx++
   return { start: slashIdx, end: endIdx }
 }
 

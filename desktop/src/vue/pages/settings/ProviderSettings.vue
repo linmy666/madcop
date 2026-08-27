@@ -537,7 +537,7 @@ function fmtContext(n: number | null | undefined) {
             :disabled="capsLoading"
             @click="loadCapabilities(false)"
           >
-            {{ capsLoading ? '刷新中…' : '刷新' }}
+            {{ capsLoading ? t('providers.refreshing') : t('common.refresh') }}
           </button>
           <button
             type="button"
@@ -545,7 +545,7 @@ function fmtContext(n: number | null | undefined) {
             :disabled="capsLiveLoading"
             @click="loadCapabilities(true)"
           >
-            {{ capsLiveLoading ? '探测中…' : '在线探测' }}
+            {{ capsLiveLoading ? t('providers.probing') : t('providers.probeOnline') }}
           </button>
         </div>
       </div>
@@ -577,13 +577,13 @@ function fmtContext(n: number | null | undefined) {
         </span>
       </div>
       <p v-else class="text-[12px] text-[var(--color-text-tertiary)]">
-        {{ capsLoading ? '加载能力信息…' : '暂无能力数据，点刷新或在线探测' }}
+        {{ capsLoading ? t('providers.capsLoading') : t('providers.capsEmpty') }}
       </p>
     </div>
     <div class="mb-5 flex items-center justify-between gap-3">
       <div>
-        <h2 class="text-[18px] font-semibold tracking-tight text-[var(--color-text-primary)]">模型供应商</h2>
-        <p class="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">管理 LLM API 提供方、模型与能力探测</p>
+        <h2 class="text-[18px] font-semibold tracking-tight text-[var(--color-text-primary)]">{{ t('settings.nav.providers') }}</h2>
+        <p class="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">{{ t('providers.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-2">
         <button
@@ -600,7 +600,7 @@ function fmtContext(n: number | null | undefined) {
           @click="showCreateModal = true"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          添加供应商
+          {{ t('providers.add') }}
         </button>
       </div>
     </div>
@@ -621,8 +621,8 @@ function fmtContext(n: number | null | undefined) {
       class="rounded-xl border border-dashed border-[var(--color-border)] px-5 py-14 text-center"
     >
       <div class="mb-2 text-[28px] opacity-30">∅</div>
-      <div class="text-[14px] text-[var(--color-text-tertiary)]">还没有配置模型供应商</div>
-      <div style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 4px; opacity: 0.7;">点击"添加供应商"开始配置</div>
+      <div class="text-[14px] text-[var(--color-text-tertiary)]">{{ t('providers.empty') }}</div>
+      <div style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 4px; opacity: 0.7;">{{ t('providers.emptyHint') }}</div>
     </div>
 
     <!-- Provider list -->

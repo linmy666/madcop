@@ -96,7 +96,6 @@ function installApiFetchShim() {
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return
   const nativeFetch = window.fetch.bind(window)
   const rewrite = (url: string) => (url.startsWith('/api/') ? getApiUrl(url) : url)
-  // @ts-expect-error - intentionally overriding the global fetch
   window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     if (typeof input === 'string') {
       return nativeFetch(rewrite(input), init)

@@ -16,6 +16,7 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { desktopHost } from '../../lib/desktopHost'
 import type { ProactiveObservation } from '../../lib/desktopHost/types'
 import { useSettingsStore } from '../stores/settingsStore'
+import { getCurrentLocale } from '../i18n'
 import { useUIStore } from '../stores/uiStore'
 
 const currentObservation = ref<ProactiveObservation | null>(null)
@@ -112,3 +113,23 @@ export function useProactive() {
 }
 
 export { currentObservation as proactiveObservation }
+
+/**
+ * Pick the user's language side from a "中文 | English" bilingual string
+ * emitted by the proactive backend. Falls back to the original text when
+ * there is no separator (older digests, single-language LLM output).
+ */
+export function pickLocaleText(text: string, locale?: string): string {
+  if (!text) return text
+  const sep = text.includes(' | ') ? ' | ' : (text.includes('｜') ? '｜' : '')
+  if (!sep) return text
+  const parts = text.split(sep).map((s) => s.trim()).filter(Boolean)
+  if (parts.length < 2) return text
+  let loc = locale || ''
+  if (!loc) {
+    try { loc = getCurrentLocale() } catch { loc = 'zh' }
+  }
+  const zhSide = parts.find((part) => /[\u4e00-\u9fff]/.test(part)) ?? parts[0] ?? ''
+  const enSide = parts.find((part) => !/[\u4e00-\u9fff]/.test(part)) ?? parts[parts.length - 1] ?? ''
+  return loc === 'en' ? enSide : zhSide
+}

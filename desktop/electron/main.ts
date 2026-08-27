@@ -88,7 +88,13 @@ function previewAgentPath() {
   return path.join(appRoot(), 'src-tauri', 'resources', 'preview-agent.js')
 }
 
-function rendererEntry() {
+function rendererEntry(): string {
+  // Dev override: ELECTRON_RENDERER_URL points the window at the vite dev
+  // server so source edits hot-reload without a dist-vue rebuild. Only
+  // http(s) URLs are honoured — anything else silently falls through to
+  // the production bundle.
+  const devUrl = process.env.ELECTRON_RENDERER_URL
+  if (devUrl && /^https?:\/\//.test(devUrl)) return devUrl
   // Vue 3 only — React dist/ is legacy and no longer a production fallback.
   const vueEntry = path.join(appRoot(), "dist-vue", "index.html")
   if (!fs.existsSync(vueEntry)) {

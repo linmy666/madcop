@@ -25,3 +25,19 @@ const _settings = useSettingsStore()
 if (_settings.locale === 'zh' || _settings.locale === 'en') {
   i18nSetLocale(_settings.locale)
 }
+
+// A crash or force-quit leaves stale 'running' markers in the persisted
+// tab/chat stores; nothing survives a restart, so reset them before the
+// sidebar renders — otherwise hours-old sessions show a live dot.
+import { useTabStore } from './stores/tabs'
+import { useChatStore } from './stores/chatStore'
+try {
+  const _tabs = useTabStore()
+  for (const tb of _tabs.tabs) {
+    if (tb.status === 'running') _tabs.setTabStatus(tb.sessionId, 'idle')
+  }
+  const _chat = useChatStore()
+  for (const s of Object.values(_chat.sessions) as Array<{ chatState: string }>) {
+    if (s.chatState && s.chatState !== 'idle') s.chatState = 'idle'
+  }
+} catch { /* stores not hydrated yet — first boot */ }

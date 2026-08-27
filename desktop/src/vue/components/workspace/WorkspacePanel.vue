@@ -10,7 +10,7 @@
         <path d="M3 7v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-7l-2-2H5a2 2 0 0 0-2 2z" />
       </svg>
       <span class="min-w-0 flex-1 truncate text-left">
-        {{ currentDir ? shortPath : '工作区' }}
+        {{ currentDir ? shortPath : t('workspace.title', '工作区') }}
       </span>
       <svg v-if="!showPopover" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M6 9l6 6 6-6" />
@@ -105,6 +105,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 import { getApiUrl } from '../../api/client'
+import { useTranslation } from '../../i18n'
+const t = useTranslation()
 
 interface FileEntry {
   name: string
@@ -217,7 +219,7 @@ async function browseDir() {
     if (host?.dialogs?.open) {
       chosen = await host.dialogs.open({
         directory: true,
-        title: '选择工作区目录',
+        title: t('workspace.pickDir', '选择工作区目录'),
         defaultPath: currentDir.value || undefined,
       })
     } else {
