@@ -178,6 +178,7 @@ const streamingText = computed(() => sessionState.value?.streamingText ?? '')
 const TURN_HEADER_DELAY_MS = 1500
 const nowTickMs = ref(Date.now())
 const headerActive = ref(false)
+const turnIsRunning = ref(false)
 let turnTimer: ReturnType<typeof setInterval> | null = null
 let headerTimer: ReturnType<typeof setTimeout> | null = null
 watch(chatState, (s) => {
@@ -209,6 +210,7 @@ const turnElapsedLabel = computed(() => {
   if (!lastUserTs) return ''
   const s = Math.max(1, Math.floor((nowTickMs.value - lastUserTs) / 1000))
   const running = ['busy', 'streaming', 'tool_executing'].includes(String(chatState.value))
+  turnIsRunning.value = running
   return `${running ? '工作中' : '已完成 · 用时'} ${s >= 60 ? Math.floor(s / 60) + ' 分 ' + (s % 60) + ' 秒' : s + ' 秒'}`
 })
 
@@ -1274,8 +1276,9 @@ function renderItemContent(item: RenderItem) {
       <!-- Messages list (turn elapsed header lives INSIDE so it can
            never float alone in an empty transcript) -->
       <div v-else ref="scrollContentRef" class="mx-auto max-w-[860px] space-y-3">
-        <div v-if="turnElapsedLabel" class="turn-header" data-testid="turn-header">
-          {{ turnElapsedLabel }}
+        <div v-if="turnElapsedLabel" class="turn-status" :class="{ 'turn-status--running': turnIsRunning }" data-testid="turn-header">
+          <span class="turn-status__dot" aria-hidden="true"></span>
+          <span>{{ turnElapsedLabel }}</span>
         </div>
         <template
           v-for="(renderedItem, index) in virtualTranscriptWindow.items"
@@ -1496,13 +1499,34 @@ function renderItemContent(item: RenderItem) {
 .run-group-summary:hover { background: var(--color-surface-hover); }
 .run-group-summary__check { color: var(--color-success, #1f9d55); font-weight: 700; }
 .run-group-summary__label { font-weight: 600; color: var(--color-text-primary); }
-.turn-header {
-  display: flex;
+.turn-status {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 14px 0 10px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
+  gap: 7px;
+  margin: 2px 0 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.turn-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary, #7c5cff);
+  flex-shrink: 0;
+}
+.turn-status--running .turn-status__dot {
+  animation: turn-status-pulse 1.6s ease-in-out infinite;
+}
+.turn-status:not(.turn-status--running) .turn-status__dot {
+  background: var(--color-success, #1f9d55);
+}
+@keyframes turn-status-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn-status--running .turn-status__dot { animation: none; }
 }
 </style>
