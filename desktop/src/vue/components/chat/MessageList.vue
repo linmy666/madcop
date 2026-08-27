@@ -1271,13 +1271,12 @@ function renderItemContent(item: RenderItem) {
         <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('chat.emptyStartConversation') }}</p>
       </div>
 
-      <!-- ZCode-style turn elapsed header -->
+      <!-- Messages list (turn elapsed header lives INSIDE so it can
+           never float alone in an empty transcript) -->
+      <div v-else ref="scrollContentRef" class="mx-auto max-w-[860px] space-y-3">
         <div v-if="turnElapsedLabel" class="turn-header" data-testid="turn-header">
           {{ turnElapsedLabel }}
         </div>
-
-        <!-- Messages list -->
-      <div v-else ref="scrollContentRef" class="mx-auto max-w-[860px] space-y-3">
         <template
           v-for="(renderedItem, index) in virtualTranscriptWindow.items"
           :key="itemKeys[renderedItem.index]"
