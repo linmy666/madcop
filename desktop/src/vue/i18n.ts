@@ -32,8 +32,12 @@ export const useI18nStore = defineStore('i18n', {
 })
 
 // Legacy module-level setter (settingsStore + chatStore use this).
+// Must mirror into the Pinia store too: components read
+// useI18nStore().locale, so updating only the module ref leaves the
+// whole i18n-driven UI (sidebar, composer) on the boot default.
 export function setLocale(locale: Locale) {
   _activeLocale.value = locale
+  try { useI18nStore().setLocale(locale) } catch { /* pinia not active yet */ }
 }
 
 export function getCurrentLocale(): Locale {

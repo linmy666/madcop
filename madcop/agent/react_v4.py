@@ -37,6 +37,22 @@ _PROTOCOL_RE = re.compile(
 _AI_MARKER = re.compile(r"Action\s*Input\s*[:：]", re.IGNORECASE)
 _BARE_FA_RE = re.compile(r"FINAL_ANSWER\s*[:：]\s*(.*)", re.DOTALL | re.IGNORECASE)
 
+# ReAct markers incl. the bare (colon-less) form CJK models emit:
+# "Thought好的，我用 write_file…" glues the protocol word to the next
+# CJK char. A colon-required regex missed it, so the reasoning streamed
+# straight into the answer AND the tool intent was silently dropped.
+# The lookahead only fires on CJK / uppercase followers so English prose
+# ("thought about it", "action items") is not a false positive.
+# NOTE: no global IGNORECASE — the (?i:...) groups keep the protocol
+# words case-insensitive while the bare-form lookahead stays
+# case-SENSITIVE, so "thought about it" (lowercase follower) is prose,
+# but "Thought好的" / "ThoughtI will" are protocol leaks.
+_REACT_MARKER_RE = re.compile(
+    r"((?i:Action)\s*Input\s*[:：]|(?i:Action)\s*[:：]|(?i:FINAL_ANSWER)\s*[:：]|(?i:Thought)\s*[:：]"
+    r"|(?i:Thought)\s*(?=[\u4e00-\u9fffA-Z])"
+    r"|(?i:Action)\s*(?=[\u4e00-\u9fff]))",
+)
+
 # D1 fix: strip <think>...</think> blocks before a raw response is appended
 # back into the LLM context. Think content is for the DISPLAY layer
 # (ThinkSeparator routes it to THOUGHT_DELTA); the next ReAct iteration
@@ -275,10 +291,7 @@ class ReActEngineV4(AgentEngine):
                         if _answer_chunk:
                             self._v4_answer_buf = getattr(self, '_v4_answer_buf', '') + _answer_chunk
                             _full_answer = self._v4_answer_buf
-                            _has_react_markers = bool(re.search(
-                                r'(Action\s*[:：]|Action\s*Input\s*[:：]|FINAL_ANSWER\s*[:：]|Thought\s*[:：])',
-                                _full_answer, re.IGNORECASE
-                            ))
+                            _has_react_markers = bool(_REACT_MARKER_RE.search(_full_answer))
                             if not _has_react_markers:
                                 if not fa_streamed and len(_full_answer) > 30:
                                     fa_streamed = True
@@ -365,21 +378,41 @@ class ReActEngineV4(AgentEngine):
             # (protocol markers detected OR <30 chars), handle at stream end.
             _buf = getattr(self, '_v4_answer_buf', '')
             if _buf and not fa_streamed and not oa_tc_name:
-                _has_action = bool(re.search(r'Action\s*[:：]', _buf, re.IGNORECASE))
+                _has_action = bool(_REACT_MARKER_RE.search(_buf))
+                # Tool-intent guard: if the model NAMED a registered tool in
+                # prose ("好的，我用 write_file 一次写好完整页面") but emitted
+                # no native tool_call, ending the turn here would show the
+                # user a promise instead of a result. Fall through to the
+                # text-protocol parse — its empty-action reflection sends
+                # the model back to emit the call properly.
+                _mentions_tool = False
                 if not _has_action:
-                    # No Action — model gave up on ReAct. Strip protocol
-                    # prefixes (Thought:, :, etc.) and output as answer.
+                    for _s in (ctx.tool_schemas or []):
+                        _n = (_s.get('function') or {}).get('name', '')
+                        if _n and re.search(rf'\b{re.escape(_n)}\b', _buf, re.IGNORECASE):
+                            _mentions_tool = True
+                            break
+                if not _has_action and not _mentions_tool:
+                    # No Action, no tool intent — model gave up on ReAct.
+                    # Strip protocol prefixes (Thought:, :, etc.) and
+                    # output as answer.
                     _clean = _buf.strip()
                     _clean = re.sub(
                         r'^[\s:：]*(Thought|Action|FINAL_ANSWER|Observation)\s*[:：]\s*',
                         '', _clean, flags=re.IGNORECASE
+                    )
+                    # Bare colon-less protocol words glued to CJK
+                    # ("Thought好的") — drop the word, keep the answer.
+                    _clean = re.sub(
+                        r'\bThought\s*(?=[\u4e00-\u9fff])', '', _clean,
+                        flags=re.IGNORECASE,
                     )
                     _clean = re.sub(r'^[\s:：]+', '', _clean).strip()
                     if _clean:
                         yield AgentStep(kind=StepKind.TEXT_DELTA, content=_clean)
                     yield AgentStep(kind=StepKind.TEXT_END)
                     yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
-                        metadata={"usage": _run_usage})
+                            metadata={"usage": _run_usage})
                     return
 
             # Text-protocol fallback parses the THINK-STRIPPED raw only.

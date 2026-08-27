@@ -7,16 +7,19 @@
 import { setLocale as i18nSetLocale } from '../../i18n'
 
 import { useI18nStore } from '../../i18n'
+import { useSettingsStore } from '../../stores/settingsStore'
 const i18n = useI18nStore()
+const settingsStore = useSettingsStore()
 const t = (lang: 'zh' | 'en') => (lang === 'zh' ? '中文' : 'EN')
 
 function pick(lang: 'zh' | 'en') {
   if (i18n.locale === lang) return
-  // Pinia store drives the reactive render. settingsStore.setLocale
-  // persists to localStorage so the next session boot starts here.
+  // Every locale mirror must move together: the i18n Pinia store drives
+  // the reactive render, the settings store persists the choice and
+  // feeds consumers that read settingsStore.locale directly (Sidebar).
   i18n.setLocale(lang)
   i18nSetLocale(lang)
-  try { settings.setLocale(lang) } catch { /* store not yet active */ }
+  settingsStore.setLocale(lang)
 }
 </script>
 

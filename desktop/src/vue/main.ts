@@ -14,3 +14,14 @@ app.use(pinia)
 // getActivePinia() during their setup phase.
 setActivePinia(pinia)
 app.mount('#root')
+
+// Restore the persisted UI locale into the i18n store. The i18n store
+// itself is memory-only and starts at 'en' every boot; without this
+// sync a user who picked 中文 last session gets a Chinese settings
+// page (settingsStore-driven) beside an English sidebar (i18n-driven).
+import { useSettingsStore } from './stores/settingsStore'
+import { setLocale as i18nSetLocale } from './i18n'
+const _settings = useSettingsStore()
+if (_settings.locale === 'zh' || _settings.locale === 'en') {
+  i18nSetLocale(_settings.locale)
+}

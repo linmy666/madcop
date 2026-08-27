@@ -11,7 +11,7 @@ import { useTabStore, SETTINGS_TAB_ID, SCHEDULED_TAB_ID } from '../../stores/tab
 import { useChatStore } from '../../stores/chatStore'
 import { useWorkspacePanelStore } from '../../stores/workspacePanelStore'
 import { useOpenTargetStore } from '../../stores/openTargetStore'
-import { translate, type TranslationKey } from '../../i18n'
+import { translate, useI18nStore, type TranslationKey } from '../../i18n'
 import type { SessionListItem } from '../../../types/session'
 import { desktopUiPreferencesApi, type SidebarProjectPreferences } from '../../api/desktopUiPreferences'
 import { getDesktopHost } from '../../../lib/desktopHost'
@@ -86,9 +86,12 @@ const workspacePanelStore = useWorkspacePanelStore()
 const settingsStore = useSettingsStore()
 const openTargetStore = useOpenTargetStore()
 
-// Translation function (Vue-friendly, using Pinia settingsStore)
+// Translation function — reads the i18n Pinia store (single source of
+// truth shared with every useTranslation() consumer), so a locale flip
+// in Settings re-renders the sidebar the same tick.
+const i18nStore = useI18nStore()
 const t = (key: TranslationKey, params?: Record<string, string | number>): string =>
-  translate(settingsStore.locale as any, key, params)
+  translate(i18nStore.locale as any, key, params)
 
 // ─── localStorage helpers (kept here — touch browser storage) ───────────
 
