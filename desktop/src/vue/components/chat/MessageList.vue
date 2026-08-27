@@ -168,6 +168,32 @@ const messages = computed(() => sessionState.value?.messages ?? EMPTY_MESSAGES)
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
 const streamingText = computed(() => sessionState.value?.streamingText ?? '')
 
+// ZCode-style turn header: whole-turn elapsed driven off the last user
+// message timestamp; ticks once per second while busy.
+const nowTickMs = ref(Date.now())
+let turnTimer: ReturnType<typeof setInterval> | null = null
+watch(chatState, (s) => {
+  if ((s === 'busy' || s === 'streaming') && !turnTimer) {
+    turnTimer = setInterval(() => { nowTickMs.value = Date.now() }, 1000)
+  } else if (s === 'idle' && turnTimer) {
+    clearInterval(turnTimer); turnTimer = null
+  }
+}, { immediate: true })
+onBeforeUnmount(() => { if (turnTimer) clearInterval(turnTimer) })
+const turnElapsedLabel = computed(() => {
+  const msgs = sessionState.value?.messages ?? []
+  let lastUserTs: number | null = null
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m: any = msgs[i]
+    if (m.type === 'user_text') { lastUserTs = m.timestamp; break }
+    if (m.type === 'assistant_text' || m.type === 'tool_use' || m.type === 'error') break
+  }
+  if (!lastUserTs) return ''
+  const s = Math.max(1, Math.floor((nowTickMs.value - lastUserTs) / 1000))
+  const running = ['busy', 'streaming', 'tool_executing'].includes(String(chatState.value))
+  return `${running ? '工作中' : '已完成 · 用时'} ${s >= 60 ? Math.floor(s / 60) + ' 分 ' + (s % 60) + ' 秒' : s + ' 秒'}`
+})
+
 // P2-12: FileCompletionCard data source. workingFiles is populated
 // by the chatStore when write_file / edit_file complete; reset at
 // turn start. Hide the card mid-stream so it doesn't visually fight
@@ -1011,6 +1037,8 @@ function findTrailingUserContent(): string | null {
   return null
 }
 
+const openGroups = ref<Set<string>>(new Set())
+
 function renderItemContent(item: RenderItem) {
   if (item.kind === 'tool_group') {
     // Render each tool call as a RunItem card (OpenAI Agents SDK
@@ -1022,6 +1050,23 @@ function renderItemContent(item: RenderItem) {
     for (const tc of item.toolCalls) {
       const result = (tc as any).result
       if (result) toolResultMap.set(tc.toolUseId, result)
+    }
+    const allDone = item.toolCalls.every(tc => !tc.isPending)
+    const totalMs = item.toolCalls.reduce((acc: number, tc: any) => acc + (tc.elapsedMs || 0), 0)
+    if (allDone && !openGroups.value.has(item.id)) {
+      // ZCode-style one-line summary; click expands the card stack.
+      return h('button', {
+        type: 'button',
+        class: 'run-group-summary',
+        'data-testid': 'run-group-summary',
+        onClick: () => { openGroups.value.add(item.id); openGroups.value = new Set(openGroups.value) },
+      }, [
+        h('span', { class: 'run-group-summary__check' }, '✓'),
+        h('span', { class: 'run-group-summary__label' },
+          `调用工具 · ${item.toolCalls.length} 项`),
+        totalMs > 0 ? h('span', { class: 'run-item__meta' },
+          `· ${totalMs >= 1000 ? (totalMs / 1000).toFixed(1) + 's' : totalMs + 'ms'}`) : null,
+      ])
     }
     return h('div', { class: 'run-item-stack' }, item.toolCalls.map(tc => {
       const result = toolResultMap.get(tc.toolUseId)
@@ -1196,7 +1241,12 @@ function renderItemContent(item: RenderItem) {
         <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('chat.emptyStartConversation') }}</p>
       </div>
 
-      <!-- Messages list -->
+      <!-- ZCode-style turn elapsed header -->
+        <div v-if="turnElapsedLabel" class="turn-header" data-testid="turn-header">
+          {{ turnElapsedLabel }}
+        </div>
+
+        <!-- Messages list -->
       <div v-else ref="scrollContentRef" class="mx-auto max-w-[860px] space-y-3">
         <template
           v-for="(renderedItem, index) in virtualTranscriptWindow.items"
@@ -1398,5 +1448,32 @@ function renderItemContent(item: RenderItem) {
   color: var(--color-text-tertiary);
   padding: 0 8px;
   font-variant-numeric: tabular-nums;
+}
+.run-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  margin: 4px 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-container-low);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.run-group-summary:hover { background: var(--color-surface-hover); }
+.run-group-summary__check { color: var(--color-success, #1f9d55); font-weight: 700; }
+.run-group-summary__label { font-weight: 600; color: var(--color-text-primary); }
+.turn-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
 }
 </style>
