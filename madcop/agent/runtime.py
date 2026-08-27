@@ -154,6 +154,11 @@ class StepKind(str, Enum):
     # Frontend shows an inline approval card; user responds via
     # POST /api/v4/chat/confirm → confirm_handler returns True/False.
     TOOL_CONFIRM_REQUEST = "tool_confirm_request"
+    # Real-time preview: emitted after a successful write_file/edit_file
+    # whose target lives in ~/.madcop/preview/ (or is an HTML file).
+    # Frontend auto-opens the workbench panel in browser mode and
+    # debounce-reloads the preview iframe.
+    PREVIEW_UPDATE = "preview_update"
     # Long-task liveness: emitted while the model is still STREAMING
     # tool-call arguments (e.g. a 20KB write_file payload takes minutes
     # to compose). Frontend shows "composing… N KB" on the pending

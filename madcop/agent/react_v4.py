@@ -786,6 +786,35 @@ class ReActEngineV4(AgentEngine):
                 )
                 _results.append((_c, _obs, _ierr, _meta))
 
+            # Real-time preview (ZCode-style): a finished write into the
+            # preview dir tells the frontend to auto-open the workbench
+            # panel in browser mode and hot-reload the iframe. Deduped
+            # per turn-path; failures don't notify.
+            _seen_preview_paths: set[str] = set()
+            for _c, _obs, _ierr, _m in _results:
+                if _ierr:
+                    continue
+                _wname = (_c["name"] or "").lower()
+                if _wname not in ("write_file", "edit_file", "write_xlsx"):
+                    continue
+                try:
+                    _wargs = json.loads(_c["raw"]) if isinstance(_c["raw"], str) and _c["raw"].strip().startswith("{") else {}
+                except Exception:
+                    _wargs = {}
+                _wpath = str(_wargs.get("path") or _wargs.get("file_path") or "")
+                if not _wpath or _wpath in _seen_preview_paths:
+                    continue
+                _is_html = _wpath.lower().endswith((".html", ".htm"))
+                _in_preview = ".madcop" in _wpath and "preview" in _wpath
+                if not (_is_html or _in_preview):
+                    continue
+                _seen_preview_paths.add(_wpath)
+                yield AgentStep(
+                    kind=StepKind.PREVIEW_UPDATE,
+                    content=_wpath,
+                    metadata={"path": _wpath},
+                )
+
             # loop-detection bookkeeping for parallel calls
             for _c, *_rest in _results[1:]:
                 steps_log.append(_c["name"])

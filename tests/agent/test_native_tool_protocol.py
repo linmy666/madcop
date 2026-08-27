@@ -345,3 +345,68 @@ class TestToolProgress(unittest.TestCase):
         # and the file still executed cleanly
         self.assertEqual(executed, ["write_file"])
         self.assertIn(StepKind.DONE, [s.kind for s in steps])
+
+
+class TestPreviewUpdate(unittest.TestCase):
+    """Real-time preview: a successful write into the preview dir (or an
+    HTML file) emits preview_update so the frontend auto-opens the
+    workbench panel and hot-reloads the iframe."""
+
+    def test_preview_update_emitted_for_preview_html_write(self):
+        from madcop.agent.react_v4 import ReActEngineV4
+
+        class _C:
+            def __init__(self):
+                self.calls = 0
+
+            def stream(self, messages, model=None, temperature=0.1,
+                       max_tokens=2048, tools=None):
+                self.calls += 1
+                if self.calls == 1:
+                    yield SimpleNamespace(
+                        tool_call_deltas=({"index": 0, "id": "t",
+                                            "name": "write_file",
+                                            "arguments": json.dumps({"path": "/home/u/.madcop/preview/index.html", "content": "<h1>hi</h1>"})},),
+                        text="", finish_reason=None)
+                    yield SimpleNamespace(text="", finish_reason="stop")
+                else:
+                    yield SimpleNamespace(text="已写入。", finish_reason=None)
+                    yield SimpleNamespace(text="", finish_reason="stop")
+
+        def ex(name, raw, work_dir=None, pre_approved=False):
+            return '{"ok": true}'
+
+        ctx = RunContext(messages=[Message(role="user", content="写页面")],
+                         model="f", agent_mode="standard", client=_C())
+        ctx.tool_executor = ex
+        steps = list(ReActEngineV4().run(ctx))
+        pu = [s for s in steps if s.kind == StepKind.PREVIEW_UPDATE]
+        self.assertEqual(len(pu), 1)
+        self.assertIn("index.html", pu[0].content)
+
+    def test_no_preview_update_for_random_txt_write(self):
+        from madcop.agent.react_v4 import ReActEngineV4
+
+        class _C:
+            def __init__(self):
+                self.calls = 0
+
+            def stream(self, messages, model=None, temperature=0.1,
+                       max_tokens=2048, tools=None):
+                self.calls += 1
+                if self.calls == 1:
+                    yield SimpleNamespace(
+                        tool_call_deltas=({"index": 0, "id": "t",
+                                            "name": "write_file",
+                                            "arguments": '{"path": "/tmp/notes.txt", "content": "hi"}'},),
+                        text="", finish_reason=None)
+                    yield SimpleNamespace(text="", finish_reason="stop")
+                else:
+                    yield SimpleNamespace(text="done", finish_reason=None)
+                    yield SimpleNamespace(text="", finish_reason="stop")
+
+        ctx = RunContext(messages=[Message(role="user", content="记笔记")],
+                         model="f", agent_mode="standard", client=_C())
+        ctx.tool_executor = lambda *a, **k: '{"ok": true}'
+        steps = list(ReActEngineV4().run(ctx))
+        self.assertEqual([s for s in steps if s.kind == StepKind.PREVIEW_UPDATE], [])

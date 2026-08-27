@@ -877,6 +877,7 @@ export const useChatStore = defineStore('chat', {
                     plan: 'plan',
                     tool_confirm_request: 'tool_confirm_request',
                     tool_progress: 'tool_progress',
+                    preview_update: 'preview_update',
                   }
                   const mapped = KIND_TO_TYPE[event.kind]
                   if (mapped) {
@@ -1552,6 +1553,8 @@ export const useChatStore = defineStore('chat', {
                     // refresh key so the PreviewPanel reloads immediately,
                     // AND auto-open the right-side workbench in browser mode
                     // so the user sees the result without manual steps.
+                    // Trailing-debounce: multi-write turns reload the iframe
+                    // once per quiet 600ms instead of once per file.
                     session.previewRefreshKey = (session.previewRefreshKey || 0) + 1
                     try {
                       const { useWorkspacePanelStore } = await import('../stores/workspacePanelStore')
@@ -1559,6 +1562,11 @@ export const useChatStore = defineStore('chat', {
                       ws.openPanel(sessionId)
                       ws.setMode(sessionId, 'browser')
                     } catch {}
+                    if ((session as any)._pvTimer) clearTimeout((session as any)._pvTimer)
+                    ;(session as any)._pvTimer = setTimeout(() => {
+                      session.previewRefreshKey = (session.previewRefreshKey || 0) + 1
+                      ;(session as any)._pvTimer = null
+                    }, 600)
                   } else if (event.type === 'error' && event.message) {
                     // Backend error (API error, rate limit, etc.).
                     // Terminal event: flush the final assistant
