@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useTranslation } from '../../i18n'
+const t = useTranslation()
 /** Sprint 2 — Memory Recall Badge.
  * Shown above assistant message when the model used memories from the
  * 5-layer retriever (Sprint 2). Click to expand and see which memories
@@ -20,7 +22,7 @@ const expanded = ref(false)
       @click="expanded = !expanded"
     >
       <span class="material-symbols-outlined text-[14px]">memory</span>
-      <span class="font-medium">基于 {{ memories.length }} 条记忆回答</span>
+      <span class="font-medium">{{ t('chat.memoryAnswer', '基于 {count} 条记忆回答', { count: memories.length }) }}</span>
       <span class="material-symbols-outlined text-[14px]">
         {{ expanded ? 'expand_less' : 'expand_more' }}
       </span>

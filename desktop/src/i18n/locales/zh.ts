@@ -2096,4 +2096,6 @@ export const zh: Record<TranslationKey, string> = {
   'chat.thinkingProcess': '思考过程',
   'chat.thinkingNow': '思考中…',
   'chat.lasted': '持续了',
+  'chat.memoryAnswer': '基于 {count} 条记忆回答',
+  'proactive.adopt': '采纳',
 }

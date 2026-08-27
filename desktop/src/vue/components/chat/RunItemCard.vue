@@ -25,6 +25,9 @@ interface Props {
   /** Engine step chip, e.g. 3 of 8. */
   step?: number
   maxSteps?: number
+  /** Sibling position within a same-step parallel batch. */
+  parallelIndex?: number
+  parallelCount?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -35,6 +38,8 @@ const props = withDefaults(defineProps<Props>(), {
   streamingChars: undefined,
   step: undefined,
   maxSteps: undefined,
+  parallelIndex: undefined,
+  parallelCount: undefined,
 })
 
 const t = useTranslation()
@@ -80,7 +85,12 @@ const streamingLabel = computed(() => {
 
 const stepLabel = computed(() => {
   if (props.step == null) return ''
-  return props.maxSteps ? `Step ${props.step}/${props.maxSteps}` : `Step ${props.step}`
+  const base = props.maxSteps ? `Step ${props.step}/${props.maxSteps}` : `Step ${props.step}`
+  // Parallel calls in the same step share the step number - suffix
+  // the sibling position so two cards don't read as duplicates.
+  const par = props.parallelIndex && props.parallelCount && props.parallelCount > 1
+    ? ` · ${props.parallelIndex}/${props.parallelCount}` : ''
+  return base + par
 })
 
 interface ToolMeta { verb: string; icon: string; labelKey?: string }
@@ -263,9 +273,12 @@ const errorText = computed(() => {
   overflow: hidden;
   transition: border-color 120ms, background 120ms;
 }
+/* Pending is quiet, same family as done/failed - only the spinner
+   moves. No tinted border/background: the purple card fought the
+   otherwise monochrome timeline. */
 .run-item--pending {
-  border-color: var(--color-primary, #7c5cff);
-  background: color-mix(in srgb, var(--color-primary, #7c5cff) 8%, transparent);
+  border-color: var(--color-border, rgba(128,128,128,0.18));
+  background: var(--color-surface-container-low, rgba(128,128,128,0.04));
 }
 .run-item--failed {
   border-color: var(--color-error, #d44a4a);
@@ -298,7 +311,7 @@ const errorText = computed(() => {
   color: var(--color-text-tertiary, #888);
 }
 .run-item--pending .run-item__icon {
-  color: var(--color-primary, #7c5cff);
+  color: var(--color-text-tertiary, #888);
   animation: run-item-spin 0.9s linear infinite;
 }
 .run-item--done .run-item__icon {
@@ -331,7 +344,7 @@ const errorText = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 .run-item__meta--live {
-  color: var(--color-primary, #7c5cff);
+  color: var(--color-text-secondary, #666);
   font-variant-numeric: tabular-nums;
 }
 .run-item__elapsed {
@@ -366,7 +379,7 @@ const errorText = computed(() => {
   align-items: center;
   gap: 8px;
   font-family: var(--font-sans, system-ui, sans-serif);
-  color: var(--color-primary, #7c5cff);
+  color: var(--color-text-tertiary, #888);
 }
 .run-item__bar {
   flex: 1;
@@ -378,7 +391,7 @@ const errorText = computed(() => {
 .run-item__bar-fill {
   height: 100%;
   width: 40%;
-  background: currentColor;
+  background: var(--color-text-tertiary, #999);
   border-radius: 2px;
   animation: run-item-progress 1.4s ease-in-out infinite;
 }

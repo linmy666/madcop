@@ -65,7 +65,7 @@ function onAdopt() {
             @click="onAdopt"
           >
             <span class="material-symbols-outlined">north_east</span>
-            采纳
+            {{ t('proactive.adopt', '采纳') }}
           </button>
         </div>
       </div>

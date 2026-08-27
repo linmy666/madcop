@@ -2094,6 +2094,8 @@ export const en = {
   'chat.thinkingProcess': 'Thinking',
   'chat.thinkingNow': 'Thinking…',
   'chat.lasted': 'lasted',
+  'chat.memoryAnswer': 'Answering with {count} memories',
+  'proactive.adopt': 'Apply',
 } as const
 
 export type TranslationKey = keyof typeof en

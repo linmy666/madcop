@@ -1058,6 +1058,10 @@ function findTrailingUserContent(): string | null {
 }
 
 const openGroups = ref<Set<string>>(new Set())
+// Inline timeline present? Then AgentPulse's phase pill is redundant.
+const hasInlineTimeline = computed(() =>
+  (sessionState.value?.messages ?? []).some(
+    (m: any) => m.type === 'tool_use' || m.type === 'thought_line'))
 
 function renderItemContent(item: RenderItem) {
   if (item.kind === 'tool_group') {
@@ -1088,7 +1092,7 @@ function renderItemContent(item: RenderItem) {
           `· ${totalMs >= 1000 ? (totalMs / 1000).toFixed(1) + 's' : totalMs + 'ms'}`) : null,
       ])
     }
-    return h('div', { class: 'run-item-stack' }, item.toolCalls.map(tc => {
+    return h('div', { class: 'run-item-stack' }, item.toolCalls.map((tc, ti) => {
       const result = toolResultMap.get(tc.toolUseId)
       return h(RunItemCard, {
         toolName: tc.toolName,
@@ -1099,6 +1103,8 @@ function renderItemContent(item: RenderItem) {
         streamingChars: (tc as any).streamingChars,
         step: (tc as any).step,
         maxSteps: (tc as any).maxSteps,
+        parallelIndex: ti + 1,
+        parallelCount: item.toolCalls.length,
       })
     }))
   }
@@ -1374,8 +1380,10 @@ function renderItemContent(item: RenderItem) {
           @respond="(ok: boolean) => chatStore.respondToolConfirm(activeTabId, ok)"
         />
 
-        <!-- AgentPulse: live phase indicator (思考中/调用工具/输出中) -->
-        <AgentPulse />
+        <!-- AgentPulse: live phase pill. Hidden when the inline timeline
+             already shows thought lines / tool cards - otherwise the same
+             info appears twice on screen. -->
+        <AgentPulse v-if="!hasInlineTimeline" />
 
         <!-- v3.7.6 — ZCode-style reasoning panel. Stays visible
              for the whole turn (busy / streaming) so the gradient
