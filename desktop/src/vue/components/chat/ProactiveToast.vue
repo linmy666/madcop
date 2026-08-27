@@ -94,9 +94,9 @@ function onAdopt() {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-warning, #d97706);
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-  padding: 14px 16px;
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-dropdown, 0 12px 40px rgba(27, 28, 26, 0.08));
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -163,7 +163,7 @@ function onAdopt() {
   padding: 6px 12px;
   font-size: 12.5px;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: var(--radius-md, 8px);
   cursor: pointer;
   font-family: inherit;
   transition: background 120ms;
@@ -185,7 +185,7 @@ function onAdopt() {
   color: #fff;
 }
 .pt-btn--primary:hover {
-  background: #1f2937;
+  filter: brightness(1.08);
 }
 
 .pt-slide-enter-active,

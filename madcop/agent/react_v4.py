@@ -53,6 +53,35 @@ _REACT_MARKER_RE = re.compile(
     r"|(?i:Action)\s*(?=[\u4e00-\u9fff]))",
 )
 
+# First-person "I'm about to act" promises with no actual tool call.
+# MiniMax-style models sometimes narrate the next step ("我换个关键词再
+# 搜一次", "让我重新搜索…", "Let me check…") and stop — ending the turn
+# there shows the user a plan instead of a result. First-person framing
+# keeps suggestions like "你可以搜索官网" (advice to the user) out.
+_ACTION_INTENT_RE = re.compile(
+    r"(让我|我来|我再|我将|我去|我这就|我马上|我需要|我要|换个关键词|重新搜|再搜一|再查一|再试一"
+    r"|let me|i'll|i will|i'm going to|i am going to|i need to|i want to|i should)",
+    re.IGNORECASE,
+)
+# Reasoning-monologue opener: the model streamed its INTERNAL thinking
+# ("The user wants me to…", "I need to…") as if it were the answer.
+# That is never a user-facing reply — bounce it back for a real one.
+# Short replies (a promise is never a full answer) containing ANY action
+# verb count as intent — enumerating phrasings is whack-a-mole ("换个更
+# 具体的搜索关键词" dodges a "换个关键词" pattern). Length guard keeps
+# real answers ("搜索结果显示…", >80 chars) out of the trap.
+_ACTION_VERB_RE = re.compile(
+    r"搜|查询?|写|生成|创建|运行|打开|发送|尝试|换个|抓取|访问"
+    r"|search|look up|look for|write|creat|generat|run|open|send|try|check|fetch",
+    re.IGNORECASE,
+)
+_SHORT_ANSWER_CHARS = 80
+_MONOLOGUE_RE = re.compile(
+    r"^\s*(the user|i need to|let me|i should|i'll|i am going to|i'm going to"
+    r"|looking at|okay,|alright,|嗯|好，用户)",
+    re.IGNORECASE,
+)
+
 # D1 fix: strip <think>...</think> blocks before a raw response is appended
 # back into the LLM context. Think content is for the DISPLAY layer
 # (ThinkSeparator routes it to THOUGHT_DELTA); the next ReAct iteration
@@ -129,6 +158,8 @@ class ReActEngineV4(AgentEngine):
             _think_sep = ThinkSeparator()
             _think_block_open = False
             self._v4_answer_buf = ''  # accumulate post-think text for ReAct detection
+            if step_num == 1:
+                self._v4_intent_streak = 0
             # BUG-FIX: when MiniMax / similar OpenAI-compatible models are
             # given a ReAct-style text prompt, they emit tool calls in the
             # wrong shape ("web_searchAction Input: {...}" as plain text),
@@ -369,6 +400,31 @@ class ReActEngineV4(AgentEngine):
             # tool must win — returning early here dropped the call and
             # the user got neither the search nor a correct answer.
             if fa_streamed and not oa_tc_name:
+                # The streamed answer may still END on a promise ("…让我换
+                # 个角度搜"). The text is already on screen — we can't
+                # unsend it — but ending the turn here strands the user
+                # with a plan. One reflection asks the model to actually
+                # run the tool; the streak cap keeps it from looping.
+                _buf_all = getattr(self, '_v4_answer_buf', '') or ''
+                _tail = _buf_all[-200:]
+                _monologue = bool(_MONOLOGUE_RE.match(_buf_all.lstrip()[:80]))
+                _short_action = (
+                    0 < len(_buf_all.strip()) < _SHORT_ANSWER_CHARS
+                    and bool(_ACTION_VERB_RE.search(_buf_all))
+                )
+                if (
+                    (_ACTION_INTENT_RE.search(_tail) or _monologue or _short_action)
+                    and getattr(self, '_v4_intent_streak', 0) < 2
+                ):
+                    self._v4_intent_streak = getattr(self, '_v4_intent_streak', 0) + 1
+                    messages.append(Message(role="assistant", content=_context_clean(raw)))
+                    messages.append(Message(role="user", content=(
+                        "Observation: 你刚才输出的是内部推理/计划，不是给用户的回答"
+                        "（且没有真正调用工具）。请现在就发出真正的工具调用；"
+                        "如果信息已足够，就输出面向用户的完整最终回答"
+                        "（用户语言、直接给结论，不要复述推理过程）。"
+                    )))
+                    continue
                 yield AgentStep(kind=StepKind.TEXT_END)
                 yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
                         metadata={"usage": _run_usage})
@@ -392,7 +448,18 @@ class ReActEngineV4(AgentEngine):
                         if _n and re.search(rf'\b{re.escape(_n)}\b', _buf, re.IGNORECASE):
                             _mentions_tool = True
                             break
-                if not _has_action and not _mentions_tool:
+                # Promise-of-action guard: "让我重新搜索…" names no tool but
+                # clearly commits to one. Treat it like tool intent — the
+                # empty-action reflection below pushes the model to emit
+                # the real call instead of ending the turn on a plan.
+                _action_intent = (
+                    not _has_action
+                    and bool(_ACTION_INTENT_RE.search(_buf))
+                    and getattr(self, '_v4_intent_streak', 0) < 2
+                )
+                if _action_intent:
+                    self._v4_intent_streak = getattr(self, '_v4_intent_streak', 0) + 1
+                if not _has_action and not _mentions_tool and not _action_intent:
                     # No Action, no tool intent — model gave up on ReAct.
                     # Strip protocol prefixes (Thought:, :, etc.) and
                     # output as answer.
@@ -524,15 +591,30 @@ class ReActEngineV4(AgentEngine):
             # Instead treat the raw text as a thought + prompt the model to
             # either call a tool properly or give FINAL_ANSWER.
             if not action.strip():
+                # After two consecutive plan-without-action replies, stop
+                # bouncing the model back — surface what it DID say as the
+                # answer rather than burning steps (and the user's patience).
+                if getattr(self, '_v4_intent_streak', 0) >= 2:
+                    _ans = (getattr(self, '_v4_answer_buf', '') or '').strip() or _context_clean(raw)
+                    if _ans:
+                        yield AgentStep(kind=StepKind.TEXT_DELTA, content=_ans)
+                    yield AgentStep(kind=StepKind.TEXT_END)
+                    yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
+                            metadata={"usage": _run_usage})
+                    return
+                self._v4_intent_streak = getattr(self, '_v4_intent_streak', 0) + 1
                 reflection = (
-                    "你的回复没有包含有效的 Action 或 FINAL_ANSWER。"
-                    "请用 'Thought: ...\\nAction: tool_name\\nAction Input: {...}' "
-                    "格式调用工具，或 'Action: FINAL_ANSWER\\nFINAL_ANSWER: 你的回答' 结束。"
+                    "你的上一条回复只说了打算做什么，但没有真正调用工具。"
+                    "请立即发出真正的工具调用——用 "
+                    "'Thought: ...\\nAction: tool_name\\nAction Input: {...}' "
+                    "格式，或直接给出 'Action: FINAL_ANSWER\\nFINAL_ANSWER: 回答' 结束。"
+                    "不要再复述计划。"
                 )
                 messages.append(Message(role="assistant", content=_context_clean(raw)))
                 messages.append(Message(role="user", content=f"Observation: {reflection}"))
                 continue
 
+            # ---
             # --- FINAL_ANSWER ---
             if action.upper() == "FINAL_ANSWER":
                 answer = normalize_final_answer(action_input)

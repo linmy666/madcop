@@ -21,6 +21,12 @@ import type { ElectronTerminalService } from './terminal'
 
 const POLL_INTERVAL_MS = 30 * 1000 // every 30 seconds (was 5 min; shortened so the observer feels "live")
 const DEBOUNCE_MS = 5_000              // coalesce bursts
+// Noise gates: MadCop's own logs/session records (and editor droppings)
+// change constantly and their tails are full of stale errors — judging
+// them produced the recurring "API error '当前模型'" ghost toasts.
+const IGNORED_FILE_RE = /(^|[\\/])(\.git|node_modules|__pycache__|\.madcop|\.venv|dist|build)([\\/]|$)|\.(log|jsonl|lock|tmp|swp|pyc|pyo|ds_store|bak)$/i
+const PER_FILE_COOLDOWN_MS = 60_000    // same file judged at most once a minute
+const SUMMARY_MEMORY = 10              // duplicate-toast suppression window
 const TERMINAL_MAX_CHARS = 2000
 
 export interface ProactiveObservation {
@@ -50,6 +56,8 @@ export class ProactiveMonitor {
   private pollTimer: NodeJS.Timeout | null = null
   private debounceTimer: NodeJS.Timeout | null = null
   private pending: Array<{ source: 'file' | 'terminal'; content: string }> = []
+  private lastFileCheckAt = new Map<string, number>()
+  private recentSummaries: string[] = []
   private fileHandler: ((evt: FileChangeEvent) => void) | null = null
   private lastTerminalSnapshot = ''
 
@@ -81,6 +89,8 @@ export class ProactiveMonitor {
       this.debounceTimer = null
     }
     this.pending = []
+    this.lastFileCheckAt.clear()
+    this.recentSummaries = []
   }
 
   /** Public hook so main.ts can forward fileWatcher events (or tests).
@@ -92,6 +102,18 @@ export class ProactiveMonitor {
    */
   onFileChange(evt: FileChangeEvent): void {
     if (!this.opts.enabled() || !this.opts.observeFiles()) return
+    if (IGNORED_FILE_RE.test(evt.file)) return
+    // Per-file cooldown — a file rewritten every few seconds (logs,
+    // autosaves) should not be re-judged on every write.
+    const fileKey = `${evt.workspace}/${evt.file}`
+    const now = Date.now()
+    if (now - (this.lastFileCheckAt.get(fileKey) ?? 0) < PER_FILE_COOLDOWN_MS) return
+    this.lastFileCheckAt.set(fileKey, now)
+    if (this.lastFileCheckAt.size > 500) {
+      for (const [k, t] of this.lastFileCheckAt) {
+        if (now - t > 10 * PER_FILE_COOLDOWN_MS) this.lastFileCheckAt.delete(k)
+      }
+    }
     // Try to read the last ~1000 chars of the file for context.
     let fileTail = ''
     try {
@@ -150,6 +172,10 @@ export class ProactiveMonitor {
       try {
         const verdict = await this.checkWithBackend(item.source, item.content)
         if (verdict.worth) {
+          const summary = (verdict.summary || '').trim()
+          if (summary && this.recentSummaries.includes(summary)) continue
+          this.recentSummaries.push(summary)
+          this.recentSummaries = this.recentSummaries.slice(-SUMMARY_MEMORY)
           const obs = {
             source: item.source,
             summary: verdict.summary,

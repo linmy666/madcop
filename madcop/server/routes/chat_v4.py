@@ -453,7 +453,13 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 "[No decorative emoji] Do NOT use emoji in headings, list "
                 "bullets, or table cells (🌀✈️🌟 etc.) — the UI is a minimal "
                 "thin-line design; plain text reads cleaner. Emoji inside "
-                "actual game/chat content the user asked for is fine."
+                "actual game/chat content the user asked for is fine. "
+                "[No plan-endings] NEVER end your reply with a promise of "
+                "future action (『让我再搜一次』『我换个关键词试试』『Let me "
+                "check...』). Either actually call the tool NOW, or give the "
+                "user your final answer with the information you already "
+                "have. A reply that only announces what you are ABOUT to do "
+                "is a failure."
             )
     except Exception as _e:
         logger.debug("build-intent directive skipped: %s", _e)
