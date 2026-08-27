@@ -22,7 +22,18 @@ function loadSelections(): Record<string, RuntimeSelection> {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return {}
     const parsed = JSON.parse(raw) as Record<string, RuntimeSelection>
-    return parsed && typeof parsed === 'object' ? parsed : {}
+    if (!parsed || typeof parsed !== 'object') return {}
+    // Sanitize legacy poison: old IntensitySlider builds persisted the
+    // display placeholder '当前模型' as modelId. Feeding that back to
+    // the LLM produced 'unknown model 当前模型 (2013)'. Drop the value
+    // so the empty-model omission path takes over.
+    for (const key of Object.keys(parsed)) {
+      const sel: any = parsed[key]
+      if (sel && (sel.modelId === '当前模型' || sel.modelId === '__placeholder__')) {
+        sel.modelId = ''
+      }
+    }
+    return parsed
   } catch { return {} }
 }
 

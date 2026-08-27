@@ -2096,6 +2096,8 @@ export const en = {
   'chat.lasted': 'lasted',
   'chat.memoryAnswer': 'Answering with {count} memories',
   'proactive.adopt': 'Apply',
+  'proactive.fileWatch': 'File watcher',
+  'proactive.terminalWatch': 'Terminal watcher',
 } as const
 
 export type TranslationKey = keyof typeof en

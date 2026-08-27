@@ -24,8 +24,10 @@ const tabStore = useTabStore()
 const sourceIcon = computed(() =>
   proactiveObservation.value?.source === 'terminal' ? 'terminal' : 'edit_note',
 )
-const sourceLabel = computed(() =>
-  proactiveObservation.value?.source === 'terminal' ? '终端' : '文件',
+const watchTitle = computed(() =>
+  proactiveObservation.value?.source === 'terminal'
+    ? t('proactive.terminalWatch', '终端观察')
+    : t('proactive.fileWatch', '文件观察'),
 )
 
 function onAdopt() {
@@ -46,7 +48,7 @@ function onAdopt() {
       >
         <div class="pt-head">
           <span class="material-symbols-outlined pt-icon">{{ sourceIcon }}</span>
-          <span class="pt-source">{{ sourceLabel }}观察</span>
+          <span class="pt-source">{{ watchTitle }}</span>
           <button class="pt-x" @click="dismiss" aria-label="忽略">
             <span class="material-symbols-outlined">close</span>
           </button>
