@@ -171,17 +171,34 @@ const streamingText = computed(() => sessionState.value?.streamingText ?? '')
 
 // ZCode-style turn header: whole-turn elapsed driven off the last user
 // message timestamp; ticks once per second while busy.
+// ZCode-style turn elapsed header: shown only after the turn has been
+// running for >= 1.5s (so trivial 0.5s turns don't flash a timer).
+// Below the threshold the streaming answer is in flight and the
+// header would be visual noise.
+const TURN_HEADER_DELAY_MS = 1500
 const nowTickMs = ref(Date.now())
+const headerActive = ref(false)
 let turnTimer: ReturnType<typeof setInterval> | null = null
+let headerTimer: ReturnType<typeof setTimeout> | null = null
 watch(chatState, (s) => {
-  if ((s === 'busy' || s === 'streaming') && !turnTimer) {
-    turnTimer = setInterval(() => { nowTickMs.value = Date.now() }, 1000)
-  } else if (s === 'idle' && turnTimer) {
-    clearInterval(turnTimer); turnTimer = null
+  const running = ['busy', 'streaming', 'tool_executing'].includes(String(s))
+  if (running) {
+    if (!turnTimer) turnTimer = setInterval(() => { nowTickMs.value = Date.now() }, 1000)
+    if (!headerTimer && !headerActive.value) {
+      headerTimer = setTimeout(() => { headerActive.value = true; headerTimer = null }, TURN_HEADER_DELAY_MS)
+    }
+  } else {
+    if (turnTimer) { clearInterval(turnTimer); turnTimer = null }
+    if (headerTimer) { clearTimeout(headerTimer); headerTimer = null }
+    headerActive.value = false
   }
 }, { immediate: true })
-onBeforeUnmount(() => { if (turnTimer) clearInterval(turnTimer) })
+onBeforeUnmount(() => {
+  if (turnTimer) clearInterval(turnTimer)
+  if (headerTimer) clearTimeout(headerTimer)
+})
 const turnElapsedLabel = computed(() => {
+  if (!headerActive.value) return ''
   const msgs = sessionState.value?.messages ?? []
   let lastUserTs: number | null = null
   for (let i = msgs.length - 1; i >= 0; i--) {
