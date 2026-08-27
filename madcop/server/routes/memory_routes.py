@@ -106,6 +106,23 @@ async def search_memory(q: str = Query(..., description="Search query")) -> dict
     store = get_memory_store()
     safe_q = q.replace('"', '""')
     records = store.search_fts(f'"{safe_q}"', limit=50)
+    if not records:
+        # CJK fallback: SQLite FTS5 unicode61 tokenizer does not segment
+        # Chinese text, so a Chinese query never matches the giant
+        # per-run tokens in the index. Fall back to a direct scan over
+        # all kinds so Chinese keyword search still works.
+        from madcop.memory import (
+            MemoryKind,
+        )
+        all_items: list = []
+        for mk in (MemoryKind.EPISODIC, MemoryKind.SEMANTIC,
+                   MemoryKind.REFLECTIVE):
+            try:
+                all_items.extend(store.list_by_kind(mk, limit=500))
+            except Exception:
+                pass
+        records = [r for r in all_items
+                   if q in (r.content or "") or q in (r.title or "")][:50]
     return {
         "query": q,
         "count": len(records),
