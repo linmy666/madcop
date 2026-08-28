@@ -176,6 +176,9 @@ const showTerminalPanel = computed(() => {
 const planSession = computed(() =>
   activeTabId.value ? chatStore.sessions[activeTabId.value] : null
 )
+const liveStep = computed(() =>
+  (planSession.value as any)?.liveStep || null
+)
 const workspaceDirForArtifacts = computed(() => {
   // Read from localStorage (set by AppShell/WorkspacePanel).
   try {
@@ -1010,6 +1013,26 @@ function openTerminalInTab() {
               :visible="ragDebugOpen"
               @close="ragDebugOpen = false"
             />
+          </div>
+        </div>
+
+        <!-- Codex-style global progress capsule: one quiet pill above the
+             composer tells the user how many steps the task has and where
+             it is now — the single strongest "sense of safety" signal. -->
+        <div
+          v-if="liveStep && liveStep.m > 0"
+          class="pointer-events-none flex w-full shrink-0 justify-center"
+          style="margin-bottom: 4px"
+        >
+          <div
+            class="flex items-center gap-2 rounded-full border border-[var(--color-border)]/70 bg-[var(--color-surface)] px-3.5 py-1 text-[12px] text-[var(--color-text-tertiary)] shadow-[var(--shadow-dropdown)]"
+            role="status"
+          >
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-brand)] opacity-40"></span>
+              <span class="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-brand)]"></span>
+            </span>
+            <span>{{ t('chat.stepProgress', '步骤') }} {{ liveStep.n }} / {{ liveStep.m }}</span>
           </div>
         </div>
 

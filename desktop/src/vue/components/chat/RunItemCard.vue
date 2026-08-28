@@ -238,7 +238,7 @@ const errorText = computed(() => {
       </span>
       <span class="run-item__verb">{{ meta.verb }}</span>
       <code v-if="target" class="run-item__target">{{ target }}</code>
-      <span v-if="stepLabel" class="run-item__meta">{{ stepLabel }}</span>
+      <span v-if="stepLabel && !isPending" class="run-item__meta">{{ stepLabel }}</span>
       <span v-if="streamingLabel" class="run-item__meta run-item__meta--live">
         {{ t('runItem.composing', 'composing…') }} {{ streamingLabel }}
       </span>
@@ -273,12 +273,16 @@ const errorText = computed(() => {
   overflow: hidden;
   transition: border-color 120ms, background 120ms;
 }
-/* Pending is quiet, same family as done/failed - only the spinner
-   moves. No tinted border/background: the purple card fought the
-   otherwise monochrome timeline. */
+/* Pending goes quieter still — a Codex-style hairline activity row, not
+   a card: no border, no fill, muted text. It becomes a real card only
+   once it has a result to show. Progress lives in the global capsule. */
 .run-item--pending {
-  border-color: var(--color-border, rgba(128,128,128,0.18));
-  background: var(--color-surface-container-low, rgba(128,128,128,0.04));
+  border-color: transparent;
+  background: transparent;
+}
+.run-item--pending .run-item__verb,
+.run-item--pending .run-item__meta {
+  color: var(--color-text-tertiary, rgba(128,128,128,0.8));
 }
 .run-item--failed {
   border-color: var(--color-error, #d44a4a);

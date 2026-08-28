@@ -1133,6 +1133,7 @@ export const useChatStore = defineStore('chat', {
                       clearInterval((session as any)._confirmPoll);
                       (session as any)._confirmPoll = null
                     }
+                    ;(session as any).liveStep = null
                     // Sprint 4 — capture creation-engine citations from
                     // DONE.metadata (only present in create mode).
                     const _meta = (event as any)?.metadata
@@ -1401,6 +1402,60 @@ export const useChatStore = defineStore('chat', {
                       step: (event as any).metadata?.step,
                       maxSteps: (event as any).metadata?.max_steps,
                     }
+                    // Global step capsule (Codex-style "Step N / M"): one
+                    // quiet indicator above the composer tells the user how
+                    // far the whole task has to go — the #1 "sense of
+                    // safety" signal in side-by-side comparisons.
+                    const _mSteps = (event as any).metadata?.max_steps
+                    if (_mSteps) {
+                      ;(session as any).liveStep = {
+                        n: (event as any).metadata?.step ?? 1,
+                        m: _mSteps,
+                      }
+                    }
+                    // Live execution plan (Codex-style todo mirror): chat
+                    // mode has no backend plan emitter, so the tasks panel
+                    // read session.plan === null forever. Synthesize one
+                    // step per tool call, completed when its result lands.
+                    {
+                      const _tid = toolMsg.toolUseId
+                      if (!(session as any).planStepByTool) (session as any).planStepByTool = {}
+                      if (!session.plan) {
+                        session.plan = {
+                          goal: session.title || '执行任务',
+                          steps: [],
+                          current_step: 1,
+                          total_steps: 0,
+                          completed_steps: 0,
+                          failed_steps: 0,
+                          status: 'running',
+                          mode: 'exec',
+                        }
+                      }
+                      const _plan = session.plan!
+                      const _idx = _plan.steps.length + 1
+                      const _target = (() => {
+                        try {
+                          const a = (event.args ?? {}) as any
+                          return String(a.path ?? a.file ?? a.city ?? a.query ?? a.text ?? a.url ?? '').slice(0, 60)
+                        } catch { return '' }
+                      })()
+                      _plan.steps.push({
+                        step: _idx,
+                        action: `${event.name}${_target ? ' · ' + _target : ''}`,
+                        tool: event.name,
+                        input_hint: _target,
+                        expected_result: '',
+                        status: 'in_progress',
+                        result: null,
+                        error: null,
+                        retry_count: 0,
+                      })
+                      ;(session as any).planStepByTool[_tid] = _idx
+                      _plan.total_steps = _plan.steps.length
+                      _plan.current_step = _idx
+                      session.plan = { ...session.plan, steps: [..._plan.steps] }
+                    }
                     // Arg-streaming progress may have arrived BEFORE this
                     // card (see TOOL_PROGRESS stash) — adopt it so the card
                     // never reads as a frozen spinner.
@@ -1484,6 +1539,20 @@ export const useChatStore = defineStore('chat', {
                     if (prev) {
                       prev.isPending = false
                       ;(prev as any).result = event.result
+                      // Mirror completion into the live execution plan.
+                      const _plan = session.plan
+                      const _stepIdx = (session as any).planStepByTool?.[(prev as any).toolUseId]
+                      if (_plan && _stepIdx) {
+                        const _st = _plan.steps[_stepIdx - 1]
+                        if (_st && _st.status === 'in_progress') {
+                          const _isErr = (event as any).metadata?.is_error === true
+                          _st.status = _isErr ? 'failed' : 'completed'
+                          if (_isErr) _plan.failed_steps = (_plan.failed_steps || 0) + 1
+                          else _plan.completed_steps = (_plan.completed_steps || 0) + 1
+                          _st.result = String((event as any).result ?? '').slice(0, 160)
+                          session.plan = { ..._plan, steps: [..._plan.steps] }
+                        }
+                      }
                       // SDK-standard display data (Claude Code tool rows):
                       // duration + error flag from the v4 tool_end metadata.
                       const _meta = (event as any).metadata || {}

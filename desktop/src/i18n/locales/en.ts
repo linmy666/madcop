@@ -1,4 +1,5 @@
 export const en = {
+  'chat.stepProgress': 'Step',
   'common.close': 'Close',
   'workspace.title': 'Workspace',
   'workspace.pickDir': 'Choose workspace folder',

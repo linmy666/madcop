@@ -1,6 +1,7 @@
 import type { TranslationKey } from './en'
 
 export const zh: Record<TranslationKey, string> = {
+  'chat.stepProgress': '步骤',
   'common.close': '关闭',
   'workspace.title': '工作区',
   'workspace.pickDir': '选择工作区目录',
