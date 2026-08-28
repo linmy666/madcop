@@ -574,9 +574,159 @@ class WriteXlsxTool(Tool):
             return {"error": f"{type(e).__name__}: {e}"}
 
 
+class WritePptxTool(Tool):
+    """Generate a real .pptx deck from a slide outline.
+
+    The model previously tried to build decks through ad-hoc bash +
+    python-pptx one-liners, failed (broken shell tool), and then told
+    the user the file was written anyway. This tool makes deck
+    generation a first-class call: the model supplies a title and a
+    slide outline; we render a clean, consistent deck via python-pptx.
+    """
+
+    name = "write_pptx"
+    description = (
+        "Generate a new .pptx presentation file. Provide `title` (deck "
+        "title) and `slides`: a list where each item has `title` and "
+        "`bullets` (a list of strings; optionally `notes`). Path must be "
+        "inside allowed dirs. Renders a clean 16:9 deck with consistent "
+        "typography."
+    )
+
+    def __init__(self, allowed_dirs: Sequence[str | Path] | None = None) -> None:
+        self._allowed_dirs = list(allowed_dirs or [os.getcwd()])
+
+    @property
+    def parameters_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Output .pptx path (e.g. /workspace/report.pptx).",
+                },
+                "title": {"type": "string", "description": "Deck title (cover slide)."},
+                "subtitle": {"type": "string", "description": "Optional cover subtitle."},
+                "slides": {
+                    "type": "array",
+                    "description": (
+                        "Slide outline. Each item: {'title': str, "
+                        "'bullets': list[str], 'notes': str (optional)}."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "bullets": {"type": "array", "items": {"type": "string"}},
+                            "notes": {"type": "string"},
+                        },
+                        "required": ["title"],
+                    },
+                },
+            },
+            "required": ["path", "title", "slides"],
+        }
+
+    def __call__(self, **kwargs: Any) -> dict[str, Any]:
+        path_str = kwargs.get("path", "")
+        title = str(kwargs.get("title", "") or "").strip()
+        slides = kwargs.get("slides", [])
+        if not path_str:
+            return {"error": "missing 'path'"}
+        if not title:
+            return {"error": "missing 'title'"}
+        if not isinstance(slides, list) or not slides:
+            return {"error": "missing or invalid 'slides' (expected a non-empty list)"}
+
+        try:
+            p = _resolve_in_allowlist(path_str, self._allowed_dirs)
+        except PermissionError as e:
+            logger.info("write_pptx denied: %s", e)
+            return {"error": str(e)}
+
+        try:
+            from pptx import Presentation
+            from pptx.util import Inches, Pt
+
+            prs = Presentation()
+            prs.slide_width = Inches(13.333)   # 16:9
+            prs.slide_height = Inches(7.5)
+
+            ACCENT = "1A1A1E"      # ink
+            ACCENT_SOFT = "5B5B66"
+            # ── Cover ──
+            cover = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+            bar = cover.shapes.add_shape(1, Inches(0.9), Inches(2.35), Inches(0.14), Inches(1.5))
+            bar.fill.solid(); bar.fill.fore_color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0x1A, 0x1A, 0x1E)
+            bar.line.fill.background()
+            box = cover.shapes.add_textbox(Inches(1.25), Inches(2.3), Inches(11.0), Inches(1.3))
+            para = box.text_frame.paragraphs[0]
+            run = para.add_run(); run.text = title
+            run.font.size = Pt(44); run.font.bold = True
+            run.font.color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0x1A, 0x1A, 0x1E)
+            sub = str(kwargs.get("subtitle", "") or "").strip()
+            if sub:
+                sbox = cover.shapes.add_textbox(Inches(1.27), Inches(3.55), Inches(11.0), Inches(0.7))
+                sp = sbox.text_frame.paragraphs[0]
+                srun = sp.add_run(); srun.text = sub
+                srun.font.size = Pt(18)
+                srun.font.color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0x5B, 0x5B, 0x66)
+
+            # ── Content slides ──
+            for i, sl in enumerate(slides, start=1):
+                if not isinstance(sl, dict):
+                    sl = {"title": str(sl)}
+                stitle = str(sl.get("title", f"Slide {i}"))
+                bullets = sl.get("bullets", []) or []
+                notes = str(sl.get("notes", "") or "")
+                slide = prs.slides.add_slide(prs.slide_layouts[6])
+                tbox = slide.shapes.add_textbox(Inches(0.9), Inches(0.55), Inches(11.5), Inches(1.0))
+                tp = tbox.text_frame.paragraphs[0]
+                trun = tp.add_run(); trun.text = stitle
+                trun.font.size = Pt(30); trun.font.bold = True
+                trun.font.color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0x1A, 0x1A, 0x1E)
+                rule = slide.shapes.add_shape(1, Inches(0.93), Inches(1.55), Inches(12.0), Pt(2))
+                rule.fill.solid(); rule.fill.fore_color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0xE4, 0xE4, 0xE7)
+                rule.line.fill.background()
+                if bullets:
+                    bbox = slide.shapes.add_textbox(Inches(0.95), Inches(1.9), Inches(11.4), Inches(5.0))
+                    tf = bbox.text_frame
+                    tf.word_wrap = True
+                    for bi, b in enumerate(bullets):
+                        bp = tf.paragraphs[0] if bi == 0 else tf.add_paragraph()
+                        br = bp.add_run()
+                        br.text = f"•  {b}" if not str(b).startswith(("•", "-", "数字")) else str(b)
+                        br.font.size = Pt(17)
+                        br.font.color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0x27, 0x27, 0x2A)
+                        bp.space_after = Pt(10)
+                if notes:
+                    slide.notes_slide.notes_text_frame.text = notes
+
+            # footer page numbers
+            for i, slide in enumerate(prs.slides):
+                if i == 0:
+                    continue
+                nbox = slide.shapes.add_textbox(Inches(12.3), Inches(7.02), Inches(0.8), Inches(0.35))
+                np_ = nbox.text_frame.paragraphs[0]
+                nrun = np_.add_run(); nrun.text = str(i)
+                nrun.font.size = Pt(11)
+                nrun.font.color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0x8A, 0x8A, 0x93)
+
+            prs.save(str(p))
+            return {
+                "path": str(p),
+                "status": "ok",
+                "slides": len(slides) + 1,
+                "bytes": p.stat().st_size,
+            }
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+
 __all__ = [
     "ReadFileTool",
     "WriteFileTool",
     "EditFileTool",
     "WriteXlsxTool",
+    "WritePptxTool",
 ]

@@ -76,6 +76,14 @@ _ACTION_VERB_RE = re.compile(
     re.IGNORECASE,
 )
 _SHORT_ANSWER_CHARS = 80
+# Falsifiable check: an answer that claims an artifact file was produced
+# ("…已生成在：台风分析报告.pptx") must point at a real file. Text
+# heuristics always leak ("要我顺手再做" dodged the intent list); the
+# filesystem can't be fooled.
+_ARTIFACT_CLAIM_RE = re.compile(
+    r"[\w.\-\u4e00-\u9fff]+\.(pptx|xlsx|docx|html?|pdf|csv|md|txt|json)\b",
+    re.IGNORECASE,
+)
 _MONOLOGUE_RE = re.compile(
     r"^\s*(the user|i need to|let me|i should|i'll|i am going to|i'm going to"
     r"|looking at|okay,|alright,|嗯|好，用户)",
@@ -412,10 +420,66 @@ class ReActEngineV4(AgentEngine):
                     0 < len(_buf_all.strip()) < _SHORT_ANSWER_CHARS
                     and bool(_ACTION_VERB_RE.search(_buf_all))
                 )
+                # Artifact-claim verification: if the answer says a file
+                # was produced, check the filesystem. Only trust claims
+                # backed by this turn's tool calls (steps_log) or an
+                # actually-existing file.
+                _claimed_missing: list[str] = []
+                try:
+                    import os as _os
+                    for _cm in _ARTIFACT_CLAIM_RE.finditer(_buf_all):
+                        _claim = _cm.group(0)
+                        if _cm.group(1).lower() not in ('pptx', 'xlsx', 'docx', 'pdf'):
+                            continue  # code snippets discussing .html/.py are fine
+                        _cand = _os.path.expanduser(str(_claim))
+                        if _os.path.isabs(_cand):
+                            _exists = _os.path.exists(_cand)
+                        else:
+                            _base = getattr(ctx, 'work_dir', None) or _os.getcwd()
+                            _exists = _os.path.exists(_os.path.join(str(_base), _cand))
+                        if not _exists:
+                            _claimed_missing.append(_claim)
+                except Exception:
+                    _claimed_missing = []
+                _streak_ok = getattr(self, '_v4_intent_streak', 0) < 2
+                if _claimed_missing and _streak_ok:
+                    messages.append(Message(role="assistant", content=_context_clean(raw)))
+                    messages.append(Message(role="user", content=(
+                        f"Observation: 你声称已生成文件 {_claimed_missing[0]}，"
+                        "但文件系统里并不存在——这是在编造结果。"
+                        "请真正调用 write_pptx / write_file 工具生成它，"
+                        "工具成功返回后，再把真实路径告诉用户。"
+                    )))
+                    self._v4_intent_streak = getattr(self, '_v4_intent_streak', 0) + 1
+                    continue
+
+                # Fabricated-tool-result guard: the answer names a
+                # registered tool ("write_pptx 失败：sandbox denied…") that
+                # was NEVER called this turn — the model invented a whole
+                # failure report instead of calling it. Steps actually
+                # taken live in steps_log.
+                _fired = {a for a in steps_log if a and a.upper() != 'FINAL_ANSWER'}
+                _named_uncalled = any(
+                    ((_n := ((sch.get('function') or {}).get('name', '')))
+                     and _n.lower() not in _fired
+                     and re.search(rf'\b{_n}\b', _buf_all, re.IGNORECASE))
+                    for sch in (ctx.tool_schemas or [])
+                )
                 if (
-                    (_ACTION_INTENT_RE.search(_tail) or _monologue or _short_action)
+                    (_ACTION_INTENT_RE.search(_tail) or _monologue or _short_action or _named_uncalled)
                     and getattr(self, '_v4_intent_streak', 0) < 2
                 ):
+                    if _named_uncalled and not (
+                        _ACTION_INTENT_RE.search(_tail) or _monologue or _short_action
+                    ):
+                        messages.append(Message(role="assistant", content=_context_clean(raw)))
+                        messages.append(Message(role="user", content=(
+                            "Observation: 你刚才报告了某个工具的执行结果，但这个回合你根本没有调用过任何工具——"
+                            "那是编造的。请真正调用对应的工具完成操作，"
+                            "并把真实的执行结果告诉用户。"
+                        )))
+                        self._v4_intent_streak = getattr(self, '_v4_intent_streak', 0) + 1
+                        continue
                     self._v4_intent_streak = getattr(self, '_v4_intent_streak', 0) + 1
                     messages.append(Message(role="assistant", content=_context_clean(raw)))
                     messages.append(Message(role="user", content=(
@@ -902,6 +966,32 @@ class ReActEngineV4(AgentEngine):
                 _results.append((_c, _obs, _ierr, _meta))
 
             # Real-time preview (ZCode-style): a finished write into the
+            # Failure streak: after 2+ consecutive failed tool calls,
+            # models start FABRICATING success ("the file is saved to
+            # /Users/xiaoming/…"). Bounce back with an explicit
+            # no-lying instruction before they compose the answer.
+            _batch_failures = [
+                (_c, str(_obs))
+                for _c, _obs, _ierr, _m in _results if _ierr
+            ]
+            if _batch_failures:
+                self._v4_fail_streak = getattr(self, '_v4_fail_streak', 0) + len(_batch_failures)
+            else:
+                self._v4_fail_streak = 0
+            if self._v4_fail_streak >= 2:
+                _first_err = _batch_failures[0][1][:220] if _batch_failures else ""
+                messages.append(Message(role="assistant", content=_context_clean(raw)))
+                messages.append(Message(role="user", content=(
+                    f"Observation: 工具已连续失败 {self._v4_fail_streak} 次"
+                    f"（最近错误：{_first_err}）。"
+                    "请注意：什么文件都还没有写入，什么操作都还没有成功。"
+                    "请根据错误修正参数重试，或改用其他工具；"
+                    "在操作真正成功之前，绝不要告诉用户'已完成/已写入/已保存'——"
+                    "那样是在编造结果。"
+                )))
+                self._v4_fail_streak = 0
+                continue
+
             # preview dir tells the frontend to auto-open the workbench
             # panel in browser mode and hot-reload the iframe. Deduped
             # per turn-path; failures don't notify.

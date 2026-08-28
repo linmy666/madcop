@@ -31,7 +31,7 @@ from .permissions import (
 from .computer import ComputerUseTool, ActionLogEntry
 # v1.6.0 — web + files + cron
 from .web import WebSearchTool, WebFetchTool
-from .files import ReadFileTool, WriteFileTool, EditFileTool, WriteXlsxTool
+from .files import ReadFileTool, WriteFileTool, EditFileTool, WriteXlsxTool, WritePptxTool
 from .cron import CronJob, CronStore, CronScheduler, parse_cron, should_run
 # v1.9.0 — docker + eventbus
 from .docker_sandbox import DockerSandbox, DockerConfig, DEFAULT_IMAGE as DEFAULT_DOCKER_IMAGE
@@ -127,6 +127,7 @@ def default_registry(
     reg.register(WriteFileTool(allowed_dirs=_write_dirs))  # v3.0 — write to user's workspace
     reg.register(EditFileTool(allowed_dirs=_write_dirs))   # v3.0 — edit in user's workspace
     reg.register(WriteXlsxTool(allowed_dirs=_write_dirs))  # v3.0 — generate xlsx output
+    reg.register(WritePptxTool(allowed_dirs=_write_dirs))  # real deck generation
     if store is not None:
         from .memory import default_memory_tools
         for tool in default_memory_tools(store):

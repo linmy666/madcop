@@ -68,6 +68,7 @@ DANGER_LEVELS: dict[str, str] = {
     # Mutating but reversible
     "write_file": "mutating",
     "write_xlsx": "mutating",
+    "write_pptx": "mutating",
     "edit_file": "mutating",
     "read_file": "safe",
     "remember": "mutating",

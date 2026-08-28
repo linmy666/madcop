@@ -282,6 +282,32 @@ class ToolExecutor:
         return ToolResult(tool_name=tool_name, content=content, elapsed_ms=elapsed)
 
     @staticmethod
+    def _filter_kwargs(handler: Callable, args: dict) -> dict:
+        """Drop kwargs the handler doesn't accept.
+
+        The engine injects work_dir/cwd into every call for file tools;
+        handlers with narrower signatures (BashTool took command/cwd/
+        timeout_s only) blew up with TypeError before, so the whole bash
+        tool was dead on arrival. **kwargs handlers pass through
+        untouched.
+        """
+        try:
+            sig = inspect.signature(handler)
+        except (ValueError, TypeError):
+            return args
+        params = sig.parameters
+        if any(pp.kind is inspect.Parameter.VAR_KEYWORD for pp in params.values()):
+            return args
+        supported = {
+            k: v for k, v in args.items()
+            if k in params and params[k].kind is not inspect.Parameter.VAR_POSITIONAL
+        }
+        dropped = sorted(set(args) - set(supported))
+        if dropped:
+            logger.info("tool handler ignoring unsupported kwargs: %s", dropped)
+        return supported
+
+    @staticmethod
     def _invoke_with_timeout(handler: Callable, args: dict, timeout_s: int) -> Any:
         """Run a (possibly async) handler with a hard timeout.
 
@@ -299,6 +325,7 @@ class ToolExecutor:
         returns naturally; that's a leak we accept because Python
         can't preempt arbitrary C calls.
         """
+        args = ToolExecutor._filter_kwargs(handler, args)
         if inspect.iscoroutinefunction(handler):
             coro = handler(**args)
 
@@ -311,7 +338,7 @@ class ToolExecutor:
                 raise _ToolTimeout(timeout_s) from e
 
         if callable(handler):
-            future = _THREAD_POOL.submit(handler, **args)
+            future = _THREAD_POOL.submit(handler, **ToolExecutor._filter_kwargs(handler, args))
             try:
                 return future.result(timeout=timeout_s)
             except concurrent.futures.TimeoutError as e:
@@ -350,6 +377,7 @@ def build_default_registry(
         EchoTool, GetTimeTool, GetCurrentModelTool,
         WebSearchTool, WebFetchTool, WeatherTool, ClarifyTool,
         ReadFileTool, WriteFileTool, EditFileTool, WriteXlsxTool,
+        WritePptxTool,
     )
     from madcop.tools.market import MarketQuoteTool, MarketHistoryTool
     from madcop.tools.paper import PaperAccountTool, PaperOrderTool, PaperResetTool
@@ -400,6 +428,7 @@ def build_default_registry(
     _reg(WriteFileTool, allowed_dirs=_write_dirs)
     _reg(EditFileTool, allowed_dirs=_write_dirs)
     _reg(WriteXlsxTool, allowed_dirs=_write_dirs)
+    _reg(WritePptxTool, allowed_dirs=_write_dirs)
 
     # Shell tool — the agent desktop finally HAS one. Runs through
     # SubprocessSandbox (cwd allowlist + timeout + output cap); danger
