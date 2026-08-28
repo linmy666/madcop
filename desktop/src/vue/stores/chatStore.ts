@@ -467,6 +467,7 @@ export const useChatStore = defineStore('chat', {
         if (!s || s.chatState !== 'busy') return
         s.chatState = 'idle'
         try { useTabStore().setTabStatus(sessionId, 'idle') } catch { /* ignore */ }
+        if (s._confirmPoll) { clearInterval(s._confirmPoll); s._confirmPoll = null }
         try {
           useUIStore().addToast({
             type: 'info',
@@ -722,6 +723,16 @@ export const useChatStore = defineStore('chat', {
           }
           session.reasoningContent = null
           session.agentStreams = {}
+          // Safety net: while the turn streams, poll the backend's live
+          // HITL queue every 5s. The SSE path delivers tool_confirm_request
+          // normally, but any dropped event used to strand the turn on an
+          // invisible confirmation (spinner forever, nothing to approve).
+          try {
+            if ((session as any)._confirmPoll) clearInterval((session as any)._confirmPoll)
+            ;(session as any)._confirmPoll = setInterval(() => {
+              try { this.rehydratePendingConfirms(sessionId) } catch { /* noop */ }
+            }, 5_000)
+          } catch { /* timer unavailable */ }
           const decoder = new TextDecoder()
           let buffer = ''
           let assistantMsg = ''
@@ -947,6 +958,41 @@ export const useChatStore = defineStore('chat', {
                     w.__madcopSSE.push({ t: Date.now(), type: event.type, id: event.id })
                   }
                 }
+                // ── FUNCTIONAL event handling (must run for EVERY event) ──
+                // These were once nested inside the debugSSELog telemetry
+                // block below; once that log hit its 200-entry cap the
+                // whole block was skipped — silently killing the HITL
+                // confirm card (turn stuck on "Step 2/12" with nothing to
+                // approve) and the live plan panel. Keep them unconditional.
+                if (event.type === 'tool_confirm_request') {
+                  // HITL: backend BLOCKED waiting for user approve/deny.
+                  // P0-3: parallel tools queue several cards — dedupe by
+                  // tool_use_id, render head-of-queue first.
+                  const reqId = (event as any).tool_use_id || `confirm-${Date.now()}`
+                  if (!session.pendingToolConfirms.some((c: any) => c.toolUseId === reqId)) {
+                    session.pendingToolConfirms.push({
+                      toolUseId: reqId,
+                      toolName: (event as any).tool_name || '',
+                      input: (event as any).tool_input || {},
+                    })
+                  }
+                } else if (event.type === 'plan') {
+                  // Persist the plan so PlanTasksPanel (right sidebar) can
+                  // render live task steps — the panel reads session.plan.
+                  // v4 SSE carries the plan under metadata.plan; the legacy
+                  // plan-mode emitter puts it at event.plan — accept both.
+                  // PlanTasksPanel reads step.action; the MEA emitter uses
+                  // step.title — mirror so one source serves both.
+                  const _p = (event as any).plan ?? (event as any).metadata?.plan
+                  if (_p) {
+                    const _steps = (_p.steps || []).map((st: any) => ({
+                      ...st,
+                      action: st.action || st.title || '',
+                    }))
+                    session.plan = { ..._p, steps: _steps }
+                  }
+                }
+
                 // In-UI mirror so users without DevTools can still see
                 // what events arrived. Capped at 200 to bound memory.
                 if (!session.debugSSELog) session.debugSSELog = []
@@ -957,41 +1003,10 @@ export const useChatStore = defineStore('chat', {
                   } else if (event.type === 'error' && event.message) {
                     preview = String(event.message).slice(0, 120)
                   } else if (event.type === 'tool_confirm_request') {
-                    // HITL: backend BLOCKED waiting for user approve/deny.
-                    // Without this handler the confirm event was silently
-                    // dropped and the reply stalled forever after intro
-                    // text. P0-3: parallel tools queue several cards —
-                    // dedupe by tool_use_id, render head-of-queue first.
-                    const reqId = (event as any).tool_use_id || `confirm-${Date.now()}`
-                    if (!session.pendingToolConfirms.some((c: any) => c.toolUseId === reqId)) {
-                      session.pendingToolConfirms.push({
-                        toolUseId: reqId,
-                        toolName: (event as any).tool_name || '',
-                        input: (event as any).tool_input || {},
-                      })
-                    }
+                    preview = `confirm ${((event as any).tool_name) || ''}`
                   } else if (event.type === 'plan') {
-                    const _p = (event as any).plan ?? event.metadata?.plan
-                    if (_p) {
-                      preview = `steps=${_p.steps?.length ?? 0} status=${_p.status}`
-                      // Persist the plan onto the session so PlanTasksPanel
-                      // (right sidebar) can render live task steps — without
-                      // this the sidebar stays blank ("准备就绪") because
-                      // the panel reads from session.plan, not from the
-                      // streaming events. v4 SSE carries the plan under
-                      // metadata.plan; the legacy plan-mode emitter puts
-                      // it at event.plan — accept both.
-                      // PlanTasksPanel reads step.action; the MEA emitter
-                      // uses step.title. Mirror so a single source of
-                      // truth can serve both UI surfaces.
-                      const _steps = (_p.steps || []).map((s: any) => ({
-                        ...s,
-                        action: s.action || s.title || '',
-                      }))
-                      session.plan = { ..._p, steps: _steps }
-                    } else {
-                      preview = 'plan'
-                    }
+                    const _p = (event as any).plan ?? (event as any).metadata?.plan
+                    preview = _p ? `steps=${_p.steps?.length ?? 0} status=${_p.status}` : 'plan'
                   } else if (event.type === 'tool' && event.name) {
                     preview = event.name
                   }
@@ -1113,6 +1128,11 @@ export const useChatStore = defineStore('chat', {
                     endLiveState()  // notify PlanTasksPanel streaming ended
                     // P2-12 — mark the tab idle so Sidebar's running count clears.
                     try { useTabStore().setTabStatus(sessionId, 'idle') } catch { /* ignore */ }
+                    // Turn over — stop the HITL rehydrate poll.
+                    if ((session as any)._confirmPoll) {
+                      clearInterval((session as any)._confirmPoll);
+                      (session as any)._confirmPoll = null
+                    }
                     // Sprint 4 — capture creation-engine citations from
                     // DONE.metadata (only present in create mode).
                     const _meta = (event as any)?.metadata
@@ -1381,6 +1401,16 @@ export const useChatStore = defineStore('chat', {
                       step: (event as any).metadata?.step,
                       maxSteps: (event as any).metadata?.max_steps,
                     }
+                    // Arg-streaming progress may have arrived BEFORE this
+                    // card (see TOOL_PROGRESS stash) — adopt it so the card
+                    // never reads as a frozen spinner.
+                    const _stash = (session as any).progressStash
+                    const _pre = _stash?.[toolMsg.toolUseId] ?? _stash?.current
+                    if (_pre) {
+                      ;(toolMsg as any).streamingChars = _pre
+                      delete _stash[toolMsg.toolUseId]
+                      delete _stash.current
+                    }
                     // Insert BEFORE the assistant text placeholder if it was
                     // already pushed (Phase-1 now streams text before deciding
                     // to call tools, so a 'tool' event can arrive after text
@@ -1420,12 +1450,19 @@ export const useChatStore = defineStore('chat', {
                     // the user sees forward motion instead of a frozen
                     // spinner.
                     const tid = (event as any).tool_use_id
+                    const chars = Number((event as any).content) || (event as any).metadata?.chars || 0
                     const pendingMsg = session.messages.find((m: any) =>
                       m.type === 'tool_use' && m.isPending === true &&
                       (!tid || (m as any).toolUseId === tid))
                     if (pendingMsg) {
-                      const chars = Number((event as any).content) || (event as any).metadata?.chars || 0
                       ;(pendingMsg as any).streamingChars = chars
+                    } else {
+                      // TOOL_PROGRESS streams DURING argument composition —
+                      // before TOOL_START creates the card. Stash per id so
+                      // the card picks the counter up the moment it exists
+                      // (otherwise the card sits at 0 KB and looks frozen).
+                      if (!(session as any).progressStash) (session as any).progressStash = {}
+                      ;(session as any).progressStash[tid || 'current'] = chars
                     }
                   } else if (event.type === 'tool_result') {
                     // Tool returned — pair it with the matching pending
