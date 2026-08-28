@@ -459,7 +459,15 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 "check...』). Either actually call the tool NOW, or give the "
                 "user your final answer with the information you already "
                 "have. A reply that only announces what you are ABOUT to do "
-                "is a failure."
+                "is a failure. "
+                "[Office tasks] For Excel/PPT/Word/CSV/data work: prefer "
+                "writing a short Python script via bash (pandas/openpyxl/"
+                "python-docx/python-pptx/matplotlib are pre-installed) — "
+                "code composes what fixed APIs cannot. For a STANDARD deck "
+                "or spreadsheet use the write_pptx / write_xlsx tools "
+                "directly. ALWAYS verify office output by calling "
+                "read_office on the generated file before telling the user "
+                "it is done, and report the real absolute path."
             )
     except Exception as _e:
         logger.debug("build-intent directive skipped: %s", _e)

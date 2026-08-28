@@ -377,7 +377,7 @@ def build_default_registry(
         EchoTool, GetTimeTool, GetCurrentModelTool,
         WebSearchTool, WebFetchTool, WeatherTool, ClarifyTool,
         ReadFileTool, WriteFileTool, EditFileTool, WriteXlsxTool,
-        WritePptxTool,
+        WritePptxTool, ReadOfficeTool,
     )
     from madcop.tools.market import MarketQuoteTool, MarketHistoryTool
     from madcop.tools.paper import PaperAccountTool, PaperOrderTool, PaperResetTool
@@ -429,6 +429,7 @@ def build_default_registry(
     _reg(EditFileTool, allowed_dirs=_write_dirs)
     _reg(WriteXlsxTool, allowed_dirs=_write_dirs)
     _reg(WritePptxTool, allowed_dirs=_write_dirs)
+    _reg(ReadOfficeTool, allowed_dirs=_read_dirs)
 
     # Shell tool — the agent desktop finally HAS one. Runs through
     # SubprocessSandbox (cwd allowlist + timeout + output cap); danger

@@ -723,10 +723,131 @@ class WritePptxTool(Tool):
             return {"error": f"{type(e).__name__}: {e}"}
 
 
+class ReadOfficeTool(Tool):
+    """Read an office document (xlsx/pptx/docx) as structured text.
+
+    Binary office formats were a one-way door: the model could WRITE
+    them (write_xlsx/write_pptx) but read_file returned mojibake, so it
+    could never verify its own output or iterate. This tool converts
+    each format to markdown-ish text the model can actually reason
+    about — the read half of the office loop (Claude-Skills style).
+    """
+
+    name = "read_office"
+    description = (
+        "Read an office document and return its content as text. "
+        "Supports .xlsx (sheets as markdown tables), .pptx (slide "
+        "titles + bullets), .docx (paragraphs + tables). Use this to "
+        "inspect a document before editing it, or to verify a file you "
+        "just generated."
+    )
+
+    def __init__(self, allowed_dirs: Sequence[str | Path] | None = None) -> None:
+        self._allowed_dirs = [Path(d).expanduser().resolve() for d in (allowed_dirs or [os.getcwd()])]
+
+    @property
+    def parameters_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path to the .xlsx/.pptx/.docx file.",
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "description": "Output cap (default 6000). Raise for big files.",
+                },
+            },
+            "required": ["path"],
+        }
+
+    # ── converters ──
+    @staticmethod
+    def _read_xlsx(path: Path) -> str:
+        import openpyxl as _xl
+        wb = _xl.load_workbook(str(path), data_only=True, read_only=True)
+        out = []
+        for ws in wb.worksheets:
+            out.append(f"## Sheet: {ws.title} ({ws.max_row} rows x {ws.max_column} cols)")
+            for row in ws.iter_rows(max_row=200, values_only=True):
+                cells = ["" if c is None else str(c) for c in row]
+                if any(c.strip() for c in cells):
+                    out.append("| " + " | ".join(cells) + " |")
+            out.append("")
+        wb.close()
+        return "\n".join(out)
+
+    @staticmethod
+    def _read_pptx(path: Path) -> str:
+        from pptx import Presentation
+        prs = Presentation(str(path))
+        out = [f"Presentation: {len(prs.slides.__iter__.__self__._sldIdLst)} slides, "
+               f"{prs.slide_width.inches:.1f}x{prs.slide_height.inches:.1f} in"]
+        for i, slide in enumerate(prs.slides, start=1):
+            out.append(f"## Slide {i}")
+            for shape in slide.shapes:
+                if shape.has_text_frame and shape.text_frame.text.strip():
+                    out.append(shape.text_frame.text.strip())
+            if slide.has_notes_slide and slide.notes_slide.notes_text_frame.text.strip():
+                out.append(f"[notes] {slide.notes_slide.notes_text_frame.text.strip()[:300]}")
+        return "\n".join(out)
+
+    @staticmethod
+    def _read_docx(path: Path) -> str:
+        import docx as _dx
+        doc = _dx.Document(str(path))
+        out = []
+        for para in doc.paragraphs:
+            if para.text.strip():
+                style = para.style.name if para.style else ""
+                prefix = "#" * min(4, max(1, len(style) - len("Heading") + 1)) if style.startswith("Heading") else ""
+                out.append(f"{prefix + ' ' if prefix else ''}{para.text.strip()}")
+        for t_idx, table in enumerate(doc.tables, start=1):
+            out.append(f"## Table {t_idx}")
+            for row in table.rows[:100]:
+                cells = [c.text.strip() for c in row.cells]
+                out.append("| " + " | ".join(cells) + " |")
+        return "\n".join(out)
+
+    def __call__(self, **kwargs: Any) -> dict[str, Any]:
+        path_str = kwargs.get("path", "")
+        max_chars = int(kwargs.get("max_chars", 6000) or 6000)
+        if not path_str:
+            return {"error": "missing 'path'"}
+        try:
+            p = _resolve_in_allowlist(path_str, self._allowed_dirs)
+        except PermissionError as e:
+            return {"error": str(e)}
+        if not p.exists():
+            return {"error": f"file not found: {p}"}
+        suffix = p.suffix.lower()
+        try:
+            if suffix == ".xlsx":
+                text = self._read_xlsx(p)
+            elif suffix == ".pptx":
+                text = self._read_pptx(p)
+            elif suffix == ".docx":
+                text = self._read_docx(p)
+            else:
+                return {"error": f"unsupported type '{suffix}' — read_office handles .xlsx/.pptx/.docx"}
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+        truncated = len(text) > max_chars
+        return {
+            "path": str(p),
+            "type": suffix.lstrip("."),
+            "content": text[:max_chars],
+            "truncated": truncated,
+            "total_chars": len(text),
+        }
+
+
 __all__ = [
     "ReadFileTool",
     "WriteFileTool",
     "EditFileTool",
     "WriteXlsxTool",
     "WritePptxTool",
+    "ReadOfficeTool",
 ]

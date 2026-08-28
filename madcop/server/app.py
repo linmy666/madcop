@@ -1952,6 +1952,26 @@ def create_app() -> FastAPI:
         )
     app.mount("/preview", StaticFiles(directory=str(_preview_dir), html=True), name="preview")
 
+    # Office stack self-check — write_pptx/read_office die mysteriously
+    # when the backend interpreter is missing these (uv vs Frameworks
+    # python mixup cost us a session).
+    def _log_office_stack() -> None:
+        import logging as _lg
+        _ok, _missing = [], []
+        for _mod in ("openpyxl", "pptx", "docx", "pandas", "matplotlib"):
+            try:
+                __import__(_mod)
+                _ok.append(_mod)
+            except ImportError:
+                _missing.append(_mod)
+        if _missing:
+            _lg.warning("office stack INCOMPLETE — missing: %s "
+                        "(install into THIS interpreter)", _missing)
+        else:
+            _lg.info("office stack ready: %s", _ok)
+
+    _log_office_stack()
+
     return app
 
 
