@@ -1998,7 +1998,6 @@ const projectMenuData = computed(() => {
 }
 .sidebar-session-row--active,
 .sidebar-session-row--selected {
-  box-shadow: inset 0 0 0 1px var(--color-brand);
 }
 /* Skip layout/paint for off-screen session rows in long project lists. */
 .sidebar-session-row {

@@ -734,23 +734,13 @@ const insertSlashCommand = () => {
       class="flex flex-1 flex-col items-center justify-center overflow-y-auto"
       :class="isMobileComposer ? 'px-6 pb-[260px] pt-10' : 'p-8 pb-64'"
     >
-      <!-- Soft radial brand glow behind the mascot -->
-      <div
-        class="pointer-events-none absolute left-1/2 top-1/2 -z-0 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-50 blur-3xl"
-        style="background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%); opacity: 0.12;"
-      />
       <div
         class="relative z-10 flex flex-col items-center text-center"
         :class="isMobileComposer ? 'max-w-[300px]' : 'max-w-md'"
       >
-        <MadCopLoader
-          :state="isSubmitting ? 'working' : 'ready'"
-          :size="isMobileComposer ? 96 : 140"
-          :class="isMobileComposer ? 'mb-3' : 'mb-5'"
-        />
         <h1
-          class="mb-2 font-bold tracking-tight text-[var(--color-text-primary)]"
-          :class="isMobileComposer ? 'text-xl' : 'text-[1.65rem]'"
+          class="mb-3 font-bold tracking-tight text-[var(--color-text-primary)]"
+          :class="isMobileComposer ? 'text-2xl' : 'text-[2rem]'"
           :style="{ fontFamily: 'var(--font-headline)' }"
         >
           {{ heroState === 'no_provider' ? '欢迎来到 MadCop' : t('empty.title') }}

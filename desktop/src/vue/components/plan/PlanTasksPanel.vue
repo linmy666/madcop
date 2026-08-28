@@ -301,7 +301,7 @@ function truncate(s: string | null, max = 36): string {
 }
 .tp__progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--color-brand), var(--color-primary-container));
+  background: var(--color-text-primary);
   border-radius: 999px;
   transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   position: relative;
@@ -395,7 +395,7 @@ function truncate(s: string | null, max = 36): string {
 }
 
 .tp__row--active {
-  background: rgba(99, 91, 255, 0.04);
+  background: rgba(13, 13, 13, 0.04);
 }
 .tp__row--done .tp__action {
   color: var(--color-text-tertiary, #888);
@@ -406,8 +406,8 @@ function truncate(s: string | null, max = 36): string {
   animation: tp-active-pulse 2s ease-in-out infinite;
 }
 @keyframes tp-active-pulse {
-  0%, 100% { background: rgba(99, 91, 255, 0.04); }
-  50% { background: rgba(99, 91, 255, 0.08); }
+  0%, 100% { background: rgba(13, 13, 13, 0.04); }
+  50% { background: rgba(13, 13, 13, 0.08); }
 }
 
 /* ── Check icons ── */
@@ -429,11 +429,11 @@ function truncate(s: string | null, max = 36): string {
   color: #fff;
 }
 .tp__check--active {
-  background: rgba(99, 91, 255, 0.12);
+  background: rgba(13, 13, 13, 0.12);
 }
 .tp__check--empty {
   background: transparent;
-  border: 1.5px solid #d4d4d8;
+  border: 1.5px solid var(--color-border);
 }
 
 /* Check pop animation */
@@ -471,7 +471,7 @@ function truncate(s: string | null, max = 36): string {
 .tp__spinner {
   width: 10px;
   height: 10px;
-  border: 2px solid rgba(99, 91, 255, 0.25);
+  border: 2px solid rgba(13, 13, 13, 0.25);
   border-top-color: var(--color-brand);
   border-radius: 50%;
   animation: tp-spin 0.5s cubic-bezier(0.4, 0.0, 0.6, 1) infinite;

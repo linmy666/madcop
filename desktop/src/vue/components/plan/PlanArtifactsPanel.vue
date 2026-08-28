@@ -132,12 +132,12 @@ const workingFilesList = computed(() => props.workingFiles || [])
 .artifacts-panel {
   width: 100%;
   height: 100%;
-  background: var(--color-surface, #fcfcfd);
-  border-left: 1px solid var(--color-border, #e8e8ec);
+  background: var(--color-surface, var(--color-surface-container-low));
+  border-left: 1px solid var(--color-border, var(--color-surface-container-high));
   display: flex;
   flex-direction: column;
   font-size: 13px;
-  color: var(--color-text-primary, #1a1a1f);
+  color: var(--color-text-primary, var(--color-text-primary));
   -webkit-font-smoothing: antialiased;
 }
 
@@ -146,7 +146,7 @@ const workingFilesList = computed(() => props.workingFiles || [])
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--color-border, #e8e8ec);
+  border-bottom: 1px solid var(--color-border, var(--color-surface-container-high));
 }
 .ap__head-left {
   display: flex;
@@ -169,7 +169,7 @@ const workingFilesList = computed(() => props.workingFiles || [])
 }
 .ap__close:hover {
   background: var(--color-surface-container, #f0f0f2);
-  color: var(--color-text-primary, #1a1a1f);
+  color: var(--color-text-primary, var(--color-text-primary));
 }
 .ap__close:active {
   transform: scale(0.94);
@@ -179,7 +179,7 @@ const workingFilesList = computed(() => props.workingFiles || [])
   font-weight: 600;
   margin: 0;
   letter-spacing: 0;
-  color: var(--color-text-primary, #1a1a1f);
+  color: var(--color-text-primary, var(--color-text-primary));
 }
 .ap__count {
   font-size: 10px;
@@ -266,14 +266,14 @@ const workingFilesList = computed(() => props.workingFiles || [])
 }
 
 .ap__artifact--final .ap__artifact-icon {
-  background: rgba(124, 58, 237, 0.10);
+  background: var(--color-surface-container-high);
   color: var(--color-brand, #7C3AED);
 }
 
 .ap__artifact-name {
   flex: 1;
   font-size: 12px;
-  color: var(--color-text-primary, #1a1a1f);
+  color: var(--color-text-primary, var(--color-text-primary));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -312,7 +312,7 @@ const workingFilesList = computed(() => props.workingFiles || [])
   align-items: center;
   padding: 3px 9px;
   background: var(--color-surface-container, #f0f0f2);
-  border: 1px solid var(--color-border, #e8e8ec);
+  border: 1px solid var(--color-border, var(--color-surface-container-high));
   border-radius: 999px;
   font-size: 11px;
   color: var(--color-text-secondary, #555);

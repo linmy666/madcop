@@ -145,9 +145,9 @@ function revealInFinder() {
 
 <style scoped>
 .file-completion {
-  border: 1px solid var(--color-success, #1f9d55);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--color-success, #1f9d55) 6%, var(--color-surface));
+  background: var(--color-surface-container-low);
   padding: 10px 12px;
   margin: 6px 0 14px;
   font-size: 12px;
@@ -222,9 +222,9 @@ function revealInFinder() {
   font-family: inherit;
 }
 .fc__btn--primary {
-  background: var(--color-success, #1f9d55);
+  background: var(--color-text-primary);
   color: var(--color-on-primary, #fff);
-  border-color: var(--color-success, #1f9d55);
+  border-color: var(--color-text-primary);
 }
 .fc__btn:hover { filter: brightness(0.97); }
 </style>

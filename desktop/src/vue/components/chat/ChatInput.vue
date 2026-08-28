@@ -1254,7 +1254,7 @@ watch(input, (v) => {
         data-testid="chat-input-panel"
         :class="[
           isHeroComposer
-            ? `glass-panel relative flex flex-col gap-3 overflow-visible rounded-xl p-4 shadow-[var(--shadow-composer)] transition-colors ${isDragActive ? 'composer-drop-target-active' : ''}`
+            ? `glass-panel relative flex flex-col gap-3 overflow-visible rounded-[24px] p-4 shadow-[var(--shadow-composer)] transition-colors ${isDragActive ? 'composer-drop-target-active' : ''}`
             : compact
               ? `glass-panel relative overflow-visible p-3 transition-colors ${isMobileViewport() ? 'rounded-2xl shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl'} ${isDragActive ? 'composer-drop-target-active' : ''}`
               : `glass-panel relative overflow-visible transition-colors ${isMobileViewport() ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl p-4'} ${isDragActive ? 'composer-drop-target-active' : ''}`,

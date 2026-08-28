@@ -536,7 +536,7 @@
   --shadow-focus-ring: 0 0 0 1px rgba(27, 28, 26, 0.18);
   --shadow-error-ring: 0 0 0 1px rgba(186, 26, 26, 0.18);
   --shadow-button-primary: 0 8px 24px rgba(27, 28, 26, 0.14);
-  --shadow-composer: 0 8px 28px rgba(27, 28, 26, 0.08);
+  --shadow-composer: 0 12px 40px rgba(13, 13, 13, 0.10), 0 2px 8px rgba(13, 13, 13, 0.05);
 
   /* Button colors */
   --color-btn-primary-fg: var(--color-on-primary);

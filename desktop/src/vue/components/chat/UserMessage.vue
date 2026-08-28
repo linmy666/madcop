@@ -104,7 +104,7 @@ function retry() {
   max-width: 100%;
   background: var(--color-surface-container-low, #efefef);
   padding: 10px 16px;
-  border-radius: var(--radius-lg);
+  border-radius: 18px;
   border: 1px solid var(--color-border-separator, rgba(0,0,0,0.08));
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
