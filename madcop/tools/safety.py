@@ -175,6 +175,11 @@ class WebFetchInput(BaseModel):
     url: str = Field(..., min_length=1, max_length=MAX_URL_CHARS)
 
 
+class WriteXlsxInput(BaseModel):
+    path: str = Field(..., min_length=1, max_length=MAX_FILE_PATH_CHARS)
+    sheets: list[dict] = Field(..., min_length=1)
+
+
 class AskUserInput(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
     options: list[str] = Field(default_factory=list)
@@ -183,7 +188,7 @@ class AskUserInput(BaseModel):
 # Map tool name -> (schema class, fields to extract from input dict)
 TOOL_SCHEMAS: dict[str, tuple[type, list[str]]] = {
     "write_file":  (WriteFileInput, ["path", "content", "encoding"]),
-    "write_xlsx":  (WriteFileInput, ["path", "content"]),
+    "write_xlsx":  (WriteXlsxInput, ["path", "sheets"]),
     "edit_file":   (EditFileInput,  ["path", "old_string", "new_string"]),
     "read_file":   (ReadFileInput,  ["path"]),
     "bash":        (BashInput,      ["command"]),
