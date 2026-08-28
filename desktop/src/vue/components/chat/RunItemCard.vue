@@ -266,12 +266,18 @@ const errorText = computed(() => {
 <style scoped>
 .run-item {
   display: block;
-  margin: 4px 0;
-  border: 1px solid var(--color-border, rgba(128,128,128,0.18));
+  margin: 2px 0;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--color-surface-container-low, rgba(128,128,128,0.04));
+  background: transparent;
   overflow: hidden;
   transition: border-color 120ms, background 120ms;
+}
+/* A finished row only gains a surface on hover — at rest it reads as
+   part of the narration, not as a box (Codex activity-row language). */
+.run-item:not(.run-item--pending):hover {
+  border-color: var(--color-border, rgba(128,128,128,0.18));
+  background: var(--color-surface-container-low, rgba(128,128,128,0.04));
 }
 /* Pending goes quieter still — a Codex-style hairline activity row, not
    a card: no border, no fill, muted text. It becomes a real card only
