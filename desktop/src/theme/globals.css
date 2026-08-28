@@ -337,10 +337,10 @@
 
 /* ─── Tailwind Theme Override (MadCop Agent — emerald teal) ─── */
 @theme {
-  --color-primary: #7C3AED;
-  --color-primary-container: #A78BFA;
-  --color-primary-fixed: #F3E8FF;
-  --color-primary-fixed-dim: #E9D5FF;
+  --color-primary: #1A1A1E;
+  --color-primary-container: #E4E4E7;
+  --color-primary-fixed: #F4F4F5;
+  --color-primary-fixed-dim: #E4E4E7;
 
   --color-on-primary: #FFFFFF;
   --color-on-surface: #1B1C1A;
@@ -372,7 +372,7 @@
 
   --color-inverse-surface: #2F312E;
   --color-inverse-on-surface: #F2F1ED;
-  --color-inverse-primary: #A78BFA;
+  --color-inverse-primary: #52525B;
 
   --color-success: #16A34A;
   --color-success-container: #E8F5E2;
@@ -395,8 +395,8 @@
  */
 :root,
 [data-madcop-theme] {
-  --madcop-primary:          #7C3AED;
-  --madcop-primary-container: #A78BFA;
+  --madcop-primary:          #1A1A1E;
+  --madcop-primary-container: #E4E4E7;
   --madcop-primary-fixed:     #F3E8FF;
   --madcop-primary-fixed-dim: #E9D5FF;
   --madcop-on-primary:        #FFFFFF;
@@ -423,7 +423,7 @@
   --madcop-on-error-container:#410002;
   --madcop-inverse-surface:   #2F312E;
   --madcop-inverse-on-surface:#F2F1ED;
-  --madcop-inverse-primary:   #A78BFA;
+  --madcop-inverse-primary:   #52525B;
   --madcop-success:           #16A34A;
   --madcop-success-container: #E8F5E2;
   --madcop-info:              #2D628F;
@@ -469,7 +469,7 @@
   --color-activity-cell-border: rgba(135, 115, 109, 0.3);
   --color-activity-cell-border-hover: rgba(124, 58, 237, 0.45);
   --color-activity-cell-border-active: var(--color-text-primary);
-  --shadow-activity-cell-hover: 0 0 0 2px rgba(124, 58, 237, 0.12), 0 8px 18px rgba(65, 54, 48, 0.16);
+  --shadow-activity-cell-hover: 0 0 0 2px rgba(27, 28, 26, 0.10), 0 8px 18px rgba(65, 54, 48, 0.16);
   --color-activity-tooltip-surface: #2F312E;
   --color-activity-tooltip-border: rgba(255, 255, 255, 0.12);
   --color-activity-tooltip-text: #F2F1ED;
@@ -507,7 +507,7 @@
   --color-sidebar-item-hover: rgba(239, 238, 234, 0.82);
   /* Active = brand-tinted fill (not just a slightly-opaque hover) so the
      selected row is unmistakable — Linear/Vercel use a tinted active state. */
-  --color-sidebar-item-active: rgba(124, 58, 237, 0.12);
+  --color-sidebar-item-active: rgba(27, 28, 26, 0.07);
   --color-sidebar-item-active-border: rgba(124, 58, 237, 0.32);
   --sidebar-panel-bg-image: none;
 
@@ -533,15 +533,15 @@
   /* Shadows */
   --shadow-dropdown: 0 4px 20px rgba(27, 28, 26, 0.04), 0 12px 40px rgba(27, 28, 26, 0.08);
   --shadow-sidebar-filter: none;
-  --shadow-focus-ring: 0 0 0 1px rgba(124, 58, 237, 0.16);
+  --shadow-focus-ring: 0 0 0 1px rgba(27, 28, 26, 0.18);
   --shadow-error-ring: 0 0 0 1px rgba(186, 26, 26, 0.18);
-  --shadow-button-primary: 0 8px 24px rgba(124, 58, 237, 0.18);
+  --shadow-button-primary: 0 8px 24px rgba(27, 28, 26, 0.14);
   --shadow-composer: 0 8px 28px rgba(27, 28, 26, 0.08);
 
   /* Button colors */
   --color-btn-primary-fg: var(--color-on-primary);
-  --gradient-btn-primary: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
-  --gradient-btn-primary-hover: linear-gradient(135deg, var(--color-primary-container), var(--color-primary));
+  --gradient-btn-primary: var(--color-primary);
+  --gradient-btn-primary-hover: color-mix(in srgb, var(--color-primary) 88%, var(--color-primary-container));
 
   /* User message bubble */
   --color-surface-user-msg: var(--color-surface-container);
@@ -617,10 +617,10 @@
 [data-theme="white"] {
   color-scheme: light;
 
-  --color-primary: #7C3AED;
-  --color-primary-container: #A78BFA;
-  --color-primary-fixed: #F3E8FF;
-  --color-primary-fixed-dim: #E9D5FF;
+  --color-primary: #1A1A1E;
+  --color-primary-container: #E4E4E7;
+  --color-primary-fixed: #F4F4F5;
+  --color-primary-fixed-dim: #E4E4E7;
 
   --color-on-primary: #FFFFFF;
   --color-on-surface: #111827;
@@ -651,7 +651,7 @@
 
   --color-inverse-surface: #111827;
   --color-inverse-on-surface: #F9FAFB;
-  --color-inverse-primary: #A78BFA;
+  --color-inverse-primary: #52525B;
 
   --color-success: #087E4F;
   --color-success-container: #DCFAE6;
@@ -715,7 +715,7 @@
   --color-sidebar-search-bg: rgba(255, 255, 255, 0.9);
   --color-sidebar-search-border: rgba(203, 213, 225, 0.88);
   --color-sidebar-item-hover: rgba(255, 255, 255, 0.78);
-  --color-sidebar-item-active: rgba(124, 58, 237, 0.10);
+  --color-sidebar-item-active: rgba(27, 28, 26, 0.07);
   --color-sidebar-item-active-border: rgba(124, 58, 237, 0.30);
   --sidebar-panel-bg-image: none;
 
@@ -738,8 +738,8 @@
   --shadow-button-primary: 0 10px 24px rgba(124, 58, 237, 0.18);
 
   --color-btn-primary-fg: var(--color-on-primary);
-  --gradient-btn-primary: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
-  --gradient-btn-primary-hover: linear-gradient(135deg, var(--color-primary-container), var(--color-primary));
+  --gradient-btn-primary: var(--color-primary);
+  --gradient-btn-primary-hover: color-mix(in srgb, var(--color-primary) 88%, var(--color-primary-container));
 
   --color-surface-user-msg: #F1F4F7;
 
@@ -803,10 +803,10 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --color-primary: #A78BFA;
-  --color-primary-container: #7C3AED;
-  --color-primary-fixed: #2E1065;
-  --color-primary-fixed-dim: #4C1D95;
+  --color-primary: #E4E4E7;
+  --color-primary-container: #27272A;
+  --color-primary-fixed: #27272A;
+  --color-primary-fixed-dim: #3F3F46;
 
   --color-on-primary: #042F2E;
   --color-on-surface: #E5E2E1;
@@ -828,7 +828,7 @@
 
   --color-secondary: #CDBDFF;
   --color-secondary-container: #3A3050;
-  --color-tertiary: #A78BFA;
+  --color-tertiary: #8B8FA8;
   --color-tertiary-container: #2E1065;
 
   --color-error: #FFB4AB;
@@ -837,11 +837,11 @@
 
   --color-inverse-surface: #E5E2E1;
   --color-inverse-on-surface: #1B1C1A;
-  --color-inverse-primary: #A78BFA;
+  --color-inverse-primary: #52525B;
 
   --color-success: #7EDB8B;
   --color-success-container: rgba(126, 219, 139, 0.16);
-  --color-info: #A78BFA;
+  --color-info: #8B8FA8;
   --color-info-container: rgba(167, 139, 250, 0.16);
   --color-warning: #F7C46C;
   --color-warning-container: rgba(247, 196, 108, 0.16);
@@ -873,14 +873,14 @@
   --color-activity-tooltip-surface: #F2F1ED;
   --color-activity-tooltip-border: rgba(167, 139, 250, 0.36);
   --color-activity-tooltip-text: #1B1C1A;
-  --color-activity-tooltip-muted: #A78BFA;
+  --color-activity-tooltip-muted: #8B8FA8;
   --color-inspector-surface: #131211;
   --color-inspector-panel: #1C1B1B;
   --color-inspector-chip: #252120;
   --color-inspector-border: rgba(167, 139, 250, 0.18);
-  --color-inspector-accent: #A78BFA;
+  --color-inspector-accent: #8B8FA8;
   --color-inspector-accent-hover: #FFD4C8;
-  --color-inspector-accent-secondary: #A78BFA;
+  --color-inspector-accent-secondary: #7C7F94;
   --color-inspector-text: #E5E2E1;
   --color-inspector-heading: #F3D6CC;
   --color-inspector-muted: #A89A95;
@@ -901,7 +901,7 @@
   --color-sidebar-search-bg: rgba(255, 255, 255, 0.03);
   --color-sidebar-search-border: rgba(255, 255, 255, 0.06);
   --color-sidebar-item-hover: rgba(255, 255, 255, 0.04);
-  --color-sidebar-item-active: rgba(167, 139, 250, 0.16);
+  --color-sidebar-item-active: rgba(255, 255, 255, 0.10);
   --color-sidebar-item-active-border: rgba(167, 139, 250, 0.34);
   --sidebar-panel-bg-image:
     radial-gradient(circle at top left, rgba(167, 139, 250, 0.045), transparent 34%),
@@ -926,8 +926,8 @@
   --shadow-button-primary: 0 12px 24px rgba(124, 58, 237, 0.18);
   --shadow-composer: 0 8px 28px rgba(0, 0, 0, 0.42);
 
-  --gradient-btn-primary: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
-  --gradient-btn-primary-hover: linear-gradient(135deg, var(--color-primary-container), var(--color-primary));
+  --gradient-btn-primary: var(--color-primary);
+  --gradient-btn-primary-hover: color-mix(in srgb, var(--color-primary) 88%, var(--color-primary-container));
 
   --color-surface-user-msg: rgba(32, 31, 31, 0.92);
 

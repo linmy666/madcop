@@ -105,25 +105,12 @@ const rowClass = computed(() => {
 .sidebar-session-row {
   content-visibility: auto;
   contain-intrinsic-size: auto 36px;
-  /* Make room for the left accent bar on selected/active rows. */
-  padding-left: 4px;
 }
+/* Selected/active = the same quiet treatment as the 新对话 nav item:
+   soft neutral fill only. The old 3px brand bar + brand ring combo
+   read as heavy next to it (user: "prefer the first style"). */
 .sidebar-session-row--active,
 .sidebar-session-row--selected {
-  box-shadow: inset 0 0 0 1px var(--color-brand);
-  /* 3px brand bar on the left edge — gives selected state a clear
-     visual anchor distinct from background-only selection. */
-  position: relative;
-}
-.sidebar-session-row--active::before,
-.sidebar-session-row--selected::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--color-brand);
+  box-shadow: none;
 }
 </style>

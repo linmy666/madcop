@@ -1,6 +1,5 @@
 <template>
-  <div v-if="hasContent" data-message-shell="assistant" data-layout="document" class="assistant-message group flex gap-3 py-4">
-    <MascotAvatar :size="28" class="mt-0.5 shrink-0" />
+  <div v-if="hasContent" data-message-shell="assistant" data-layout="document" class="assistant-message group flex py-4">
     <div class="assistant-message__body min-w-0 flex-1">
       <!-- Error message: styled card instead of raw text -->
       <div v-if="isError" class="error-card" role="alert">
@@ -41,13 +40,9 @@
             class="reasoning-block__toggle"
             @click.stop="toggleReasoning"
           >
-            <span class="material-symbols-outlined text-[14px] reasoning-block__icon">
-              {{ reasoningExpanded ? 'expand_less' : 'psychology' }}
-            </span>
             <span class="reasoning-block__label">
-              {{ isStreaming && !cleanContent ? '思考中…' : '思考过程' }}
+              {{ isStreaming && !cleanContent ? 'Thinking…' : t('chat.thoughtProcess', '思考过程') }}
             </span>
-            <span v-if="!reasoningExpanded" class="reasoning-block__hint">点击展开</span>
           </button>
           <div v-if="reasoningExpanded" class="reasoning-block__body">
             <p class="reasoning-block__text">{{ reasoningContent }}</p>
@@ -57,21 +52,11 @@
         <MarkdownRenderer
           :content="cleanContent"
           :streaming="isStreaming"
-          class="text-[14px] leading-[1.7] text-[var(--color-text-primary)]"
+          class="text-[15px] leading-[1.75] text-[var(--color-text-primary)]"
         />
-        <!-- Streaming indicator: breathing dots before the first token,
-             then a soft breathing caret once text starts flowing. -->
-        <div v-if="isStreaming" class="mt-1.5 flex items-center gap-1.5">
-          <template v-if="!cleanContent">
-            <span class="typing-dot" />
-            <span class="typing-dot" />
-            <span class="typing-dot" />
-          </template>
-          <span
-            v-else
-            class="inline-block h-[18px] w-[3px] rounded-full bg-[var(--color-text-tertiary)] align-text-bottom animate-caret-breathe"
-          />
-        </div>
+        <!-- Streaming indicator: three soft dots only before the first
+             token. No caret while text flows — a blinking grey bar reads
+             as "unfinished" the whole time (user feedback). -->
       </template>
 
       <!-- Hover actions -->
