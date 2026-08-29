@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,8 @@ async def list_skills(
                     "name": f.stem, "displayName": title,
                     "description": content[:200], "source": "bundled",
                     "userInvocable": True, "contentLength": len(content),
+                    "category": (re.search(r"<!-- category: (.+?) -->", content).group(1)
+                                 if re.search(r"<!-- category: (.+?) -->", content) else ""),
                     "hasDirectory": False, "path": str(f),
                 })
     return {"skills": skills, "total": len(skills)}

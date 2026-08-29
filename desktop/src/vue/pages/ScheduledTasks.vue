@@ -18,6 +18,24 @@ const draft = ref({
   prompt: '',
 })
 
+// Qoder-style preset templates — one click fills the create form.
+// All local: these run on the user's own backend with their own API keys.
+const TEMPLATES = [
+  { name: '每日新闻摘要', cron: '0 8 * * *',
+    prompt: '搜索今天的科技新闻，挑出 5 条最重要的，生成一份简短摘要（每条 2 句话），保存为 markdown 到工作目录。' },
+  { name: '工作目录巡检', cron: '0 9-18/2 * * *',
+    prompt: '检查工作目录下最近 2 小时内修改的文件，报告任何语法错误、异常改动或未完成的 TODO。如无异常只需回复"巡检正常"。' },
+  { name: '每周工作总结', cron: '0 17 * * 5',
+    prompt: '回顾本周会话历史和最近生成的文件，写一份本周工作总结（完成事项/遗留问题/下周建议），保存为 markdown。' },
+  { name: '数据备份提醒', cron: '0 18 * * 1-5',
+    prompt: '列出工作目录下今天修改过的所有文件清单，如果超过 20 个文件未备份，生成一份备份清单 markdown。' },
+]
+function applyTemplate(t: typeof TEMPLATES[number]) {
+  draft.value = { name: t.name, cron: t.cron, prompt: t.prompt }
+  showCreate.value = true
+}
+
+
 const tasks = computed(() => taskStore.tasks)
 const loading = computed(() => taskStore.isLoading)
 const recentRuns = computed(() => taskStore.recentRuns.slice(0, 8))
@@ -112,6 +130,18 @@ function formatTs(v: string | number | undefined) {
           计划任务在桌面端后端运行时可用；任务与运行记录保存在
           <code>~/.madcop/scheduled_tasks.json</code>。
         </span>
+      </div>
+
+      <div class="scheduled__templates">
+        <span class="scheduled__templates-label">模板：</span>
+        <button
+          v-for="tpl in TEMPLATES"
+          :key="tpl.name"
+          type="button"
+          class="scheduled__tpl"
+          :title="tpl.prompt"
+          @click="applyTemplate(tpl)"
+        >{{ tpl.name }}</button>
       </div>
 
       <div v-if="showCreate" class="scheduled__form">
@@ -282,4 +312,30 @@ function formatTs(v: string | number | undefined) {
 }
 .muted { color: var(--color-text-tertiary); }
 .meta { margin: 6px 0 0; font-size: 11px; }
+.scheduled__templates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.scheduled__templates-label {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+.scheduled__tpl {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-container-low);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.scheduled__tpl:hover {
+  background: var(--color-surface-container-high);
+  color: var(--color-text-primary);
+}
 </style>

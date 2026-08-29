@@ -228,10 +228,14 @@ def list_user_skills() -> list[dict[str, Any]]:
                 break
             if line.strip() and not line.startswith("#"):
                 in_body = True
+        # Optional `<!-- category: X -->` marker (Qoder-style grouping)
+        import re as _re
+        _cat_m = _re.search(r"<!--\s*category:\s*(.+?)\s*-->", content)
         skills.append({
             "name": f.stem,
             "displayName": title,
             "description": description or f"Auto-distilled skill for: {title}",
+            "category": _cat_m.group(1) if _cat_m else "",
             "source": "user",
             "userInvocable": True,
             "contentLength": len(content),

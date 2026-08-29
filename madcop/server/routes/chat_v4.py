@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import queue
 import threading
 import time
@@ -586,6 +587,13 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             "tool_input": tool_input,
             "created_at": time.time(),
         }
+        # Qoder-style silent skip (opt-in): an unattended confirm card
+        # deadlocks the agent forever. When MADCOP_HITL_TIMEOUT_S is set,
+        # auto-REJECT after that many seconds of no response — the tool
+        # result surfaces "[用户未在时限内确认，已自动拒绝]" so the model
+        # can route around it instead of hanging.
+        _timeout_s = float(os.environ.get("MADCOP_HITL_TIMEOUT_S", "0") or 0)
+        _created = time.time()
         try:
             while True:
                 try:
@@ -593,6 +601,12 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 except concurrent.futures.TimeoutError:
                     if turn_cancelled.is_set():
                         return False  # turn aborted while waiting
+                    if _timeout_s > 0 and time.time() - _created > _timeout_s:
+                        logger.info(
+                            "HITL confirm %s (%s) auto-rejected after %ss "
+                            "without user response", tool_use_id, tool_name, _timeout_s,
+                        )
+                        return False
         finally:
             _PENDING_CONFIRMS.pop(tool_use_id, None)
             _PENDING_META.pop(tool_use_id, None)
