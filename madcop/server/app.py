@@ -1499,7 +1499,10 @@ def create_app() -> FastAPI:
     async def get_user_settings_madcop() -> dict[str, Any]:
         """cc-haha React 客户端期望的 user settings 端点"""
         return {
-            "theme": "white",
+            # UI theme lives in the renderer (useAppearance/localStorage);
+            # returning a fixed value here desynced the General settings
+            # select (theme:"white" matched no option -> blank dropdown).
+            "theme": "",
             "alwaysThinkingEnabled": True,
             "autoDreamEnabled": False,
             "chatSendBehavior": "enter",

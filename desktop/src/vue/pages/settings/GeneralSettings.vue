@@ -28,12 +28,12 @@ async function loadSettings() {
     if (res.ok) {
       const data = await res.json()
       if (data.locale) locale.value = data.locale
-      if (data.theme) {
-        theme.value = data.theme
-        setAppearance(data.theme as 'light' | 'dark' | 'sepia')
-      } else {
-        theme.value = appearance.value
-      }
+      // Legacy stored values ("white") predate the current palette —
+      // anything unknown falls back to the live appearance value so the
+      // select never renders blank.
+      const t = data.theme
+      theme.value = (t === 'light' || t === 'dark' || t === 'sepia') ? t : appearance.value
+      setAppearance(theme.value as 'light' | 'dark' | 'sepia')
       if (data.chatSendBehavior) chatSendBehavior.value = data.chatSendBehavior
       if (data.responseLanguage) responseLanguage.value = data.responseLanguage
       if (data.uiZoom) uiZoom.value = data.uiZoom
@@ -100,16 +100,6 @@ onMounted(loadSettings)
       <div class="gs-card__head">
         <span class="material-symbols-outlined gs-card__icon">translate</span>
         <h3 class="gs-card__title">{{ t('general.langReply') }}</h3>
-      </div>
-      <div class="gs-row">
-        <div class="gs-row__info">
-          <div class="gs-row__label">{{ t('general.uiLanguage') }}</div>
-          <div class="gs-row__desc">{{ t('general.uiLanguageDesc') }}</div>
-        </div>
-        <select :value="locale" class="gs-select" @change="onLocaleChange">
-          <option value="zh">{{ t('general.langZh') }}</option>
-          <option value="en">English</option>
-        </select>
       </div>
       <div class="gs-row">
         <div class="gs-row__info">

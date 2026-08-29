@@ -204,8 +204,38 @@ async function addProfileFact() {
   newProfileFact.value = ''
 }
 
+
+// Semantic-memory rows arrive as raw JSON triples
+// {"subject":"skill","predicate":"teaches","object":"写 pytest 测试",...}.
+// Render them as a human sentence, never as raw JSON.
+const PREDICATE_ZH: Record<string, string> = {
+  teaches: '学会了', knows: '了解到', prefers: '偏好',
+  uses: '使用', did: '完成了', asked: '询问过', fixed: '修复了',
+  deployed: '部署了', wrote: '编写了', created: '创建了',
+}
+function humanizeFact(raw: string): string {
+  let t: any = null
+  try { t = JSON.parse(raw) } catch { return raw }
+  if (!t || typeof t !== 'object') return raw
+  const subj = String(t.subject ?? '').trim()
+  const pred = String(t.predicate ?? '').trim()
+  const obj = String(t.object ?? '').trim()
+  if (!obj) return raw
+  const predZh = PREDICATE_ZH[pred] ?? pred
+  const kind = String(t.kind ?? '')
+  const kindLabel: Record<string, string> = {
+    fact: '事实', skill: '技能', episode: '事件',
+    preference: '偏好', scenario: '场景', insight: '洞察',
+  }
+  const badge = kindLabel[kind] ?? ''
+  const main = predZh ? `${subj} ${predZh} ${obj}`.trim() : obj
+  return badge ? `【${badge}】${main}` : main
+}
+
 function formatRelative(iso: string): string {
   const d = new Date(iso)
+  // Guard: missing/epoch-zero timestamps rendered as "1970/1/22" — show a dash.
+  if (!iso || Number.isNaN(d.getTime()) || d.getFullYear() < 2000) return '—'
   const diff = Date.now() - d.getTime()
   if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分钟前`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`
@@ -232,13 +262,13 @@ onMounted(loadAll)
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-[900px] space-y-5 px-8">
+  <div class="mx-auto w-full max-w-[900px] space-y-5 px-8 pt-10">
     <!-- PageHero -->
     <PageHero
       eyebrow="AI 记忆"
       title="我记得"
       accent="关于你的一切"
-      subtitle="200 条长期记忆 · 所有数据保留在本地，永远不会离开你的 Mac"
+      subtitle="200 条长期记忆 · 所有数据仅保存在本机"
     >
       <template #actions>
         <div class="mem-learn-toggle">
@@ -364,7 +394,7 @@ onMounted(loadAll)
           style="font-family: var(--font-mono)"
         >{{ Math.round(p.confidence * 100) }}%</span>
         <div class="flex-1 min-w-0">
-          <p class="text-[13px] text-[var(--color-text-primary)]">{{ p.content }}</p>
+          <p class="text-[13px] text-[var(--color-text-primary)]">{{ humanizeFact(p.content) }}</p>
           <div
             class="mt-1 flex items-center gap-3 text-[10px] text-[var(--color-text-tertiary)]"
             style="font-family: var(--font-mono)"
@@ -414,7 +444,7 @@ onMounted(loadAll)
               {{ Math.round(r.relevance * 100) }}%
             </span>
             <div class="flex-1 min-w-0">
-              <p class="text-[13px] text-[var(--color-text-primary)]">{{ r.content }}</p>
+              <p class="text-[13px] text-[var(--color-text-primary)]">{{ humanizeFact(r.content) }}</p>
               <p
                 class="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]"
                 style="font-family: var(--font-mono)"
@@ -534,7 +564,7 @@ onMounted(loadAll)
           class="rounded bg-[var(--color-success)]/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-success)]"
           style="font-family: var(--font-mono)"
         >local only</span>
-        <span>所有数据存储于本地。永远不会离开你的 Mac。</span>
+        <span>所有数据仅保存在本机，绝不上传。</span>
       </div>
     </div>
   </div>
