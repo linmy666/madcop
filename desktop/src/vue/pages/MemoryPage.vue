@@ -20,7 +20,7 @@ import ErrorState from '../components/common/ErrorState.vue'
 
 // ─── Data model ────────────────────────────────────────────────────────
 
-type MemoryLayer = 'profile' | 'relevant' | 'preferences' | 'skills'
+type MemoryLayer = 'profile' | 'longTerm' | 'sessionEvents' | 'insights' | 'skills'
 
 interface ProfileFact {
   id: string
@@ -84,7 +84,7 @@ const SAMPLE_SKILLS: Skill[] = []
 // ─── Computed counts ──────────────────────────────────────────────────
 
 const totalCount = computed(
-  () => profile.value.length + relevant.value.length + preferences.value.length + skills.value.length,
+  () => profile.value.length + relevant.value.length + skills.value.length,
 )
 
 const resourceEstimate = computed(() => {
@@ -100,10 +100,15 @@ const resourceEstimate = computed(() => {
 
 // ─── Layer meta ───────────────────────────────────────────────────────
 
+// Three-tier memory system (Qoder/ChatGPT pattern):
+//   长期记忆 — facts you taught, persist across sessions
+//   会话事件 — what happened in sessions, short-term by nature
+//   洞察     — patterns the Agent derived from repetition
 const LAYERS: { key: MemoryLayer; label: string; desc: string; count: () => number }[] = [
   { key: 'profile', label: '画像', desc: '关于你的基本信息', count: () => profile.value.length },
-  { key: 'relevant', label: '相关记忆', desc: '对话中用过的上下文', count: () => relevant.value.length },
-  { key: 'preferences', label: '偏好', desc: '你喜欢 / 不喜欢什么', count: () => preferences.value.length },
+  { key: 'longTerm', label: '长期记忆', desc: '你教过 Agent 的事实 · 跨会话保留', count: () => relevant.value.filter((x) => x.layer === 'semantic').length },
+  { key: 'sessionEvents', label: '会话事件', desc: '会话中发生的事 · 短期上下文', count: () => relevant.value.filter((x) => x.layer === 'episodic').length },
+  { key: 'insights', label: '洞察', desc: 'Agent 从重复模式中总结的规律', count: () => relevant.value.filter((x) => x.layer === 'scenario' || x.layer === 'insight').length },
   { key: 'skills', label: '技能', desc: '提炼的可复用流程', count: () => skills.value.length },
 ]
 
@@ -184,7 +189,9 @@ async function toggleLearning(enabled: boolean) {
 
 async function deleteItem(layer: MemoryLayer, id: string) {
   if (layer === 'profile') profile.value = profile.value.filter((x) => x.id !== id)
-  if (layer === 'relevant') relevant.value = relevant.value.filter((x) => x.id !== id)
+  if (['longTerm', 'sessionEvents', 'insights'].includes(layer)) {
+    relevant.value = relevant.value.filter((x) => x.id !== id)
+  }
   if (layer === 'preferences') preferences.value = preferences.value.filter((x) => x.id !== id)
   if (layer === 'skills') skills.value = skills.value.filter((x) => x.id !== id)
   // await fetch(`/api/memory/${layer}/${id}`, { method: 'DELETE' })
@@ -416,52 +423,123 @@ onMounted(loadAll)
       </div>
     </section>
 
-    <!-- Relevant memories (grouped by layer) -->
-    <section v-if="activeTab === 'relevant'" class="space-y-3">
+<!-- 长期记忆 tier -->
+    <section v-if="activeTab === 'longTerm'" class="space-y-3">
+      <div class="mb-2 flex items-center gap-2 text-[12px] text-[var(--color-text-secondary)]">
+        <span class="material-symbols-outlined text-[16px]" style="color: var(--color-primary)">database</span>
+        <span class="font-medium">长期记忆</span>
+        <span class="text-[var(--color-text-tertiary)]">· 你教过 Agent 的事实 · 跨会话保留</span>
+      </div>
       <div
-        v-for="layer in ['episodic', 'semantic', 'scenario', 'insight']"
-        :key="layer"
+        v-for="r in relevant.filter(x => ['semantic'].includes(x.layer))"
+        :key="r.id"
+        class="group flex items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
       >
-        <div
-          class="mb-1.5 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-tertiary)]"
-          style="font-family: var(--font-mono)"
+        <span
+          class="shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums"
+          :class="r.layer === 'semantic' ? 'bg-[var(--color-primary-container)] text-[var(--color-primary)]' : 'bg-[var(--color-surface-container-low)] text-[var(--color-text-tertiary)]'"
         >
-          <span>{{ LAYER_LABEL[layer] }}</span>
-          <span class="h-px flex-1 bg-[var(--color-border-separator)]"></span>
-          <span class="tabular-nums">{{ relevant.filter(r => r.layer === layer).length }}</span>
-        </div>
-        <div class="space-y-1.5">
-          <div
-            v-for="r in relevant.filter(x => x.layer === layer)"
-            :key="r.id"
-            class="group flex items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
-          >
-            <span
-              class="shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums"
-              :class="layer === 'insight' ? 'bg-[var(--color-brand)]/10 text-[var(--color-brand)]' : 'bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'"
-              style="font-family: var(--font-mono)"
-            >
-              {{ Math.round(r.relevance * 100) }}%
-            </span>
-            <div class="flex-1 min-w-0">
-              <p class="text-[13px] text-[var(--color-text-primary)]">{{ humanizeFact(r.content) }}</p>
-              <p
-                class="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]"
-                style="font-family: var(--font-mono)"
-              >{{ formatRelative(r.createdAt) }}</p>
-            </div>
-            <button
-              type="button"
-              class="shrink-0 rounded p-1 text-[var(--color-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] group-hover:opacity-100"
-              :aria-label="`删除 ${r.content}`"
-              @click="deleteItem('relevant', r.id)"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
+          { r.confidence != null ? Math.round((r.confidence ?? 0.5) * 100) + '%' : '50%' }
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-[13px] text-[var(--color-text-primary)]">{ humanizeFact(r.content) }</p>
+          <div class="mt-1 flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]" style="font-family: var(--font-mono)">
+            <span>{ formatRelative(r.createdAt) }</span>
           </div>
         </div>
+        <button
+          type="button"
+          class="shrink-0 rounded p-1 text-[var(--color-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] group-hover:opacity-100"
+          aria-label="删除"
+          @click="deleteItem('longTerm', r.id)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div v-if="relevant.filter(x => ['semantic'].includes(x.layer)).length === 0" class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12.5px] text-[var(--color-text-tertiary)]">
+        暂无此类记忆 — 长期记忆会随着你和 Agent 的对话自动积累。
+      </div>
+    </section>
+
+    <!-- 会话事件 tier -->
+    <section v-if="activeTab === 'sessionEvents'" class="space-y-3">
+      <div class="mb-2 flex items-center gap-2 text-[12px] text-[var(--color-text-secondary)]">
+        <span class="material-symbols-outlined text-[16px]" style="color: var(--color-primary)">history</span>
+        <span class="font-medium">会话事件</span>
+        <span class="text-[var(--color-text-tertiary)]">· 会话中发生的事 · 短期上下文</span>
+      </div>
+      <div
+        v-for="r in relevant.filter(x => ['episodic'].includes(x.layer))"
+        :key="r.id"
+        class="group flex items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+      >
+        <span
+          class="shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums"
+          :class="r.layer === 'semantic' ? 'bg-[var(--color-primary-container)] text-[var(--color-primary)]' : 'bg-[var(--color-surface-container-low)] text-[var(--color-text-tertiary)]'"
+        >
+          { r.confidence != null ? Math.round((r.confidence ?? 0.5) * 100) + '%' : '50%' }
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-[13px] text-[var(--color-text-primary)]">{ humanizeFact(r.content) }</p>
+          <div class="mt-1 flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]" style="font-family: var(--font-mono)">
+            <span>{ formatRelative(r.createdAt) }</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 rounded p-1 text-[var(--color-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] group-hover:opacity-100"
+          aria-label="删除"
+          @click="deleteItem('sessionEvents', r.id)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div v-if="relevant.filter(x => ['episodic'].includes(x.layer)).length === 0" class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12.5px] text-[var(--color-text-tertiary)]">
+        暂无此类记忆 — 会话事件会随着你和 Agent 的对话自动积累。
+      </div>
+    </section>
+
+    <!-- 洞察 tier -->
+    <section v-if="activeTab === 'insights'" class="space-y-3">
+      <div class="mb-2 flex items-center gap-2 text-[12px] text-[var(--color-text-secondary)]">
+        <span class="material-symbols-outlined text-[16px]" style="color: var(--color-primary)">lightbulb</span>
+        <span class="font-medium">洞察</span>
+        <span class="text-[var(--color-text-tertiary)]">· Agent 从重复模式中总结的规律</span>
+      </div>
+      <div
+        v-for="r in relevant.filter(x => ['scenario', 'insight'].includes(x.layer))"
+        :key="r.id"
+        class="group flex items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+      >
+        <span
+          class="shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums"
+          :class="r.layer === 'semantic' ? 'bg-[var(--color-primary-container)] text-[var(--color-primary)]' : 'bg-[var(--color-surface-container-low)] text-[var(--color-text-tertiary)]'"
+        >
+          { r.confidence != null ? Math.round((r.confidence ?? 0.5) * 100) + '%' : '50%' }
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-[13px] text-[var(--color-text-primary)]">{ humanizeFact(r.content) }</p>
+          <div class="mt-1 flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]" style="font-family: var(--font-mono)">
+            <span>{ formatRelative(r.createdAt) }</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 rounded p-1 text-[var(--color-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] group-hover:opacity-100"
+          aria-label="删除"
+          @click="deleteItem('insights', r.id)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div v-if="relevant.filter(x => ['scenario', 'insight'].includes(x.layer)).length === 0" class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12.5px] text-[var(--color-text-tertiary)]">
+        暂无此类记忆 — 洞察会随着你和 Agent 的对话自动积累。
       </div>
     </section>
 
