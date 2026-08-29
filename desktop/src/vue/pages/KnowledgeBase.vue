@@ -3,6 +3,7 @@
 // Wired to the real /api/agents/knowledge backend (JSON-backed CRUD).
 
 import { ref, computed, onMounted } from 'vue'
+import PageHero from '../components/common/PageHero.vue'
 import { getApiUrl } from '../api/client'
 
 interface KnowledgeItem {
@@ -159,16 +160,19 @@ const TYPE_FILTERS: Array<'all' | KnowledgeItem['type']> = [
   <div class="kb-page">
     <div class="kb-page__inner">
       <!-- Header -->
-      <header class="kb-page__head">
-        <div>
-          <h1 class="kb-page__title">知识库</h1>
-          <p class="kb-page__sub">{{ items.length }} 个条目 · Agent 会话中可引用这些知识</p>
-        </div>
-        <button class="kb-btn kb-btn--primary" @click="showAdd = !showAdd">
-          <span class="material-symbols-outlined" style="font-size:18px">{{ showAdd ? 'close' : 'add' }}</span>
-          {{ showAdd ? '取消' : '添加知识' }}
-        </button>
-      </header>
+      <PageHero
+        eyebrow="知识库"
+        title="让 Agent 记住"
+        accent="你的知识"
+        :subtitle="items.length + ' 个条目 · 会话中自动引用'"
+      >
+        <template #actions>
+          <button class="kb-btn kb-btn--primary" @click="showAdd = !showAdd">
+            <span class="material-symbols-outlined" style="font-size:18px">{{ showAdd ? 'close' : 'add' }}</span>
+            {{ showAdd ? '取消' : '添加知识' }}
+          </button>
+        </template>
+      </PageHero>
 
       <!-- Add form -->
       <Transition name="kb-slide">

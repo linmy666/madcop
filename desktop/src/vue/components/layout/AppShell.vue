@@ -51,11 +51,11 @@ const tabStore = useTabStore()
 // duplicating that. Special/non-session tabs (settings, workflows,
 // knowledge, etc.) still get the strip because the sidebar doesn't
 // expose them as session entries.
-const showTabStrip = computed(() => {
-  if (!tabStore.activeTabId) return false
-  const tab = tabStore.tabs.find((tb: any) => tb.sessionId === tabStore.activeTabId)
-  return tab?.type !== 'session'
-})
+// The horizontal tab strip is gone: the sidebar is the single
+// navigation surface (ChatGPT/Qoder pattern). Special pages are
+// reachable from the sidebar; sessions likewise. Two parallel
+// session lists read as redundancy, not power.
+const showTabStrip = computed(() => false)
 
 // Listen for ⌘K toggle event from CommandPalette
 const _onPaletteToggle = () => {

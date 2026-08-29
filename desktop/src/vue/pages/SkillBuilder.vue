@@ -176,9 +176,15 @@ async function createSkill() {
           </div>
 
           <div v-if="showCreateCta" class="skill-empty">
-            <span class="material-symbols-outlined skill-empty__icon">auto_awesome</span>
+            <div class="skill-empty__badge">
+              <span class="material-symbols-outlined">auto_awesome</span>
+            </div>
             <h3>还没有技能</h3>
-            <p>点右上角「新建技能」创建第一个；或在 <code>~/.madcop/skills/</code> 放入手册 md 文件。</p>
+            <p>创建第一个技能手册，Agent 会自动在对话中调用它。</p>
+            <button class="skill-empty__cta" @click="showBuilder = true">
+              <span class="material-symbols-outlined">add</span>
+              创建第一个技能
+            </button>
           </div>
       </div>
 
@@ -307,14 +313,45 @@ async function createSkill() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 56px 20px;
+  gap: 10px;
+  padding: 64px 24px;
   text-align: center;
   color: var(--color-text-secondary);
+  border: 1.5px dashed var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface-container-lowest);
 }
-.skill-empty__icon { font-size: 34px; color: var(--color-text-tertiary); }
-.skill-empty h3 { margin: 0; font-size: 15px; color: var(--color-text-primary); }
-.skill-empty p { margin: 0; font-size: 13px; max-width: 380px; }
+.skill-empty__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--color-primary-container);
+  color: var(--color-primary);
+  margin-bottom: 4px;
+}
+.skill-empty__badge .material-symbols-outlined { font-size: 26px; }
+.skill-empty h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
+.skill-empty p { margin: 0; font-size: 13px; max-width: 400px; }
+.skill-empty__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--color-on-primary, #fff);
+  background: var(--color-primary);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: filter 120ms;
+}
+.skill-empty__cta:hover { filter: brightness(1.08); }
 .skill-empty code {
   font-family: var(--font-mono);
   font-size: 12px;

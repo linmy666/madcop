@@ -3,6 +3,7 @@
  * Scheduled tasks — wired to taskStore → /api/scheduled-tasks.
  */
 import { ref, onMounted, computed } from 'vue'
+import PageHero from '../components/common/PageHero.vue'
 import { useTaskStore } from '../stores/taskStore'
 import { useUIStore } from '../stores/uiStore'
 
@@ -111,58 +112,18 @@ function formatTs(v: string | number | undefined) {
 <template>
   <div class="scheduled">
     <div class="scheduled__inner">
-      <div class="scheduled__head">
-        <div>
-          <h1 class="scheduled__title">计划任务</h1>
-          <p class="scheduled__sub">
-            管理定时 Prompt。也可用聊天命令
-            <code>/schedule &lt;cron&gt; &lt;prompt&gt;</code> 创建。
-          </p>
-        </div>
-        <button class="scheduled__btn" type="button" @click="showCreate = !showCreate">
-          {{ showCreate ? '取消' : '新建任务' }}
-        </button>
-      </div>
-
-      <div class="scheduled__notice">
-        <span class="scheduled__notice-glyph">⏱</span>
-        <span class="scheduled__notice-text">
-          计划任务在桌面端后端运行时可用；任务与运行记录保存在
-          <code>~/.madcop/scheduled_tasks.json</code>。
-        </span>
-      </div>
-
-      <div class="scheduled__templates">
-        <span class="scheduled__templates-label">模板：</span>
-        <button
-          v-for="tpl in TEMPLATES"
-          :key="tpl.name"
-          type="button"
-          class="scheduled__tpl"
-          :title="tpl.prompt"
-          @click="applyTemplate(tpl)"
-        >{{ tpl.name }}</button>
-      </div>
-
-      <div v-if="showCreate" class="scheduled__form">
-        <label>
-          <span>名称</span>
-          <input v-model="draft.name" placeholder="例如：每日站会摘要" />
-        </label>
-        <label>
-          <span>Cron</span>
-          <input v-model="draft.cron" placeholder="0 9 * * *" class="mono" />
-        </label>
-        <label class="full">
-          <span>Prompt</span>
-          <textarea v-model="draft.prompt" rows="3" placeholder="要执行的指令…" />
-        </label>
-        <div class="scheduled__form-actions">
-          <button type="button" class="scheduled__btn" :disabled="creating" @click="createTask">
-            {{ creating ? '创建中…' : '保存' }}
+      <PageHero
+        eyebrow="自动化"
+        title="让任务"
+        accent="定时发生"
+        subtitle="管理定时 Prompt — 也可用聊天命令 /schedule <cron> <prompt> 创建"
+      >
+        <template #actions>
+          <button class="scheduled__btn" type="button" @click="showCreate = !showCreate">
+            {{ showCreate ? '取消' : '新建任务' }}
           </button>
-        </div>
-      </div>
+        </template>
+      </PageHero>
 
       <div v-if="loading" class="scheduled__loading">加载中…</div>
 

@@ -14,6 +14,7 @@
  */
 
 import { ref, computed, onMounted } from 'vue'
+import PageHero from '../components/common/PageHero.vue'
 import { getApiUrl } from '../api/client'
 import ErrorState from '../components/common/ErrorState.vue'
 
@@ -226,47 +227,35 @@ const LAYER_LABEL: Record<string, string> = {
   insight: '洞察',
 }
 
+const continuousLearning = ref(false)
 onMounted(loadAll)
 </script>
 
 <template>
   <div class="mx-auto w-full max-w-[900px] space-y-5 px-8">
-    <!-- Header card -->
-    <header class="flex items-start justify-between gap-4 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-5 py-5">
-      <div class="min-w-0">
-        <div class="mb-2 text-[11px] font-semibold tracking-wide text-[var(--color-text-tertiary)]">AI</div>
-        <div class="mb-2 flex items-center gap-2">
-          <span class="material-symbols-outlined text-[20px] text-[var(--color-brand)]" style="fontVariationSettings: 'FILL' 1">psychology</span>
-          <h2 class="text-lg font-semibold tracking-tight text-[var(--color-text-primary)]">记忆</h2>
-          <span class="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-text-tertiary)] border border-[var(--color-border)]">
-            {{ totalCount }}
-          </span>
+    <!-- PageHero -->
+    <PageHero
+      eyebrow="AI 记忆"
+      title="我记得"
+      accent="关于你的一切"
+      subtitle="200 条长期记忆 · 所有数据保留在本地，永远不会离开你的 Mac"
+    >
+      <template #actions>
+        <div class="mem-learn-toggle">
+          <span class="mem-learn-toggle__label">持续学习</span>
+          <button
+            type="button"
+            role="switch"
+            class="mem-toggle"
+            :class="{ 'mem-toggle--on': continuousLearning }"
+            :aria-checked="continuousLearning"
+            @click="continuousLearning = !continuousLearning"
+          >
+            <span class="mem-toggle__thumb" />
+          </button>
         </div>
-        <p class="text-sm leading-6 text-[var(--color-text-secondary)]">
-          MadCop 记住的关于你的所有信息。共 {{ totalCount }} 条。
-        </p>
-      </div>
-      <div class="flex shrink-0 flex-col items-end gap-1.5">
-        <span class="text-[10px] font-medium text-[var(--color-text-tertiary)]">持续学习</span>
-        <button
-          type="button"
-          role="switch"
-          :aria-checked="learningEnabled"
-          :class="[
-            'relative h-7 w-12 shrink-0 rounded-full transition-colors',
-            learningEnabled ? 'bg-[var(--color-brand)]' : 'bg-[var(--color-border)]',
-          ]"
-          @click="toggleLearning(!learningEnabled)"
-        >
-          <span
-            :class="[
-              'absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform',
-              learningEnabled ? 'translate-x-5' : 'translate-x-0.5',
-            ]"
-          ></span>
-        </button>
-      </div>
-    </header>
+      </template>
+    </PageHero>
 
     <!-- Toggle hint -->
     <ErrorState v-if="loadError" :message="loadError" retry-label="重试" @retry="() => { loadError = ''; loadAll() }" />
@@ -550,3 +539,43 @@ onMounted(loadAll)
     </div>
   </div>
 </template>
+
+<style scoped>
+.mem-learn-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mem-learn-toggle__label {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+}
+.mem-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 150ms;
+}
+.mem-toggle__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 150ms;
+}
+.mem-toggle--on {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.mem-toggle--on .mem-toggle__thumb {
+  transform: translateX(18px);
+}
+</style>
