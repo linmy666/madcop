@@ -114,6 +114,13 @@ import ToolCallBlock from './ToolCallBlock.vue'
 import ToolCallInline from './ToolCallInline.vue'
 import ToolCallGroup from './ToolCallGroup.vue'
 import RunItemCard from './RunItemCard.vue'
+const collapsedGroups = ref<Set<string>>(new Set())
+const TOOL_VERB_MAP: Record<string, { verb: string }> = {
+  read_file: { verb: '读取文件' }, write_file: { verb: '写入文件' },
+  write_xlsx: { verb: '生成表格' }, write_pptx: { verb: '生成演示' },
+  edit_file: { verb: '编辑文件' }, web_search: { verb: '搜索网络' },
+  web_fetch: { verb: '抓取页面' }, bash: { verb: '执行命令' },
+}
 import ToolResultBlock from './ToolResultBlock.vue'
 import PermissionDialog from './PermissionDialog.vue'
 import AskUserQuestion from './AskUserQuestion.vue'
@@ -1091,6 +1098,28 @@ function renderItemContent(item: RenderItem) {
         totalMs > 0 ? h('span', { class: 'run-item__meta' },
           `· ${totalMs >= 1000 ? (totalMs / 1000).toFixed(1) + 's' : totalMs + 'ms'}`) : null,
       ])
+    }
+    // Codex-style aggregation: completed multi-tool groups collapse to
+    // one expandable line ("执行了 3 个命令") instead of stacking cards.
+    const groupDone = item.toolCalls.length >= 2 &&
+      item.toolCalls.every((tc: any) => !tc.isPending)
+    if (groupDone && collapsedGroups.value.has(item.key)) {
+      const verbs = [...new Set(item.toolCalls.map((tc: any) => {
+        const meta = TOOL_VERB_MAP[tc.toolName] || { verb: tc.toolName }
+        return meta.verb || tc.toolName
+      }))]
+      return h('button', {
+        class: 'tool-group-collapsed',
+        onClick: () => collapsedGroups.value.delete(item.key),
+      }, [
+        h('span', { class: 'material-symbols-outlined tool-group-collapsed__icon' }, 'terminal'),
+        h('span', `执行了 ${item.toolCalls.length} 个命令`),
+        h('span', { class: 'tool-group-collapsed__detail' },
+          verbs.slice(0, 3).join(' · ') + (verbs.length > 3 ? ' …' : '')),
+      ])
+    }
+    if (groupDone && item.toolCalls.length >= 2) {
+      collapsedGroups.value.add(item.key)
     }
     return h('div', { class: 'run-item-stack' }, item.toolCalls.map((tc, ti) => {
       const result = toolResultMap.get(tc.toolUseId)
