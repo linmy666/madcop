@@ -137,16 +137,42 @@ function renderGraph(graph: { nodes: BrainNode[]; edges: BrainEdge[] }) {
 
 function runLayout() {
   if (!cy) return
-  const layout = cy.layout({
-    name: 'fcose',
-    animate: true,
-    animationDuration: 600,
-    nodeRepulsion: () => 8000,
-    idealEdgeLength: () => 120,
-    nodeSeparation: 90,
-    randomize: true,
-  } as object)
-  layout.run()
+  // fcose is an untyped extension whose registration can silently fail
+  // (async chunk load, version drift) — a dead layout left 21 nodes
+  // positioned at (0,0) inside a blank canvas. Fall back to the built-in
+  // 'grid' if fcose isn't registered, so the graph ALWAYS becomes visible.
+  const layouts: object[] = [
+    {
+      name: 'fcose',
+      animate: true,
+      animationDuration: 600,
+      nodeRepulsion: () => 8000,
+      idealEdgeLength: () => 120,
+      nodeSeparation: 90,
+      randomize: true,
+    },
+    { name: 'grid', animate: true, animationDuration: 400, fit: true, padding: 60 },
+  ]
+  for (const opts of layouts) {
+    try {
+      const layout = cy.layout(opts as object)
+      layout.run()
+      break
+    } catch (e) {
+      console.warn('[knowledge-canvas] layout failed, trying fallback', e)
+    }
+  }
+  // Safety net: even if every layout dies, force nodes into view.
+  if (cy.nodes().nonempty()) {
+    const box = cy.nodes().boundingBox()
+    if (!box || (box.w === 0 && box.h === 0)) {
+      cy.nodes().positions((n: any, i: number) => ({
+        x: 160 + (i % 6) * 180,
+        y: 120 + Math.floor(i / 6) * 140,
+      }))
+    }
+    cy.fit(undefined, 60)
+  }
   void nextTick(() => persistPositions())
 }
 

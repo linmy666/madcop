@@ -230,7 +230,7 @@ onMounted(loadAll)
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl space-y-5">
+  <div class="mx-auto w-full max-w-[900px] space-y-5 px-8">
     <!-- Header card -->
     <header class="flex items-start justify-between gap-4 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-5 py-5">
       <div class="min-w-0">

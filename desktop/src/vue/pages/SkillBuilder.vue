@@ -30,14 +30,43 @@ async function load() {
   try {
     const res = await fetch(getApiUrl('/api/agents/skills'))
     if (res.ok) skills.value = await res.json()
+    // Merge manual skills (~/.madcop/skills/*.md, Qoder-style with
+    // category markers) so the builder shows the full library.
+    const ures = await fetch(getApiUrl('/api/skills'))
+    if (ures.ok) {
+      const data = await ures.json()
+      const manual = (data.skills || []).map((u: any) => ({
+        id: `manual:${u.name}`,
+        name: u.displayName || u.name,
+        description: u.description || '',
+        triggers: [u.category].filter(Boolean),
+        steps: [],
+        enabled: true,
+        manual: true,
+        category: u.category || '',
+      }))
+      const seen = new Set(skills.value.map((x: any) => x.name))
+      skills.value = [...skills.value, ...manual.filter((m: any) => !seen.has(m.name))]
+    }
   } catch { /* keep empty */ } finally { loading.value = false }
 }
 onMounted(load)
 
+// Category chips (Qoder-style) — derived from manual skill categories.
+const activeCategory = ref('')
+const categories = computed(() => {
+  const set = new Set<string>()
+  for (const s of skills.value as any[]) if (s.category) set.add(s.category)
+  return [...set]
+})
+const showCreateCta = computed(() => !loading.value && skills.value.length === 0)
+
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
-  if (!q) return skills.value
-  return skills.value.filter(s =>
+  let list = skills.value
+  if (activeCategory.value) list = list.filter((s: any) => s.category === activeCategory.value)
+  if (!q) return list
+  return list.filter(s =>
     s.name.toLowerCase().includes(q) ||
     s.description.toLowerCase().includes(q) ||
     s.triggers.some(t => t.toLowerCase().includes(q))
@@ -127,7 +156,30 @@ async function createSkill() {
         <div class="skill-search">
           <span class="material-symbols-outlined text-[16px]">search</span>
           <input v-model="search" placeholder="搜索技能..." class="skill-search__input" />
-        </div>
+          </div>
+
+          <div v-if="categories.length" class="skill-cats">
+            <button
+              type="button"
+              class="skill-cat"
+              :class="{ 'skill-cat--active': activeCategory === '' }"
+              @click="activeCategory = ''"
+            >全部</button>
+            <button
+              v-for="c in categories"
+              :key="c"
+              type="button"
+              class="skill-cat"
+              :class="{ 'skill-cat--active': activeCategory === c }"
+              @click="activeCategory = c"
+            >{{ c }}</button>
+          </div>
+
+          <div v-if="showCreateCta" class="skill-empty">
+            <span class="material-symbols-outlined skill-empty__icon">auto_awesome</span>
+            <h3>还没有技能</h3>
+            <p>点右上角「新建技能」创建第一个；或在 <code>~/.madcop/skills/</code> 放入手册 md 文件。</p>
+          </div>
       </div>
 
       <!-- Skill list -->
@@ -227,4 +279,47 @@ async function createSkill() {
 
 .skill-slide-enter-active, .skill-slide-leave-active { transition: all 200ms; overflow: hidden; }
 .skill-slide-enter-from, .skill-slide-leave-to { opacity: 0; max-height: 0; padding: 0; margin: 0; border: none; }
+
+.skill-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+.skill-cat {
+  padding: 4px 12px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-container-low);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.skill-cat:hover { background: var(--color-surface-container-high); color: var(--color-text-primary); }
+.skill-cat--active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary, #fff);
+}
+.skill-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 56px 20px;
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+.skill-empty__icon { font-size: 34px; color: var(--color-text-tertiary); }
+.skill-empty h3 { margin: 0; font-size: 15px; color: var(--color-text-primary); }
+.skill-empty p { margin: 0; font-size: 13px; max-width: 380px; }
+.skill-empty code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--color-surface-container-low);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
 </style>
