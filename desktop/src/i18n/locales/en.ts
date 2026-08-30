@@ -1,4 +1,10 @@
 export const en = {
+  'settings.mcp.importGuideTitle': 'How to add an MCP service',
+  'settings.mcp.importGuide1': 'Click "添加服务" above, choose STDIO / HTTP / SSE transport',
+  'settings.mcp.importGuide2': 'STDIO: fill command (e.g. npx) and args; HTTP/SSE: fill URL',
+  'settings.mcp.importGuide3': 'Save then click "重连"; tools are injected into the global registry for chat',
+  'settings.mcp.importGuideExample': 'Example: npx -y @modelcontextprotocol/server-filesystem /tmp',
+  'settings.mcp.importJsonToggle': 'Import from JSON (Claude Desktop / Cursor)',
   'chat.stepProgress': 'Step',
   'common.close': 'Close',
   'workspace.title': 'Workspace',

@@ -1,6 +1,12 @@
 import type { TranslationKey } from './en'
 
 export const zh: Record<TranslationKey, string> = {
+  'settings.mcp.importGuideTitle': '如何添加 MCP 服务',
+  'settings.mcp.importGuide1': '点击上方「添加服务」，选择 STDIO / HTTP / SSE 传输方式',
+  'settings.mcp.importGuide2': 'STDIO：填写 command（如 npx）与 args；HTTP/SSE：填写 URL',
+  'settings.mcp.importGuide3': '保存后点「重连」；工具会注入全局 registry 供对话调用',
+  'settings.mcp.importGuideExample': '示例：npx -y @modelcontextprotocol/server-filesystem /tmp',
+  'settings.mcp.importJsonToggle': '从 JSON 导入（Claude Desktop / Cursor）',
   'chat.stepProgress': '步骤',
   'common.close': '关闭',
   'workspace.title': '工作区',
