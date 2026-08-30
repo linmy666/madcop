@@ -42,8 +42,12 @@ export const useAgentStore = defineStore('agent', {
       this.error = null
       try {
         const response = await agentsApi.list(cwd)
-        this.activeAgents = response.activeAgents
-        this.allAgents = response.allAgents
+        // The backend /api/agents returns { builtin: [...] } while older
+        // client code expects { activeAgents, allAgents }. Undefined here
+        // crashed the whole Agents settings page (reading 'length').
+        const all = (response.allAgents ?? (response as any).builtin ?? []) as AgentDefinition[]
+        this.allAgents = all
+        this.activeAgents = (response.activeAgents ?? all.filter((a) => a.status === 'online')) as AgentDefinition[]
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to load agents'
         this.error = message
