@@ -1791,3 +1791,104 @@ a:focus-visible,
 @media (max-width: 767px) {
   table { display: block; overflow-x: auto; white-space: nowrap; }
 }
+
+
+/* ─────────────────────────────────────────────────────────────────────
+   Settings pages — global polish layer
+   GeneralSettings (.gs-*) and TerminalSettings (.ts-*) share the same
+   card/row anatomy but their scoped styles are bare. This layer adds
+   the designer touches (hover feedback, row rhythm, control polish)
+   with enough specificity to sit on top of scoped rules.
+   ───────────────────────────────────────────────────────────────────── */
+
+.ts-card,
+.gs-card {
+  box-shadow: 0 1px 2px rgba(13, 13, 13, 0.04) !important;
+}
+
+.ts-row,
+.gs-row {
+  min-height: 60px !important;
+  border-radius: 0 !important;
+  transition: background 120ms ease !important;
+}
+
+.ts-row:first-of-type,
+.gs-row:first-of-type { border-top-left-radius: 10px !important; border-top-right-radius: 10px !important; }
+.ts-row:last-of-type,
+.gs-row:last-of-type { border-bottom-left-radius: 10px !important; border-bottom-right-radius: 10px !important; border-bottom: none !important; }
+
+.ts-row:hover,
+.gs-row:hover {
+  background: var(--color-surface-container-low, #F9F9F9) !important;
+}
+
+.ts-row__label,
+.gs-row__label {
+  font-weight: 500 !important;
+}
+
+.ts-row__desc,
+.gs-row__desc {
+  margin-top: 2px !important;
+}
+
+/* Controls: consistent height, padding, hairline border */
+.ts-select,
+.gs-select,
+.ts-input,
+.gs-input {
+  min-width: 150px !important;
+  height: 34px !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--color-border) !important;
+  background: var(--color-surface) !important;
+  transition: border-color 120ms, box-shadow 120ms !important;
+}
+
+.ts-select:hover,
+.gs-select:hover,
+.ts-input:hover,
+.gs-input:hover {
+  border-color: var(--color-text-tertiary) !important;
+}
+
+.ts-select:focus,
+.gs-select:focus,
+.ts-input:focus,
+.gs-input:focus {
+  outline: none !important;
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent) !important;
+}
+
+/* Range sliders: violet accent thumb already via accent-color; give the
+   track a softer look */
+.ts-range,
+.gs-range {
+  accent-color: var(--color-primary) !important;
+  height: 4px !important;
+}
+
+/* Card headers: slightly stronger separation */
+.ts-card__head,
+.gs-card__head {
+  border-bottom: 1px solid var(--color-border-separator, var(--color-border)) !important;
+  background: var(--color-surface-container-low, transparent) !important;
+  border-radius: 10px 10px 0 0 !important;
+}
+
+/* Card container itself: overflow hidden so the rounded corners clip rows */
+.ts-card,
+.gs-card {
+  overflow: hidden !important;
+  border-radius: 12px !important;
+  padding: 0 !important;
+}
+
+/* Card head padding restoration (padding:0 on card above) */
+.ts-card__head { padding: 12px 16px !important; }
+.gs-card__head { padding: 12px 16px !important; }
+.ts-row, .gs-row { padding: 12px 16px !important; }

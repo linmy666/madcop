@@ -217,19 +217,19 @@ function getSeverityClass(severity: string): string {
       <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3">
         <div class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.diagnostics.events') }}</div>
         <div class="mt-1.5 text-sm font-semibold text-[var(--color-text-primary)]">
-          {{ status ? String(status.eventCount) : '-' }}
+          {{ status && status.eventCount != null ? String(status.eventCount) : '—' }}
         </div>
       </div>
       <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3">
         <div class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.diagnostics.recentErrors') }}</div>
         <div class="mt-1.5 text-sm font-semibold text-[var(--color-text-primary)]">
-          {{ status ? String(status.recentErrorCount) : '-' }}
+          {{ status && status.recentErrorCount != null ? String(status.recentErrorCount) : '—' }}
         </div>
       </div>
       <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-3">
         <div class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.diagnostics.retention') }}</div>
         <div class="mt-1.5 text-sm font-semibold text-[var(--color-text-primary)]">
-          {{ status ? t('settings.diagnostics.retentionValue', { days: String(status.retentionDays), size: formatBytes(status.maxBytes) }) : '-' }}
+          {{ status && status.retentionDays != null ? t('settings.diagnostics.retentionValue', { days: String(status.retentionDays), size: formatBytes(status.maxBytes) }) : '—' }}
         </div>
       </div>
     </div>
