@@ -15,6 +15,7 @@ import os
 import re
 import queue
 import threading
+from pathlib import Path
 import time
 import asyncio
 import concurrent.futures
@@ -61,6 +62,37 @@ _SESSION_SUMMARIES: dict[str, str] = {}
 # path lives under that dir prefix skip the card entirely. In-process
 # only (restart = ask again, the safe default).
 _SESSION_APPROVED: dict[str, set[str]] = {}
+# P2 — approval scopes survive backend restarts (the store is in-process
+# only, so a restart would re-gate everything and re-pop cards the user
+# already answered). The file is the durable mirror; loaded lazily per
+# session at chat start.
+_APPROVAL_SCOPES_FILE = Path.home() / ".madcop" / "approval_scopes.json"
+
+
+def _load_approval_scopes(session_id: str) -> None:
+    """Merge the durable record for `session_id` into the in-memory set
+    (in-memory wins on conflict — a live approval is fresher)."""
+    try:
+        if _APPROVAL_SCOPES_FILE.exists():
+            data = json.loads(_APPROVAL_SCOPES_FILE.read_text() or "{}")
+            stored = data.get(session_id) or []
+            cur = _SESSION_APPROVED.setdefault(session_id, set())
+            cur.update(stored)
+    except Exception as e:
+        logger.debug("approval scopes load failed: %s", e)
+
+
+def _save_approval_scopes(session_id: str) -> None:
+    try:
+        data: dict[str, list] = {}
+        if _APPROVAL_SCOPES_FILE.exists():
+            data = json.loads(_APPROVAL_SCOPES_FILE.read_text() or "{}")
+        data[session_id] = sorted(_SESSION_APPROVED.get(session_id, set()))
+        _APPROVAL_SCOPES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _APPROVAL_SCOPES_FILE.write_text(
+            json.dumps(data, ensure_ascii=False, indent=1))
+    except Exception as e:
+        logger.debug("approval scopes save failed: %s", e)
 # Scope choice attached to a pending confirm before its Future resolves
 # (the POST route knows the scope; the blocking confirm_handler reads it
 # right after fut.result() returns).
@@ -482,6 +514,13 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
 
     from madcop.harness.coeffects import coeffects_for
     _coeffects = coeffects_for(session_id)
+    # Re-arm the session-scope approvals from the durable mirror.
+    if session_id:
+        _load_approval_scopes(session_id)
+        for _entry in _SESSION_APPROVED.get(session_id, set()):
+            _t, _, _d = _entry.partition(":")
+            if _d:
+                _coeffects.provide(f"approval.dir:{_d}", {"tool": _t})
     _bound = set(_coeffects.bindings.keys()) | {
         # Always-on keys for built-ins that don't need dynamic context.
         "net", "shell", "fs.write",
@@ -793,8 +832,14 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                                  or (tool_input or {}).get("file_path") or "")
                         if _p:
                             try:
-                                _dir = os.path.dirname(
-                                    os.path.abspath(os.path.expanduser(_p)))
+                                # Relative paths resolve against the TURN's
+                                # work_dir, not the server process cwd —
+                                # otherwise the recorded scope dir points
+                                # somewhere the file never lives.
+                                _pp = Path(_p).expanduser()
+                                if not _pp.is_absolute() and work_dir:
+                                    _pp = Path(work_dir) / _pp
+                                _dir = os.path.dirname(str(_pp))
                             except Exception:
                                 _dir = ""
                         if _dir:
@@ -811,6 +856,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                                     f"approval.dir:{_dir}", {"tool": tool_name})
                             except Exception as _ce:
                                 logger.debug("coeffect provide failed: %s", _ce)
+                            _save_approval_scopes(_sid)
                             logger.info(
                                 "HITL session-scope approved: %s under %s (session %s)",
                                 tool_name, _dir, _sid,
@@ -1338,9 +1384,68 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                             append_assistant(session_id, _at, model=model or "")
                         except Exception:
                             pass
-                    # Auto-generate title (persist to session store).
+    # Auto-generate title (persist to session store).
                     _gen_title(session_id, _latest_user, _at, ctx.client, model)
+                    # Qoder-style follow-up suggestion — generated in
+                    # THIS worker thread and queued as an event, so the
+                    # SSE loop closes without a 6s post-done stall (the
+                    # old in-generator version blocked the close).
+                    try:
+                        import concurrent.futures as _cf_fu
+
+                        _fu_answer = _assistant_text_holder[0].strip()
+                        if _fu_answer and len(_fu_answer) >= 200 and not _fu_answer.startswith("已连续执行"):
+                            def _gen_followup() -> str:
+                                try:
+                                    _resp = ctx.client.chat(
+                                        [
+                                            Message(role="system", content=(
+                                                "根据这段对话，预测用户最可能追问的下一个问题。"
+                                                "直接输出问题本身：不要思考过程、编号、引号或句号结尾。"
+                                                "用用户的语言，最多25个字，且必须与刚才的回答"
+                                                "具体相关（延伸细节/对比/下一步操作）。"
+                                            )),
+                                            Message(role="user", content=(
+                                                f"用户问：{(_latest_user or '')[:400]}\n\n"
+                                                f"助手答：{_fu_answer[:800]}"
+                                            )),
+                                        ],
+                                        model=ctx.model, temperature=0.6,
+                                    )
+                                    _t = (getattr(_resp, "content", "") or "").strip()
+                                    _t = re.sub(r"<think>[\s\S]*?</think>", "", _t)
+                                    _t = re.sub(r"</?think>", "", _t).strip()
+                                    for _ln in _t.splitlines():
+                                        _ln = _ln.strip().strip('"').strip()
+                                        if _ln:
+                                            return _ln[:60]
+                                    return ""
+                                except Exception:
+                                    return ""
+
+                            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _fex:
+                                _fu_fut = _fex.submit(_gen_followup)
+                                try:
+                                    _fq = _fu_fut.result(timeout=6.0)
+                                except Exception:
+                                    _fq = ""
+                            if _fq:
+                                q.put(AgentStep(kind=StepKind.FOLLOWUP, content=_fq))
+                    except Exception as _fe:
+                        logger.debug("followup generation skipped: %s", _fe)
+
+                    # P1 cleanup — the turn finished and its output was
+                    # persisted; the inverses (and each staged pre-image)
+                    # are no longer needed. Without this every write_file
+                    # leaks a snapshot copy for the server's lifetime.
+                    try:
+                        from madcop.harness.effects import STORE
+                        STORE.clear_prefix(f"{session_id or ''}:")
+                    except Exception:
+                        pass
+
                     q.put(sentinel)
+
 
             thread = threading.Thread(target=worker, daemon=True)
             thread.start()
@@ -1384,60 +1489,6 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                         )
 
                 yield emitter.emit(item)
-
-            # Qoder-style follow-up suggestion: one contextual next-question
-            # chip under the finished answer. Hard 4s budget on a side
-            # thread — a slow provider must never delay stream close.
-            _followup_q = ""
-            try:
-                import concurrent.futures as _cf_fu
-
-                _fu_answer = _assistant_text_holder[0].strip()
-                if (len(_fu_answer) >= 200
-                        and not _fu_answer.startswith("已连续执行")):  # substantial answers only — short ones gain no chip
-                    def _gen_followup() -> str:
-                        try:
-                            _resp = ctx.client.chat(
-                                [
-                                    Message(role="system", content=(
-                                        "根据这段对话，预测用户最可能追问的下一个问题。"
-                                        "直接输出问题本身：不要思考过程、编号、引号或句号结尾。"
-                                        "用用户的语言，最多25个字，且必须与刚才的回答"
-                                        "具体相关（延伸细节/对比/下一步操作）。"
-                                    )),
-                                    Message(role="user", content=(
-                                        f"用户问：{(_latest_user or '')[:400]}\n\n"
-                                        f"助手答：{_fu_answer[:800]}"
-                                    )),
-                                ],
-                                model=ctx.model, temperature=0.6,
-                            )
-                            _t = (getattr(_resp, "content", "") or "").strip()
-                            # MiniMax-style models wrap everything in
-                            # <think>...</think> — strip blocks AND stray
-                            # tags, then take the first non-empty line.
-                            _t = re.sub(r"<think>[\s\S]*?</think>", "", _t)
-                            _t = re.sub(r"</?think>", "", _t).strip()
-                            for _ln in _t.splitlines():
-                                _ln = _ln.strip().strip('"').strip()
-                                if _ln:
-                                    return _ln[:60]
-                            return ""
-                        except Exception:
-                            return ""
-
-                    with _cf_fu.ThreadPoolExecutor(max_workers=1) as _fex:
-                        _fu_fut = _fex.submit(_gen_followup)
-                        try:
-                            _followup_q = _fu_fut.result(timeout=6.0)
-                        except Exception:
-                            _followup_q = ""
-            except Exception as _fe:
-                logger.debug("followup generation skipped: %s", _fe)
-            if _followup_q:
-                yield emitter.emit(AgentStep(
-                    kind=StepKind.FOLLOWUP, content=_followup_q,
-                ))
 
             # P3-A — skill_distilled: after the run, auto-distill if the
             # exchange looks valuable (mirrors legacy app.py:3037/3332/3526).

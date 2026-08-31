@@ -471,6 +471,15 @@ class MadCopHarness:
         m = re.search(r'"status"\s*:\s*"(complete|incomplete|blocked)"', result, re.IGNORECASE)
         if m:
             status = m.group(1).lower()
+        else:
+            # Robust fallback: models with <think> wrappers or prose often
+            # emit the verdict as a bare keyword — scan for it directly
+            # instead of defaulting to 'incomplete' on every malformed JSON.
+            low = result.lower()
+            for kw in ("blocked", "incomplete", "complete"):  # 'incomplete' contains 'complete' — longest/most-specific first
+                if kw in low:
+                    status = kw
+                    break
         self.log.append(reasoning_event("audit", result, step=step.index, status=status))
         return status
 
@@ -516,9 +525,31 @@ class MadCopHarness:
             yield from self._executor(step)
 
             # ── Auditor ──
+            # Cost control: the auditor is a full LLM roundtrip. When the
+            # step made NO mutating calls (pure search/read/prose), there
+            # is no disk state to independently verify — skip the third
+            # call and trust the step. Mutating steps keep the full audit.
+            _had_mutating = bool(self._step_effect_keys)
+            tid = f"aud-{i}"
+            if not _had_mutating:
+                yield self._emit_plan(step, "auditing")
+                yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=tid)
+                yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
+                                content=f"\n🔍 Step {i}: 只读步骤，跳过独立审计（无文件变更）")
+                yield AgentStep(kind=StepKind.THOUGHT_END, thought_id=tid,
+                                elapsed_ms=step.duration_ms)
+                step.audit_status = "complete"
+                self.verified_state = (
+                    f"{self.verified_state}\n\n"
+                    f"[Step {i} ✓]\n{step.executor_summary}"
+                ).strip()
+                step.completed_at = time.time()
+                yield self._emit_plan(step, "complete")
+                step.transition(TurnState.DONE)
+                continue
+
             step.transition(TurnState.AUDITING)
             yield self._emit_plan(step, "auditing")
-            tid = f"aud-{i}"
             yield AgentStep(kind=StepKind.THOUGHT_START, thought_id=tid)
             yield AgentStep(kind=StepKind.THOUGHT_DELTA, thought_id=tid,
                             content=f"\n🔍 Step {i}: 验证中...")

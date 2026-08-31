@@ -44,6 +44,9 @@ class RecordedEffect:
     label: str
     reversible: bool
     inverse: Callable[[], None] | None
+    # Staged pre-image temp file backing the inverse (unlink on cleanup —
+    # otherwise every write_file leaks a snapshot copy on disk).
+    temp_path: str | None = None
     created_at: float = field(default_factory=time.time)
 
 
@@ -61,12 +64,12 @@ class EffectStore:
 
     def register(
         self, key: str, label: str, inverse: Callable[[], None] | None,
-        reversible: bool = True,
+        reversible: bool = True, temp_path: str | None = None,
     ) -> None:
         with self._lock:
             self._effects.setdefault(key, []).append(
                 RecordedEffect(key=key, label=label, reversible=reversible,
-                               inverse=inverse)
+                               inverse=inverse, temp_path=temp_path)
             )
 
     def mark_irreversible(self, key: str, label: str) -> None:
@@ -98,6 +101,26 @@ class EffectStore:
                   "skipped": skipped, "total": len(effects)}
         logger.info("[effects] revert %s", report)
         return report
+
+    def clear_prefix(self, prefix: str) -> int:
+        """Drop every key starting with `prefix` and unlink the staged
+        snapshot temps backing them. Called when a turn finishes and its
+        output was verified/accepted — the inverses are no longer needed,
+        and keeping them (plus each 25KB+ staged pre-image) leaks memory
+        and disk on a long-running server. Returns the number of keys."""
+        with self._lock:
+            keys = [k for k in self._effects if k.startswith(prefix)]
+            temps: list[str] = []
+            for k in keys:
+                for eff in self._effects.pop(k):
+                    if eff.temp_path:
+                        temps.append(eff.temp_path)
+        for t in temps:
+            try:
+                os.unlink(t)
+            except OSError:
+                pass
+        return len(keys)
 
     def peek(self, key: str) -> list[dict]:
         with self._lock:
@@ -145,6 +168,7 @@ def make_file_restore_inverse(path_str: str) -> Callable[[], None] | None:
                 finally:
                     os.unlink(tmp)
 
+            _restore_existing.snapshot_tmp = tmp  # cleared via clear_prefix
             return _restore_existing
         # File does not exist yet → inverse deletes it.
         def _restore_absent() -> None:
@@ -189,7 +213,8 @@ def capture_file_inverse(
     if inverse is None:
         STORE.mark_irreversible(effect_key, label or tool_name)
         return {"key": effect_key, "reversible": False, "reason": "snapshot failed"}
-    STORE.register(effect_key, label or f"{tool_name}:{p.name}", inverse)
+    STORE.register(effect_key, label or f"{tool_name}:{p.name}", inverse,
+                   temp_path=getattr(inverse, "snapshot_tmp", None))
     return {"key": effect_key, "reversible": True}
 
 

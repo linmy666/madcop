@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -55,17 +56,30 @@ def _resolve_in_allowlist(
     """
     raw = Path(path).expanduser()
 
-    # Hallucinated /Users/<name> correction (before resolution — the
-    # nonexistent segment can't be resolved faithfully anyway).
+    # Hallucinated home-dir correction (before resolution — the
+    # nonexistent segment can't be resolved faithfully anyway). Covers
+    # the three corpus-driven patterns: /Users/<name>, /home/<name>,
+    # C:\Users\<name> — xiaoming is THE Chinese textbook placeholder.
     real_home = Path.home()
     try:
         parts = raw.parts
         if (
-            len(parts) >= 3 and parts[0] == "/" and parts[1] == "Users"
+            len(parts) >= 3 and parts[0] == "/" and parts[1] in ("Users", "home")
             and parts[2] != real_home.name
-            and not (Path("/Users") / parts[2]).exists()
+            and not (Path("/") / parts[1] / parts[2]).exists()
         ):
             raw = real_home.joinpath(*parts[3:])
+        else:
+            rs = str(raw)
+            for win_prefix in ("C:\\Users\\", "C:/Users/"):
+                if rs.startswith(win_prefix):
+                    segs = re.split(r"[\\/]", rs)
+                    if (
+                        len(segs) >= 3 and segs[2] != real_home.name
+                        and not Path("C:/Users", segs[2]).exists()
+                    ):
+                        raw = real_home.joinpath(*segs[3:])
+                    break
     except Exception:
         pass
 
