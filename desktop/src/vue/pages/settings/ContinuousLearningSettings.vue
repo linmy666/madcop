@@ -11,9 +11,41 @@
 
 import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { getDesktopHost } from '../../lib/desktopHost'
 
 // Sprint 5 — Proactive Observer toggles.
 const settingsStore = useSettingsStore()
+
+// P2: surface the watcher state instead of hiding it behind two checkboxes.
+// Reads the workspace the same way useProactive does so the badge stays
+// in sync with what the main process is actually watching.
+const currentWorkspace = ref('')
+const restarting = ref(false)
+const lastRestartResult = ref<{ ok: boolean; message: string } | null>(null)
+
+function readWorkspace(): string {
+  try { return localStorage.getItem('madcop_workspace_dir') || '' } catch { return '' }
+}
+currentWorkspace.value = readWorkspace()
+window.addEventListener('storage', () => { currentWorkspace.value = readWorkspace() })
+
+async function restartObserver() {
+  restarting.value = true
+  lastRestartResult.value = null
+  try {
+    await getDesktopHost().proactive.setWorkspace({
+      workspace: currentWorkspace.value,
+      enabled: settingsStore.proactive.enabled,
+      observeFiles: settingsStore.proactive.observeFiles,
+      observeTerminal: settingsStore.proactive.observeTerminal,
+    })
+    lastRestartResult.value = { ok: true, message: `已重新挂载到 ${currentWorkspace.value}` }
+  } catch (e: any) {
+    lastRestartResult.value = { ok: false, message: `重启失败：${e?.message || e}` }
+  } finally {
+    restarting.value = false
+  }
+}
 
 // ─── State ─────────────────────────────────────────────────────────────
 
@@ -368,6 +400,33 @@ onMounted(refreshStats)
         <p class="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
           <strong>使用方法：</strong>先在左侧选择你的项目文件夹（工作区），然后开启下方的开关。Agent 会自动监控该文件夹下的代码改动。
         </p>
+      </div>
+
+      <!-- P2: the proactive observer had a real watcher hidden behind a
+           nondescript two-checkbox toggle — users opened this panel and
+           had no idea whether the watcher was actually pointing at a
+           real directory. Show the current workspace + a one-click
+           restart button so the pipeline is observable. -->
+      <div class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-4 py-3 text-[12px]">
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">当前观察目录</div>
+            <div class="mt-0.5 truncate font-mono text-[12px]" :title="currentWorkspace">
+              {{ currentWorkspace || '尚未选择 — 左侧侧栏点工作区选目录' }}
+            </div>
+          </div>
+          <button
+            type="button"
+            class="shrink-0 rounded-md border border-[var(--color-border)] px-2 py-1 text-[11px] hover:bg-[var(--color-surface-container)] disabled:opacity-40"
+            :disabled="!currentWorkspace || restarting"
+            @click="restartObserver"
+          >
+            {{ restarting ? '重启中…' : '重新挂载观察器' }}
+          </button>
+        </div>
+        <div v-if="lastRestartResult" class="mt-2 text-[11px]" :class="lastRestartResult.ok ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'">
+          {{ lastRestartResult.message }}
+        </div>
       </div>
 
       <label class="flex items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3">

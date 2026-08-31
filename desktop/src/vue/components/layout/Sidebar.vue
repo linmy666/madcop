@@ -340,16 +340,16 @@ const isMobileComputed = computed(() => props.isMobile ?? false)
 const closeMobileDrawer = () => props.onRequestClose?.()
 
 // === v3.1 — Graph-theoretic nav: more/less state for secondary nav ===
-// B-2: "更多" menu defaults to OPEN so secondary features (workflows,
-// design, skill builder) are discoverable. Persisted to localStorage.
+// Defaults to COLLAPSED (user feedback): 定时任务/工作流/设计工具/技能
+// 构建器 are advanced tools, not daily surface. Persisted to localStorage.
 function _loadNavMoreOpen(): boolean {
   try {
-    const stored = localStorage.getItem('madcop_nav_more_open')
-    return stored === null ? true : stored === 'true'
-  } catch { return true }
+    const stored = localStorage.getItem('madcop_nav_more_open_v2')
+    return stored === null ? false : stored === 'true'
+  } catch { return false }
 }
 const navMoreOpen = ref(_loadNavMoreOpen())
-watch(navMoreOpen, (v) => { try { localStorage.setItem('madcop_nav_more_open', String(v)) } catch { /* noop */ } })
+watch(navMoreOpen, (v) => { try { localStorage.setItem('madcop_nav_more_open_v2', String(v)) } catch { /* noop */ } })
 const activeSessionCount = computed(() => sessionStore.sessions?.length ?? 0)
 const runningSessionCount = computed(() => (tabStore.tabs ?? []).filter((tb: any) => tb.status === 'running').length)
 
@@ -1692,6 +1692,7 @@ const projectMenuData = computed(() => {
                     :batch-mode="sessionStore.isBatchMode"
                     :selected="sessionStore.selectedSessionIds.includes(session.id)"
                     :is-running="runningSessionIds.has(session.id)"
+                    :unread="!!chatStore.sessions[session.id]?.hasUnread && session.id !== activeTabId"
                     :is-worktree="isWorktreeSession(session)"
                     :renaming="renamingId === session.id"
                     :rename-value="renameValue"
@@ -1701,6 +1702,7 @@ const projectMenuData = computed(() => {
                       if (sessionStore.isBatchMode) { handleBatchSessionClick(e, session.id); return }
                       tabStore.openTab(session.id, session.title)
                       chatStore.connectToSession(session.id)
+                      if (chatStore.sessions[session.id]) (chatStore.sessions[session.id] as any).hasUnread = false
                       closeMobileDrawer()
                     }"
                     @contextmenu="(e) => handleContextMenu(e, session.id)"

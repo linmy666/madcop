@@ -238,7 +238,7 @@ const errorText = computed(() => {
       </span>
       <span class="run-item__verb">{{ meta.verb }}</span>
       <code v-if="target" class="run-item__target">{{ target }}</code>
-      <span v-if="stepLabel && !isPending" class="run-item__meta">{{ stepLabel }}</span>
+      <span v-if="stepLabel" class="run-item__meta">{{ stepLabel }}</span>
       <span v-if="streamingLabel" class="run-item__meta run-item__meta--live">
         {{ t('runItem.composing', 'composing…') }} {{ streamingLabel }}
       </span>
@@ -272,6 +272,16 @@ const errorText = computed(() => {
   background: transparent;
   overflow: hidden;
   transition: border-color 120ms, background 120ms;
+  /* Rows fade-slide in as the run progresses — the timeline reads as
+     motion, not as blocks popping into existence. */
+  animation: run-item-in 180ms ease-out;
+}
+@keyframes run-item-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-item { animation: none; }
 }
 /* A finished row only gains a surface on hover — at rest it reads as
    part of the narration, not as a box (Codex activity-row language). */

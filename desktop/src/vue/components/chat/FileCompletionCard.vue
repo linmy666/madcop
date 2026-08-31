@@ -10,8 +10,9 @@
  *     simple per-file actions (download via blob URL, others via the
  *     Electron bridge when available, else graceful no-op).
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useTranslation } from '../../i18n'
+import FilePreviewModal from './FilePreviewModal.vue'
 
 interface Props {
   paths: string[]
@@ -23,6 +24,12 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), { workDir: undefined, caption: undefined })
 const t = useTranslation()
+
+/** Qoder parity: clicking a file row opens the in-app content preview. */
+const previewPath = ref('')
+function openPreview(p: string) {
+  previewPath.value = p
+}
 
 interface FileRow { name: string; dir: string; full: string }
 
@@ -96,7 +103,13 @@ function revealInFinder() {
     </header>
     <ul class="fc__list">
       <li v-for="r in rows" :key="r.full" class="fc__row">
-        <code class="fc__name" :title="r.full">{{ shortName(r.full) }}</code>
+        <button
+          type="button"
+          class="fc__name fc__name--link"
+          :title="`${r.full} — 点击预览`"
+          data-testid="fc-preview"
+          @click="openPreview(r.full)"
+        >{{ shortName(r.full) }}</button>
         <button
           type="button"
           class="fc__icon-btn"
@@ -140,6 +153,11 @@ function revealInFinder() {
         <span>{{ t('fileCompletion.openFolder', 'Open folder') }}</span>
       </button>
     </footer>
+    <FilePreviewModal
+      v-if="previewPath"
+      :path="previewPath"
+      @close="previewPath = ''"
+    />
   </section>
 </template>
 
@@ -187,6 +205,21 @@ function revealInFinder() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Clickable preview affordance: same mono row, subtle underline on
+   hover — reads as "open me" without turning the list into buttons. */
+.fc__name--link {
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.fc__name--link:hover {
+  color: var(--color-text-primary, #111);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .fc__icon-btn {
   display: inline-flex;

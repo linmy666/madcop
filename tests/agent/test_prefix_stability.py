@@ -36,7 +36,7 @@ class _RecordingClient:
     def __init__(self):
         self.calls: list[list[Message]] = []
 
-    def stream(self, messages, model=None, temperature=0.1, max_tokens=2048, tools=None):
+    def stream(self, messages, model=None, temperature=0.1, max_tokens=2048, tools=None, effort=None):
         self.calls.append(list(messages))
         yield SimpleNamespace(text="这是回答内容，足够长了。", finish_reason=None)
         yield SimpleNamespace(text="", finish_reason="stop")

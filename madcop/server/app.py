@@ -988,6 +988,10 @@ def _extract_and_emit_html_preview(text: str) -> str | None:
         return None
 
 
+_mcp_manager = None  # set by _load_mcp_into_global_registry
+_mcp_global_registry = None
+
+
 def create_app() -> FastAPI:
     import asyncio as _aio
 
@@ -1089,8 +1093,6 @@ def create_app() -> FastAPI:
     import atexit
     from madcop.tools.mcp import MCPClientManager
 
-    _mcp_manager: MCPClientManager | None = None
-    _mcp_global_registry = None
 
     def _load_mcp_into_global_registry() -> None:
         """Connect to all enabled MCP servers and register their tools
@@ -1120,13 +1122,20 @@ def create_app() -> FastAPI:
                 except Exception:
                     continue
             mgr.connect_all()
-            # Aggregate tools from each connected client
+            # Aggregate tools from each connected client, remembered BY
+            # SERVER so per-request registries (chat_v4) can register them
+            # with coeffect requires={"mcp:<server>"} — connectivity then
+            # gates availability without an RPC per request.
             tools: list = []
+            mgr._tools_by_server = {}
             for client in mgr._clients.values():
                 try:
-                    tools.extend(client.list_tools())
+                    _sv_tools = client.list_tools()
+                    tools.extend(_sv_tools)
+                    mgr._tools_by_server[client.name] = _sv_tools
                 except Exception as e:
                     logger.debug("swallowed: %s", e)
+                    mgr._tools_by_server[client.name] = []
             for t in tools:
                 try:
                     default_registry().register(t)
@@ -1138,6 +1147,31 @@ def create_app() -> FastAPI:
         except Exception as e:
             logger.warning("mcp: Failed to load: %s", e)
             print(f"[mcp] Failed to load: {e}")
+
+    def get_mcp_manager() -> MCPClientManager | None:
+        """Connected MCP manager (or None). chat_v4 uses this to merge
+        server tools into the per-request registry, each declared with
+        requires={"mcp:<server>"} (reactive coeffects)."""
+        return _mcp_manager
+
+    @app.post("/api/mcp/reload")
+    async def mcp_reload() -> dict[str, Any]:
+        """P3 — hot reload: disconnect all MCP clients (running their
+        dispose), re-read mcp_servers.json, reconnect, and refresh the
+        per-server tool tables. No process restart; in-flight turns are
+        untouched (they already carry their tool lists). Mirrors the
+        paper's config reconciliation + hot module replacement."""
+        global _mcp_manager, _mcp_global_registry
+        try:
+            if _mcp_manager:
+                _mcp_manager.close_all()
+            _mcp_manager = None
+            _load_mcp_into_global_registry()
+            mgr = _mcp_manager
+            counts = {k: len(v) for k, v in getattr(mgr, "_tools_by_server", {}).items()}
+            return {"ok": True, "servers": counts}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
     atexit.register(lambda: _mcp_manager.close_all() if _mcp_manager else None)
     _load_mcp_into_global_registry()

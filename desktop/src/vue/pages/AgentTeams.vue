@@ -169,7 +169,7 @@ const inputValue = ref('')
               :value="inputValue"
               @input="($event as any).target.value"
             />
-            <button class="bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] w-9 h-9 rounded-lg flex items-center justify-center transition-all hover:brightness-105 active:scale-95">
+            <button class="bg-[var(--color-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] w-9 h-9 rounded-lg flex items-center justify-center transition-all hover:brightness-105 active:scale-95">
               <span
                 class="material-symbols-outlined text-lg"
                 :style="{ fontVariationSettings: \"'FILL' 1\" }"

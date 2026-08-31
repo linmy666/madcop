@@ -128,7 +128,7 @@ watch(() => props.open, (v) => {
               Next
             </button>
             <button v-else @click="finish"
-              class="px-4 py-2 bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] rounded text-xs font-semibold shadow-sm">
+              class="px-4 py-2 bg-[var(--color-primary)] text-[var(--color-btn-primary-fg)] rounded text-xs font-semibold shadow-sm">
               {{ props.editTask ? 'Save Changes' : 'Create Task' }}
             </button>
           </div>

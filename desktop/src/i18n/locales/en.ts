@@ -2102,7 +2102,7 @@ export const en = {
   'chat.queueNext': 'Queue next — current turn will run this when it finishes',
   // ---- last i18n cleanups ----
   'agentMode.aria': 'Agent mode',
-  'intensity.title': 'Calibration',
+  'intensity.title': 'Thinking depth',
   'composer.placeholder': 'Ask MadCop to write, debug or explain…',
   // ---- file completion card ----
   'fileCompletion.count': '{count} file generated | {count} files generated',

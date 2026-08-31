@@ -1,6 +1,8 @@
 <template>
-  <!-- User message: right-aligned, soft bubble with user avatar -->
-  <div data-message-shell="user" class="user-message group flex items-start justify-end gap-3 py-3">
+  <!-- User message: right-aligned quiet bubble. No avatar — Qoder/ChatGPT
+       language: the bubble's alignment alone identifies the speaker, and a
+       person-icon circle next to every message reads as visual noise. -->
+  <div data-message-shell="user" class="user-message group flex items-start justify-end py-3">
     <div class="flex max-w-[80%] flex-col items-end">
       <div class="user-message__bubble">
         <!-- Image attachments (inline thumbnails) -->
@@ -40,9 +42,6 @@
           <span class="material-symbols-outlined text-[16px]">replay</span>
         </button>
       </div>
-    </div>
-    <div class="user-message__avatar" aria-hidden="true">
-      <span class="material-symbols-outlined">person</span>
     </div>
   </div>
 </template>
@@ -157,23 +156,5 @@ function retry() {
   border: 1px solid var(--color-border);
   border-radius: 4px;
   color: var(--color-text-secondary);
-}
-
-.user-message__avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 2px;
-  /* Neutral avatar — the user's own messages shouldn't outshine the agent's
-     replies. Reserve the brand gradient for the primary action button. */
-  background: var(--color-surface-container-high);
-  color: var(--color-text-secondary);
-}
-.user-message__avatar .material-symbols-outlined {
-  font-size: 18px;
 }
 </style>

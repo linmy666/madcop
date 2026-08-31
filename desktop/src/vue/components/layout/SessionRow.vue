@@ -11,6 +11,8 @@ const props = defineProps<{
   batchMode: boolean
   selected: boolean
   isRunning?: boolean
+  /** Qoder parity: a turn finished while this row wasn't on screen. */
+  unread?: boolean
   isWorktree?: boolean
   renaming: boolean
   renameValue: string
@@ -87,6 +89,11 @@ const rowClass = computed(() => {
           v-if="isRunning"
           class="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-brand)]"
           title="running"
+        />
+        <span
+          v-else-if="unread"
+          class="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-info, #3b82f6)]"
+          title="有新回复"
         />
         <span
           v-if="isWorktree"

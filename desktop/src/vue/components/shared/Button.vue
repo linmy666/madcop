@@ -26,7 +26,7 @@ defineEmits<{ (e: 'click', ev: MouseEvent): void }>()
     :class="[
       'inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-md)] font-medium transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
       {
-        'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] hover:bg-[image:var(--gradient-btn-primary-hover)] hover:brightness-105 active:translate-y-[1px]': variant === 'primary',
+        'bg-[var(--color-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_88%,var(--color-primary-container))] hover:brightness-105 active:translate-y-[1px]': variant === 'primary',
         'bg-[var(--color-surface)] text-[var(--color-text-primary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]': variant === 'secondary',
         'bg-[var(--color-error)] text-white hover:opacity-90': variant === 'danger',
         'bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]': variant === 'ghost',

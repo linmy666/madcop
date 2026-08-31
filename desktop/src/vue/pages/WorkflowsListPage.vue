@@ -105,6 +105,55 @@ const handleEdit = (wf: Workflow) => {
   editingEdges.value = wf.edges as any[]
 }
 
+// Mode library: "作为模板修改" made real — clicking a mode creates a
+// workflow with a skeleton matching the mode's node_count (start →
+// N×llm chain → end) and opens the editor. Previously the cards were
+// pure decoration.
+const handleCreateFromMode = async (mode: AgentMode) => {
+  const llmCount = Math.max(1, (mode.node_count || 3) - 2)
+  const nodes: any[] = [
+    { id: 'start-1', type: 'start', position: { x: 80, y: 220 }, data: { label: '开始' } },
+  ]
+  for (let i = 0; i < llmCount; i++) {
+    nodes.push({
+      id: `llm-${i + 1}`,
+      type: 'llm',
+      position: { x: 80 + (i + 1) * 190, y: 220 },
+      data: {
+        label: `Agent ${String.fromCharCode(65 + i)}`,
+        // First agent takes the user input; later agents refine the
+        // previous agent's output — without a prompt the LLM node
+        // sends an empty message (observed: model answered "消息为空").
+        prompt: i === 0
+          ? '{{input}}'
+          : '请基于以下内容继续完成任务：\n{{llm-' + i + '.output.text}}',
+        system: '你是工作流中的一个协作 Agent，用用户的语言直接完成任务。',
+      },
+    })
+  }
+  nodes.push({
+    id: 'end-1',
+    type: 'end',
+    position: { x: 80 + (llmCount + 1) * 190, y: 220 },
+    data: { label: '结束' },
+  })
+  const edges: any[] = []
+  for (let i = 0; i < nodes.length - 1; i++) {
+    edges.push({ id: `e-${i}`, source: nodes[i].id, target: nodes[i + 1].id })
+  }
+  const wf = await createWorkflow({
+    name: `${mode.name}工作流`,
+    description: mode.description,
+    nodes,
+    edges,
+  } as any)
+  await refresh()
+  editingId.value = (wf as any).id
+  editingName.value = (wf as any).name
+  editingNodes.value = (wf as any).nodes
+  editingEdges.value = (wf as any).edges
+}
+
 const handleDelete = async (id: string) => {
   if (!confirm('确定删除这个工作流？')) return
   await deleteWorkflow(id)
@@ -152,30 +201,40 @@ const handleRun = async () => {
 
 // ─── Invoke workflow dialog state ─────────────────────────────────────
 import { ref as _ref } from 'vue'
-const invokingWorkflow = _ref<any>(null)
+// Naming fix: the dialog's v-if checks `showInvokeDialog && invokeWorkflow`
+// while openInvokeDialog used to set `invokingWorkflow` — the two names
+// never met, so the 运行 dialog could never open (dead button). Unified.
+const showInvokeDialog = _ref(false)
+const invokeWorkflow = _ref<any>(null)
 const invokeInput = _ref('')
 const invokeResult = _ref('')
 const invokeError = _ref('')
 const invokeRunning = _ref(false)
 
 function openInvokeDialog(wf: any) {
-  invokingWorkflow.value = wf
+  invokeWorkflow.value = wf
   invokeInput.value = ''
   invokeResult.value = ''
   invokeError.value = ''
+  showInvokeDialog.value = true
 }
 
 function closeInvokeDialog() {
-  invokingWorkflow.value = null
+  showInvokeDialog.value = false
+  invokeWorkflow.value = null
 }
 
+// Dialog buttons called `confirmInvoke` — also undefined (same refactor
+// gap). Alias to the real runner.
+const confirmInvoke = runInvokedWorkflow
+
 async function runInvokedWorkflow() {
-  if (!invokingWorkflow.value || !invokeInput.value.trim()) return
+  if (!invokeWorkflow.value || !invokeInput.value.trim()) return
   invokeRunning.value = true
   invokeError.value = ''
   invokeResult.value = ''
   try {
-    const wf = invokingWorkflow.value
+    const wf = invokeWorkflow.value
     const res = await fetch(getApiUrl(`/api/workflows/${wf.id}/run`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -300,7 +359,16 @@ const handleBack = async () => {
         <p class="wf-section__sub">预置的协作模式，可直接运行或作为模板修改</p>
       </header>
       <div class="wf-modes-grid">
-        <div v-for="mode in modes" :key="mode.id" class="wf-mode">
+        <div
+          v-for="mode in modes"
+          :key="mode.id"
+          class="wf-mode"
+          role="button"
+          tabindex="0"
+          :title="`从「${mode.name}」模板创建工作流`"
+          @click="handleCreateFromMode(mode)"
+          @keydown.enter="handleCreateFromMode(mode)"
+        >
           <div class="wf-mode__icon">
             <span class="material-symbols-outlined">{{ MODE_ICONS[mode.id] || 'tune' }}</span>
           </div>
@@ -370,6 +438,26 @@ const handleBack = async () => {
               "
             >{{ invokeRunning ? '运行中…' : '▶ 运行' }}</button>
           </div>
+          <pre
+            v-if="invokeError"
+            style="
+              margin: 16px 0 0; padding: 10px 12px; white-space: pre-wrap;
+              word-break: break-word; font-size: 12px; max-height: 240px; overflow: auto;
+              background: color-mix(in srgb, var(--color-error, #d44a4a) 8%, transparent);
+              border: 1px solid var(--color-error, #d44a4a); border-radius: 6px;
+              color: var(--color-error, #d44a4a);
+            "
+          >{{ invokeError }}</pre>
+          <pre
+            v-else-if="invokeResult"
+            style="
+              margin: 16px 0 0; padding: 10px 12px; white-space: pre-wrap;
+              word-break: break-word; font-size: 12.5px; line-height: 1.6; max-height: 280px; overflow: auto;
+              background: var(--color-surface-container-low, #f7f7f7);
+              border: 1px solid var(--color-border); border-radius: 6px;
+              color: var(--color-text-primary);
+            "
+          >{{ invokeResult }}</pre>
         </div>
       </div>
     </Teleport>
@@ -625,8 +713,13 @@ const handleBack = async () => {
   border-radius: 8px;
   padding: 16px;
   transition: border-color 140ms;
+  cursor: pointer;
 }
 .wf-mode:hover { border-color: var(--color-text-tertiary); }
+.wf-mode:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
 .wf-mode__icon {
   width: 32px;
   height: 32px;

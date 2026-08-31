@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import queue
 import threading
 import time
@@ -54,6 +55,51 @@ _PENDING_META: dict[str, dict] = {}
 _SESSION_LAST_USAGE: dict[str, dict] = {}
 _SESSION_SUMMARIES: dict[str, str] = {}
 
+# Qoder-style session-scoped HITL approvals: conversation_id →
+# {"tool_name:dir_prefix"} entries. When the user approves a confirm
+# card with scope="session", subsequent same-tool calls whose target
+# path lives under that dir prefix skip the card entirely. In-process
+# only (restart = ask again, the safe default).
+_SESSION_APPROVED: dict[str, set[str]] = {}
+# Scope choice attached to a pending confirm before its Future resolves
+# (the POST route knows the scope; the blocking confirm_handler reads it
+# right after fut.result() returns).
+_PENDING_SCOPE: dict[str, str] = {}
+
+
+def _session_scope_approved(session_id: str):
+    """Build the ctx.session_scope_approved callable for a session."""
+    def _check(tool_name: str, tool_input: dict) -> bool:
+        approved = _SESSION_APPROVED.get(session_id or "")
+        if not approved:
+            return False
+        # Only file tools can carry a dir scope; bash/run_command must
+        # always ask per call (a "trusted shell" scope would be a hole).
+        raw_path = str(
+            (tool_input or {}).get("path")
+            or (tool_input or {}).get("file_path")
+            or ""
+        )
+        if not raw_path:
+            return False
+        try:
+            p = os.path.abspath(os.path.expanduser(raw_path))
+        except Exception:
+            return False
+        prefix = os.path.dirname(p)
+        for entry in approved:
+            t, _, pre = entry.partition(":")
+            if t != tool_name or not pre:
+                continue
+            try:
+                pre_abs = os.path.abspath(os.path.expanduser(pre))
+            except Exception:
+                continue
+            if p == pre_abs or p.startswith(pre_abs.rstrip("/") + os.sep):
+                return True
+        return False
+    return _check
+
 
 @router.get("/api/v4/chat/confirm/pending")
 async def pending_confirms(conversation_id: str = "") -> dict[str, Any]:
@@ -81,8 +127,13 @@ async def pending_confirms(conversation_id: str = "") -> dict[str, Any]:
 class ConfirmRequest(BaseModel):
     """Frontend payload for responding to a tool confirmation request."""
     session_id: str = ""
+    # Legacy clients send conversation_id — accept either.
+    conversation_id: str = ""
     tool_use_id: str
     approved: bool
+    # "once" (default) = approve this call only; "session" = also allow
+    # same-tool calls under the target's directory for this conversation.
+    scope: str = "once"
 
 
 @router.post("/api/v4/chat/confirm")
@@ -92,10 +143,87 @@ async def confirm_tool(body: ConfirmRequest) -> dict[str, Any]:
     fut = _PENDING_CONFIRMS.get(body.tool_use_id)
     if fut is None or fut.done():
         return {"ok": False, "error": "no pending confirmation for this tool_use_id"}
+    # Attach the scope choice before resolving — confirm_handler reads it
+    # right after fut.result() returns and records session approvals.
+    _PENDING_SCOPE[body.tool_use_id] = "session" if body.scope == "session" else "once"
+    if body.scope == "session":
+        # Record under the session the confirm_handler was built with.
+        _meta = _PENDING_META.get(body.tool_use_id) or {}
+        body.session_id = body.session_id or body.conversation_id or _meta.get("conversation_id", "")
+        _PENDING_META[body.tool_use_id] = {**_meta, "scope_session_id": body.session_id}
     # concurrent.futures.Future.set_result is thread-safe — can be called
     # from the event loop thread while the worker thread blocks on result().
     fut.set_result(body.approved)
     return {"ok": True, "approved": body.approved}
+
+
+# File preview: max bytes shipped to the client (larger files truncate).
+_PREVIEW_MAX_BYTES = 120_000
+# Allowlist mirrors the write tools: workspace + user dirs, never /etc etc.
+# tempfile.gettempdir() covers /tmp — the default scratch workspace the
+# write tools already accept as the session work_dir.
+_PREVIEW_ROOTS = [
+    os.path.expanduser("~"),
+    os.path.expanduser("~/Downloads"),
+    os.path.expanduser("~/Desktop"),
+    os.path.expanduser("~/.madcop"),
+    os.getcwd(),
+    # /tmp (→ /private/tmp on macOS) — the default scratch workspace the
+    # write tools already accept as the session work_dir.
+    os.path.realpath("/tmp"),
+    __import__("tempfile").gettempdir(),
+]
+
+
+@router.get("/api/v4/file/preview")
+async def file_preview(path: str = "", work_dir: str = "") -> dict[str, Any]:
+    """Read a text file for the client-side delivery-card preview.
+
+    Same allowlist policy as the write tools (user dirs / workspace /
+    ~/.madcop / system temp); binary content is detected (NUL sniff) and
+    refused so the modal never renders mojibake. Content caps at 120KB.
+    """
+    if not path:
+        return {"ok": False, "error": "missing path"}
+    # realpath (not abspath): /tmp is a symlink to /private/tmp on macOS —
+    # a workspace of /private/tmp must match a user path of /tmp/....
+    try:
+        p = os.path.realpath(os.path.expanduser(path))
+    except Exception:
+        return {"ok": False, "error": "invalid path"}
+    roots = list(_PREVIEW_ROOTS)
+    if work_dir:
+        try:
+            roots.append(os.path.realpath(os.path.expanduser(work_dir)))
+        except Exception:
+            pass
+    inside = any(
+        (p == r or p.startswith(r.rstrip(os.sep) + os.sep)) for r in roots if r
+    )
+    if not inside:
+        return {"ok": False, "error": "path outside allowed directories"}
+    if not os.path.isfile(p):
+        return {"ok": False, "error": "not a file"}
+    try:
+        size = os.path.getsize(p)
+        with open(p, "rb") as f:
+            head = f.read(min(size, 8192))
+            if b"\x00" in head:
+                return {"ok": False, "error": "binary file", "is_binary": True,
+                        "size": size, "name": os.path.basename(p)}
+            f.seek(0)
+            data = f.read(_PREVIEW_MAX_BYTES + 1)
+        text = data[:_PREVIEW_MAX_BYTES].decode("utf-8", errors="replace")
+        return {
+            "ok": True,
+            "path": p,
+            "name": os.path.basename(p),
+            "size": size,
+            "truncated": size > _PREVIEW_MAX_BYTES,
+            "content": text,
+        }
+    except OSError as e:
+        return {"ok": False, "error": str(e)}
 
 
 def _get_client():
@@ -215,6 +343,15 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     work_dir = body.get("work_dir")
     session_id = body.get("conversation_id") or ""
 
+    # P3-b — validate reasoning effort UPFRONT (dsh parity: reject
+    # unsupported values before a prompt runs, never mid-stream).
+    _effort = body.get("effort") or None
+    if _effort and _effort not in ("auto", "low", "medium", "high", "max"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"无效的思考深度 '{_effort}'。可用：auto/low/medium/high/max。",
+        )
+
     # Phase 2c — derive the conversation context from the session log
     # (single source of truth). The request body's history is treated as
     # a fallback for old sessions that predate logging. When a log with
@@ -332,17 +469,53 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 content=original + "\n\n" + "\n\n".join(extra_parts),
             )
 
-    # Build tool registry with memory store
+    # Build tool registry with memory store.
+    # P2 — reactive coeffects: the session's bindings (approvals, MCP
+    # servers, shell) decide which tools are callable THIS request.
+    # bound_keys=None would mean "all bound" (tests); here we pass the
+    # real keys plus the always-on built-ins.
     try:
         from madcop.server.deps import get_memory_store
         mem_store = get_memory_store()
     except Exception:
         mem_store = None
 
+    from madcop.harness.coeffects import coeffects_for
+    _coeffects = coeffects_for(session_id)
+    _bound = set(_coeffects.bindings.keys()) | {
+        # Always-on keys for built-ins that don't need dynamic context.
+        "net", "shell", "fs.write",
+    }
     reg, tool_executor = build_default_registry(
         workspace_dir=work_dir,
         store=mem_store,
+        bound_keys=_bound,
     )
+
+    # P2 — MCP tools merged into the REQUEST registry. They previously
+    # lived only in the startup-time global registry and never reached
+    # v4 chat (latent bug). Each tool declares requires={"mcp:<server>"}:
+    # a connected server satisfies it; a disconnected one gates the tool.
+    try:
+        from madcop.server import app as _app_mod
+        from madcop.tools.safety import danger_level as _danger_level
+        _mgr = getattr(_app_mod, "_mcp_manager", None)
+        if _mgr is not None and getattr(_mgr, "_tools_by_server", None):
+            from madcop.agent.tool_executor import ToolPlugin
+            for _srv, _tools in _mgr._tools_by_server.items():
+                _key = f"mcp:{_srv}"
+                if _coeffects.get(_key) is None:
+                    _coeffects.provide(_key, {"server": _srv})
+                for _t in _tools or []:
+                    reg.register(ToolPlugin(
+                        name=_t.name,
+                        handler=_t,
+                        schema=_t.to_openai_schema(),
+                        danger=_danger_level(_t.name),
+                        requires=frozenset({_key}),
+                    ))
+    except Exception as _mcp_err:
+        logger.debug("mcp merge skipped: %s", _mcp_err)
 
     # P1-7 — prompt-cache-friendly prefix split (Claude SDK
     # exclude_dynamic_sections). The SYSTEM prompt carries only
@@ -480,7 +653,13 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 "or spreadsheet use the write_pptx / write_xlsx tools "
                 "directly. ALWAYS verify office output by calling "
                 "read_office on the generated file before telling the user "
-                "it is done, and report the real absolute path."
+                "it is done, and report the real absolute path. "
+                "[Format discipline] Match the user's requested shape "
+                "EXACTLY: if they ask for one sentence, answer in one "
+                "sentence; three points means exactly three; ~500字 means "
+                "approximately 500. No opening pleasantries (『好的，让我来"
+                "为你介绍…』), no closing boilerplate (『希望对你有帮助…』). "
+                "Lead with the answer itself."
             )
     except Exception as _e:
         logger.debug("build-intent directive skipped: %s", _e)
@@ -507,6 +686,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         client=_get_client(),
         tool_schemas=reg.get_all_schemas(),
         system_prefix=sys_prefix,
+        effort=_effort,  # P3-b — validated above; forwarded to stream()
     )
 
     # P2-12: ship the two demo hooks. A future plugin layer can swap
@@ -597,7 +777,45 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         try:
             while True:
                 try:
-                    return fut.result(timeout=5.0)
+                    _ok = fut.result(timeout=5.0)
+                    # Session-scope recording: the card's "本会话内始终允许"
+                    # adds "tool:dir" to the conversation's approval set so
+                    # the engine's scope pre-check skips later cards.
+                    if _ok and _PENDING_SCOPE.pop(tool_use_id, "once") == "session":
+                        _rec_sid = ""
+                        try:
+                            _rec_sid = (_PENDING_META.get(tool_use_id) or {}).get(
+                                "scope_session_id", "") or ""
+                        except Exception:
+                            _rec_sid = ""
+                        _dir = ""
+                        _p = str((tool_input or {}).get("path")
+                                 or (tool_input or {}).get("file_path") or "")
+                        if _p:
+                            try:
+                                _dir = os.path.dirname(
+                                    os.path.abspath(os.path.expanduser(_p)))
+                            except Exception:
+                                _dir = ""
+                        if _dir:
+                            _sid = _rec_sid or session_id or ""
+                            _SESSION_APPROVED.setdefault(_sid, set()).add(
+                                f"{tool_name}:{_dir}")
+                            # P2 — the approval is ALSO a coeffect binding:
+                            # provide `approval.dir:<dir>` for the session.
+                            # Withdrawal (revoking the scope) re-gates the
+                            # tools reactively — the binding is the state.
+                            try:
+                                from madcop.harness.coeffects import coeffects_for
+                                coeffects_for(_sid).provide(
+                                    f"approval.dir:{_dir}", {"tool": tool_name})
+                            except Exception as _ce:
+                                logger.debug("coeffect provide failed: %s", _ce)
+                            logger.info(
+                                "HITL session-scope approved: %s under %s (session %s)",
+                                tool_name, _dir, _sid,
+                            )
+                    return _ok
                 except concurrent.futures.TimeoutError:
                     if turn_cancelled.is_set():
                         return False  # turn aborted while waiting
@@ -610,8 +828,12 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         finally:
             _PENDING_CONFIRMS.pop(tool_use_id, None)
             _PENDING_META.pop(tool_use_id, None)
+            _PENDING_SCOPE.pop(tool_use_id, None)
 
     ctx.confirm_handler = confirm_handler
+    # Qoder-style scoped approvals: the engine consults this before
+    # rendering a confirm card (see react_v4 Phase C).
+    ctx.session_scope_approved = _session_scope_approved(session_id)
 
     # Create engine
     engine = EngineFactory.create(ctx)
@@ -842,7 +1064,10 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 try:
                     from madcop.memory.retriever_5layer import FiveLayerRetriever
                     _fr = FiveLayerRetriever(mem_store)
-                    _recalls = _fr.retrieve(_latest_user, top_k=5)
+                    # min_score gate: only genuinely relevant memories may
+                    # badge the answer — unrelated top-5 fills made the
+                    # 「基于 N 条记忆回答」 pill noise.
+                    _recalls = _fr.retrieve(_latest_user, top_k=5, min_score=0.18)
                     if _recalls:
                         yield emitter.emit(AgentStep(
                             kind=StepKind.MEMORY_RECALL,
@@ -1159,6 +1384,60 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                         )
 
                 yield emitter.emit(item)
+
+            # Qoder-style follow-up suggestion: one contextual next-question
+            # chip under the finished answer. Hard 4s budget on a side
+            # thread — a slow provider must never delay stream close.
+            _followup_q = ""
+            try:
+                import concurrent.futures as _cf_fu
+
+                _fu_answer = _assistant_text_holder[0].strip()
+                if (len(_fu_answer) >= 200
+                        and not _fu_answer.startswith("已连续执行")):  # substantial answers only — short ones gain no chip
+                    def _gen_followup() -> str:
+                        try:
+                            _resp = ctx.client.chat(
+                                [
+                                    Message(role="system", content=(
+                                        "根据这段对话，预测用户最可能追问的下一个问题。"
+                                        "直接输出问题本身：不要思考过程、编号、引号或句号结尾。"
+                                        "用用户的语言，最多25个字，且必须与刚才的回答"
+                                        "具体相关（延伸细节/对比/下一步操作）。"
+                                    )),
+                                    Message(role="user", content=(
+                                        f"用户问：{(_latest_user or '')[:400]}\n\n"
+                                        f"助手答：{_fu_answer[:800]}"
+                                    )),
+                                ],
+                                model=ctx.model, temperature=0.6,
+                            )
+                            _t = (getattr(_resp, "content", "") or "").strip()
+                            # MiniMax-style models wrap everything in
+                            # <think>...</think> — strip blocks AND stray
+                            # tags, then take the first non-empty line.
+                            _t = re.sub(r"<think>[\s\S]*?</think>", "", _t)
+                            _t = re.sub(r"</?think>", "", _t).strip()
+                            for _ln in _t.splitlines():
+                                _ln = _ln.strip().strip('"').strip()
+                                if _ln:
+                                    return _ln[:60]
+                            return ""
+                        except Exception:
+                            return ""
+
+                    with _cf_fu.ThreadPoolExecutor(max_workers=1) as _fex:
+                        _fu_fut = _fex.submit(_gen_followup)
+                        try:
+                            _followup_q = _fu_fut.result(timeout=6.0)
+                        except Exception:
+                            _followup_q = ""
+            except Exception as _fe:
+                logger.debug("followup generation skipped: %s", _fe)
+            if _followup_q:
+                yield emitter.emit(AgentStep(
+                    kind=StepKind.FOLLOWUP, content=_followup_q,
+                ))
 
             # P3-A — skill_distilled: after the run, auto-distill if the
             # exchange looks valuable (mirrors legacy app.py:3037/3332/3526).

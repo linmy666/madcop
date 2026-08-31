@@ -42,7 +42,6 @@ import { SETTINGS_TAB_ID, useTabStore } from '../stores/tabStore'
 import RepositoryLaunchControls from '../components/shared/RepositoryLaunchControls.vue'
 import PermissionModeSelector from '../components/controls/PermissionModeSelector.vue'
 import ModelSelector from '../components/controls/ModelSelector.vue'
-import AgentModeSelector from '../components/controls/AgentModeSelector.vue'
 import AttachmentGallery from '../components/chat/AttachmentGallery.vue'
 import ComposerDropOverlay from '../components/chat/ComposerDropOverlay.vue'
 import ContextUsageIndicator from '../components/chat/ContextUsageIndicator.vue'
@@ -177,6 +176,10 @@ const lastPluginReloadSummary = usePluginStore().lastReloadSummary
 // B-1: context-aware hero. Detect setup gaps and guide the user inline
 // instead of letting them type → send → error with no recovery path.
 const heroState = computed<'no_provider' | 'no_workspace' | 'ready'>(() => {
+  // Don't judge provider status until /api/settings has answered — a fresh
+  // mount would otherwise flash 「先配置一个 AI 模型供应商」 for a
+  // fully-configured app (the fetch hadn't landed yet).
+  if (!_settingsStore.settingsLoaded) return 'ready'
   if (!_settingsStore.activeProviderName && !currentModel) return 'no_provider'
   if (typeof localStorage !== 'undefined' && !localStorage.getItem('madcop_workspace_dir')) return 'no_workspace'
   return 'ready'
@@ -1025,7 +1028,8 @@ const insertSlashCommand = () => {
                 />
               </div>
 
-              <!-- Right: context indicator + model + submit -->
+              <!-- Right: model + submit. ContextUsageIndicator removed —
+                   a permanent "0.0% context used" chip read as noise. -->
               <div
                 class="flex items-center gap-2"
                 :class="
@@ -1034,20 +1038,7 @@ const insertSlashCommand = () => {
                     : ''
                 "
               >
-                <ContextUsageIndicator
-                  chat-state="idle"
-                  :message-count="0"
-                  :runtime-selection-key="draftRuntimeSelectionKey"
-                  :fallback-model-label="draftModelLabel"
-                  draft
-                  :compact="isMobileComposer"
-                />
                 <ModelSelector
-                  :runtime-key="DRAFT_RUNTIME_SELECTION_KEY"
-                  :disabled="isSubmitting"
-                  :compact="isMobileComposer"
-                />
-                <AgentModeSelector
                   :selection-key="DRAFT_RUNTIME_SELECTION_KEY"
                   :disabled="isSubmitting"
                   :compact="isMobileComposer"
@@ -1057,7 +1048,7 @@ const insertSlashCommand = () => {
                   :disabled="!canSubmit"
                   :aria-label="t('common.run')"
                   :title="isMobileComposer ? t('common.run') : undefined"
-                  class="flex shrink-0 items-center justify-center gap-1 rounded-lg bg-[image:var(--gradient-btn-primary)] text-xs font-semibold text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] transition-all hover:brightness-105 disabled:opacity-30"
+                  class="flex shrink-0 items-center justify-center gap-1 rounded-lg bg-[var(--color-primary)] text-xs font-semibold text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] transition-all hover:brightness-105 disabled:opacity-30"
                   :class="
                     isMobileComposer
                       ? 'h-11 w-11 rounded-xl px-0 py-0'

@@ -14,6 +14,7 @@ const t = useTranslation()
 
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { getApiUrl, getBaseUrl } from '../../api/client'
+import ThinkingDepthSection from './ThinkingDepthSection.vue'
 
 interface Provider {
   provider_id: string
@@ -38,6 +39,9 @@ const props = defineProps<{
   compact?: boolean
   disabled?: boolean
   selectedModel?: string
+  /** When provided, the popover renders the thinking-depth section
+   *  (reasoning effort) bound to this runtime selection key. */
+  selectionKey?: string
 }>()
 
 const emit = defineEmits<{
@@ -301,6 +305,14 @@ watch(() => props.selectedModel, (val) => {
         />
         <button class="model-selector__context-apply" @click="applyContextOverride">保存</button>
       </div>
+
+      <!-- Thinking depth (reasoning effort) — moved from the standalone
+           composer slider so model + depth live in one place. -->
+      <ThinkingDepthSection
+        v-if="selectionKey"
+        :selection-key="selectionKey"
+        :selected-model="selectedModel"
+      />
     </div>
   </div>
 </template>

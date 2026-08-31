@@ -76,7 +76,7 @@ async function handleLogout() {
       <button
         @click="handleLogin"
         :disabled="status === 'pending'"
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-[var(--radius-md)] bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] transition-all hover:brightness-105 disabled:opacity-50"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] transition-all hover:brightness-105 disabled:opacity-50"
       >
         <span class="material-symbols-outlined text-[14px]">login</span>
         登录 {{ providerName }}

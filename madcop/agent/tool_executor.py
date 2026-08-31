@@ -98,6 +98,11 @@ class ToolPlugin:
     schema: dict  # OpenAI function schema
     danger: str = "safe"  # safe | mutating | destructive
     timeout_s: int = DEFAULT_TIMEOUT_S
+    # Reactive coeffects (paper §3.2): context keys this tool REQUIRES.
+    # The tool is callable only while every key is bound in the session's
+    # CoeffectStore (e.g. "mcp:<server>", "approval.dir:<abs>"). Empty
+    # set = always satisfied.
+    requires: frozenset[str] = frozenset()
 
 
 class PluginRegistry:
@@ -116,6 +121,23 @@ class PluginRegistry:
     def get_all_schemas(self) -> list[dict]:
         """Return OpenAI function schemas for all registered tools."""
         return [p.schema for p in self._plugins.values()]
+
+    def satisfied_schemas(self, bound_keys: set[str]) -> list[dict]:
+        """Schemas of tools whose coeffect specification is satisfied
+        (Definition 21: σ ⊨ d ⟺ ∀k∈d. k ∈ dom(σ)). Unsatisfied tools
+        are GATED — the engine sees them as unavailable instead of
+        failing at call time."""
+        return [
+            p.schema for p in self._plugins.values()
+            if p.requires <= bound_keys
+        ]
+
+    def unsatisfied_reason(self, name: str, bound_keys: set[str]) -> str:
+        p = self._plugins.get(name)
+        if p is None:
+            return ""
+        missing = sorted(p.requires - bound_keys)
+        return ", ".join(missing) if missing else ""
 
     def names(self) -> list[str]:
         return list(self._plugins.keys())
@@ -143,6 +165,7 @@ class ToolExecutor:
         raw_input: Any,
         work_dir: str | None = None,
         pre_approved: bool = False,
+        effect_key: str | None = None,
     ) -> ToolResult:
         """Execute synchronously (called from ReAct engine thread).
 
@@ -152,6 +175,12 @@ class ToolExecutor:
           3. Execute with hard timeout (DEFAULT_TIMEOUT_S)
           4. Format result (success or one of: validation / confirmation /
              timeout / generic error)
+
+        ``effect_key``: when provided (the tool_use_id), mutating file
+        tools capture a pre-image snapshot and register an inverse with
+        the EffectStore under this key BEFORE execution — enabling
+        revertible effects (paper §3.1). bash/run_command are recorded
+        as irreversible markers so revert reports stay honest.
 
         The handler may be sync or async. For sync handlers we wrap in
         ``asyncio.run`` with a 30s ``wait_for`` so a runaway tool cannot
@@ -225,6 +254,17 @@ class ToolExecutor:
         if work_dir:
             args.setdefault("work_dir", work_dir)
             args.setdefault("cwd", work_dir)
+
+        # 3.5 Revertible effects (paper §3.1): snapshot the pre-state of
+        # mutating file tools BEFORE execution and register the inverse
+        # under `effect_key`. bash/run_command recorded as irreversible.
+        if effect_key:
+            try:
+                from madcop.harness.effects import capture_file_inverse
+                capture_file_inverse(tool_name, args, effect_key)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[effects] pre-capture failed for %s: %s",
+                               tool_name, e)
 
         timeout_s = max(1, int(plugin.timeout_s or DEFAULT_TIMEOUT_S))
 
@@ -367,6 +407,7 @@ class _ToolTimeout(Exception):
 def build_default_registry(
     workspace_dir: str | None = None,
     store: Any = None,
+    bound_keys: set[str] | None = None,
 ) -> tuple[PluginRegistry, ToolExecutor]:
     """Build a registry with all built-in tools and return
     (registry, executor).
@@ -386,7 +427,7 @@ def build_default_registry(
 
     reg = PluginRegistry()
 
-    def _reg(tool_cls, *args, **kwargs):
+    def _reg(tool_cls, *args, requires=frozenset(), **kwargs):
         """Register a tool class instance."""
         tool = tool_cls(*args, **kwargs)
         reg.register(ToolPlugin(
@@ -394,14 +435,15 @@ def build_default_registry(
             handler=tool,
             schema=tool.to_openai_schema(),
             danger=danger_level(tool.name),
+            requires=frozenset(requires),
         ))
 
     # Core tools
     _reg(EchoTool)
     _reg(GetTimeTool)
     _reg(GetCurrentModelTool)
-    _reg(WebSearchTool)
-    _reg(WebFetchTool)
+    _reg(WebSearchTool, requires={'net'})
+    _reg(WebFetchTool, requires={'net'})
     _reg(WeatherTool)
     _reg(ClarifyTool)
 
@@ -443,6 +485,7 @@ def build_default_registry(
             handler=_bash,
             schema=_bash.to_openai_schema(),
             danger=danger_level(_bash.name),
+            requires=frozenset({'shell'}),
         ))
     except Exception as e:  # pragma: no cover
         logger.warning("bash tool registration failed: %s", e)
@@ -466,6 +509,17 @@ def build_default_registry(
         register_browser_plugins(reg)
     except Exception as e:  # pragma: no cover
         logger.warning("failed to register browser plugins: %s", e)
+
+    # Reactive coeffects: gate tools whose declared keys are unbound.
+    # bound_keys=None (tests/CLI) means "everything bound" — the chat
+    # route passes the session's actual bindings.
+    if bound_keys is not None:
+        _gated = [n for n, p in reg._plugins.items()
+                  if not p.requires <= set(bound_keys)]
+        for _n in _gated:
+            logger.info("[coeffects] gating tool %s (unbound keys: %s)",
+                        _n, sorted(reg._plugins[_n].requires - set(bound_keys)))
+            reg._plugins.pop(_n, None)
 
     executor = ToolExecutor(reg)
     return reg, executor

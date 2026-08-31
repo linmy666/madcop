@@ -12,9 +12,11 @@ but with a clean AgentStep output interface.
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 import uuid
+from pathlib import Path
 from typing import Iterator
 
 from .runtime import AgentEngine, AgentStep, RunContext, StepKind
@@ -71,8 +73,8 @@ _ACTION_INTENT_RE = re.compile(
 # 具体的搜索关键词" dodges a "换个关键词" pattern). Length guard keeps
 # real answers ("搜索结果显示…", >80 chars) out of the trap.
 _ACTION_VERB_RE = re.compile(
-    r"搜|查询?|写|生成|创建|运行|打开|发送|尝试|换个|抓取|访问"
-    r"|search|look up|look for|write|creat|generat|run|open|send|try|check|fetch",
+    r"搜|查询?|写|生成|创建|运行|打开|发送|尝试|换个|抓取|访问|读取?|验证|检查|构建|搭建|测试|实现|安装|修复"
+    r"|search|look up|look for|write|creat|generat|run|open|send|try|check|fetch|read|build|verify|fix",
     re.IGNORECASE,
 )
 _SHORT_ANSWER_CHARS = 80
@@ -83,6 +85,12 @@ _SHORT_ANSWER_CHARS = 80
 _ARTIFACT_CLAIM_RE = re.compile(
     r"[\w.\-\u4e00-\u9fff]+\.(pptx|xlsx|docx|html?|pdf|csv|md|txt|json)\b",
     re.IGNORECASE,
+)
+_TAIL_PROMISE_RE = re.compile(
+    r"(然后|接着|接下来|下面|现在|先|再|马上|就要|正在|准备|试图)[^。！？\n]{0,24}?"
+    r"(开始|继续|去|来)?[^。！？\n]{0,12}?"
+    r"(读|验证|检查|构建|搭建|生成|写|创建|测试|运行|实现|修复|搜|抓取)"
+    r"[^。！？\n]{0,20}[。！？]?\s*$"
 )
 _MONOLOGUE_RE = re.compile(
     r"^\s*(the user|i need to|let me|i should|i'll|i am going to|i'm going to"
@@ -105,6 +113,13 @@ def _context_clean(text: str) -> str:
     return cleaned.strip()
 
 
+# Rolling-compaction budget (chars, ~3.5 chars/token for mixed CJK):
+# 120k chars ≈ 34k tokens of live loop context — far under provider
+# limits while keeping every recent observation intact.
+_COMPACT_BUDGET_CHARS = 120_000
+_COMPACT_KEEP_TAIL = 8
+
+
 class ReActEngineV4(AgentEngine):
     """Standard ReAct engine with unified AgentStep output.
 
@@ -124,6 +139,8 @@ class ReActEngineV4(AgentEngine):
         cur_tid = ""
         steps_log: list[str] = []  # for loop detection
         fa_streamed = False
+        # Files written this turn (for the max-steps progress report).
+        self._v4_written_files = []
         # P1-5: token usage summed across this run's LLM calls; attached
         # to the DONE step for the UI's context budget indicator.
         _run_usage: dict[str, Any] = {}
@@ -144,6 +161,19 @@ class ReActEngineV4(AgentEngine):
         for step_num in range(1, max_steps + 1):
             step_start = time.time()
             _step_usage: dict[str, Any] = {}
+            # Long-run context hygiene: multi-file builds append an
+            # assistant raw + Observation pair per step; without a cap the
+            # 40-step context dwarfs the actual task. Compress the middle
+            # into short summaries, keep system + first user + last 8.
+            self._maybe_compact(messages)
+            # Grace budget-end: give the model a wrap-up turn instead of a
+            # hard stop, so the user gets a real progress report.
+            if step_num == max_steps and any(a for a in steps_log):
+                messages.append(Message(role="user", content=(
+                    "（预算提示）这是本回合最后一个工具步骤：请直接给出面向用户的"
+                    "最终回答——汇报已生成的文件与绝对路径、完成了什么、还剩什么，"
+                    "并提示用户回复「继续」即可接着完成。不要再发起新的工具调用。"
+                )))
             # P2-9: one llm_call span per engine step.
             try:
                 from madcop.agent.trace import start_span as _ts
@@ -168,6 +198,7 @@ class ReActEngineV4(AgentEngine):
             self._v4_answer_buf = ''  # accumulate post-think text for ReAct detection
             if step_num == 1:
                 self._v4_intent_streak = 0
+                self._v4_promise_streak = 0
             # BUG-FIX: when MiniMax / similar OpenAI-compatible models are
             # given a ReAct-style text prompt, they emit tool calls in the
             # wrong shape ("web_searchAction Input: {...}" as plain text),
@@ -195,14 +226,33 @@ class ReActEngineV4(AgentEngine):
                     # stream (duplicated content). cf. OpenAI Agents SDK
                     # retry.py's approve_unsafe_replay split.
                     from madcop.llm.retry import stream_with_retry
+                    def _stream_factory():
+                        # Tolerant call: older clients / test doubles may
+                        # not accept `effort` — retry once without it.
+                        try:
+                            return ctx.client.stream(
+                                messages,
+                                model=ctx.model,
+                                temperature=0.1,
+                                # 16k: composing a whole file (game HTML
+                                # etc.) burns ~8k in the think phase alone
+                                # — an 8k cap truncated mid-think, which
+                                # silently killed long build turns.
+                                max_tokens=16384,
+                                effort=getattr(ctx, 'effort', None),
+                                tools=ctx.tool_schemas or None,
+                            )
+                        except TypeError:
+                            return ctx.client.stream(
+                                messages,
+                                model=ctx.model,
+                                temperature=0.1,
+                                max_tokens=16384,
+                                tools=ctx.tool_schemas or None,
+                            )
+
                     _chunk_iter = stream_with_retry(
-                        lambda: ctx.client.stream(
-                            messages,
-                            model=ctx.model,
-                            temperature=0.1,
-                            max_tokens=8192,
-                            tools=ctx.tool_schemas or None,
-                        ),
+                        _stream_factory,
                         label=f"react-step-{step_num}",
                     )
                     for chunk in _chunk_iter:
@@ -441,6 +491,24 @@ class ReActEngineV4(AgentEngine):
                             _claimed_missing.append(_claim)
                 except Exception:
                     _claimed_missing = []
+                # P2 — tail-promise detection: a LONG answer that ENDS on
+                # a continuation phrase ("……然后开始构建。") is a plan
+                # ending — the model narrated work it never did. Separate
+                # counter from the intent streak so earlier reflections
+                # don't spend this guard's budget.
+                _tail_promise = bool(_TAIL_PROMISE_RE.search(_buf_all[-90:]))
+                _promise_streak_ok = getattr(self, '_v4_promise_streak', 0) < 2
+                if _tail_promise and _promise_streak_ok and not _claimed_missing:
+                    self._v4_promise_streak = getattr(self, '_v4_promise_streak', 0) + 1
+                    messages.append(Message(role="assistant", content=_context_clean(raw)))
+                    messages.append(Message(role="user", content=(
+                        "Observation: 你的上一条回复以承诺收尾"
+                        "（例如『然后开始构建/验证』）但没有执行就结束了回合——"
+                        "用户什么都没得到。立即调用工具完成你承诺的动作，"
+                        "完成后再给出最终答复；不要只宣布接下来要做什么。"
+                    )))
+                    continue
+
                 _streak_ok = getattr(self, '_v4_intent_streak', 0) < 2
                 if _claimed_missing and _streak_ok:
                     messages.append(Message(role="assistant", content=_context_clean(raw)))
@@ -620,6 +688,38 @@ class ReActEngineV4(AgentEngine):
                 )))
                 continue
 
+            # Think-only truncation (PvZ bug): the model composed the whole
+            # artifact inside <think> and hit the length cap before closing
+            # it — zero tool calls, zero answer text, turn ended silently
+            # with "这一轮没有产生回复". Bounce it back with an explicit
+            # "write the file via the tool, not in your head" instruction.
+            _think_only = (
+                _finish_reason == "length"
+                and not action.strip()
+                and not oa_tc_name
+                and not (getattr(self, '_v4_answer_buf', '') or '').strip()
+                and not fa_streamed
+            )
+            if _think_only:
+                self._v4_intent_streak = getattr(self, '_v4_intent_streak', 0) + 1
+                if getattr(self, '_v4_intent_streak', 0) >= 3:
+                    yield AgentStep(kind=StepKind.TEXT_DELTA, content=(
+                        "模型输出在思考阶段被长度上限截断，且未能发起任何工具调用。"
+                        "请回复「继续」重试，或把任务拆小一些。"
+                    ))
+                    yield AgentStep(kind=StepKind.TEXT_END)
+                    yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
+                                    metadata={"usage": _run_usage})
+                    return
+                messages.append(Message(role="user", content=(
+                    "Observation: [error] 本次响应在思考阶段就达到了长度上限被截断——"
+                    "你把完整代码写在了思考里，却没有发出任何工具调用，用户什么都没得到。"
+                    "请立即调用 write_file 工具把文件真正写入磁盘"
+                    "（内容太长就分多次写入或精简规模），"
+                    "不要在思考里写完整代码。"
+                )))
+                continue
+
             # --- COT enforcement ---
             if action.upper() != "FINAL_ANSWER" and not thought.strip():
                 reflection = (
@@ -662,6 +762,14 @@ class ReActEngineV4(AgentEngine):
                     _ans = (getattr(self, '_v4_answer_buf', '') or '').strip() or _context_clean(raw)
                     if _ans:
                         yield AgentStep(kind=StepKind.TEXT_DELTA, content=_ans)
+                    else:
+                        # Empty-done bailout: nothing streamed, no tool fired
+                        # — a silent "这一轮没有产生回复" is the worst UX.
+                        # Tell the user honestly and offer the retry word.
+                        yield AgentStep(kind=StepKind.TEXT_DELTA, content=(
+                            "这一轮模型没有产出任何内容（可能在组织长内容时被截断）。"
+                            "请回复「继续」让我重试。"
+                        ))
                     yield AgentStep(kind=StepKind.TEXT_END)
                     yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
                             metadata={"usage": _run_usage})
@@ -775,6 +883,11 @@ class ReActEngineV4(AgentEngine):
                             raw_result = ctx.tool_executor(
                                 name, _exec_input, ctx.work_dir,
                                 pre_approved=approved,
+                                # Revertible effects (paper §3.1): the
+                                # tool_use_id keys the inverse so an MEA
+                                # audit-blocked step (or a future undo)
+                                # can restore the pre-call state.
+                                effect_key=f"{ctx.session_id or 'sess'}:{_c['use_id']}",
                             )
                         except TypeError:
                             raw_result = ctx.tool_executor(name, _exec_input, ctx.work_dir)
@@ -877,8 +990,15 @@ class ReActEngineV4(AgentEngine):
                 else:
                     _free.append((_c, _args))
 
-            # Phase B — free calls run concurrently (bounded pool).
+            # Phase B — free calls: read-only tools run concurrently in a
+            # bounded pool; MUTATING tools run serially in submission
+            # order (paper §3.4.1 effect independence — two writes to the
+            # same path must not interleave, and serial mutation makes
+            # each inverse's `g(δ)=γ` witness hold regardless of order).
             if _free:
+                from madcop.tools.safety import danger_level as _dlvl
+                _readonly = [fc for fc in _free if _dlvl(fc[0]["name"]) == "safe"]
+                _mutating = [fc for fc in _free if _dlvl(fc[0]["name"]) != "safe"]
                 for _c, _a in _free:
                     yield AgentStep(
                         kind=StepKind.TOOL_START,
@@ -886,36 +1006,57 @@ class ReActEngineV4(AgentEngine):
                         tool_use_id=_c["use_id"],
                         metadata=dict(_step_meta),
                     )
-                import concurrent.futures as _cf
-                with _cf.ThreadPoolExecutor(max_workers=min(4, len(_free))) as _pool:
-                    _futs = {
-                        _pool.submit(_exec_one, _c["name"], _a, True): _c
-                        for _c, _a in _free
-                    }
-                    for _fut in _cf.as_completed(_futs):
-                        _c = _futs[_fut]
-                        _obs, _ierr, _meta = _fut.result()
-                        # P2-12: PostToolUse hooks may append observations
-                        if getattr(ctx, "hooks", None):
-                            from .hooks import HookEvent, HookContext as _HC
-                            _pr = ctx.hooks.run(_HC(
-                                event=HookEvent.POST_TOOL_USE,
-                                tool_name=_c["name"], tool_input=dict(_a),
-                                tool_result=_obs, is_error=_ierr,
-                                turn_id=str(step_num),
-                                conversation_id=ctx.session_id or "",
-                            ))
-                            if _pr.extra_observation and _obs is not None:
-                                _obs = str(_obs) + "\n" + _pr.extra_observation
-                        yield AgentStep(
-                            kind=StepKind.TOOL_END,
-                            tool_name=_c["name"], tool_use_id=_c["use_id"],
-                            tool_result=(_obs or "")[:2000],
-                            is_error=_ierr, metadata=_meta,
-                        )
-                        _results.append((_c, _obs, _ierr, _meta))
+
+                def _run_one(fc):
+                    _c, _a = fc
+                    _obs, _ierr, _meta = _exec_one(_c["name"], _a, True)
+                    # P2-12: PostToolUse hooks may append observations
+                    if getattr(ctx, "hooks", None):
+                        from .hooks import HookEvent, HookContext as _HC
+                        _pr = ctx.hooks.run(_HC(
+                            event=HookEvent.POST_TOOL_USE,
+                            tool_name=_c["name"], tool_input=dict(_a),
+                            tool_result=_obs, is_error=_ierr,
+                            turn_id=str(step_num),
+                            conversation_id=ctx.session_id or "",
+                        ))
+                        if _pr.extra_observation and _obs is not None:
+                            _obs = str(_obs) + "\n" + _pr.extra_observation
+                    return fc, _obs, _ierr, _meta
+
+                _done: list = []
+                if _readonly:
+                    import concurrent.futures as _cf
+                    with _cf.ThreadPoolExecutor(max_workers=min(4, len(_readonly))) as _pool:
+                        _futs = {_pool.submit(_run_one, fc): fc for fc in _readonly}
+                        for _fut in _cf.as_completed(_futs):
+                            _fc, _obs, _ierr, _meta = _fut.result()
+                            _c, _a = _fc
+                            yield AgentStep(
+                                kind=StepKind.TOOL_END,
+                                tool_name=_c["name"], tool_use_id=_c["use_id"],
+                                tool_result=(_obs or "")[:2000],
+                                is_error=_ierr, metadata=_meta,
+                            )
+                            _results.append((_c, _obs, _ierr, _meta))
+                # Mutating tools: strictly serial, submission order —
+                # each TOOL_END streams as soon as it finishes.
+                for _fc in _mutating:
+                    _fc, _obs, _ierr, _meta = _run_one(_fc)
+                    _c, _a = _fc
+                    yield AgentStep(
+                        kind=StepKind.TOOL_END,
+                        tool_name=_c["name"], tool_use_id=_c["use_id"],
+                        tool_result=(_obs or "")[:2000],
+                        is_error=_ierr, metadata=_meta,
+                    )
+                    _results.append((_c, _obs, _ierr, _meta))
 
             # Phase C — confirm-needed calls: one HITL card at a time.
+            # Session-scope approvals (Qoder-style "始终允许此目录") skip
+            # the card entirely — without this, a 20-file build pops 20
+            # identical cards and the long task dies of click fatigue.
+            _scope_fn = getattr(ctx, "session_scope_approved", None)
             for _c, _a in _confirm:
                 yield AgentStep(
                     kind=StepKind.TOOL_START,
@@ -923,24 +1064,31 @@ class ReActEngineV4(AgentEngine):
                     tool_use_id=_c["use_id"],
                     metadata=dict(_step_meta),
                 )
-                yield AgentStep(
-                    kind=StepKind.TOOL_CONFIRM_REQUEST,
-                    tool_name=_c["name"], tool_input=_a,
-                    tool_use_id=_c["use_id"],
-                )
-                _approved = True
-                try:
-                    _approved = ctx.confirm_handler(_c["name"], _a, _c["use_id"])
-                except Exception:
-                    _approved = True
-                if not _approved:
+                _pre_ok = False
+                if _scope_fn:
+                    try:
+                        _pre_ok = bool(_scope_fn(_c["name"], _a))
+                    except Exception:
+                        _pre_ok = False
+                if not _pre_ok:
                     yield AgentStep(
-                        kind=StepKind.TOOL_END,
-                        tool_name=_c["name"], tool_use_id=_c["use_id"],
-                        tool_result="[用户拒绝了此操作]", is_error=True,
+                        kind=StepKind.TOOL_CONFIRM_REQUEST,
+                        tool_name=_c["name"], tool_input=_a,
+                        tool_use_id=_c["use_id"],
                     )
-                    _results.append((_c, "[用户拒绝了此操作]", True, {}))
-                    continue
+                    _approved = True
+                    try:
+                        _approved = ctx.confirm_handler(_c["name"], _a, _c["use_id"])
+                    except Exception:
+                        _approved = True
+                    if not _approved:
+                        yield AgentStep(
+                            kind=StepKind.TOOL_END,
+                            tool_name=_c["name"], tool_use_id=_c["use_id"],
+                            tool_result="[用户拒绝了此操作]", is_error=True,
+                        )
+                        _results.append((_c, "[用户拒绝了此操作]", True, {}))
+                        continue
                 _obs, _ierr, _meta = _exec_one(_c["name"], _a, True)
                 # P2-12: PostToolUse hooks may append observations
                 # (e.g. "the file just changed — consider formatting").
@@ -992,6 +1140,25 @@ class ReActEngineV4(AgentEngine):
                 self._v4_fail_streak = 0
                 continue
 
+            # Track every successful write for the max-steps progress
+            # report (files written this turn → honest wrap-up listing).
+            for _c, _obs, _ierr, _m in _results:
+                if _ierr:
+                    continue
+                _wn = (_c["name"] or "").lower()
+                if _wn not in ("write_file", "edit_file", "write_xlsx", "write_pptx"):
+                    continue
+                try:
+                    _wargs = json.loads(_c["raw"]) if isinstance(_c["raw"], str) and _c["raw"].strip().startswith("{") else {}
+                except Exception:
+                    _wargs = {}
+                _wp = str(_wargs.get("path") or _wargs.get("file_path") or "")
+                if _wp:
+                    _written = getattr(self, "_v4_written_files", [])
+                    if _wp not in _written:
+                        _written.append(_wp)
+                    self._v4_written_files = _written
+
             # preview dir tells the frontend to auto-open the workbench
             # panel in browser mode and hot-reload the iframe. Deduped
             # per turn-path; failures don't notify.
@@ -1014,10 +1181,25 @@ class ReActEngineV4(AgentEngine):
                 if not (_is_html or _in_preview):
                     continue
                 _seen_preview_paths.add(_wpath)
+                _emit_path = _wpath
+                # The /preview static mount only serves ~/.madcop/preview/ —
+                # an HTML written elsewhere (/tmp/game.html) 404s in the
+                # live-preview iframe. Mirror it into the preview dir so
+                # the panel can actually render it.
+                if _is_html and not _in_preview:
+                    try:
+                        import shutil as _shutil
+                        _pdir = Path.home() / ".madcop" / "preview"
+                        _pdir.mkdir(parents=True, exist_ok=True)
+                        _dst = _pdir / os.path.basename(_wpath)
+                        _shutil.copyfile(_wpath, _dst)
+                        _emit_path = str(_dst)
+                    except Exception:
+                        _emit_path = _wpath
                 yield AgentStep(
                     kind=StepKind.PREVIEW_UPDATE,
-                    content=_wpath,
-                    metadata={"path": _wpath},
+                    content=_emit_path,
+                    metadata={"path": _emit_path, "source": _wpath},
                 )
 
             # loop-detection bookkeeping for parallel calls
@@ -1060,13 +1242,60 @@ class ReActEngineV4(AgentEngine):
                 messages.append(Message(role="user", content=_combined))
 
         # --- Max steps exhausted ---
+        # Report what WAS accomplished instead of a shrug — a build that
+        # wrote 8 files at step 40 must not tell the user "换个模式重试".
+        _wrote = getattr(self, "_v4_written_files", [])
+        if _wrote:
+            _listing = "\n".join(f"- `{p}`" for p in _wrote[-12:])
+            _msg = (
+                f"已连续执行 {max_steps} 步，本回合预算用完。当前进度：\n\n"
+                f"**已生成 {len(_wrote)} 个文件：**\n{_listing}\n\n"
+                "回复「继续」我会接着完成剩余部分。"
+            )
+        else:
+            _msg = f"已连续执行 {max_steps} 步但任务还未收敛。回复「继续」我可以接着尝试，或把任务拆小一些。"
         yield AgentStep(
             kind=StepKind.TEXT_DELTA,
-            content=f"我已经连续尝试了 {max_steps} 步但仍未收敛。请换用「深度」模式重试。",
+            content=_msg,
         )
         yield AgentStep(kind=StepKind.TEXT_END)
         yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
                         metadata={"usage": _run_usage})
+
+    @staticmethod
+    def _maybe_compact(messages: list, budget_chars: int = _COMPACT_BUDGET_CHARS) -> bool:
+        """Compress the middle of a growing ReAct loop transcript.
+
+        Long builds append (assistant raw, Observation) pairs every step;
+        past ~120k chars the oldest pairs carry little signal (files live
+        on disk). Replace them with one summary message; keep the system
+        prompt, the first user message, and the last 8 messages verbatim.
+        """
+        try:
+            total = sum(len(m.content or "") for m in messages)
+            if total <= budget_chars:
+                return False
+            keep_tail = _COMPACT_KEEP_TAIL
+            if len(messages) <= keep_tail + 2:
+                return False
+            head, middle, tail = messages[:2], messages[2:-keep_tail], messages[-keep_tail:]
+            lines: list[str] = []
+            for m in middle:
+                c = (m.content or "").strip().replace("\n", " ")
+                if not c:
+                    continue
+                lines.append(f"[{m.role}] {c[:160]}")
+            if not lines:
+                return False
+            compacted = Message(role="user", content=(
+                "--- 历史压缩 ---\n本回合较早步骤的摘要（细节已省略，"
+                "文件以磁盘实际内容为准）：\n" + "\n".join(lines) +
+                "\n--- 压缩结束 ---"
+            ))
+            messages[:] = head + [compacted] + tail
+            return True
+        except Exception:
+            return False
 
     def _build_messages(self, ctx: RunContext) -> list:
         """Build initial [system, user] messages.

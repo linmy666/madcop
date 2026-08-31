@@ -62,6 +62,7 @@ class FiveLayerRetriever:
         top_k: int = 5,
         half_life_days: float = 30.0,
         hybrid_fn = None,
+        min_score: float = 0.05,
     ) -> list[RecallResult]:
         if not query.strip():
             return []
@@ -98,4 +99,7 @@ class FiveLayerRetriever:
                 score = c.get("score", 0.0) * LAYER_WEIGHTS["L4b_insight"] * decay
             scored.append(RecallResult(item=c, layer=layer_id, score=score))
         scored.sort(key=lambda r: r.score, reverse=True)
-        return scored[:top_k]
+        # Relevance gate: without a floor, weak hybrid matches always fill
+        # top_k — every turn showed 「基于 5 条记忆回答」 with unrelated
+        # items. Below the floor = no recall at all (badge stays hidden).
+        return [r for r in scored[:top_k] if r.score >= min_score]

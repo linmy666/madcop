@@ -125,6 +125,9 @@ export const useSettingsStore = defineStore('settings', {
     autoDreamEnabled: false,
     availableModels: [] as ModelInfo[],
     activeProviderName: null as string | null,
+    /** True once /api/settings has answered (even on error) — gates the
+     *  empty-state hero so it never flashes the setup CTA prematurely. */
+    settingsLoaded: false,
     locale: 'en' as string,
     chatSendBehavior: 'enter' as string,
     outputStyle: 'Learning' as string,
@@ -225,8 +228,13 @@ export const useSettingsStore = defineStore('settings', {
             providerName: active.label || active.provider_id,
           } as ModelInfo
         }
+        // Marks the backend fetch as done — the empty-state hero uses this
+        // to avoid flashing 「先配置一个 AI 模型供应商」 while the request
+        // is still in flight (the app IS configured).
+        this.settingsLoaded = true
       } catch {
         /* keep local state */
+        this.settingsLoaded = true
       }
     },
 

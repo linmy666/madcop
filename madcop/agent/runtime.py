@@ -184,6 +184,10 @@ class StepKind(str, Enum):
     # can render the Step N/M progress UI.
     PLAN = "plan"
 
+    # Qoder-style follow-up suggestion: one contextual next-question chip
+    # under the finished answer. `content` holds the question text.
+    FOLLOWUP = "followup"
+
     # Terminal
     ERROR = "error"
     DONE = "done"
@@ -285,8 +289,30 @@ class RunContext:
     # observe). None = no hooks = identical baseline behavior.
     hooks: Any = None
 
-    # Max ReAct steps
-    max_steps: int = 12
+    # Max ReAct steps (40 covers multi-file builds like a small game;
+    # engines raise it further per-mode, e.g. deep → 60)
+    max_steps: int = 40
+
+    # Reasoning effort ('auto'|'low'|'medium'|'high'|'max') — forwarded
+    # to client.stream() which maps it to the provider's reasoning knob.
+    # None/'auto' = provider default. P3-b: validated at the route.
+    effort: str | None = None
+
+    # ── Derived child contexts (paper §3.2.3 derived realization) ─────
+    def derive(self, **overrides) -> "RunContext":
+        """A child context: every field copied, `overrides` applied.
+
+        Realization is 'derived' per the composability paper — the parent
+        is untouched and recovery means DISCARDING the child (no inverse
+        needed). MEA uses this to hand each Executor a scoped context:
+        narrowed tool set, per-step work dir, no memory side channels —
+        a subagent can no longer mutate the parent's knobs by accident.
+        """
+        data = {
+            f: getattr(self, f) for f in self.__dataclass_fields__  # type: ignore[attr-defined]
+        }
+        data.update(overrides)
+        return RunContext(**data)
 
 
 # ─── Engine Interface ────────────────────────────────────────────────────────
@@ -647,6 +673,12 @@ class EngineFactory:
             # Auto-route: simple Q&A → Quick, needs tools → ReAct
             if EngineFactory._should_use_tools(ctx):
                 from .react_v4 import ReActEngineV4
+                # Long-horizon builds ("做个植物大战僵尸") need 30-80 tool
+                # steps; the old default of 12 gave up mid-build with a
+                # "换用深度模式" shrug. 40 covers multi-file projects while
+                # still bounding cost.
+                if not ctx.max_steps or ctx.max_steps < 40:
+                    ctx.max_steps = 40
                 return ReActEngineV4()
             return QuickEngine()
 
@@ -663,7 +695,7 @@ class EngineFactory:
                     # Pass the chat worker's session log so MEA doesn't
                     # create a duplicate orphan log (double-write fix).
                     self._harness = MadCopHarness(
-                        ctx, max_steps=8,
+                        ctx, max_steps=30,
                         shared_log=getattr(ctx, "_shared_session_log", None),
                     )
                     yield from self._harness.run()
@@ -682,7 +714,7 @@ class EngineFactory:
             return ReActEngineV4()
         elif mode == "deep":
             from .react_v4 import ReActEngineV4
-            ctx.max_steps = 20
+            ctx.max_steps = 60
             return ReActEngineV4()
         else:
             return QuickEngine()

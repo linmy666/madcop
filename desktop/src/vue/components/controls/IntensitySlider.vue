@@ -2,7 +2,7 @@
 import { useTranslation } from '../../i18n'
 const t = useTranslation()
 /**
- * IntensitySlider — 强度校准滑杆.
+ * IntensitySlider — 思考深度选择器.
  *
  * One continuous 31-notch slider that selects the model × reasoning-effort
  * combination in a single gesture. The track is split proportionally
@@ -10,7 +10,7 @@ const t = useTranslation()
  * position maps back to modelId + effortLevel in the session runtime
  * store. Six named stages give the knob a sense of escalation:
  *
- *   实习生 (00) · 助理 (06) · 工程师 (12) · 资深 (18) · 专家 (24) · 传奇 (30)
+ *   极速 (00) · 快速 (06) · 标准 (12) · 深入 (18) · 深度 (24) · 极致 (30)
  *
  * The plain ModelSelector stays next to it for users who want the flat
  * list — this control is the fast path, not a replacement.
@@ -36,12 +36,12 @@ const settingsStore = useSettingsStore()
 const NOTCHES = 30 // track spans 0..30
 
 const STAGES = [
-  { label: '实习生', hint: '快问快答，不折腾' },
-  { label: '助理', hint: '简单任务，够用就好' },
-  { label: '工程师', hint: '常规开发主力档' },
-  { label: '资深', hint: '复杂问题，深思考' },
-  { label: '专家', hint: '全力推理，攻坚模式' },
-  { label: '传奇', hint: '榨干每一滴算力' },
+  { label: '极速', hint: '直出答案，最快响应' },
+  { label: '快速', hint: '少量思考，低延迟' },
+  { label: '标准', hint: '日常工作档' },
+  { label: '深入', hint: '复杂问题，多步推理' },
+  { label: '深度', hint: '长链路推理，充分验证' },
+  { label: '极致', hint: '全力推理，不计耗时' },
 ] as const
 
 const EFFORTS = [
@@ -107,11 +107,10 @@ const position = computed(() =>
   posForIndex(currentIndex.value, combos.value.length),
 )
 
-const _stageT = (s: { label: string; hint: string }) => ({ label: t('intensity.' + s.label + '.label', s.label), hint: t('intensity.' + s.label + '.hint', s.hint) })
 const stage = computed(() => {
   const s = Math.round(position.value / (NOTCHES / (STAGES.length - 1)))
   const _s = STAGES[Math.min(STAGES.length - 1, Math.max(0, s))]
-  return _dstageT(_s)
+  return _stageT(_s)
 })
 
 const activeCombo = computed(() =>
@@ -146,11 +145,10 @@ const trackRef = ref<HTMLElement | null>(null)
 const dragPos = ref<number | null>(null) // live notch while dragging
 
 const displayPos = computed(() => dragPos.value ?? position.value)
-const _dstageT = (s: { label: string; hint: string }) => ({ label: t('intensity.' + s.label + '.label', s.label), hint: t('intensity.' + s.label + '.hint', s.hint) })
 const displayStage = computed(() => {
   const s = Math.round(displayPos.value / (NOTCHES / (STAGES.length - 1)))
   const _s = STAGES[Math.min(STAGES.length - 1, Math.max(0, s))]
-  return _dstageT(_s)
+  return _stageT(_s)
 })
 
 function toggle() {
@@ -237,7 +235,7 @@ function isStageNotch(n: number): boolean {
     <button
       @click.stop="toggle"
       :disabled="disabled"
-      :aria-label="t('intensity.title', 'Calibration') + '：' + stage.label"
+      :aria-label="t('intensity.title', '思考深度') + '：' + stage.label"
       :title="`${stage.label} · ${activeCombo.effortLabel}推理`"
       class="intensity-slider__trigger"
       :class="{ 'intensity-slider__trigger--compact': compact }"

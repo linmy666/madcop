@@ -172,6 +172,15 @@ function getActiveSessionCitations() {
   return sessionState.value?.citations ?? []
 }
 
+/** Qoder-style follow-up chip: clicking sends the suggested question
+ *  as the next user turn (same path as a normal composer send). */
+function askFollowup(question: string) {
+  const sid = activeTabId.value
+  const q = (question || '').trim()
+  if (!sid || !q) return
+  void chatStore.sendMessage(sid, q)
+}
+
 const messages = computed(() => sessionState.value?.messages ?? EMPTY_MESSAGES)
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
 const streamingText = computed(() => sessionState.value?.streamingText ?? '')
@@ -1406,8 +1415,22 @@ function renderItemContent(item: RenderItem) {
           :tool-name="sessionState.pendingToolConfirms[0].toolName"
           :input="sessionState.pendingToolConfirms[0].input"
           :queue-count="sessionState.pendingToolConfirms.length"
-          @respond="(ok: boolean) => chatStore.respondToolConfirm(activeTabId, ok)"
+          @respond="(ok: boolean, scope: 'once' | 'session') => chatStore.respondToolConfirm(activeTabId, ok, scope)"
         />
+
+        <!-- Qoder-style follow-up suggestion: one contextual next-question
+             chip under the finished answer. Click = ask it immediately. -->
+        <button
+          v-if="sessionState?.followupSuggestion && chatStore.sessions[activeTabId]?.chatState === 'idle'"
+          type="button"
+          class="followup-chip"
+          @click="askFollowup(sessionState.followupSuggestion)"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 14l-4-4 4-4"/><path d="M5 10h9a5 5 0 0 1 5 5v3"/>
+          </svg>
+          {{ sessionState.followupSuggestion }}
+        </button>
 
         <!-- AgentPulse: live phase pill. Hidden when the inline timeline
              already shows thought lines / tool cards - otherwise the same
@@ -1566,4 +1589,32 @@ function renderItemContent(item: RenderItem) {
 @media (prefers-reduced-motion: reduce) {
   .turn-status--running .turn-status__dot { animation: none; }
 }
+
+/* Qoder-style follow-up suggestion chip: quiet ghost pill with a
+   small corner-arrow icon, aligned with the answer's left edge. */
+.followup-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 2px;
+  padding: 6px 14px;
+  border: 1px solid var(--color-border, rgba(128,128,128,0.25));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary, #5d5d5d);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.followup-chip:hover {
+  border-color: var(--color-text-tertiary, #8f8f8f);
+  color: var(--color-text-primary, #0d0d0d);
+  background: var(--color-surface-container, #f7f7f7);
+}
+.followup-chip svg { flex-shrink: 0; opacity: 0.7; }
 </style>

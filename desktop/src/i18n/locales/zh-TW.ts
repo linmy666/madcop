@@ -67,7 +67,7 @@ export const zh: Record<TranslationKey, string> = {
   'general.uiZoom': 'Interface zoom',
   'general.webSearch': 'Web search',
   'general.webSearchDesc': 'Allow the agent to search the web',
-  'intensity.title': 'Calibration',
+  'intensity.title': '深度設計',
   'intensity.专家.hint': 'Full force reasoning, breakthrough mode',
   'intensity.专家.label': 'Expert',
   'intensity.传奇.hint': 'Squeeze every drop of compute',

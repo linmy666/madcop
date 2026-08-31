@@ -38,8 +38,6 @@ import Tooltip from '../common/Tooltip.vue'
 import FileSearchMenu from './FileSearchMenu.vue'
 import ContextUsageIndicator from './ContextUsageIndicator.vue'
 import ModelSelector from '../controls/ModelSelector.vue'
-import AgentModeSelector from '../controls/AgentModeSelector.vue'
-import IntensitySlider from '../controls/IntensitySlider.vue'
 import VoiceButton from './VoiceButton.vue'
 import LocalSlashCommandPanel from './LocalSlashCommandPanel.vue'
 import ComposerDropOverlay from './ComposerDropOverlay.vue'
@@ -1530,34 +1528,16 @@ watch(input, (v) => {
           <div class="flex min-w-0 items-center justify-end gap-2 shrink">
             <template v-if="!isMemberSession && activeTabId">
               <VoiceButton @transcript="onVoiceTranscript" />
-              <ContextUsageIndicator
-                :session-id="activeTabId"
-                :chat-state="chatState"
-                :message-count="messageCount"
-                :total-content="totalContent"
-                :runtime-selection-key="runtimeSelectionKey"
-                :fallback-model-label="runtimeModelLabel"
-                :compact="true"
-                :refresh-nonce="sessionState?.compactCount ?? 0"
-                :t="t"
-              />
+              <!-- AgentModeSelector + IntensitySlider removed (user
+                   feedback): the "对话/任务" mode split and the persona
+                   slider are replaced by 思考深度, which now lives inside
+                   the ModelSelector popover via selectionKey. -->
 
               <ModelSelector
                 :compact="useCompactControls"
                 :disabled="isSubmitting"
                 :selected-model="selectedModel"
-                @update:selected-model="(m: string) => { selectedModel = m }"
-              />
-              <AgentModeSelector
                 :selection-key="activeTabId || DRAFT_RUNTIME_SELECTION_KEY"
-                :compact="useCompactControls"
-                :disabled="isSubmitting"
-              />
-              <IntensitySlider
-                :selection-key="activeTabId || DRAFT_RUNTIME_SELECTION_KEY"
-                :selected-model="selectedModel"
-                :compact="useCompactControls"
-                :disabled="isSubmitting"
                 @update:selected-model="(m: string) => { selectedModel = m }"
               />
             </template>
@@ -1599,16 +1579,23 @@ watch(input, (v) => {
                     ? 'bg-amber-500 text-white shadow-sm'
                     : !isMemberSession && isActive
                       ? 'bg-[var(--color-error)] text-white shadow-[0_0_0_1px_color-mix(in_srgb,var(--color-error)_45%,transparent)]'
-                      : 'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)]',
+                      // Solid ink primary (Qoder send-key language): the
+                      // token gradient rendered washed-out in some themes.
+                      : 'bg-[var(--color-text-primary)] text-[var(--color-surface)] shadow-[0_1px_3px_rgba(0,0,0,0.12)]',
                 ]"
               >
-                <span class="material-symbols-outlined text-[14px]">
-                  {{
-                    !isMemberSession && isActive
-                      ? (input.trim() ? 'directions' : 'stop')
-                      : 'arrow_forward'
-                  }}
-                </span>
+                <Transition name="btnicon" mode="out-in">
+                  <span
+                    :key="!isMemberSession && isActive ? (input.trim() ? 'directions' : 'stop') : 'arrow_forward'"
+                    class="material-symbols-outlined text-[14px]"
+                  >
+                    {{
+                      !isMemberSession && isActive
+                        ? (input.trim() ? 'directions' : 'stop')
+                        : 'arrow_forward'
+                    }}
+                  </span>
+                </Transition>
                 <span v-if="!iconOnlyAction">
                   {{
                     !isMemberSession && isActive
@@ -1692,5 +1679,25 @@ watch(input, (v) => {
   background: var(--color-surface);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/* Qoder-parity send⇄stop morph: the icon crossfades with a tiny
+   scale dip so the same button reads as one control changing shape
+   instead of two icons hard-swapping. */
+.btnicon-enter-active,
+.btnicon-leave-active {
+  transition: opacity 0.13s ease, transform 0.13s ease;
+}
+.btnicon-enter-from {
+  opacity: 0;
+  transform: scale(0.55);
+}
+.btnicon-leave-to {
+  opacity: 0;
+  transform: scale(0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btnicon-enter-active,
+  .btnicon-leave-active { transition: none; }
 }
 </style>

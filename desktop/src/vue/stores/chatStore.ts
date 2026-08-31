@@ -480,6 +480,10 @@ export const useChatStore = defineStore('chat', {
       // ClarificationPanel stays stuck on screen even though the user
       // has moved on to a new question.
       session.clarificationPending = null
+      // A new send supersedes the previous turn's follow-up chip, and
+      // opening the session clears its unread dot (Qoder parity).
+      ;(session as any).followupSuggestion = ''
+      ;(session as any).hasUnread = false
       // Add the user message. transcriptMessageId mirrors id so session
       // branching (fork-from-here) can locate the backend message by id.
       const userId = nextId()
@@ -889,6 +893,7 @@ export const useChatStore = defineStore('chat', {
                     tool_confirm_request: 'tool_confirm_request',
                     tool_progress: 'tool_progress',
                     preview_update: 'preview_update',
+                    followup: 'followup',
                   }
                   const mapped = KIND_TO_TYPE[event.kind]
                   if (mapped) {
@@ -991,6 +996,10 @@ export const useChatStore = defineStore('chat', {
                     }))
                     session.plan = { ..._p, steps: _steps }
                   }
+                } else if (event.type === 'followup') {
+                  // Qoder-style next-question chip under the finished
+                  // answer. Cleared on the next send (see sendMessage).
+                  ;(session as any).followupSuggestion = String(event.content || '').trim()
                 }
 
                 // In-UI mirror so users without DevTools can still see
@@ -1145,6 +1154,24 @@ export const useChatStore = defineStore('chat', {
                         input_tokens: _usage.prompt_tokens || 0,
                         output_tokens: _usage.completion_tokens || 0,
                       }
+                      // Qoder-style context meter: prompt tokens vs the
+                      // model's context window (defaults to 128k; provider
+                      // config may override via settings store later).
+                      const _ctxLimit =
+                        (this as any).contextWindowTokens || 128_000
+                      ;(session as any).contextPct = Math.min(99,
+                        Math.max(1, Math.round(
+                          ((_usage.prompt_tokens || 0) / _ctxLimit) * 100)))
+                    }
+                    // Background-completion blue dot (Qoder parity): the
+                    // answer landed while the window was hidden or another
+                    // session is on screen — flag the sidebar row.
+                    let _isActive = false
+                    try {
+                      _isActive = useSessionStore(this.$pinia).activeSessionId === sessionId
+                    } catch { /* store not ready — treat as background */ }
+                    if (document.visibilityState === 'hidden' || !_isActive) {
+                      ;(session as any).hasUnread = true
                     }
                     if (_meta && Array.isArray(_meta.citations) && _meta.citations.length > 0) {
                       session.citations = _meta.citations.map((c: any) => ({
@@ -1808,8 +1835,12 @@ export const useChatStore = defineStore('chat', {
 
     /** HITL: respond to the head-of-queue tool confirmation (Approve/Deny).
      *  Parallel tools queue several cards; answering resolves the current
-     *  one and the next card (if any) slides in. */
-    async respondToolConfirm(sessionId: string, approved: boolean) {
+     *  one and the next card (if any) slides in. scope='session' also
+     *  approves same-tool calls under the target's directory (Qoder-style
+     *  "始终允许此目录") so long builds stop re-popping identical cards. */
+    async respondToolConfirm(
+      sessionId: string, approved: boolean, scope: 'once' | 'session' = 'once',
+    ) {
       const session = this.sessions[sessionId]
       if (!session?.pendingToolConfirms?.length) return
       const req = session.pendingToolConfirms.shift()!
@@ -1821,6 +1852,7 @@ export const useChatStore = defineStore('chat', {
             conversation_id: sessionId,
             tool_use_id: req.toolUseId,
             approved,
+            scope,
           }),
         })
       } catch { /* network error — backend timeout rejects safely */ }

@@ -41,11 +41,34 @@ def _resolve_in_allowlist(
     active workspace), so models can write ``out.md`` instead of a full
     absolute path and still land in the user's project.
 
-    Raises ``PermissionError`` if outside. Denied attempts are logged so
-    a bypass attempt is auditable even when the caller only returns
-    ``{"error": ...}`` to the model.
+    Hallucinated-username auto-correction: models frequently write to
+    ``/Users/xiaoming/…`` (the canonical Chinese textbook username) or
+    other nonexistent users under /Users. When the first path segment
+    under /Users names a user that does not exist on this machine, the
+    path is transparently rewritten to the REAL home and resolution
+    retried — the tool result tells the model the corrected path so
+    later references stay consistent.
+
+    Raises ``PermissionError`` if still outside. Denied attempts are
+    logged so a bypass attempt is auditable even when the caller only
+    returns ``{"error": ...}`` to the model.
     """
     raw = Path(path).expanduser()
+
+    # Hallucinated /Users/<name> correction (before resolution — the
+    # nonexistent segment can't be resolved faithfully anyway).
+    real_home = Path.home()
+    try:
+        parts = raw.parts
+        if (
+            len(parts) >= 3 and parts[0] == "/" and parts[1] == "Users"
+            and parts[2] != real_home.name
+            and not (Path("/Users") / parts[2]).exists()
+        ):
+            raw = real_home.joinpath(*parts[3:])
+    except Exception:
+        pass
+
     if not raw.is_absolute():
         if allowed_dirs:
             base = Path(allowed_dirs[0]).expanduser().resolve()

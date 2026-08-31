@@ -81,6 +81,7 @@ class MadCopHarness:
         self.goal = ""
         self.verified_state = ""
         self.steps: list[Step] = []
+        self._step_effect_keys: list[str] = []
         self._last_contract_desc = ""
         self._last_executor_output = ""
         # Reasoning captured by _llm_stream's ThinkSeparator — drained by
@@ -283,6 +284,11 @@ class MadCopHarness:
         from madcop.agent.react_v4 import ReActEngineV4
         engine = ReActEngineV4()
 
+        # P1 — revertible effects: collect the effect keys of every tool
+        # call this step executes so an audit-blocked step can apply the
+        # stored inverses and restore the workspace (paper §3.1 recover).
+        self._step_effect_keys = []
+
         sidechain: SessionLog | None = None
         try:
             _sc_id = f"{self.log.run_id}-sc{step.index}"
@@ -309,7 +315,7 @@ class MadCopHarness:
             " artifact with tools (write_file for new files, edit_file"
             " for changes). Do NOT merely describe what you would write."
         )
-        exec_ctx = RunContext(
+        exec_ctx = self.ctx.derive(
             messages=[Message(
                 role="user",
                 content=(
@@ -317,18 +323,27 @@ class MadCopHarness:
                     f"你的子任务合约：{self._last_contract_desc}"
                 ),
             )],
-            model=self.ctx.model,
             agent_mode="standard",
-            client=self.ctx.client,
-            tool_schemas=self.ctx.tool_schemas,
-            tool_executor=self.ctx.tool_executor,
             system_prefix=_coder_prefix,
-            work_dir=self.ctx.work_dir,
             max_steps=6,
+            session_id=self.ctx.session_id,
+            # Isolation (paper §3.2.3 derived realization): the Coder's
+            # context excludes memory side channels — a subagent must not
+            # write long-term memories as a side effect of one step.
+            tool_schemas=[
+                s for s in self.ctx.tool_schemas
+                if (s.get("function") or s).get("name", "") != "remember"
+            ],
         )
 
         result_text = ""
         for ev in engine.run(exec_ctx):
+            # Revertible effects: TOOL_START carries the tool_use_id the
+            # executor used as its effect key — collect for step revert.
+            if ev.kind == StepKind.TOOL_START and ev.tool_use_id:
+                _ek = f"{self.ctx.session_id or 'sess'}:{ev.tool_use_id}"
+                if _ek not in self._step_effect_keys:
+                    self._step_effect_keys.append(_ek)
             # D2 fix: do NOT forward the executor's terminal events.
             # ReActEngineV4 emits TEXT_END/DONE when ITS loop finishes —
             # but the MEA loop is still running. Forwarding them made the
@@ -386,6 +401,21 @@ class MadCopHarness:
                 pass
 
     # ─── Auditor: verify ──────────────────────────────────────────
+
+    def revert_step_effects(self) -> tuple[int, list[str]]:
+        """Apply every inverse recorded by this step's tool calls
+        (newest-first) and clear the keys. Returns (applied, keys).
+
+        Extracted so tests can drive the revert deterministically
+        without an LLM in the loop."""
+        if not self._step_effect_keys:
+            return 0, []
+        from madcop.harness.effects import STORE
+        applied = 0
+        for k in self._step_effect_keys:
+            rep = STORE.revert(k)
+            applied += rep.get("applied", 0)
+        return applied, list(self._step_effect_keys)
 
     def _collect_file_evidence(self) -> str:
         """Phase 4b — real environment verification via the fs capability.
@@ -510,6 +540,23 @@ class MadCopHarness:
                 ).strip()
                 step.transition(TurnState.DONE)
             elif audit_status == "blocked":
+                # P1 — real soft revert (paper §3.1 recover): a blocked
+                # step means the executor left the environment in a bad
+                # state. Apply the recorded inverses newest-first so the
+                # retry starts from the pre-step workspace.
+                _count, _keys = self.revert_step_effects()
+                if _count:
+                    yield AgentStep(
+                        kind=StepKind.THOUGHT_DELTA, thought_id=tid,
+                        content=(f"\n↩️ 已回退本步的 {_count} 项文件改动"
+                                 "（审计判定 blocked），将从干净状态重试。\n"),
+                    )
+                    self.log.append(system_event(
+                        "step_reverted",
+                        f"step {i}: reverted {_count} effects",
+                        step=i, keys=_keys,
+                    ))
+                self._step_effect_keys = []
                 step.transition(TurnState.BLOCKED)
                 break
             else:
