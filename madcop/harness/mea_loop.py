@@ -200,6 +200,30 @@ class MadCopHarness:
             },
         )
 
+    def _recent_trajectory(self, limit: int = 6) -> str:
+        """Codex-parity: the Manager plans against REAL observations.
+
+        Previously the Manager saw only goal + verified_state — a
+        secondhand summary it wrote itself. The last few tool calls
+        (name + result snippet) from the session log ground the next
+        subtask in what actually happened (a failed write, an empty
+        search) instead of what the executor CLAIMED happened."""
+        lines: list[str] = []
+        try:
+            for ev in self.log.events():
+                d = ev.domain.value if hasattr(ev.domain, "value") else ev.domain
+                if d != "tool":
+                    continue
+                name = (ev.metadata or {}).get("tool_name") or ""
+                snippet = (ev.content or "").strip().replace("\n", " ")[:140]
+                if not snippet:
+                    continue
+                icon = "←" if ev.kind == "tool_result" else "→"
+                lines.append(f"{icon} {name or ev.kind}: {snippet}")
+        except Exception:
+            return ""
+        return "\n".join(lines[-limit:])
+
     def _manager(self, step: Step) -> Iterator[AgentStep]:
         """Manager: read goal + state → emit subtask contract. Streams reasoning."""
         system = (
@@ -226,6 +250,33 @@ class MadCopHarness:
             f"{audit_feedback}\n\n"
             f"What should the Executor do next? (Step {step.index}/{self.max_steps})"
         )
+        # Grounding: recent tool trajectory from the log (real
+        # observations, not self-report).
+        _traj = self._recent_trajectory()
+        if _traj:
+            user_msg += (
+                "\n\nRecent tool activity this turn (ground truth):\n" + _traj
+            )
+
+        # Steer (Codex Op::Steer): drain mid-turn guidance BEFORE
+        # planning so the next subtask redirects, and surface the
+        # receipt so the UI confirms consumption.
+        try:
+            _realm = getattr(self.ctx, "realm", None)
+            if _realm is not None:
+                _steers = _realm.drain_steers()
+            else:
+                from madcop.server.steer_queue import drain_steers
+                _steers = drain_steers(self.ctx.session_id or "")
+            if _steers:
+                from madcop.server.steer_queue import format_steer_block
+                user_msg += "\n\n" + format_steer_block(_steers)
+                yield AgentStep(
+                    kind=StepKind.STEER_INJECTED,
+                    content="；".join(s[:80] for s in _steers),
+                )
+        except Exception:
+            pass
 
         contract_text = ""
         tid = f"mgr-{step.index}"
@@ -350,8 +401,10 @@ class MadCopHarness:
         for ev in engine.run(exec_ctx):
             # Revertible effects: TOOL_START carries the tool_use_id the
             # executor used as its effect key — collect for step revert.
+            # Realm-aware: the child realm namespaces its own keys.
             if ev.kind == StepKind.TOOL_START and ev.tool_use_id:
-                _ek = f"{self.ctx.session_id or 'sess'}:{ev.tool_use_id}"
+                from madcop.harness.realm import effect_key_for
+                _ek = effect_key_for(exec_ctx, ev.tool_use_id)
                 if _ek not in self._step_effect_keys:
                     self._step_effect_keys.append(_ek)
             # D2 fix: do NOT forward the executor's terminal events.

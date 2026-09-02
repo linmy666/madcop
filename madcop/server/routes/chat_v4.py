@@ -69,25 +69,87 @@ _SESSION_APPROVED: dict[str, set[str]] = {}
 _APPROVAL_SCOPES_FILE = Path.home() / ".madcop" / "approval_scopes.json"
 
 
-def _load_approval_scopes(session_id: str) -> None:
-    """Merge the durable record for `session_id` into the in-memory set
-    (in-memory wins on conflict — a live approval is fresher)."""
+def _normalize_scope_entry(entry: str) -> str:
+    """Legacy "tool:dir" entries predate the tool-agnostic "dir:dir"
+    scope shape. Migrate any entry whose head isn't already "dir" but
+    whose tail carries a filesystem path separator."""
+    entry = str(entry)
+    head, sep, tail = entry.partition(":")
+    if not sep or head == "dir" or not tail:
+        return entry
+    if "/" in tail or os.sep in tail:
+        return f"dir:{tail}"
+    return entry
+
+
+def _normalize_scope_entries(entries: Any) -> list[str]:
+    """Migrate legacy entries, dedupe, and sort — the canonical on-disk
+    form for one session's scope list."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for e in entries or []:
+        ne = _normalize_scope_entry(e)
+        if ne not in seen:
+            seen.add(ne)
+            out.append(ne)
+    return sorted(out)
+
+
+def _backup_corrupt_scopes_file() -> None:
+    """Preserve a corrupt approval_scopes.json for forensics (renamed
+    *.corrupt-<unix_ts>) so the store can rebuild from empty without
+    losing the evidence of what broke."""
     try:
         if _APPROVAL_SCOPES_FILE.exists():
-            data = json.loads(_APPROVAL_SCOPES_FILE.read_text() or "{}")
-            stored = data.get(session_id) or []
-            cur = _SESSION_APPROVED.setdefault(session_id, set())
-            cur.update(stored)
+            _APPROVAL_SCOPES_FILE.rename(_APPROVAL_SCOPES_FILE.with_name(
+                f"{_APPROVAL_SCOPES_FILE.name}.corrupt-{int(time.time())}"))
+    except Exception as e:
+        logger.debug("approval scopes corrupt-backup failed: %s", e)
+
+
+def _read_scopes_file() -> dict:
+    """Read the durable mirror with corrupt-file recovery: a JSON parse
+    failure or a non-dict document is backed up and treated as empty."""
+    try:
+        if not _APPROVAL_SCOPES_FILE.exists():
+            return {}
+        data = json.loads(_APPROVAL_SCOPES_FILE.read_text() or "{}")
+        if not isinstance(data, dict):
+            _backup_corrupt_scopes_file()
+            return {}
+        return data
+    except Exception as e:
+        logger.debug("approval scopes file unreadable, backing up: %s", e)
+        _backup_corrupt_scopes_file()
+        return {}
+
+
+def _load_approval_scopes(session_id: str) -> None:
+    """Merge the durable record for `session_id` into the in-memory set
+    (in-memory wins on conflict — a live approval is fresher). Corrupt
+    files are preserved as *.corrupt-<ts> and skipped; legacy "tool:dir"
+    entries are migrated to the "dir:dir" scope shape on read."""
+    try:
+        data = _read_scopes_file()
+        stored = data.get(session_id) or []
+        if not isinstance(stored, list):
+            stored = []
+        cur = _SESSION_APPROVED.setdefault(session_id, set())
+        cur.update(_normalize_scope_entries(stored))
     except Exception as e:
         logger.debug("approval scopes load failed: %s", e)
 
 
 def _save_approval_scopes(session_id: str) -> None:
     try:
-        data: dict[str, list] = {}
-        if _APPROVAL_SCOPES_FILE.exists():
-            data = json.loads(_APPROVAL_SCOPES_FILE.read_text() or "{}")
-        data[session_id] = sorted(_SESSION_APPROVED.get(session_id, set()))
+        data = _read_scopes_file()
+        # The file is the durable mirror — migrate every session's
+        # legacy entries while saving so the old shape never survives.
+        for _sid, _entries in list(data.items()):
+            if isinstance(_entries, list):
+                data[_sid] = _normalize_scope_entries(_entries)
+        data[session_id] = _normalize_scope_entries(
+            _SESSION_APPROVED.get(session_id, set()))
         _APPROVAL_SCOPES_FILE.parent.mkdir(parents=True, exist_ok=True)
         _APPROVAL_SCOPES_FILE.write_text(
             json.dumps(data, ensure_ascii=False, indent=1))
@@ -436,6 +498,18 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         except Exception as _e:
             logger.debug("log-derived context unavailable, using body: %s", _e)
 
+    # Codex Op::Steer 兜底：上一回合结束后仍滞留队列的 steer 绝不
+    # 丢弃，搭车进本回合的开头。
+    if session_id:
+        try:
+            from madcop.server.steer_queue import drain_steers, format_steer_block
+            _leftover = drain_steers(session_id)
+            if _leftover and messages:
+                messages.append(Message(role="user", content=format_steer_block(_leftover)))
+                logger.info("carried %d leftover steer(s) into this turn", len(_leftover))
+        except Exception:
+            pass
+
     # P1-6 — token-driven compaction (pi-mono design). The old policy
     # (message-count trigger + 200-char truncation of the middle)
     # destroyed long-session context quality. Now: trigger on token
@@ -578,6 +652,17 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                     ))
     except Exception as _mcp_err:
         logger.debug("mcp merge skipped: %s", _mcp_err)
+
+    # dsh 自进化工具：~/.madcop/skills/*.py 热加载为 ToolPlugin。
+    try:
+        from madcop.harness.skill_tools import load_skill_plugins
+        for _sp in load_skill_plugins():
+            reg.register(_sp)
+        _skill_names = [p.name for p in load_skill_plugins()]
+        if _skill_names:
+            logger.info("skill tools loaded: %s", _skill_names)
+    except Exception as _sk_err:
+        logger.debug("skills merge skipped: %s", _sk_err)
 
     # P1-7 — prompt-cache-friendly prefix split (Claude SDK
     # exclude_dynamic_sections). The SYSTEM prompt carries only
@@ -739,6 +824,8 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         )
 
     # Build run context
+    from madcop.harness.realm import SessionRealm
+    _realm = SessionRealm.root(session_id)
     ctx = RunContext(
         messages=messages,
         model=model,
@@ -754,6 +841,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         tool_schemas=reg.visible_schemas(_bound, phase="all"),
         system_prefix=sys_prefix,
         effort=_effort,  # P3-b — validated above; forwarded to stream()
+        realm=_realm,
     )
 
     # P2-12: ship the two demo hooks. A future plugin layer can swap
@@ -802,15 +890,16 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
 
     ctx.tool_executor = tool_call
 
-    # Meta-Harness: apply tool-policy knobs. (Compaction threshold is
-    # consumed earlier — before compaction runs — see _compact_threshold.)
+    # Meta-Harness: apply tool-policy knobs.
     try:
         from madcop.meta_harness.task_harness import load_active_harness
+        from madcop.agent.compaction import DEFAULT_CONTEXT_WINDOW, RESERVE_TOKENS
         _harness = load_active_harness()
         # Apply tool policy (allowlist / max_tools / enable)
         ctx.tool_schemas = _harness.filter_tool_schemas(ctx.tool_schemas)
         logger.info("meta-harness active: %s (tools=%d, compact=%d)",
-                    _harness.name, len(ctx.tool_schemas), _compact_threshold)
+                    _harness.name, len(ctx.tool_schemas),
+                    DEFAULT_CONTEXT_WINDOW - RESERVE_TOKENS)
     except Exception as _e:
         logger.debug("meta-harness not loaded: %s", _e)
 
@@ -1471,15 +1560,27 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                     except Exception as _fe:
                         logger.debug("followup generation skipped: %s", _fe)
 
+                    # Codex turn_diff_tracker：回合结束汇总磁盘改动。
+                    try:
+                        from madcop.harness.turn_diff import summarize_turn_diff
+                        _td = summarize_turn_diff(work_dir)
+                        if _td and _td.get("files_changed"):
+                            q.put(AgentStep(kind=StepKind.TURN_DIFF, metadata={"diff": _td}))
+                    except Exception:
+                        pass
+
                     # P1 cleanup — the turn finished and its output was
                     # persisted; the inverses (and each staged pre-image)
                     # are no longer needed. Without this every write_file
                     # leaks a snapshot copy for the server's lifetime.
                     try:
-                        from madcop.harness.effects import STORE
-                        STORE.clear_prefix(f"{session_id or ''}:")
+                        _realm.dispose()
                     except Exception:
-                        pass
+                        try:
+                            from madcop.harness.effects import STORE
+                            STORE.clear_prefix(f"{session_id or ''}:")
+                        except Exception:
+                            pass
 
                     q.put(sentinel)
 
@@ -1653,6 +1754,13 @@ async def session_fork(session_id: str, body: ForkBody | None = None) -> dict[st
         "new_session_id": dst.run_id,
         "events_copied": copied,
     }
+
+
+@router.post("/api/v4/skills/reload")
+async def skills_reload() -> dict[str, Any]:
+    """Re-import ~/.madcop/skills/*.py (mtime-forced) and list tools."""
+    from madcop.harness.skill_tools import reload_skills
+    return reload_skills()
 
 
 __all__ = ["router", "chat_v4"]

@@ -120,6 +120,15 @@ _COMPACT_BUDGET_CHARS = 120_000
 _COMPACT_KEEP_TAIL = 8
 
 
+def _compact_trigger_tokens() -> int:
+    """Token budget that fires a MID-TURN compact (Codex auto-compact).
+
+    Defaults to window−32k reserve (128k−32k = 96k): compact while there
+    is still room for the compacted context + one big completion, never
+    ride the provider's window edge into an overflow error."""
+    return int(os.environ.get("MADCOP_COMPACT_TRIGGER_TOKENS", "96000"))
+
+
 class ReActEngineV4(AgentEngine):
     """Standard ReAct engine with unified AgentStep output.
 
@@ -161,6 +170,27 @@ class ReActEngineV4(AgentEngine):
         for step_num in range(1, max_steps + 1):
             step_start = time.time()
             _step_usage: dict[str, Any] = {}
+            # Steer (Codex Op::Steer): mid-turn user guidance drains
+            # BEFORE each LLM call and rides in as a user message — the
+            # run is never aborted, the queue is never lost. Realm-aware
+            # (child realms drain the ROOT conversation's queue).
+            try:
+                _realm = getattr(ctx, "realm", None)
+                if _realm is not None:
+                    _steers = _realm.drain_steers()
+                else:
+                    from madcop.server.steer_queue import drain_steers
+                    _steers = drain_steers(ctx.session_id or "")
+                if _steers:
+                    from madcop.server.steer_queue import format_steer_block
+                    messages.append(Message(
+                        role="user", content=format_steer_block(_steers)))
+                    yield AgentStep(
+                        kind=StepKind.STEER_INJECTED,
+                        content="；".join(s[:80] for s in _steers),
+                    )
+            except Exception:
+                pass
             # Long-run context hygiene: multi-file builds append an
             # assistant raw + Observation pair per step; without a cap the
             # 40-step context dwarfs the actual task. Compress the middle
@@ -434,6 +464,22 @@ class ReActEngineV4(AgentEngine):
                 _run_usage["total_tokens"] = (
                     _run_usage["prompt_tokens"] + _run_usage["completion_tokens"]
                 )
+
+                # Codex auto-compact: provider-truth prompt tokens over
+                # the trigger → compact the loop transcript NOW, before
+                # the next call's context grows past the window.
+                _trig = _compact_trigger_tokens()
+                if int(_run_usage.get("prompt_tokens") or 0) >= _trig:
+                    _chars_before = sum(
+                        len(m.content or "") for m in messages)
+                    if self._maybe_compact(messages, force=True):
+                        yield AgentStep(kind=StepKind.CONTEXT_COMPACT, metadata={
+                            "prompt_tokens": _run_usage.get("prompt_tokens"),
+                            "trigger_tokens": _trig,
+                            "chars_before": _chars_before,
+                            "chars_after": sum(
+                                len(m.content or "") for m in messages),
+                        })
 
             # P2-9: close this step's llm_call span with its summary.
             try:
@@ -875,6 +921,9 @@ class ReActEngineV4(AgentEngine):
                     _tool_span = None
                 _t0 = time.time()
                 try:
+                    # Unified context paradigm: effect keys route through
+                    # the realm (child realms → own namespace).
+                    from madcop.harness.realm import effect_key_for
                     if ctx.tool_executor:
                         _exec_input = (
                             json.dumps(args, ensure_ascii=False) if args else ""
@@ -887,7 +936,7 @@ class ReActEngineV4(AgentEngine):
                                 # tool_use_id keys the inverse so an MEA
                                 # audit-blocked step (or a future undo)
                                 # can restore the pre-call state.
-                                effect_key=f"{ctx.session_id or 'sess'}:{_c['use_id']}",
+                                effect_key=effect_key_for(ctx, _c['use_id']),
                             )
                         except TypeError:
                             raw_result = ctx.tool_executor(name, _exec_input, ctx.work_dir)
@@ -1263,17 +1312,21 @@ class ReActEngineV4(AgentEngine):
                         metadata={"usage": _run_usage})
 
     @staticmethod
-    def _maybe_compact(messages: list, budget_chars: int = _COMPACT_BUDGET_CHARS) -> bool:
+    def _maybe_compact(messages: list, budget_chars: int = _COMPACT_BUDGET_CHARS,
+                       force: bool = False) -> bool:
         """Compress the middle of a growing ReAct loop transcript.
 
         Long builds append (assistant raw, Observation) pairs every step;
         past ~120k chars the oldest pairs carry little signal (files live
         on disk). Replace them with one summary message; keep the system
         prompt, the first user message, and the last 8 messages verbatim.
+        ``force`` compacts regardless of the char budget — the token
+        trigger (provider usage) is the accurate signal, chars are the
+        fallback estimate.
         """
         try:
             total = sum(len(m.content or "") for m in messages)
-            if total <= budget_chars:
+            if total <= budget_chars and not force:
                 return False
             keep_tail = _COMPACT_KEEP_TAIL
             if len(messages) <= keep_tail + 2:

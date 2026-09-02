@@ -102,6 +102,23 @@ class EffectStore:
         logger.info("[effects] revert %s", report)
         return report
 
+    def revert_prefix(self, prefix: str) -> dict:
+        """Revert EVERY key under `prefix` (each key's own inverses in
+        reverse order, keys themselves in registration order). Used by
+        SessionRealm.revert_all — a derived realm's whole effect
+        namespace unwinds in one call. Returns an aggregate report."""
+        with self._lock:
+            keys = [k for k in self._effects if k.startswith(prefix)]
+        report = {"prefix": prefix, "keys": 0, "applied": 0,
+                  "failed": 0, "skipped": 0}
+        for k in keys:
+            rep = self.revert(k)
+            report["keys"] += 1
+            report["applied"] += rep["applied"]
+            report["failed"] += rep["failed"]
+            report["skipped"] += rep["skipped"]
+        return report
+
     def clear_prefix(self, prefix: str) -> int:
         """Drop every key starting with `prefix` and unlink the staged
         snapshot temps backing them. Called when a turn finishes and its

@@ -1275,6 +1275,33 @@ function renderItemContent(item: RenderItem) {
       class: 'mb-3 px-4 py-2.5 rounded-lg border border-[var(--color-error)]/20 bg-[var(--color-error-container)]/28 text-sm text-[var(--color-error)]',
     }, `${t('common.error')}: ${msg.message || t('common.unknownError')}`)
   }
+  if (msg.type === 'turn_diff') {
+    // Codex turn_diff_tracker — end-of-turn disk-change summary card.
+    const d: any = (msg as any).diff || {}
+    const files: any[] = d.files || []
+    const summary = t('chat.turnDiff', '本回合修改')
+    return h('div', {
+      class: 'mb-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-4 py-3',
+      'data-testid': 'turn-diff-card',
+    }, [
+      h('div', { class: 'flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)]' }, [
+        h('span', { class: 'material-symbols-outlined text-[16px] text-[var(--color-text-secondary)]' }, 'difference'),
+        h('span', null, `${summary} ${d.files_changed ?? files.length} 个文件`),
+        h('span', { class: 'text-[var(--color-success)]' }, `+${d.insertions ?? 0}`),
+        h('span', { class: 'text-[var(--color-error)]' }, `−${d.deletions ?? 0}`),
+      ]),
+      files.length
+        ? h('div', { class: 'mt-1.5 flex flex-col gap-0.5' },
+            files.slice(0, 8).map((f: any) => h('div', {
+              class: 'flex items-center gap-2 text-[12px] text-[var(--color-text-secondary)] font-mono',
+            }, [
+              h('span', null, f.status === 'D' ? '删除' : f.status === 'A' ? '新增' : '修改'),
+              h('span', { class: 'truncate' }, f.path),
+            ])))
+        : null,
+      d.truncated ? h('div', { class: 'mt-1 text-[11px] text-[var(--color-text-tertiary)]' }, `…共 ${d.files_changed} 个文件`) : null,
+    ])
+  }
   if (msg.type === 'task_summary') {
     return h(InlineTaskSummary, { tasks: msg.tasks || [] })
   }

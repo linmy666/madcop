@@ -894,6 +894,9 @@ export const useChatStore = defineStore('chat', {
                     tool_progress: 'tool_progress',
                     preview_update: 'preview_update',
                     followup: 'followup',
+                    steer_injected: 'steer_injected',
+                    context_compact: 'context_compact',
+                    turn_diff: 'turn_diff',
                   }
                   const mapped = KIND_TO_TYPE[event.kind]
                   if (mapped) {
@@ -1000,6 +1003,23 @@ export const useChatStore = defineStore('chat', {
                   // Qoder-style next-question chip under the finished
                   // answer. Cleared on the next send (see sendMessage).
                   ;(session as any).followupSuggestion = String(event.content || '').trim()
+                } else if (event.type === 'steer_injected') {
+                  // Codex Op::Steer — a mid-turn user nudge was drained
+                  // and injected into the running conversation.
+                  const id = nextId()
+                  session.messages.push({ type: 'system', content: `已注入中途指引：${String(event.content || '').slice(0, 120)}`, id, transcriptMessageId: id, timestamp: Date.now() } as any)
+                } else if (event.type === 'context_compact') {
+                  // Mid-turn auto-compact fired (token-budget trigger).
+                  const id = nextId()
+                  session.messages.push({ type: 'system', content: '上下文已自动压缩（保留最近对话与关键事实）', id, transcriptMessageId: id, timestamp: Date.now() } as any)
+                } else if (event.type === 'turn_diff') {
+                  // Codex turn_diff_tracker — end-of-turn disk-change card.
+                  const d = (event as any).metadata?.diff
+                  if (d && d.files_changed) {
+                    const id = nextId()
+                    session.messages.push({ type: 'turn_diff', diff: d, id, transcriptMessageId: id, timestamp: Date.now() } as any)
+                    this._persistSession(sessionId)
+                  }
                 }
 
                 // In-UI mirror so users without DevTools can still see

@@ -188,6 +188,16 @@ class StepKind(str, Enum):
     # under the finished answer. `content` holds the question text.
     FOLLOWUP = "followup"
 
+    # Codex Op::Steer receipt: a mid-turn user steer was drained from the
+    # queue and injected into the next LLM call. `content` holds the text.
+    STEER_INJECTED = "steer_injected"
+    # Codex auto-compact: the loop's live context crossed the token
+    # budget and was compacted mid-turn. metadata carries the numbers.
+    CONTEXT_COMPACT = "context_compact"
+    # Codex turn_diff_tracker: end-of-turn summary of what the run
+    # changed on disk. metadata.diff = {files, insertions, deletions…}.
+    TURN_DIFF = "turn_diff"
+
     # Terminal
     ERROR = "error"
     DONE = "done"
@@ -298,6 +308,11 @@ class RunContext:
     # None/'auto' = provider default. P3-b: validated at the route.
     effort: str | None = None
 
+    # Unified context paradigm (paper §3.3): when set (SessionRealm),
+    # effect keys, coeffect derivation and steer draining all route
+    # through it. None = legacy per-piece behavior (tests, old paths).
+    realm: Any = None
+
     # ── Derived child contexts (paper §3.2.3 derived realization) ─────────
     def derive(
         self,
@@ -336,6 +351,11 @@ class RunContext:
         elif inherit_messages == "last_n":
             keep = max(0, int(inherit_last_n or 0))
             data["messages"] = list(self.messages or [])[-keep:] if keep else []
+        # Unified context paradigm: fork the realm too — the child gets
+        # its own effect namespace + derived coeffects, and keeps
+        # draining the ROOT conversation's steer queue.
+        if self.realm is not None and data.get("realm") is self.realm:
+            data["realm"] = self.realm.derive()
         return RunContext(**data)
 
 

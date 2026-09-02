@@ -41,7 +41,6 @@ last non-None modified_input wins; extra_observations are concatenated.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -137,43 +136,49 @@ class HookChain:
 
 
 # ─── Shipped hooks (demonstrate the API) ───────────────────────────────────
-
-_DANGEROUS_PATTERNS = [
-    r"\brm\s+-rf?[\s/]",                          # rm -rf /, rm -r /etc
-    r"\bmkfs(\.[a-z0-9]+)?\b",
-    r"\bdd\s+if=.+of=/dev/(sd|nvme|hd)",
-    r"\b(shutdown|reboot|halt)\b",
-    r"\bcurl[^|]*\|\s*(bash|sh|zsh)\b",  # pipe to shell
-    r":\(\)\s*\{\s*:\|:&\s*\};:",        # fork bomb
-]
+#
+# The deny-list lives in ~/.madcop/exec_policy.json (seeded from these
+# defaults on first run) — see madcop/harness/exec_policy.py. Editing
+# that file takes effect on the next tool call (mtime hot-reload).
 
 
 class SafetyHook:
-    """PreToolUse hook for the `bash` tool — deny destructive patterns.
+    """PreToolUse hook for the `bash` tool — enforce the exec policy.
 
-    Replaces `cmd` with a no-op echo and surfaces a clear error so the
-    user sees what was blocked without the engine executing it.
+    Codex parity: the rule list is user-editable JSON, not compiled-in
+    regexes. `deny` vetoes the call with the matched rule's reason;
+    `warn` lets it run but appends the rule notice to the observation
+    so the model (and the user) sees which rule was tripped.
     """
 
-    name = "safety:dangerous-bash"
-
-    def __init__(self):
-        self._res = [re.compile(p, re.IGNORECASE) for p in _DANGEROUS_PATTERNS]
+    name = "safety:exec-policy"
 
     def __call__(self, ctx: HookContext) -> HookResult | None:
         if ctx.event != HookEvent.PRE_TOOL_USE or ctx.tool_name != "bash":
             return None
         cmd = (ctx.tool_input.get("command") or
                ctx.tool_input.get("cmd") or "")
-        for pat in self._res:
-            if pat.search(cmd):
-                return HookResult(
-                    continue_=False,
-                    error=(
-                        "[safety] 拒绝执行：检测到高危命令模式。"
-                        f"规则={pat.pattern}; 命令={cmd[:120]!r}"
-                    ),
-                )
+        if not cmd:
+            return HookResult()
+        from madcop.harness.exec_policy import get_policy
+        decision = get_policy().check(cmd)
+        if decision.action == "deny":
+            return HookResult(
+                continue_=False,
+                error=(
+                    "[exec-policy] 拒绝执行：命中规则 "
+                    f"'{decision.rule_id}'（{decision.reason}）。"
+                    f"命令={cmd[:120]!r}。如需放行请在 "
+                    "~/.madcop/exec_policy.json 调整该规则。"
+                ),
+            )
+        if decision.action == "warn":
+            return HookResult(
+                extra_observation=(
+                    f"[exec-policy] 提示：命中规则 '{decision.rule_id}'"
+                    f"（{decision.reason}）。"
+                ),
+            )
         return HookResult()
 
 
