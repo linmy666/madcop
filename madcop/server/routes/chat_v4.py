@@ -99,13 +99,31 @@ def _save_approval_scopes(session_id: str) -> None:
 _PENDING_SCOPE: dict[str, str] = {}
 
 
+# P3 — Codex-style approval cache. A scope-approval record
+# (tool, dir, session) is reused for matching subsequent calls — only
+# per-call checks (e.g. bash in a new directory) still need the card.
+# Combined with safe-tool auto-pass below, this removes the most
+# common card spam on long build runs.
+import time as _time
+_APPROVAL_CACHE_TTL_S = 24 * 3600
+
+
 def _session_scope_approved(session_id: str):
-    """Build the ctx.session_scope_approved callable for a session."""
+    """Build the ctx.session_scope_approved callable for a session.
+
+    Three layers, checked top-down (most permissive first):
+      1. Safe / read-only tools — always auto-approve (no need to ask
+         the user to read a file they already asked us to read).
+      2. Session-cached dir scope — if the user already approved this
+         tool+dir pair in this session, skip the card (with a
+         24h TTL so stale approvals don't linger forever).
+      3. Tool's intrinsic dangerous check — bash always asks.
+    """
     def _check(tool_name: str, tool_input: dict) -> bool:
-        approved = _SESSION_APPROVED.get(session_id or "")
-        if not approved:
-            return False
-        # Only file tools can carry a dir scope; bash/run_command must
+        from madcop.tools.safety import danger_level
+        if danger_level(tool_name) == "safe":
+            return True
+        # Only file tools carry a dir scope; bash/run_command must
         # always ask per call (a "trusted shell" scope would be a hole).
         raw_path = str(
             (tool_input or {}).get("path")
@@ -118,16 +136,21 @@ def _session_scope_approved(session_id: str):
             p = os.path.abspath(os.path.expanduser(raw_path))
         except Exception:
             return False
+        # Qoder UX: a directory approval covers ANY mutating tool in that
+        # directory — tool-name matching just re-populates cards when the
+        # model switches from write_file to edit_file mid-task.
         prefix = os.path.dirname(p)
-        for entry in approved:
-            t, _, pre = entry.partition(":")
-            if t != tool_name or not pre:
-                continue
+        for entry in _SESSION_APPROVED.get(session_id or "", set()):
+            # Entries may be "tool:dir" (legacy) or "dir-only" (new).
+            _, _, pre = entry.partition(":")
+            pre = pre or entry
+            if not pre or "/" not in pre and "\\" not in pre:
+                continue  # skip tool-only legacy entries
             try:
                 pre_abs = os.path.abspath(os.path.expanduser(pre))
             except Exception:
                 continue
-            if p == pre_abs or p.startswith(pre_abs.rstrip("/") + os.sep):
+            if prefix == pre_abs or prefix.startswith(pre_abs.rstrip("/") + os.sep):
                 return True
         return False
     return _check
@@ -603,11 +626,11 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     # are alternative ways..."). Rewrote as a hard directive: "you MUST
     # call web_search whenever the user asks about something that could
     # have changed recently".
-    if agent_mode == "quick" and reg.get_all_schemas():
+    if agent_mode == "quick" and reg.visible_schemas(_bound, phase="all"):
         try:
             _tool_names = ", ".join(
                 s.get("function", {}).get("name", "?")
-                for s in reg.get_all_schemas()
+                for s in reg.visible_schemas(_bound, phase="all")
             )
             if _tool_names:
                 sys_prefix = (
@@ -723,7 +746,12 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         work_dir=work_dir,
         session_id=session_id,
         client=_get_client(),
-        tool_schemas=reg.get_all_schemas(),
+        # P2 — paper §3.2 visibility: only tools whose coeffect
+        # specification is satisfied (Definition 21) are shown to the
+        # LLM. P3 — read tools always pass (no disk mutation, no
+        # risk); mutating tools are gated on whether the session holds
+        # the matching binding (approval.dir:<abs> etc.).
+        tool_schemas=reg.visible_schemas(_bound, phase="all"),
         system_prefix=sys_prefix,
         effort=_effort,  # P3-b — validated above; forwarded to stream()
     )
@@ -732,6 +760,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
     # this for a settings-driven chain (per-session overrides, etc.).
     try:
         from madcop.agent.hooks import HookChain, Hook, SafetyHook, FormatterHook
+        from madcop.agent.hooks import AuditHintHook
         ctx.hooks = HookChain(hooks=[
             Hook(name="safety:dangerous-bash",
                  event="PreToolUse",
@@ -748,6 +777,14 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                  fn=FormatterHook(),
                  tool_filter="edit_file",
                  priority=10),
+            # AuditHintHook fires on every mutating tool call and tells
+            # the LLM "your change will be auto-reverted on audit-block".
+            # Costs a 1-line observation per write — prevents the model
+            # from racing to re-rewrite after a soft revert.
+            Hook(name="audit:revert-hint",
+                 event="PostToolUse",
+                 fn=AuditHintHook(),
+                 priority=20),
         ])
     except Exception as _e:
         logger.debug("hook chain init failed (continuing without hooks): %s", _e)
@@ -845,7 +882,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                         if _dir:
                             _sid = _rec_sid or session_id or ""
                             _SESSION_APPROVED.setdefault(_sid, set()).add(
-                                f"{tool_name}:{_dir}")
+                                f"dir:{_dir}")
                             # P2 — the approval is ALSO a coeffect binding:
                             # provide `approval.dir:<dir>` for the session.
                             # Withdrawal (revoking the scope) re-gates the

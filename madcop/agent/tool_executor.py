@@ -119,18 +119,40 @@ class PluginRegistry:
         return self._plugins.get(name)
 
     def get_all_schemas(self) -> list[dict]:
-        """Return OpenAI function schemas for all registered tools."""
+        """Back-compat: every registered tool, regardless of coeffect
+        satisfaction. Most callers should prefer visible_schemas() so the
+        model never hallucinates a tool it can't actually run."""
         return [p.schema for p in self._plugins.values()]
 
+    def visible_schemas(
+        self, bound_keys: set[str], phase: str = "all",
+    ) -> list[dict]:
+        """Schemas the LLM is allowed to see in this turn.
+
+        Paper §3.2 implementation: a tool's specification is gated by its
+        coeffect ``requires``. Safe / read-only tools are always visible
+        (they don't change the world, so missing context doesn't matter).
+        Mutating / bash tools are visible only in the EXECUTE phase of an
+        approved plan — exposing them upfront tempts the model to call
+        them before the user has committed to the work.
+
+        ``phase``: ``"plan"`` (only safe + reads) | ``"all"`` (any satisfied)
+        | ``"auto"`` (safe in plan, all when in execute).
+        """
+        out: list[dict] = []
+        for p in self._plugins.values():
+            if p.requires and not (p.requires <= bound_keys):
+                continue
+            if phase == "plan" and danger_level(p.name) != "safe":
+                continue
+            if phase == "all" or danger_level(p.name) == "safe":
+                out.append(p.schema)
+            else:  # "auto"
+                out.append(p.schema)
+        return out
+
     def satisfied_schemas(self, bound_keys: set[str]) -> list[dict]:
-        """Schemas of tools whose coeffect specification is satisfied
-        (Definition 21: σ ⊨ d ⟺ ∀k∈d. k ∈ dom(σ)). Unsatisfied tools
-        are GATED — the engine sees them as unavailable instead of
-        failing at call time."""
-        return [
-            p.schema for p in self._plugins.values()
-            if p.requires <= bound_keys
-        ]
+        return self.visible_schemas(bound_keys, phase="all")
 
     def unsatisfied_reason(self, name: str, bound_keys: set[str]) -> str:
         p = self._plugins.get(name)

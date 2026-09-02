@@ -315,14 +315,13 @@ class MadCopHarness:
             " artifact with tools (write_file for new files, edit_file"
             " for changes). Do NOT merely describe what you would write."
         )
+        # Codex-style fork_turns: inherit the last 4 turns of the
+        # parent's history so the Coder knows the goal and prior audit
+        # decisions without re-reading the whole conversation. Recovery
+        # = discarding the child context (no inverse needed).
         exec_ctx = self.ctx.derive(
-            messages=[Message(
-                role="user",
-                content=(
-                    f"总体任务：{self.goal}\n\n"
-                    f"你的子任务合约：{self._last_contract_desc}"
-                ),
-            )],
+            inherit_messages="last_n",
+            inherit_last_n=4,
             agent_mode="standard",
             system_prefix=_coder_prefix,
             max_steps=6,
@@ -335,6 +334,17 @@ class MadCopHarness:
                 if (s.get("function") or s).get("name", "") != "remember"
             ],
         )
+        # Append the contract as a fresh user message so the
+        # subagent sees it at the tail of the inherited history
+        # (positions the task statement where every model pays
+        # attention first).
+        from madcop.llm.client import Message as _M
+        exec_ctx.messages = list(exec_ctx.messages) + [
+            _M(role="user", content=(
+                f"总体任务：{self.goal}\n\n"
+                f"你的子任务合约：{self._last_contract_desc}"
+            ))
+        ]
 
         result_text = ""
         for ev in engine.run(exec_ctx):

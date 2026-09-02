@@ -298,20 +298,44 @@ class RunContext:
     # None/'auto' = provider default. P3-b: validated at the route.
     effort: str | None = None
 
-    # ── Derived child contexts (paper §3.2.3 derived realization) ─────
-    def derive(self, **overrides) -> "RunContext":
-        """A child context: every field copied, `overrides` applied.
+    # ── Derived child contexts (paper §3.2.3 derived realization) ─────────
+    def derive(
+        self,
+        inherit_messages: str = "none",
+        inherit_last_n: int = 0,
+        **overrides,
+    ) -> "RunContext":
+        """A child context: every field copied, ``overrides`` applied.
 
         Realization is 'derived' per the composability paper — the parent
         is untouched and recovery means DISCARDING the child (no inverse
         needed). MEA uses this to hand each Executor a scoped context:
         narrowed tool set, per-step work dir, no memory side channels —
         a subagent can no longer mutate the parent's knobs by accident.
+
+        ``inherit_messages`` controls how much of the parent turn
+        history the child sees (Codex-style fork_turns, 0=none,
+        "all"=everything, "last_n"=inherit_messages="last_n" with
+        inherit_last_n)::
+          - "none"   — clean slate (default for independent tasks)
+          - "all"    — inherit the full parent history
+          - "last_n" — inherit the last N items of the parent history
+                         (use inherit_last_n to choose N)
         """
         data = {
             f: getattr(self, f) for f in self.__dataclass_fields__  # type: ignore[attr-defined]
         }
         data.update(overrides)
+        # Clone the messages list (don't share the parent's reference).
+        if "messages" not in data:
+            data["messages"] = list(self.messages or [])
+        if inherit_messages == "none":
+            data["messages"] = []
+        elif inherit_messages == "all":
+            data["messages"] = list(self.messages or [])
+        elif inherit_messages == "last_n":
+            keep = max(0, int(inherit_last_n or 0))
+            data["messages"] = list(self.messages or [])[-keep:] if keep else []
         return RunContext(**data)
 
 

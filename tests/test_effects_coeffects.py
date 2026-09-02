@@ -217,3 +217,51 @@ def test_tail_promise_regex_polarities():
         assert _TAIL_PROMISE_RE.search(p[-90:]), f"should match: {p}"
     for a in answers:
         assert not _TAIL_PROMISE_RE.search(a[-90:]), f"should NOT match: {a}"
+
+
+def test_registry_phase_filters_mutating_tools():
+    """visible_schemas('plan') shows only safe tools; 'all' shows any
+    satisfied tool. Mirrors the Codex-like two-phase execution flow
+    (plan = read-only plan, execute = mutating)."""
+    from madcop.agent.tool_executor import ToolPlugin, PluginRegistry
+
+    reg = PluginRegistry()
+    for i, (name, danger, reqs) in enumerate([
+        ("read_file", "safe", frozenset()),
+        ("search", "safe", frozenset({"net"})),
+        ("write_file", "mutating", frozenset()),
+        ("bash", "destructive", frozenset()),
+    ]):
+        reg.register(ToolPlugin(
+            name=name, handler=lambda **k: "", schema={
+                "type": "function", "function": {"name": name}},
+            danger=danger, requires=reqs,
+        ))
+
+    all_safe = {p.schema["function"]["name"] for p in [
+        reg._plugins["read_file"], reg._plugins["search"]]}
+    # Empty coeffect store: satisfied tools only.
+    plan_names = {s["function"]["name"]
+                  for s in reg.visible_schemas(set(), phase="plan")}
+    # plan shows only safe tools whose coeffects are satisfied; search
+    # has requires={"net"} and is gated because net is not bound.
+    assert plan_names == {"read_file"}, plan_names
+
+    # With net bound, plan still only shows safe — write_file is mutating
+    # even if all coeffects are satisfied, because we don't want the
+    # LLM calling it before the user commits to the work.
+    plan_with_net = {s["function"]["name"]
+                     for s in reg.visible_schemas({"net"}, phase="plan")}
+    assert plan_with_net == all_safe, plan_with_net
+
+    # 'all' phase shows anything with satisfied coeffects (mutating
+    # included, since we're in the execute stage).
+    all_names = {s["function"]["name"]
+                 for s in reg.visible_schemas({"net"}, phase="all")}
+    assert "read_file" in all_names and "search" in all_names, all_names
+
+    # Unbound coeffect means the tool is gated.
+    no_net = {s["function"]["name"]
+              for s in reg.visible_schemas(set(), phase="all")}
+    assert "search" not in no_net
+    assert "read_file" in no_net

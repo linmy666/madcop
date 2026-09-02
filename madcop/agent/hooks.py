@@ -10,9 +10,33 @@ Hooks are matched by event + optional name and run in priority order
 (lowest priority fires first). Failures in any single hook are
 swallowed — a buggy hook must never break the engine.
 
-Two shipped hooks demonstrate the API:
+Two shipped hooks demonstrate the API + the multi-contributor pattern:
   - SafetyHook: deny `rm -rf` / `mkfs` etc. (PreToolUse on bash)
   - FormatterHook: PostToolUse on write_file → run prettier on the file
+  - AuditHintHook: PostToolUse on mutating tools → append the inverse
+    capability to the observation so the model knows the step is
+    revertible (paper §3.1 — make reversibility visible to the LLM)
+
+EXTENSION GUIDE
+---------------
+To add a new cross-cutting behaviour without touching the engine:
+
+    from madcop.agent.hooks import Hook, HookContext, HookResult, HookEvent
+
+    class MyHook:
+        name = "myname:tag"
+        def __call__(self, ctx: HookContext) -> HookResult | None:
+            if ctx.event != HookEvent.PRE_TOOL_USE: return None
+            ...
+            return HookResult(continue_=True, modified_input=new_input,
+                              extra_observation="FYI: ...")
+
+    chain = ctx.hooks  # or chat_v4 builds it
+    chain.add(Hook(name=MyHook.name, event=HookEvent.PRE_TOOL_USE, fn=MyHook()))
+
+Multiple contributors per event are normal — they all fire in priority
+order. Their decisions are folded: any continue_=False wins; the
+last non-None modified_input wins; extra_observations are concatenated.
 """
 from __future__ import annotations
 
@@ -216,5 +240,41 @@ class FormatterHook:
 
 __all__ = [
     "HookEvent", "HookContext", "HookResult", "Hook", "HookChain",
-    "SafetyHook", "FormatterHook",
+    "SafetyHook", "FormatterHook", "AuditHintHook",
 ]
+
+
+class AuditHintHook:
+    """PostToolUse: hint to the LLM that the side effect is REVERTIBLE.
+
+    P3 — the MEA auditor's "soft revert" only works when the model
+    keeps writing consistent content after a blocked step. If the model
+    doesn't know its file changes are revertible, it often races to
+    re-write the same thing in a way that *overrides* the prior
+    snapshot. By appending a one-line hint on every mutating tool
+    call's observation, the LLM learns the safety net exists and stays
+    calm during audit-blocked retries.
+
+    This is the third demo contrib in the multi-contributor pattern:
+    multiple hooks per event, all fire in priority order, decisions
+    fold (any continue_=False wins, latest modified_input wins,
+    extra_observations concatenate).
+    """
+
+    name = "audit:revert-hint"
+
+    _MUTATING = {"write_file", "edit_file", "write_xlsx", "write_pptx"}
+
+    def __call__(self, ctx: HookContext) -> HookResult | None:
+        if ctx.event != HookEvent.POST_TOOL_USE:
+            return None
+        if ctx.tool_name not in self._MUTATING:
+            return None
+        if ctx.is_error:
+            return None
+        return HookResult(
+            extra_observation=(
+                "（审计层会在审核不过时自动恢复此文件改动；"
+                "你不必手动重写。）"
+            ),
+        )
