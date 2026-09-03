@@ -49,7 +49,15 @@
           </div>
         </div>
 
+        <div v-if="isStreaming" class="stream-caret-wrap">
+          <MarkdownRenderer
+            :content="cleanContent"
+            :streaming="isStreaming"
+            class="text-[15px] leading-[1.75] text-[var(--color-text-primary)]"
+          /><span class="stream-caret" aria-hidden="true"></span>
+        </div>
         <MarkdownRenderer
+          v-else
           :content="cleanContent"
           :streaming="isStreaming"
           class="text-[15px] leading-[1.75] text-[var(--color-text-primary)]"
@@ -484,5 +492,26 @@ async function distillAsSkill() {
   line-height: 1.5;
   opacity: 0.8;
   word-break: break-word;
+}
+
+/* Streaming caret — a quiet block cursor at the growing edge of the
+   answer. Hidden when reduced-motion is requested. */
+.stream-caret-wrap { position: relative; }
+.stream-caret {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--color-text-tertiary, #999);
+  animation: stream-caret-blink 1s step-end infinite;
+  border-radius: 1px;
+}
+@keyframes stream-caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stream-caret { animation: none; opacity: 0.4; }
 }
 </style>
