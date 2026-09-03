@@ -164,15 +164,27 @@ def compact_messages(
     model: str | None = None,
     prev_summary: str = "",
     keep_recent_tokens: int = KEEP_RECENT_TOKENS,
+    force: bool = False,
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
     """Compact a message list → (new_messages, record).
 
     new_messages = [summary as user message] + tail. record describes
     what happened (for the session log's compaction event). On summary
     failure, falls back to keeping [prev_summary or brief note] + tail
-    — never raises into the chat path.
+    — never raises into the chat path. ``force`` (manual/user-invoked
+    compaction) summarizes even when the history still fits the
+    keep-recent budget, keeping the last 2 messages as the tail.
     """
     cut = select_cut_point(messages, keep_recent_tokens)
+    if force and cut >= len(messages) and len(messages) > 2:
+        cut = len(messages) - 2
+    if cut >= len(messages) and not force:
+        # select_cut_point says the whole history fits the keep-recent
+        # budget — nothing to do. (Defensive: callers are gated by
+        # should_compact, but an ungated call must not nuke the entire
+        # history into a summary.)
+        return messages, {"compacted": False, "keep_tail_n": len(messages),
+                          "reason": "within budget"}
     if cut == 0:
         cut = min(1, len(messages))
     head, tail = messages[:cut], messages[cut:]
@@ -232,9 +244,46 @@ def compact_messages(
     return new_messages, record
 
 
+# ─── Compaction lifecycle hooks (codex parity: Pre/PostCompact) ─────────────
+# hooks.py defines the PRE_COMPACT / POST_COMPACT event names; this is the
+# single place they FIRE. Every compaction path (mid-turn auto-compact,
+# overflow retry, manual endpoint) goes through these so hook contributors
+# observe one lifecycle. No chain / no contributors → no-op.
+
+def fire_pre_compact(hooks, *, trigger: str, prompt_tokens: int | None = None) -> None:
+    if hooks is None:
+        return
+    try:
+        from .hooks import HookContext, HookEvent
+        hooks.run(HookContext(
+            event=HookEvent.PRE_COMPACT,
+            metadata={"trigger": trigger, "prompt_tokens": prompt_tokens},
+        ))
+    except Exception as e:  # noqa: BLE001
+        logger.debug("pre_compact hook failed: %s", e)
+
+
+def fire_post_compact(hooks, *, trigger: str, record: dict) -> None:
+    if hooks is None:
+        return
+    try:
+        from .hooks import HookContext, HookEvent
+        hooks.run(HookContext(
+            event=HookEvent.POST_COMPACT,
+            metadata={
+                "trigger": trigger,
+                "summary": str(record.get("summary", ""))[:500],
+                "head_turns": record.get("head_turns", 0),
+                "keep_tail_n": record.get("keep_tail_n", 0),
+            },
+        ))
+    except Exception as e:  # noqa: BLE001
+        logger.debug("post_compact hook failed: %s", e)
+
+
 __all__ = [
     "DEFAULT_CONTEXT_WINDOW", "RESERVE_TOKENS", "KEEP_RECENT_TOKENS",
     "estimate_tokens", "is_overflow_error", "messages_tokens",
     "context_tokens", "should_compact", "select_cut_point",
-    "compact_messages",
+    "compact_messages", "fire_pre_compact", "fire_post_compact",
 ]

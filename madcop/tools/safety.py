@@ -65,6 +65,7 @@ DANGER_LEVELS: dict[str, str] = {
     "recall_memory": "safe",
     "ask_user": "safe",
     "echo": "safe",
+    "get_context_remaining": "safe",
     # Mutating but reversible
     "write_file": "mutating",
     "write_xlsx": "mutating",

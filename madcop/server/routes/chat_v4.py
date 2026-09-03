@@ -51,9 +51,11 @@ _PENDING_META: dict[str, dict] = {}
 
 # P1-6 — per-session live context signals: last provider usage (token
 # ground truth, from DONE steps) and the latest compaction checkpoint
-# (for incremental UPDATE summaries). In-process only; the durable
-# record lives in the session log's compaction events.
-_SESSION_LAST_USAGE: dict[str, dict] = {}
+# (for incremental UPDATE summaries). The usage dict lives in the shared
+# usage_store so the get_context_remaining tool reads the same numbers
+# the compaction trigger sees. In-process only; the durable record
+# lives in the session log's compaction events.
+from madcop.agent.usage_store import SESSION_USAGE as _SESSION_LAST_USAGE
 _SESSION_SUMMARIES: dict[str, str] = {}
 
 # Qoder-style session-scoped HITL approvals: conversation_id →
@@ -626,6 +628,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         workspace_dir=work_dir,
         store=mem_store,
         bound_keys=_bound,
+        session_id=session_id,
     )
 
     # P2 — MCP tools merged into the REQUEST registry. They previously
@@ -1458,11 +1461,23 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                                 _cmsgs, _crec = _cm(
                                     _dmsgs, ctx.client, ctx.model,
                                     prev_summary=_SESSION_SUMMARIES.get(session_id, ""),
+                                    # Provider overflow means the real window
+                                    # is smaller than our estimate — compact
+                                    # even when the chars/4 estimate "fits".
+                                    force=True,
                                 )
                                 if _crec.get("compacted"):
                                     ctx.messages = [Message(role=d["role"], content=d["content"])
                                                     for d in _cmsgs]
                                     _SESSION_SUMMARIES[session_id] = _crec["summary"]
+                                    try:
+                                        from madcop.agent.compaction import fire_post_compact
+                                        fire_post_compact(
+                                            getattr(ctx, "hooks", None),
+                                            trigger="overflow", record=_crec,
+                                        )
+                                    except Exception:
+                                        pass
                                     if _session_log:
                                         _session_log.append(HarnessEvent(
                                             domain=EventDomain.SYSTEM, kind="compaction",
@@ -1761,6 +1776,73 @@ async def skills_reload() -> dict[str, Any]:
     """Re-import ~/.madcop/skills/*.py (mtime-forced) and list tools."""
     from madcop.harness.skill_tools import reload_skills
     return reload_skills()
+
+
+class CompactBody(BaseModel):
+    """Manual compaction request (codex Op::Compact parity)."""
+    conversation_id: str
+
+
+@router.post("/api/v4/compact")
+async def compact_session(body: CompactBody) -> dict[str, Any]:
+    """Manually compact a session's context (user-invoked from the UI).
+
+    Same lifecycle as automatic compaction: structured checkpoint via a
+    dedicated LLM call, cut only at user-message boundaries, checkpoint
+    persisted as a `compaction` session-log event so future derives
+    reuse it. Idempotent-safe: compacting an already-small session is a
+    no-op that reports compacted=False."""
+    sid = (body.conversation_id or "").strip()
+    if not sid:
+        raise HTTPException(422, "conversation_id required")
+    try:
+        from madcop.harness.core import SessionLog
+        _prior = SessionLog.for_session(sid)
+        derived = _prior.derive_messages()
+    except Exception as e:
+        raise HTTPException(404, f"no session log for '{sid}': {e}")
+
+    msgs = [Message(role=d["role"], content=d["content"]) for d in derived]
+    if not msgs:
+        return {"ok": True, "compacted": False, "reason": "empty session"}
+
+    from madcop.agent.compaction import (
+        should_compact, compact_messages, fire_post_compact,
+    )
+    dicts = [{"role": m.role or "user", "content": m.content or ""} for m in msgs]
+    # Manual compaction is user-intent: run even below the auto trigger
+    # (force via a zero window), the summarizer itself guards the floor.
+    if should_compact(dicts, _SESSION_LAST_USAGE.get(sid)):
+        trigger = "auto"
+    else:
+        trigger = "manual"
+    new_dicts, record = compact_messages(
+        dicts, _get_client(), None,
+        prev_summary=_SESSION_SUMMARIES.get(sid, ""),
+        force=(trigger == "manual"),
+    )
+    if not record.get("compacted"):
+        return {"ok": True, "compacted": False, "reason": "nothing to compact"}
+    _SESSION_SUMMARIES[sid] = record["summary"]
+    try:
+        from madcop.harness.core import EventDomain, HarnessEvent
+        _prior.append(HarnessEvent(
+            domain=EventDomain.SYSTEM, kind="compaction",
+            content=record["summary"],
+            metadata={"keep_tail_n": record.get("keep_tail_n", 0),
+                      "trigger": trigger},
+        ))
+    except Exception as e:
+        logger.debug("manual compaction persist failed: %s", e)
+    fire_post_compact(None, trigger=trigger, record=record)
+    return {
+        "ok": True,
+        "compacted": True,
+        "trigger": trigger,
+        "summary": record["summary"][:2000],
+        "messages_before": len(dicts),
+        "messages_after": len(new_dicts),
+    }
 
 
 __all__ = ["router", "chat_v4"]

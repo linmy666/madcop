@@ -499,21 +499,104 @@ class EditFileTool(Tool):
 
         try:
             content = p.read_text(encoding="utf-8", errors="replace")
-            if old_text not in content:
-                return {"error": f"old_text not found in {p}"}
 
-            new_content = content.replace(old_text, new_text, 1)
+            # Fast path: byte-exact substring (keeps the historical
+            # behaviour and cost model).
+            if old_text in content:
+                new_content = content.replace(old_text, new_text, 1)
+                p.write_text(new_content, encoding="utf-8")
+                logger.info("edit_file: replaced %d chars in %s", len(old_text), p)
+                return {
+                    "path": str(p),
+                    "status": "ok",
+                    "match": "exact",
+                    "old_len": len(old_text),
+                    "new_len": len(new_text),
+                }
+
+            # Fuzzy path (codex apply-patch seek_sequence port): locate
+            # old_text as a line sequence with decreasing strictness —
+            # exact lines → rstrip → trim → Unicode punctuation
+            # normalisation. Rescues model-authored anchors that differ
+            # from the file only in trailing whitespace or typographic
+            # quotes/dashes instead of failing the whole edit.
+            eol = "\r\n" if "\r\n" in content else "\n"
+            lines = content.split(eol)
+            pattern = old_text.replace("\r\n", "\n").split("\n")
+            idx, tier = _seek_sequence(lines, pattern)
+            if idx is None:
+                return {
+                    "error": (
+                        f"old_text not found in {p}（精确与模糊匹配均失败）。"
+                        "请 read_file 后用文件中的原文重试——注意保留缩进与标点。"
+                    ),
+                }
+            replacement = new_text.replace("\r\n", "\n").split("\n")
+            new_lines = lines[:idx] + replacement + lines[idx + len(pattern):]
+            new_content = eol.join(new_lines)
             p.write_text(new_content, encoding="utf-8")
-
-            logger.info("edit_file: replaced %d chars in %s", len(old_text), p)
+            logger.info("edit_file: fuzzy(%s) replaced %d lines in %s",
+                        tier, len(pattern), p)
             return {
                 "path": str(p),
                 "status": "ok",
+                "match": tier,
                 "old_len": len(old_text),
                 "new_len": len(new_text),
             }
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+
+# Unicode punctuation normalisation (codex apply-patch): typographic
+# dashes/quotes/spaces collapse to their ASCII equivalents so anchors
+# authored as plain ASCII still match files containing smart glyphs.
+_PUNCT_MAP = str.maketrans({
+    "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-",
+    "\u2014": "-", "\u2015": "-", "\u2212": "-",
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
+    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
+    "\u00a0": " ", "\u2002": " ", "\u2003": " ", "\u2004": " ",
+    "\u2005": " ", "\u2006": " ", "\u2007": " ", "\u2008": " ",
+    "\u2009": " ", "\u200a": " ", "\u202f": " ", "\u205f": " ",
+    "\u3000": " ",
+})
+
+
+def _norm_line(s: str) -> str:
+    return s.strip().translate(_PUNCT_MAP)
+
+
+def _seek_sequence(lines: list[str], pattern: list[str]) -> tuple[int | None, str]:
+    """Find `pattern` (a line sequence) in `lines` with decreasing
+    strictness. Returns (start_index, tier) or (None, "").
+
+    Tiers, mirroring codex-rs/apply-patch/src/seek_sequence.rs:
+      exact → rstrip (ignore trailing whitespace) → trim (both sides)
+      → Unicode-punctuation-normalised trim. Empty pattern matches at 0.
+    """
+    if not pattern:
+        return 0, "exact"
+    if len(pattern) > len(lines):
+        return None, ""
+    n = len(lines) - len(pattern)
+
+    for i in range(n + 1):
+        if lines[i:i + len(pattern)] == pattern:
+            return i, "exact"
+    for i in range(n + 1):
+        if all(lines[i + j].rstrip() == pattern[j].rstrip()
+               for j in range(len(pattern))):
+            return i, "rstrip"
+    for i in range(n + 1):
+        if all(lines[i + j].strip() == pattern[j].strip()
+               for j in range(len(pattern))):
+            return i, "trim"
+    for i in range(n + 1):
+        if all(_norm_line(lines[i + j]) == _norm_line(pattern[j])
+               for j in range(len(pattern))):
+            return i, "unicode"
+    return None, ""
 
 
 # --------------------------------------------------------------------------- #

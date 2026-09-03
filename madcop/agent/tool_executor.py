@@ -430,6 +430,7 @@ def build_default_registry(
     workspace_dir: str | None = None,
     store: Any = None,
     bound_keys: set[str] | None = None,
+    session_id: str = "",
 ) -> tuple[PluginRegistry, ToolExecutor]:
     """Build a registry with all built-in tools and return
     (registry, executor).
@@ -469,6 +470,22 @@ def build_default_registry(
     _reg(WeatherTool)
     _reg(ClarifyTool)
 
+    # Codex parity: self-pacing tool — the model asks how much context
+    # is left instead of running into a provider overflow mid-artifact.
+    try:
+        from madcop.tools.context_budget import GetContextRemainingTool
+        from madcop.agent.compaction import DEFAULT_CONTEXT_WINDOW as _ctx_win
+        _gbudget = GetContextRemainingTool(
+            session_id=session_id, context_window=_ctx_win)
+        reg.register(ToolPlugin(
+            name=_gbudget.name,
+            handler=_gbudget,
+            schema=_gbudget.to_openai_schema(),
+            danger=danger_level(_gbudget.name),
+        ))
+    except Exception as e:  # pragma: no cover
+        logger.warning("get_context_remaining registration failed: %s", e)
+
     # Market / paper tools
     _reg(MarketQuoteTool)
     _reg(MarketHistoryTool)
@@ -498,10 +515,23 @@ def build_default_registry(
     # Shell tool — the agent desktop finally HAS one. Runs through
     # SubprocessSandbox (cwd allowlist + timeout + output cap); danger
     # level is "destructive" so every call hits the HITL confirm card.
+    # shell=True: string commands run under the user's shell (pipes,
+    # globs work). Safety comes from exec_policy (PreToolUse veto) +
+    # HITL, not from pretending commands aren't shell. A per-session
+    # environment snapshot (codex shell_snapshot parity) is sourced
+    # before each command so the user's rc setup is visible.
     try:
         from madcop.tools.sandbox import BashTool, SubprocessSandbox
-        _sandbox = SubprocessSandbox(allowed_dirs=[Path(d) for d in _write_dirs if d])
-        _bash = BashTool(_sandbox)
+        from madcop.tools.shell_snapshot import ensure_snapshot
+        _sandbox = SubprocessSandbox(
+            allowed_dirs=[Path(d) for d in _write_dirs if d],
+            shell=True,
+        )
+        _bash = BashTool(
+            _sandbox,
+            snapshot_provider=(lambda: ensure_snapshot(session_id))
+            if session_id else None,
+        )
         reg.register(ToolPlugin(
             name=_bash.name,
             handler=_bash,

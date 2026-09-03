@@ -470,6 +470,11 @@ class ReActEngineV4(AgentEngine):
                 # the next call's context grows past the window.
                 _trig = _compact_trigger_tokens()
                 if int(_run_usage.get("prompt_tokens") or 0) >= _trig:
+                    from madcop.agent.compaction import fire_pre_compact
+                    fire_pre_compact(
+                        getattr(ctx, "hooks", None), trigger="auto",
+                        prompt_tokens=_run_usage.get("prompt_tokens"),
+                    )
                     _chars_before = sum(
                         len(m.content or "") for m in messages)
                     if self._maybe_compact(messages, force=True):
@@ -480,6 +485,15 @@ class ReActEngineV4(AgentEngine):
                             "chars_after": sum(
                                 len(m.content or "") for m in messages),
                         })
+                        try:
+                            from madcop.agent.compaction import fire_post_compact
+                            fire_post_compact(
+                                getattr(ctx, "hooks", None), trigger="auto",
+                                record={"summary": "", "head_turns": 0,
+                                        "keep_tail_n": _COMPACT_KEEP_TAIL},
+                            )
+                        except Exception:
+                            pass
 
             # P2-9: close this step's llm_call span with its summary.
             try:

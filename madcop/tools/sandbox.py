@@ -260,7 +260,8 @@ class BashTool:
         # The LLM can now call `bash(command="ls -la")`.
     """
 
-    def __init__(self, sandbox: SubprocessSandbox, *, name: str = "bash"):
+    def __init__(self, sandbox: SubprocessSandbox, *, name: str = "bash",
+                 snapshot_provider=None):
         self.name = name
         self.description = (
             "Run a shell command in a sandboxed subprocess. "
@@ -271,6 +272,15 @@ class BashTool:
             "deletion, system changes — those need a different tool."
         )
         self._sandbox = sandbox
+        # Codex-parity shell snapshot: when provided (a callable → path
+        # or None), every command is prefixed with `. <snapshot>` so it
+        # starts from the user's rc environment (PATH from nvm/sdkman,
+        # aliases, functions, exports).
+        self._snapshot_provider = snapshot_provider
+
+    @property
+    def shell_mode(self) -> bool:
+        return bool(self._sandbox._shell)
 
     @property
     def parameters_schema(self) -> dict[str, Any]:
@@ -294,7 +304,14 @@ class BashTool:
         }
 
     def __call__(self, *, command: str, cwd: str | None = None, timeout_s: float | None = None) -> dict[str, Any]:
-        result = self._sandbox.run(command, cwd=cwd, timeout_s=timeout_s)
+        cmd = command
+        if self._snapshot_provider is not None and self.shell_mode:
+            try:
+                from .shell_snapshot import wrap_command
+                cmd = wrap_command(command, self._snapshot_provider())
+            except Exception:  # noqa: BLE001 — snapshot is best-effort
+                cmd = command
+        result = self._sandbox.run(cmd, cwd=cwd, timeout_s=timeout_s)
         return {
             "stdout": result.stdout,
             "stderr": result.stderr,

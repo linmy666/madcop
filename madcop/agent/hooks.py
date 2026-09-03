@@ -53,6 +53,7 @@ class HookEvent:
     PRE_TOOL_USE = "PreToolUse"   # before a tool executes
     POST_TOOL_USE = "PostToolUse" # after a tool returns
     PRE_COMPACT = "PreCompact"   # before context compaction
+    POST_COMPACT = "PostCompact" # after context compaction (checkpoint ready)
     STOP = "Stop"                # end of turn / agent
 
 
