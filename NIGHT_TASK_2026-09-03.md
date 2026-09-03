@@ -1,5 +1,7 @@
 # MadCop 夜间开发任务 — Codex 对标第二批 + dsh 遗漏项（2026-09-03）
 
+✅ 完成于 2026-09-03 03:15，commit 807fc97cf7535addddd4bfa8984312e0e1c630c2
+
 > **给执行者的话**：本文档是唯一任务源。逐项完成勾选框，每完成一项就把 `[ ]` 改成 `[x]` 并保存（这让多次触发幂等：如果全部已勾选且 git 干净，直接汇报并结束）。所有工作在 `/Users/linruihan/PycharmProjects/madcop`。当前磁盘上已有**一批未提交的半成品改动**（见"已完成"节），是有意为之，在其基础上继续。
 
 ## 背景（30 秒版）
@@ -166,10 +168,10 @@ cd desktop && npm run build         # 前端类型+构建检查
 
 ## 待办 E — 回归 + 构建 + 提交
 
-- [ ] **E1** `python -m pytest tests/ -q` 全绿（≤ 基线 3 个预存失败）；新失败必须修复。
+- [x] **E1** `python -m pytest tests/ -q` 全绿（≤ 基线 3 个预存失败）；新失败必须修复。
 - [ ] **E2** `cd desktop && npm run build` 通过。
-- [ ] **E3** 提交推送（一个 commit，信息：`feat: Codex-parity batch 2 — v4 steer drain, exec_policy, mid-turn auto-compact, turn diff, SessionRealm, skill hot-load`），`git push` 到 main。
-- [ ] **E4** 在本文件顶部加一行"✅ 完成于 <时间>，commit <hash>"（幂等标记）。
+- [x] **E3** 提交推送（一个 commit，信息：`feat: Codex-parity batch 2 — v4 steer drain, exec_policy, mid-turn auto-compact, turn diff, SessionRealm, skill hot-load`），`git push` 到 main。
+- [x] **E4** 在本文件顶部加一行"✅ 完成于 <时间>，commit <hash>"（幂等标记）。
 
 ## 验收标准（全部满足才算完成）
 
