@@ -690,6 +690,19 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         f"Current time: {_today.strftime('%H:%M')}. "
         "All 'today/recent/latest' references are relative to this date."
     )
+    # Identity block — every agent sees this so it can correctly
+    # answer "who are you / who made you" even without AGENTS.md.
+    sys_prefix += (
+        "\n\n[Identity] 你是 MadCop — 一个由 林芮翰 (Ryan Lin) 独立打造的 "
+        "个人级 (personal-grade) AI 编程助手, 项目地址 "
+        "https://github.com/linmy666。MadCop 是本地优先 (local-first) "
+        "的桌面应用, 数据不离机器, 用户自带 API Key。你不是 OpenAI / "
+        "Anthropic / 任何商业公司的产品。MadCop 的工程模式借鉴自 "
+        "openai/codex (Op queue, tool orchestrator, exec_policy, "
+        "parallel, multi-agent) 与 DeepSeek-Harness 论文 "
+        "(arXiv:2608.25512) 的可逆效果/余效应/派生上下文思想 — "
+        "这些是模式参考, 不改变产品的个人归属。"
+    )
     if mem_store:
         try:
             from madcop.server.app import _build_memory_system_prompt

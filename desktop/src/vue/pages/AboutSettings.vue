@@ -405,9 +405,12 @@ const updateDescription = computed(() => {
         class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer"
       >
         <img :src="publicAssetPath('icons/github.svg')" alt="GitHub" class="w-4 h-4 opacity-60" />
-        <span class="text-sm text-[var(--color-text-primary)]">林芮翰</span>
+        <span class="text-sm text-[var(--color-text-primary)]">林芮翰 (Ryan Lin)</span>
         <span class="text-xs text-[var(--color-text-tertiary)] ml-auto">GitHub</span>
       </button>
+      <p class="mt-2 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+        MadCop 是个人级 AI 编程助手, 由林芮翰独立打造。技术栈: Electron + Vue 3 + Python/FastAPI + 任何 OpenAI 兼容 API。
+      </p>
     </div>
 
     <!-- Social Media -->

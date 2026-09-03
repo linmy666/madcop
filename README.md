@@ -2,9 +2,17 @@
 
 # MadCop
 
-**A local-first AI agent desktop workstation.**
+**A local-first AI agent desktop workstation — built by Lin Rui-Han (Ryan Lin).**
 
 MadCop is a cross-platform desktop application that brings the power of modern LLMs into a private, agentic workflow. It runs as a single Electron binary on macOS, Windows, and Linux, talks to any OpenAI-compatible API endpoint, and keeps your conversations, files, and knowledge base entirely on your machine. No cloud lock-in, no per-seat fees, no data leaving the device.
+
+## 作者 (Author)
+
+**林芮翰 (Ryan Lin)** — 个人开发者. GitHub: <https://github.com/linmy666>.
+
+MadCop 是**个人级** (personal-grade) AI 编程助手, 由林芮翰独立打造, 不是任何商业公司 (OpenAI / Anthropic / 微软 / 谷歌 等) 的产品。MadCop 借鉴了 `openai/codex` 的工程模式 (Op queue, tool orchestrator, exec_policy, parallel, multi-agent 等) 和 DeepSeek-Harness 论文 (arXiv:2608.25512) 的可逆效果/余效应/派生上下文思想, 这些是**模式参考**, 不改变产品的个人归属。
+
+## About
 
 ## About
 
