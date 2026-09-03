@@ -1221,6 +1221,8 @@ function renderItemContent(item: RenderItem) {
       streamingChars: (msg as any).streamingChars,
       step: (msg as any).step,
       maxSteps: (msg as any).maxSteps,
+      guardian: (msg as any).guardian,
+      guardianReason: (msg as any).guardianReason,
     })
   }
   // v3.8.3 — tool_result messages are now absorbed by the
@@ -1419,8 +1421,13 @@ function renderItemContent(item: RenderItem) {
           :compact="compact"
         />
 
+        <!-- MemoryRecallBadge: hidden by product request. Recalls still
+             flow into the system prompt (5-layer retriever in chat_v4);
+             the timeline used to show a blue "Answering with N memories"
+             chip, but it was pure noise on every turn. Surface a chip
+             only when the user opens the dedicated Memory page. -->
         <MemoryRecallBadge
-          v-if="getActiveSessionMemoryRecalls().length > 0"
+          v-if="false"
           :memories="getActiveSessionMemoryRecalls()"
         />
 

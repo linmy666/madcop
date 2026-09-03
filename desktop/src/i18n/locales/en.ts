@@ -108,6 +108,7 @@ export const en = {
   'settings.nav.adapters': 'Adapters',
   'settings.nav.h5Access': 'H5 access',
   'settings.nav.terminal': 'Terminal',
+  'settings.nav.execPolicy': 'Exec Policy',
   'settings.nav.computerUse': 'Computer use',
   'settings.nav.activity': 'Activity',
   'settings.nav.trace': 'Traces',

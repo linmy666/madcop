@@ -1831,6 +1831,78 @@ async def skills_reload() -> dict[str, Any]:
     return reload_skills()
 
 
+class SkillInfo(BaseModel):
+    pass  # placeholder — response model not enforced
+
+
+@router.get("/api/v4/skills")
+async def skills_list() -> dict[str, Any]:
+    """List live skill tools from ~/.madcop/skills/*.py (cached scan)."""
+    from madcop.harness.skill_tools import SKILLS_DIR, load_skill_plugins
+    plugins = load_skill_plugins()
+    files = []
+    try:
+        files = sorted(f.name for f in SKILLS_DIR.glob("*.py")
+                       if not f.name.startswith("_"))
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "skills_dir": str(SKILLS_DIR),
+        "files": files,
+        "tools": [
+            {"name": p.name,
+             "description": (p.schema.get("function", {}) or {}).get("description", ""),
+             "danger": p.danger}
+            for p in plugins
+        ],
+    }
+
+
+@router.get("/api/v4/exec_policy")
+async def exec_policy_get() -> dict[str, Any]:
+    """Return the current exec_policy rules (the durable JSON file)."""
+    from madcop.harness.exec_policy import get_policy
+    pol = get_policy()
+    return {
+        "ok": True,
+        "source": pol.source,
+        "rules": pol.rules,
+        "doc": ("规则按顺序匹配（先命中先生效）。action: deny=拒绝 / "
+                "warn=放行但警告 / allow=放行。pattern 为不区分大小写的正则。"),
+    }
+
+
+class ExecPolicyBody(BaseModel):
+    rules: list[dict[str, Any]]
+
+
+@router.put("/api/v4/exec_policy")
+async def exec_policy_put(body: ExecPolicyBody) -> dict[str, Any]:
+    """Validate and persist exec_policy rules; hot-reload takes effect
+    immediately (next bash call re-checks mtime)."""
+    import re as _re
+    cleaned = []
+    for r in body.rules or []:
+        pat = str(r.get("pattern", "")).strip()
+        action = str(r.get("action", "warn")).lower().strip()
+        if action not in ("allow", "warn", "deny"):
+            raise HTTPException(422, f"非法 action: {action!r}（allow/warn/deny）")
+        try:
+            _re.compile(pat)
+        except _re.error as e:
+            raise HTTPException(422, f"非法正则 {pat!r}: {e}")
+        cleaned.append({"id": str(r.get("id") or f"rule-{len(cleaned) + 1}"),
+                        "pattern": pat, "action": action,
+                        "reason": str(r.get("reason", ""))})
+    from madcop.harness.exec_policy import POLICY_FILE, reset_policy_cache
+    POLICY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    POLICY_FILE.write_text(json.dumps(
+        {"rules": cleaned}, ensure_ascii=False, indent=2))
+    reset_policy_cache()
+    return {"ok": True, "rules": cleaned, "count": len(cleaned)}
+
+
 class CompactBody(BaseModel):
     """Manual compaction request (codex Op::Compact parity)."""
     conversation_id: str

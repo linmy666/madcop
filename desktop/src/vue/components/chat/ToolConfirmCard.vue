@@ -34,7 +34,26 @@ const detail = computed(() => {
 })
 
 /** File tools whose target path can carry a directory scope. */
-const FILE_TOOLS = new Set(['write_file', 'edit_file', 'write_xlsx', 'write_pptx'])
+const FILE_TOOLS = new Set(['write_file', 'edit_file', 'write_xlsx', 'write_pptx', 'apply_patch'])
+
+/** apply_patch: parse the patch body into colored diff lines so the
+ *  card previews what will change before approval (codex parity). */
+const patchLines = computed<{ op: string; text: string }[]>(() => {
+  if (props.toolName !== 'apply_patch') return []
+  const inp = props.input || {}
+  const patch = typeof inp.patch === 'string' ? inp.patch : ''
+  if (!patch.trim()) return []
+  const out: { op: string; text: string }[] = []
+  for (const raw of patch.replace(/\r\n/g, '\n').split('\n')) {
+    if (raw.startsWith('*** Begin Patch') || raw.startsWith('*** End Patch')) continue
+    if (raw.startsWith('*** ')) { out.push({ op: 'hdr', text: raw.slice(4) }); continue }
+    if (raw.startsWith('+')) out.push({ op: 'add', text: raw.slice(1) })
+    else if (raw.startsWith('-')) out.push({ op: 'del', text: raw.slice(1) })
+    else if (raw.startsWith('@@')) out.push({ op: 'anchor', text: raw })
+    else out.push({ op: 'ctx', text: raw.replace(/^ /, '') })
+  }
+  return out.slice(0, 60)
+})
 
 const targetDir = computed(() => {
   if (!FILE_TOOLS.has(props.toolName)) return ''
@@ -69,6 +88,11 @@ const sizeHint = computed(() => {
       <span v-if="sizeHint" class="tcc__size">{{ sizeHint }}</span>
     </div>
     <div v-if="detail" class="tcc__detail">{{ detail }}</div>
+    <pre v-if="patchLines.length" class="tcc__patch"><code
+      v-for="(ln, i) in patchLines"
+      :key="i"
+      :class="`tcc__patch-line tcc__patch-line--${ln.op}`"
+    >{{ ln.text }}</code></pre>
     <div class="tcc__actions">
       <button type="button" class="tcc__btn tcc__btn--deny" @click="emit('respond', false, 'once')">拒绝</button>
       <button
@@ -171,4 +195,24 @@ const sizeHint = computed(() => {
 .tcc__btn--approve:hover {
   opacity: 0.85;
 }
+
+.tcc__patch {
+  margin: 8px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, rgba(128,128,128,0.25));
+  border-radius: 6px;
+  background: var(--color-surface-container-low, #f4f4f4);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+.tcc__patch-line { display: block; }
+.tcc__patch-line--add { color: #16a34a; background: rgba(22,163,74,0.08); }
+.tcc__patch-line--del { color: var(--color-error, #dc2626); background: rgba(220,38,38,0.07); text-decoration: line-through; }
+.tcc__patch-line--hdr { color: var(--color-text-primary, #111); font-weight: 600; }
+.tcc__patch-line--anchor { color: var(--color-text-tertiary, #888); }
+.tcc__patch-line--ctx { color: var(--color-text-secondary, #555); }
 </style>

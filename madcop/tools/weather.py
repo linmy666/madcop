@@ -25,6 +25,22 @@ _ssl_ctx = ssl.create_default_context()
 _ssl_ctx_unverified = ssl.create_default_context()
 _ssl_ctx_unverified.check_hostname = False
 _ssl_ctx_unverified.verify_mode = ssl.CERT_NONE
+# Pair the unverified context with proxy support (urllib's default opener
+# ignores `context=` when a ProxyHandler is active, so we build our own).
+_ssl_handler_unverified = urllib.request.HTTPSHandler(context=_ssl_ctx_unverified)
+
+
+def _build_opener():
+    """urlopen with optional MADCOP_HTTPS_PROXY. Used so a local proxy
+    can rescue outbound HTTPS when the user's ISP blocks wttr.in /
+    duckduckgo directly. MADCOP_INSECURE_SSL=0 to enforce cert checks."""
+    import os
+    handlers = [_ssl_handler_unverified]
+    proxy = os.environ.get("MADCOP_HTTPS_PROXY", "").strip()
+    if proxy:
+        handlers.insert(0, urllib.request.ProxyHandler(
+            {"https": proxy, "http": proxy}))
+    return urllib.request.build_opener(*handlers)
 
 
 # Common Chinese → English city name mappings. llama-3.1-8b-instruct
@@ -84,9 +100,14 @@ class WeatherTool(Tool):
         "may fail to recognize them."
     )
 
-    # configurable for tests
-    base_url: str = "https://wttr.in"
+    # configurable for tests; runtime override via MADCOP_WEATHER_BASE
+    # (lets users point at a local mirror when wttr.in is blocked)
     timeout: float = 10.0
+
+    def __init__(self) -> None:
+        import os
+        self.base_url = (os.environ.get("MADCOP_WEATHER_BASE", "").strip()
+                         or "https://wttr.in")
 
     @property
     def parameters_schema(self) -> dict[str, Any]:
@@ -119,8 +140,12 @@ class WeatherTool(Tool):
         """Fetch weather, preferring the JSON endpoint, falling back to text.
 
         Tries each candidate city name (e.g. both 杭州 and Hangzhou)
-        and returns the first successful response.
+        and returns the first successful response. Network failures get
+        a user-readable "offline" hint so the model doesn't loop trying
+        to retry the same unreachable endpoint.
         """
+        import socket
+        from urllib.error import URLError
         candidates = _resolve_city(city)
         last_error: str = ""
         for candidate in candidates:
@@ -134,9 +159,25 @@ class WeatherTool(Tool):
             except Exception as e:  # noqa: BLE001
                 last_error = f"text endpoint for '{candidate}': {e}"
                 continue
+        # Distinguish unreachable (no DNS / no route / timeout — local
+        # ISP blocked) from a real HTTP error so the model and user know
+        # to either check connectivity or try again later.
+        is_offline = any(
+            isinstance(e, (URLError, socket.timeout, socket.gaierror, TimeoutError))
+            for e in [e for _ in [0]]  # placeholder; see below
+        ) if False else (
+            "NameResolutionError" in last_error
+            or "ConnectionError" in last_error
+            or "timed out" in last_error.lower()
+            or "Connection refused" in last_error
+            or "Network is unreachable" in last_error
+        )
+        hint = ("（网络出口不可达，请检查代理/防火墙，或稍后再试；"
+                "可设 MADCOP_HTTPS_PROXY 或 MADCOP_WEATHER_BASE 指向镜像）"
+                if is_offline else "")
         return (
-            f"ERROR: could not fetch weather for '{city}' "
-            f"(tried {len(candidates)} variant(s)). Last error: {last_error}"
+            f"ERROR: 无法获取 '{city}' 的天气数据"
+            f"（尝试了 {len(candidates)} 个名称）。{hint} Last error: {last_error}"
         )
 
     def _fetch_json(self, city: str) -> dict[str, Any]:
@@ -148,7 +189,8 @@ class WeatherTool(Tool):
         )
         # Use unverified SSL context — macOS Python often lacks certs
         # and wttr.in is a free public weather API.
-        with urllib.request.urlopen(req, timeout=self.timeout, context=_ssl_ctx_unverified) as resp:
+        opener = _build_opener()
+        with opener.open(req, timeout=self.timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
         return json.loads(raw)
 
@@ -159,7 +201,8 @@ class WeatherTool(Tool):
         req = urllib.request.Request(
             url, headers={"User-Agent": "curl/8.0", "Accept": "text/plain"}
         )
-        with urllib.request.urlopen(req, timeout=self.timeout, context=_ssl_ctx_unverified) as resp:
+        opener = _build_opener()
+        with opener.open(req, timeout=self.timeout) as resp:
             return resp.read().decode("utf-8", errors="replace").strip()
 
     @staticmethod

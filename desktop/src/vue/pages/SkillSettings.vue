@@ -5,6 +5,7 @@ import { useTranslation } from '../i18n'
 import { useUIStore } from '../stores/uiStore'
 import SkillList from './SkillList.vue'
 import SkillDetail from './SkillDetail.vue'
+import SkillToolsPanel from '../components/settings/SkillToolsPanel.vue'
 
 const skillStore = useSkillStore()
 const uiStore = useUIStore()
@@ -139,6 +140,7 @@ async function runDistill() {
       </div>
 
       <SkillList />
+      <SkillToolsPanel />
     </template>
   </div>
 </template>

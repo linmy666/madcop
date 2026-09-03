@@ -18,6 +18,7 @@ import {
 } from '../stores/tabs'
 import { useSessionStore } from '../stores/sessionStore'
 import { useChatStore } from '../stores/chatStore'
+import { useUIStore } from '../stores/uiStore'
 import { useCLITaskStore } from '../stores/cliTaskStore'
 import { useTeamStore } from '../stores/teamStore'
 import { useWorkspacePanelStore } from '../stores/workspacePanelStore'
@@ -141,6 +142,25 @@ const pendingComputerUsePermission = computed(() => sessionState.value?.pendingC
 const trackedTaskSessionId = computed(() => cliTaskStore.sessionId)
 const hasIncompleteTasks = computed(() => cliTaskStore.tasks.some((task: any) => task.status !== 'completed'))
 const hasRunningTasks = computed(() => cliTaskStore.tasks.some((task: any) => task.status === 'in_progress'))
+
+// ── Context budget pill + manual compaction (codex parity) ────────────────
+const CONTEXT_WINDOW_TOKENS = 128000
+const lastUsage = computed(() => (sessionState.value as any)?.lastUsage as
+  | { prompt_tokens: number; completion_tokens?: number; at?: number }
+  | undefined)
+const lastPromptTokens = computed(() => lastUsage.value?.prompt_tokens ?? 0)
+const contextUsagePct = computed(() => {
+  if (!lastUsage.value?.prompt_tokens) return null
+  return Math.min(100, Math.round((lastPromptTokens.value / CONTEXT_WINDOW_TOKENS) * 100))
+})
+const uiStoreCompact = useUIStore()
+async function compactContext() {
+  const ok = await chatStore.compactSession(activeTabId)
+  uiStoreCompact.addToast({
+    type: ok ? 'success' : 'error',
+    message: ok ? '已请求压缩上下文' : '压缩失败，请查看时间线',
+  })
+}
 const chatState = computed(() => sessionState.value?.chatState ?? 'idle')
 const tokenUsage = computed(() => sessionState.value?.tokenUsage ?? { input_tokens: 0, output_tokens: 0 })
 // Bumps whenever the AI writes to the preview dir — drives PreviewPanel refresh.
@@ -832,6 +852,35 @@ function openTerminalInTab() {
                     <span class="material-symbols-outlined text-[18px] leading-none">
                       {{ workbenchOpen ? 'right_panel_close' : 'right_panel_open' }}
                     </span>
+                  </button>
+                  <!-- Context-budget pill (codex parity): how full the
+                       model's context window is, from the last run's
+                       provider usage. Amber near the limit. -->
+                  <span
+                    v-if="contextUsagePct !== null"
+                    :title="`上下文窗口已用约 ${contextUsagePct}%（prompt ${lastPromptTokens.toLocaleString()} / 128k tokens）`"
+                    :class="[
+                      'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+                      contextUsagePct >= 90
+                        ? 'bg-[var(--color-error)]/10 text-[var(--color-error)]'
+                        : contextUsagePct >= 75
+                          ? 'bg-[#b45309]/10 text-[#b45309]'
+                          : 'bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'
+                    ]"
+                  >
+                    <span class="material-symbols-outlined text-[13px] leading-none">data_usage</span>
+                    上下文 {{ contextUsagePct }}%
+                  </span>
+                  <!-- Manual context compaction (codex Op::Compact) -->
+                  <button
+                    v-if="!isEmpty"
+                    type="button"
+                    title="压缩上下文：把早期对话固化为检查点，释放窗口空间"
+                    aria-label="压缩上下文"
+                    class="flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]"
+                    @click.stop="compactContext"
+                  >
+                    <span class="material-symbols-outlined text-[18px] leading-none">compress</span>
                   </button>
                   <!-- ... overflow menu (replaces tab-strip right-click affordance) -->
                   <button

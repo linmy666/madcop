@@ -1151,6 +1151,9 @@ class ReActEngineV4(AgentEngine):
                             _gd = None
                         if _gd is not None and _gd.decision == "allow":
                             _obs, _ierr, _meta = _exec_one(_c["name"], _a, True)
+                            _meta = dict(_meta or {})
+                            _meta["guardian"] = "allow"
+                            _meta["guardian_reason"] = _gd.reason
                             yield AgentStep(
                                 kind=StepKind.TOOL_END,
                                 tool_name=_c["name"], tool_use_id=_c["use_id"],

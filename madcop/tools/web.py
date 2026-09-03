@@ -41,6 +41,9 @@ _USER_AGENT = "madcop/1.6 (+https://github.com/linmy666/madcop)"
 import ssl as _ssl
 _ssl_ctx = _ssl.create_default_context()
 _ssl_ctx_fallback = _ssl.create_default_context()
+# Pair the unverified context with ProxyHandler (urllib's default opener
+# ignores `context=` when a ProxyHandler is active).
+_ssl_handler_fallback = urllib.request.HTTPSHandler(context=_ssl_ctx_fallback)
 _ssl_ctx_fallback.check_hostname = False
 _ssl_ctx_fallback.verify_mode = _ssl.CERT_NONE
 
@@ -101,7 +104,15 @@ def _http_get(url: str, timeout: int = _DEFAULT_TIMEOUT) -> bytes:
         headers={"User-Agent": _USER_AGENT},
     )
     # Use unverified SSL context — macOS Python often lacks certs.
-    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx_fallback) as resp:
+    # MADCOP_HTTPS_PROXY lets users route through a local proxy when
+    # their ISP blocks outbound HTTPS to duckduckgo / wttr.in / etc.
+    handlers = [_ssl_handler_fallback]
+    proxy = os.environ.get("MADCOP_HTTPS_PROXY", "").strip()
+    if proxy:
+        handlers.insert(0, urllib.request.ProxyHandler(
+            {"https": proxy, "http": proxy}))
+    opener = urllib.request.build_opener(*handlers)
+    with opener.open(req, timeout=timeout) as resp:
         return resp.read(_MAX_CONTENT_BYTES)
 
 

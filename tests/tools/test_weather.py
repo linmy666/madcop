@@ -149,7 +149,8 @@ def test_fetch_json_calls_urlopen():
     mock_resp.__enter__ = MagicMock(return_value=mock_resp)
     mock_resp.__exit__ = MagicMock(return_value=False)
 
-    with patch("madcop.tools.weather.urllib.request.urlopen", return_value=mock_resp):
+    with patch("madcop.tools.weather._build_opener") as mo:
+        mo.return_value.open.return_value.__enter__.return_value = mock_resp
         data = t._fetch_json("Shanghai")
 
     assert data["current_condition"][0]["temp_C"] == "22"
@@ -164,7 +165,8 @@ def test_fetch_text_calls_urlopen():
     mock_resp.__enter__ = MagicMock(return_value=mock_resp)
     mock_resp.__exit__ = MagicMock(return_value=False)
 
-    with patch("madcop.tools.weather.urllib.request.urlopen", return_value=mock_resp):
+    with patch("madcop.tools.weather._build_opener") as mo:
+        mo.return_value.open.return_value.__enter__.return_value = mock_resp
         text = t._fetch_text("Shanghai")
 
     assert text == "Shanghai: +22C"
@@ -173,6 +175,7 @@ def test_fetch_text_calls_urlopen():
 def test_fetch_json_timeout():
     import socket
     t = WeatherTool()
-    with patch("madcop.tools.weather.urllib.request.urlopen", side_effect=socket.timeout("timed out")):
+    with patch("madcop.tools.weather._build_opener") as mo:
+        mo.return_value.open.side_effect = socket.timeout("timed out")
         with pytest.raises(Exception):
             t._fetch_json("Shanghai")

@@ -1148,6 +1148,17 @@ export const useChatStore = defineStore('chat', {
                     _flushTerminal()
                   } else if (event.type === 'done') {
                     session.chatState = 'idle'
+                    // Context-budget pill: keep the run's provider usage
+                    // (prompt vs window) so the header can show how full
+                    // the context is. Codex-parity with get_context_remaining.
+                    const _du = (event as any).metadata?.usage
+                    if (_du && typeof _du.prompt_tokens === 'number') {
+                      ;(session as any).lastUsage = {
+                        prompt_tokens: Number(_du.prompt_tokens) || 0,
+                        completion_tokens: Number(_du.completion_tokens) || 0,
+                        at: Date.now(),
+                      }
+                    }
                     // P1-7/feature-clear — clear the live-streaming buffer
                     // so the floating <AssistantMessage> bubble (v-if'd on
                     // `streamingText.trim()`) disappears and the cursor stops
@@ -1608,6 +1619,13 @@ export const useChatStore = defineStore('chat', {
                       if (typeof (event as any).is_error === 'boolean') {
                         ;(prev as any).isError = (event as any).is_error
                       }
+                      // Guardian (codex parity): shield badge on the row —
+                      // allow = auto-approved without a HITL card, deny =
+                      // refused with the anti-workaround note.
+                      if (_meta.guardian) {
+                        ;(prev as any).guardian = String(_meta.guardian)
+                        ;(prev as any).guardianReason = String(_meta.guardian_reason || '')
+                      }
                     } else {
                       // Orphan result (no matching pending tool_use)
                       session.messages.push({
@@ -1876,6 +1894,34 @@ export const useChatStore = defineStore('chat', {
           }),
         })
       } catch { /* network error — backend timeout rejects safely */ }
+    },
+
+    /** Manual context compaction (codex Op::Compact). POSTs to the
+     *  /api/v4/compact endpoint and appends a system note with the
+     *  checkpoint result so the user sees the session got lighter. */
+    async compactSession(sessionId: string): Promise<boolean> {
+      if (!sessionId) return false
+      const session = this.getSession(sessionId)
+      try {
+        const res = await fetch(getApiUrl('/api/v4/compact'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation_id: sessionId }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+        const id = nextId()
+        const note = data.compacted
+          ? `上下文已压缩（${data.messages_before} → ${data.messages_after} 条），早期内容已固化为检查点`
+          : `上下文无需压缩（${data.reason || '当前体量健康'}）`
+        session.messages.push({ type: 'system', content: note, id, transcriptMessageId: id, timestamp: Date.now() } as any)
+        this._persistSession(sessionId)
+        return true
+      } catch (e: any) {
+        const id = nextId()
+        session.messages.push({ type: 'system', content: `压缩失败：${e?.message || e}`, id, transcriptMessageId: id, timestamp: Date.now() } as any)
+        return false
+      }
     },
 
     /**

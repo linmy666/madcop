@@ -28,6 +28,10 @@ interface Props {
   /** Sibling position within a same-step parallel batch. */
   parallelIndex?: number
   parallelCount?: number
+  /** Guardian (codex parity): 'allow' = auto-approved by the LLM
+   *  reviewer without a HITL card; 'deny' = refused with a reason. */
+  guardian?: 'allow' | 'deny' | string
+  guardianReason?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -244,6 +248,19 @@ const errorText = computed(() => {
       </span>
       <span v-if="resultSummary" class="run-item__meta">{{ resultSummary }}</span>
       <span v-if="durationLabel" class="run-item__meta">· {{ durationLabel }}</span>
+      <span
+        v-if="guardian"
+        :title="guardian === 'allow'
+          ? `Guardian 预审通过，自动放行（${guardianReason || '低风险'}）`
+          : `Guardian 拒绝：${guardianReason || '高风险命令'}`"
+        :class="[
+          'run-item__guardian',
+          guardian === 'allow' ? 'run-item__guardian--allow' : 'run-item__guardian--deny'
+        ]"
+      >
+        <span class="material-symbols-outlined" style="font-size: 12px; line-height: 1">shield</span>
+        {{ guardian === 'allow' ? 'Guardian 放行' : 'Guardian 拒绝' }}
+      </span>
       <span v-if="elapsedLabel" class="run-item__meta run-item__elapsed">{{ elapsedLabel }}</span>
       <svg class="run-item__chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
         <polyline v-if="!expanded" points="6 9 12 15 18 9" />
@@ -299,6 +316,26 @@ const errorText = computed(() => {
 .run-item--pending .run-item__verb,
 .run-item--pending .run-item__meta {
   color: var(--color-text-tertiary, rgba(128,128,128,0.8));
+}
+
+.run-item__guardian {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.run-item__guardian--allow {
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-container);
+}
+.run-item__guardian--deny {
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
 }
 .run-item--failed {
   border-color: var(--color-error, #d44a4a);
