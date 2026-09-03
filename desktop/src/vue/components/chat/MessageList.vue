@@ -1186,6 +1186,14 @@ function renderItemContent(item: RenderItem) {
     return bubble
   }
   if (assistantishType) {
+    // Suppress messages whose only content is raw LLM-emitted clarify
+    // JSON ("[{"clarify":true,"question":"...","options":[]}]"). The
+    // ClarificationPanel + the dedicated clarify message type already
+    // render the question; showing the raw JSON in the timeline too is
+    // just noise (was the bug behind the "lots of clarify code in the
+    // timeline" report).
+    const _raw = String(msg.content || '').trim()
+    if (/\[\{"clarify":\s*true/.test(_raw)) return null;
     const branchTarget = branchableMessageTargets.value.get(msg.id)
     const canBranch = Boolean(branchTarget) && !branchActionsDisabled.value
     return h(AssistantMessage, {
@@ -1334,6 +1342,28 @@ function renderItemContent(item: RenderItem) {
   if (msg.type === 'system') {
     return h('div', { class: 'mb-3 text-center text-xs text-[var(--color-text-tertiary)]' }, msg.content || '')
   }
+  if (msg.type === 'clarify') {
+    // Anchored mirror of ClarificationPanel: panel drives the interaction,
+    // we keep one timeline card so the conversation flow is readable.
+    const opts = (((msg as any).options) || []) as string[]
+    const q = ((msg as any).question || msg.content || '') as string
+    return h('div', {
+      class: 'mb-3 rounded-xl border border-[var(--color-brand)]/30 bg-[var(--color-surface-container-low)] px-4 py-3',
+      'data-testid': 'clarify-message',
+    }, [
+      h('div', { class: 'flex items-center gap-2 text-[12px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide' }, [
+        h('span', { class: 'material-symbols-outlined text-[16px] text-[var(--color-brand)]' }, 'help'),
+        h('span', null, t('chat.clarifyHeading', '需要你确认')),
+      ]),
+      h('div', { class: 'mt-1.5 text-[13px] text-[var(--color-text-primary)]' }, q),
+      opts.length
+        ? h('div', { class: 'mt-2 flex flex-wrap gap-1.5' },
+            opts.map((o: string) => h('span', {
+              class: 'rounded-full bg-[var(--color-surface-container)] px-2.5 py-0.5 text-[12px] text-[var(--color-text-secondary)]',
+            }, o)))
+        : null,
+    ])
+  }
 
   return h('div', { class: 'mb-2 text-xs text-[var(--color-text-tertiary)]' }, `[Unknown: ${msg.type}]`)
 }
@@ -1369,10 +1399,11 @@ function renderItemContent(item: RenderItem) {
       <!-- Messages list (turn elapsed header lives INSIDE so it can
            never float alone in an empty transcript) -->
       <div v-else ref="scrollContentRef" class="mx-auto max-w-[860px] space-y-3">
-        <div v-if="turnElapsedLabel" class="turn-status" :class="{ 'turn-status--running': turnIsRunning }" data-testid="turn-header">
-          <span class="turn-status__dot" aria-hidden="true"></span>
-          <span>{{ turnElapsedLabel }}</span>
-        </div>
+        <!-- Turn-status pill removed by product request — the "工作中 N
+             秒 / 已完成 · 用时 N 秒" header added nothing beyond the
+             RunItem cards already showing per-tool step chips, and the
+             "处理中" dot echoed every other state signal. -->
+        <div v-if="false" class="turn-status hidden" aria-hidden="true"></div>
         <template
           v-for="(renderedItem, index) in virtualTranscriptWindow.items"
           :key="itemKeys[renderedItem.index]"

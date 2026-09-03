@@ -1540,21 +1540,48 @@ export const useChatStore = defineStore('chat', {
                     const q = event.question || _t('chat.needMoreInfo', '需要你补充信息')
                     const opts = Array.isArray(event.options) ? event.options : []
                     session.clarificationPending = { question: q, options: opts }
-                    // Ensure a visible assistant message even if no text event follows
+                    // Drop any assistant_text accumulated so far (the LLM
+                    // usually repeats the question + options as a markdown
+                    // list right before ask_user fires — that duplicated
+                    // the ClarificationPanel's cleaner chip UI). Replace
+                    // the last assistant_text with a short anchor that
+                    // points at the chip card below.
                     if (!assistantPushed) {
-                      const clarifyBody = opts.length
-                        ? `${q}\n\n${opts.map((o: string) => `- ${o}`).join('\n')}`
-                        : q
-                      assistantMsg = clarifyBody
+                      assistantMsg = `__CLARIFY_ANCHOR__${q}`
                       assistantMsgObj = {
-                        type: 'assistant_text',
-                        content: clarifyBody,
+                        type: 'clarify',
+                        toolName: 'ask_user',
+                        toolUseId: `clarify-${Date.now()}`,
+                        question: q,
+                        options: opts,
+                        content: `已向你确认：${q}`,
                         id: nextId(),
                         timestamp: Date.now(),
                         isStreaming: false,
                       } as any
                       session.messages.push(assistantMsgObj)
                       assistantPushed = true
+                    }
+                    // Also fold any preceding assistant_text from this
+                    // stream into the anchor so the timeline doesn't
+                    // show "你想查哪个城市的天气？ - 北京 - 上海 ..." in
+                    // raw markdown form.
+                    const _clarifyIdx = session.messages.findIndex(
+                      (m: any) => m === assistantMsgObj,
+                    )
+                    if (_clarifyIdx > 0) {
+                      for (let _i = _clarifyIdx - 1; _i >= 0; _i--) {
+                        const _prev: any = session.messages[_i]
+                        if (_prev?.type === 'assistant_text' && _prev?.isStreaming === false) {
+                          session.messages.splice(_i, 1)
+                          break
+                        }
+                        if (_prev?.type === 'assistant_text' && _prev?.isStreaming === true) {
+                          _prev.content = `已向你确认：${q}`
+                          _prev.isStreaming = false
+                          break
+                        }
+                      }
                     }
                   } else if (event.type === 'tool_progress') {
                     // Long-task liveness: the model is still STREAMING

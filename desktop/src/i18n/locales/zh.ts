@@ -8,6 +8,7 @@ export const zh: Record<TranslationKey, string> = {
   'settings.mcp.importGuideExample': '示例：npx -y @modelcontextprotocol/server-filesystem /tmp',
   'settings.mcp.importJsonToggle': '从 JSON 导入（Claude Desktop / Cursor）',
   'chat.stepProgress': '步骤',
+  'chat.clarifyHeading': '需要你确认',
   'common.close': '关闭',
   'workspace.title': '工作区',
   'workspace.pickDir': '选择工作区目录',

@@ -6,6 +6,7 @@ export const en = {
   'settings.mcp.importGuideExample': 'Example: npx -y @modelcontextprotocol/server-filesystem /tmp',
   'settings.mcp.importJsonToggle': 'Import from JSON (Claude Desktop / Cursor)',
   'chat.stepProgress': 'Step',
+  'chat.clarifyHeading': 'Need your confirmation',
   'common.close': 'Close',
   'workspace.title': 'Workspace',
   'workspace.pickDir': 'Choose workspace folder',
