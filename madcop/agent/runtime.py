@@ -313,6 +313,10 @@ class RunContext:
     # through it. None = legacy per-piece behavior (tests, old paths).
     realm: Any = None
 
+    # Guardian (codex parity): optional LLM command reviewer consulted
+    # in Phase C before a HITL card is popped. None = HITL-only.
+    guardian: Any = None
+
     # ── Derived child contexts (paper §3.2.3 derived realization) ─────────
     def derive(
         self,

@@ -1006,6 +1006,17 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             _PENDING_SCOPE.pop(tool_use_id, None)
 
     ctx.confirm_handler = confirm_handler
+    # Guardian (codex full mechanism set): LLM pre-review stands in
+    # front of the HITL card for bash commands — allow skips the card,
+    # deny refuses with an anti-workaround note, escalate (or any
+    # failure/timeout/disabled) falls back to the human card.
+    try:
+        from madcop.harness.guardian import GuardianReviewer
+        ctx.guardian = GuardianReviewer(client_getter=_get_client,
+                                        model=model)
+    except Exception as _g_err:
+        logger.debug("guardian init failed (HITL-only): %s", _g_err)
+        ctx.guardian = None
     # Qoder-style scoped approvals: the engine consults this before
     # rendering a confirm card (see react_v4 Phase C).
     ctx.session_scope_approved = _session_scope_approved(session_id)

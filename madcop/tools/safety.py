@@ -71,6 +71,7 @@ DANGER_LEVELS: dict[str, str] = {
     "write_xlsx": "mutating",
     "write_pptx": "mutating",
     "edit_file": "mutating",
+    "apply_patch": "mutating",
     "read_file": "safe",
     "remember": "mutating",
     # Trading tools (paper account) — placing/resetting simulated trades.
@@ -143,6 +144,10 @@ class EditFileInput(BaseModel):
         return v
 
 
+class ApplyPatchInput(BaseModel):
+    patch: str = Field(..., min_length=1, max_length=MAX_CONTENT_CHARS * 4)
+
+
 class ReadFileInput(BaseModel):
     path: str = Field(..., min_length=1, max_length=MAX_FILE_PATH_CHARS)
 
@@ -191,6 +196,7 @@ TOOL_SCHEMAS: dict[str, tuple[type, list[str]]] = {
     "write_file":  (WriteFileInput, ["path", "content", "encoding"]),
     "write_xlsx":  (WriteXlsxInput, ["path", "sheets"]),
     "edit_file":   (EditFileInput,  ["path", "old_string", "new_string"]),
+    "apply_patch": (ApplyPatchInput, ["patch"]),
     "read_file":   (ReadFileInput,  ["path"]),
     "bash":        (BashInput,      ["command"]),
     "web_search":  (WebSearchInput, ["query"]),

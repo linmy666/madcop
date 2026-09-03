@@ -213,12 +213,42 @@ def capture_file_inverse(
     (network, subprocesses) have no faithful inverse — the paper allows
     unwitnessed effects; the store simply reports them as skipped on
     revert so callers can surface partial success honestly.
+
+    apply_patch may touch many files: one inverse per patch path,
+    registered under the SAME effect key so a step revert unwinds all
+    of them newest-first.
     """
     from madcop.tools.safety import danger_level
 
     if tool_name == "bash" or tool_name == "run_command":
         STORE.mark_irreversible(effect_key, label or tool_name)
         return {"key": effect_key, "reversible": False}
+    if tool_name == "apply_patch":
+        try:
+            from madcop.tools.apply_patch import parse_patch
+            ops = parse_patch(str(args.get("patch") or ""))
+        except Exception:  # noqa: BLE001 — bad patch fails in the tool itself
+            return {"key": effect_key, "reversible": False, "noop": True}
+        seen: set[str] = set()
+        for op in ops:
+            for path_str in (op.get("path"), op.get("move_to")):
+                if not path_str or path_str in seen:
+                    continue
+                seen.add(path_str)
+                try:
+                    p = Path(path_str).expanduser()
+                    inverse = make_file_restore_inverse(str(p))
+                except Exception:  # noqa: BLE001
+                    inverse = None
+                if inverse is None:
+                    STORE.mark_irreversible(
+                        effect_key, label or f"apply_patch:{path_str}")
+                else:
+                    STORE.register(
+                        effect_key, f"apply_patch:{p.name}", inverse,
+                        temp_path=getattr(inverse, "snapshot_tmp", None))
+        return {"key": effect_key, "reversible": True,
+                "files": len(seen)}
     if tool_name not in MUTATING_FILE_TOOLS:
         return {"key": effect_key, "reversible": False, "noop": True}
     raw_path = str(args.get("path") or args.get("file_path") or "")

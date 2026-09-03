@@ -443,6 +443,7 @@ def build_default_registry(
         ReadFileTool, WriteFileTool, EditFileTool, WriteXlsxTool,
         WritePptxTool, ReadOfficeTool,
     )
+    from madcop.tools.apply_patch import ApplyPatchTool
     from madcop.tools.market import MarketQuoteTool, MarketHistoryTool
     from madcop.tools.paper import PaperAccountTool, PaperOrderTool, PaperResetTool
     import os
@@ -508,6 +509,7 @@ def build_default_registry(
     _reg(ReadFileTool, allowed_dirs=_read_dirs)
     _reg(WriteFileTool, allowed_dirs=_write_dirs)
     _reg(EditFileTool, allowed_dirs=_write_dirs)
+    _reg(ApplyPatchTool, allowed_dirs=_write_dirs)
     _reg(WriteXlsxTool, allowed_dirs=_write_dirs)
     _reg(WritePptxTool, allowed_dirs=_write_dirs)
     _reg(ReadOfficeTool, allowed_dirs=_read_dirs)

@@ -173,6 +173,24 @@ class SafetyHook:
                     "~/.madcop/exec_policy.json 调整该规则。"
                 ),
             )
+        # Second safety net below the regex policy (codex command_safety
+        # parity): tokenize + unwrap wrappers (sudo/env/xargs/... up to
+        # 8 layers) and classify. Catches `sudo rm -rf /` shaped
+        # bypasses that regex rules miss.
+        from madcop.harness.command_safety import dangerous_command_match
+        match = dangerous_command_match(cmd)
+        if match is not None:
+            label = ("rm 带强制删除标志" if match.value == "forced_rm"
+                     else "高危命令")
+            return HookResult(
+                continue_=False,
+                error=(
+                    f"[safety] 拒绝执行：检测到{label}（token 级检测）。"
+                    f"命令={cmd[:120]!r}。"
+                    "如是误报，请换用更精确的命令或在 "
+                    "~/.madcop/exec_policy.json 说明。"
+                ),
+            )
         if decision.action == "warn":
             return HookResult(
                 extra_observation=(

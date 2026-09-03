@@ -1134,6 +1134,47 @@ class ReActEngineV4(AgentEngine):
                     except Exception:
                         _pre_ok = False
                 if not _pre_ok:
+                    # Guardian (codex full mechanism set): a fast LLM
+                    # review stands in front of the human card. allow →
+                    # run silently; deny → refuse with the anti-workaround
+                    # note (the model must not route around the refusal);
+                    # escalate / disabled / any failure → HITL card as
+                    # before. Only shell-class tools consult it — file
+                    # writes keep their dir-scope/card semantics.
+                    if getattr(ctx, "guardian", None) and (
+                        (_c["name"] or "").lower() in ("bash", "run_command")
+                    ):
+                        try:
+                            _g_cmd = str(_a.get("command") or _a.get("cmd") or "")
+                            _gd = ctx.guardian.review(_g_cmd)
+                        except Exception:
+                            _gd = None
+                        if _gd is not None and _gd.decision == "allow":
+                            _obs, _ierr, _meta = _exec_one(_c["name"], _a, True)
+                            yield AgentStep(
+                                kind=StepKind.TOOL_END,
+                                tool_name=_c["name"], tool_use_id=_c["use_id"],
+                                tool_result=(_obs or "")[:2000],
+                                is_error=_ierr, metadata=_meta,
+                            )
+                            _results.append((_c, _obs, _ierr, _meta))
+                            continue
+                        if _gd is not None and _gd.decision == "deny":
+                            from madcop.harness.guardian import (
+                                anti_workaround_observation as _awo,
+                            )
+                            _deny_note = _awo(_gd)
+                            yield AgentStep(
+                                kind=StepKind.TOOL_END,
+                                tool_name=_c["name"], tool_use_id=_c["use_id"],
+                                tool_result=_deny_note, is_error=True,
+                                metadata={"guardian": "deny",
+                                          "guardian_reason": _gd.reason},
+                            )
+                            _results.append((_c, _deny_note, True,
+                                             {"guardian": "deny"}))
+                            continue
+                        # escalate / None → fall through to the card
                     yield AgentStep(
                         kind=StepKind.TOOL_CONFIRM_REQUEST,
                         tool_name=_c["name"], tool_input=_a,

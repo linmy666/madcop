@@ -567,35 +567,42 @@ def _norm_line(s: str) -> str:
     return s.strip().translate(_PUNCT_MAP)
 
 
-def _seek_sequence(lines: list[str], pattern: list[str]) -> tuple[int | None, str]:
+def _seek_sequence(lines: list[str], pattern: list[str],
+                   start: int = 0, eof: bool = False) -> tuple[int | None, str]:
     """Find `pattern` (a line sequence) in `lines` with decreasing
     strictness. Returns (start_index, tier) or (None, "").
 
     Tiers, mirroring codex-rs/apply-patch/src/seek_sequence.rs:
       exact → rstrip (ignore trailing whitespace) → trim (both sides)
-      → Unicode-punctuation-normalised trim. Empty pattern matches at 0.
+      → Unicode-punctuation-normalised trim. Empty pattern matches at
+      `start`. ``eof`` (patch *** End of File anchors) searches from
+      the end first so end-of-file hunks land at the tail.
     """
     if not pattern:
-        return 0, "exact"
+        return start if start <= len(lines) else len(lines), "exact"
     if len(pattern) > len(lines):
         return None, ""
     n = len(lines) - len(pattern)
+    search_start = max(start, n) if eof else min(start, n)
 
-    for i in range(n + 1):
+    for i in range(search_start, n + 1):
         if lines[i:i + len(pattern)] == pattern:
             return i, "exact"
-    for i in range(n + 1):
+    for i in range(search_start, n + 1):
         if all(lines[i + j].rstrip() == pattern[j].rstrip()
                for j in range(len(pattern))):
             return i, "rstrip"
-    for i in range(n + 1):
+    for i in range(search_start, n + 1):
         if all(lines[i + j].strip() == pattern[j].strip()
                for j in range(len(pattern))):
             return i, "trim"
-    for i in range(n + 1):
+    for i in range(search_start, n + 1):
         if all(_norm_line(lines[i + j]) == _norm_line(pattern[j])
                for j in range(len(pattern))):
             return i, "unicode"
+    if eof and search_start != 0:
+        # Fall back to a forward search from `start` (codex behaviour).
+        return _seek_sequence(lines, pattern, start, eof=False)
     return None, ""
 
 
