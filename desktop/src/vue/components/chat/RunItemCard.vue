@@ -87,14 +87,14 @@ const streamingLabel = computed(() => {
   return ''
 })
 
+// Step chip removed by product request: "Step 1/40" leaked the ENGINE's
+// step budget into the UI. Users read it as a 40-step plan for a
+// one-tool query. The parallel-call sibling suffix (2/3) is kept —
+// that part IS real user-visible information.
 const stepLabel = computed(() => {
-  if (props.step == null) return ''
-  const base = props.maxSteps ? `Step ${props.step}/${props.maxSteps}` : `Step ${props.step}`
-  // Parallel calls in the same step share the step number - suffix
-  // the sibling position so two cards don't read as duplicates.
   const par = props.parallelIndex && props.parallelCount && props.parallelCount > 1
     ? ` · ${props.parallelIndex}/${props.parallelCount}` : ''
-  return base + par
+  return par
 })
 
 interface ToolMeta { verb: string; icon: string; labelKey?: string }
