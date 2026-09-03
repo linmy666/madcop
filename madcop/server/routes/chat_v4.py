@@ -1554,6 +1554,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                                 logger.warning("overflow compaction failed: %s", _oe)
                         break  # normal exit of the retry loop
                 except Exception as e:
+                    logger.error("worker engine error: %s", e, exc_info=True)
                     q.put(AgentStep(kind=StepKind.ERROR, content=str(e)))
                 finally:
                     # v4-1/2/3 — persist messages + generate title + complete
@@ -1785,7 +1786,7 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                     logger.debug("brain_auto skipped: %s", _e)
 
         except Exception as e:
-            logger.error("chat_v4 stream error: %s", e)
+            logger.error("chat_v4 stream error: %s", e, exc_info=True)
             yield emitter.error(str(e))
         finally:
             # Signal the worker to stop and wait briefly so tool
