@@ -1187,17 +1187,24 @@ function renderItemContent(item: RenderItem) {
   }
   if (assistantishType) {
     // Suppress messages whose only content is raw LLM-emitted clarify
-    // JSON ("[{"clarify":true,"question":"...","options":[]}]"). The
-    // ClarificationPanel + the dedicated clarify message type already
-    // render the question; showing the raw JSON in the timeline too is
-    // just noise (was the bug behind the "lots of clarify code in the
-    // timeline" report).
-    const _raw = String(msg.content || '').trim()
-    if (/\[\{"clarify":\s*true/.test(_raw)) return null;
+    // JSON ("{"clarify":true,"question":"...","options":[]}" — with or
+    // without the wrapping array). The ClarificationPanel + the
+    // dedicated clarify message type render the question properly;
+    // raw JSON in the timeline is noise (three identical JSON lines
+    // were the original bug report).
+    let assistantContent = String(msg.content || '')
+    if (/^\s*\[?\s*\{\s*"clarify"\s*:\s*true/.test(assistantContent.trim())) {
+      // Message STARTS with the blob — strip every clarify blob line;
+      // hide the message entirely when nothing else remains.
+      assistantContent = assistantContent
+        .replace(/\[?\s*\{\s*"clarify"\s*:\s*true[\s\S]*?\}\s*\]?/g, '')
+        .trim()
+      if (!assistantContent) return null
+    }
     const branchTarget = branchableMessageTargets.value.get(msg.id)
     const canBranch = Boolean(branchTarget) && !branchActionsDisabled.value
     return h(AssistantMessage, {
-      content: msg.content || '',
+      content: assistantContent,
       isStreaming: msg.isStreaming,
       sessionId: msg.sessionId,
       timestamp: msg.timestamp,
@@ -1517,10 +1524,10 @@ function renderItemContent(item: RenderItem) {
           {{ sessionState.followupSuggestion }}
         </button>
 
-        <!-- AgentPulse: live phase pill. Hidden when the inline timeline
-             already shows thought lines / tool cards - otherwise the same
-             info appears twice on screen. -->
-        <AgentPulse v-if="!hasInlineTimeline" />
+        <!-- AgentPulse: live phase pill. Hidden by product request —
+             "处理中..." duplicated the removed turn-status pill and the
+             RunItem step chips already carry progress. -->
+        <AgentPulse v-if="false" />
 
         <!-- v3.7.6 — ZCode-style reasoning panel. Stays visible
              for the whole turn (busy / streaming) so the gradient

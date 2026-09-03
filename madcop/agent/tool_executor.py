@@ -226,6 +226,21 @@ class ToolExecutor:
         # 1. Pydantic validation
         ok, err, _validated = validate_tool_input(tool_name, args)
         if not ok:
+            # ask_user special case: a malformed clarification shouldn't
+            # surface as a scary error card — the user can't answer it.
+            # Tell the model to fall back to plain-text question instead.
+            if tool_name in ("ask_user", "clarify"):
+                return ToolResult(
+                    tool_name=tool_name,
+                    error=(
+                        "ask_user 参数格式错误（需要 "
+                        '{"question": "…", "options": ["…"]}）。'
+                        "请直接在最终回答里用一句话向用户提问，等用户回复。"
+                    ),
+                    is_error=True,
+                    is_validation_error=True,
+                    elapsed_ms=_elapsed_ms(),
+                )
             return ToolResult(
                 tool_name=tool_name,
                 error=f"输入校验失败: {err}",

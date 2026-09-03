@@ -92,6 +92,48 @@ _TAIL_PROMISE_RE = re.compile(
     r"(读|验证|检查|构建|搭建|生成|写|创建|测试|运行|实现|修复|搜|抓取)"
     r"[^。！？\n]{0,20}[。！？]?\s*$"
 )
+# Models sometimes PRINT the ask_user payload as plain text instead of
+# calling the tool: {"clarify":true,"question":"...","options":[...]}.
+# Rendering that raw JSON to the user is the single worst timeline
+# outcome (three identical JSON lines in a weather test). Detect and
+# convert it into a real CLARIFY step so the UI shows the chip dialog.
+_CLARIFY_JSON_RE = re.compile(
+    r'\[\s*\{\s*"clarify"\s*:\s*true.*?\}\s*\]|'
+    r'\{\s*"clarify"\s*:\s*true.*?\}',
+    re.DOTALL,
+)
+
+
+def _extract_clarify(text: str):
+    """Parse a clarify-JSON blob out of `text`.
+
+    Returns (question, options, remaining_text) when the text is
+    clarify-JSON-dominant (the blob makes up most of the message);
+    None when there is no blob or it's only a fragment of a longer
+    real answer."""
+    if '"clarify"' not in text:
+        return None
+    m = _CLARIFY_JSON_RE.search(text)
+    if not m:
+        return None
+    try:
+        raw = m.group(0).strip()
+        if raw.startswith('['):
+            raw = raw.strip('[]')
+        data = json.loads(raw)
+        q = str(data.get('question') or '').strip()
+        opts = [str(o).strip() for o in (data.get('options') or [])
+                if str(o).strip()]
+        if not q:
+            return None
+        remaining = (text[:m.start()] + ' ' + text[m.end():]).strip()
+        # Dominance check: leftover prose must be short (<120 chars) or
+        # the JSON is just a piece of a bigger legitimate answer.
+        if len(remaining) > 120:
+            return None
+        return q, opts, remaining
+    except Exception:
+        return None
 _MONOLOGUE_RE = re.compile(
     r"^\s*(the user|i need to|let me|i should|i'll|i am going to|i'm going to"
     r"|looking at|okay,|alright,|嗯|好，用户)",
@@ -617,6 +659,22 @@ class ReActEngineV4(AgentEngine):
                         "（用户语言、直接给结论，不要复述推理过程）。"
                     )))
                     continue
+                # Printed-clarify rescue (streamed path): the JSON already
+                # went out via TEXT_DELTA — the frontend hides raw-JSON
+                # messages — but we still end the turn with a REAL
+                # CLARIFY step so the chip dialog renders.
+                _cl_streamed = _extract_clarify(getattr(self, '_v4_answer_buf', '') or '')
+                if _cl_streamed is not None:
+                    _q, _opts, _rest = _cl_streamed
+                    if _rest:
+                        yield AgentStep(kind=StepKind.TEXT_DELTA, content=_rest)
+                    yield AgentStep(kind=StepKind.TEXT_END)
+                    yield AgentStep(kind=StepKind.CLARIFY, question=_q,
+                                    options=_opts, tool_name="ask_user",
+                                    tool_use_id=f"clarify-{step_num}")
+                    yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
+                            metadata={"usage": _run_usage})
+                    return
                 yield AgentStep(kind=StepKind.TEXT_END)
                 yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
                         metadata={"usage": _run_usage})
@@ -625,6 +683,22 @@ class ReActEngineV4(AgentEngine):
             # If ThinkSeparator buffered post-think text but didn't stream it
             # (protocol markers detected OR <30 chars), handle at stream end.
             _buf = getattr(self, '_v4_answer_buf', '')
+            # Printed-clarify rescue (streamed path): the answer text may
+            # already have streamed out — the frontend hides raw-JSON
+            # messages — but we still emit a real CLARIFY step so the
+            # chip dialog renders and the turn ends as a question.
+            _cl_streamed = _extract_clarify(_buf or '')
+            if _cl_streamed is not None and not oa_tc_name:
+                _q, _opts, _rest = _cl_streamed
+                if _rest:
+                    yield AgentStep(kind=StepKind.TEXT_DELTA, content=_rest)
+                yield AgentStep(kind=StepKind.TEXT_END)
+                yield AgentStep(kind=StepKind.CLARIFY, question=_q,
+                                options=_opts, tool_name="ask_user",
+                                tool_use_id=f"clarify-{step_num}")
+                yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
+                        metadata={"usage": _run_usage})
+                return
             if _buf and not fa_streamed and not oa_tc_name:
                 _has_action = bool(_REACT_MARKER_RE.search(_buf))
                 # Tool-intent guard: if the model NAMED a registered tool in
@@ -850,6 +924,35 @@ class ReActEngineV4(AgentEngine):
             # --- FINAL_ANSWER ---
             if action.upper() == "FINAL_ANSWER":
                 answer = normalize_final_answer(action_input)
+                # Empty FINAL_ANSWER = the model bailed on the protocol
+                # (live repro: it wanted ask_user, got confused by the
+                # mixed native/text protocol, emitted nothing). Bounce
+                # it back once instead of ending with an empty reply —
+                # an invisible answer is the worst timeline outcome.
+                if not answer.strip() and not fa_streamed:
+                    if getattr(self, '_v4_empty_fa_streak', 0) < 1:
+                        self._v4_empty_fa_streak = getattr(self, '_v4_empty_fa_streak', 0) + 1
+                        messages.append(Message(role="assistant", content=_context_clean(raw)))
+                        messages.append(Message(role="user", content=(
+                            "Observation: 你的 FINAL_ANSWER 是空的——用户会看到一片空白。"
+                            "请要么直接在 Action Input 里写给用户的完整回答（哪怕一句话），"
+                            "要么用正确的工具调用格式发起工具（Action: 工具名, "
+                            "Action Input: 参数JSON）。不要再输出空答案。"
+                        )))
+                        continue
+                    self._v4_empty_fa_streak = 0
+                _cl = _extract_clarify(answer or '')
+                if _cl is not None:
+                    _q, _opts, _rest = _cl
+                    if _rest and not fa_streamed:
+                        yield AgentStep(kind=StepKind.TEXT_DELTA, content=_rest)
+                    yield AgentStep(kind=StepKind.TEXT_END)
+                    yield AgentStep(kind=StepKind.CLARIFY, question=_q,
+                                    options=_opts, tool_name="ask_user",
+                                    tool_use_id=f"clarify-{step_num}")
+                    yield AgentStep(kind=StepKind.DONE, model=ctx.model or "",
+                            metadata={"usage": _run_usage})
+                    return
                 if answer and not fa_streamed:
                     yield AgentStep(kind=StepKind.TEXT_DELTA, content=answer)
                 yield AgentStep(kind=StepKind.TEXT_END)

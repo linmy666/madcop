@@ -96,6 +96,13 @@ Action Input: <工具参数JSON；FINAL_ANSWER 时直接写答案>
 8. 用户问"你是什么模型"时调用 get_current_model
 9. 写文件优先一次性写完，禁止对同一文件连续 write_file 两次。修改已有文件用 edit_file。
 10. web_search 搜索时**用简短英文关键词**（3-5 个词），不要用长中文句子。
+11. **需要向用户提问（缺城市、缺文件名等）时，走文本协议输出:
+    Thought: 缺少城市
+    Action: ask_user
+    Action Input: {"question": "查哪个城市的天气？", "options": ["北京", "上海"]}
+    严禁把 {"clarify":true,...} 这类 JSON 直接写进 FINAL_ANSWER 的答案文本里——
+    那会原样显示给用户。也严禁输出空的 FINAL_ANSWER：Action Input 必须是
+    给用户的完整回答，哪怕一句话。
     例如搜 "semiconductor supply chain AI" 而不是 "人工智能供应链最新进展"。
     每次搜索只搜一个方向，不要一次搜太多内容。
 """

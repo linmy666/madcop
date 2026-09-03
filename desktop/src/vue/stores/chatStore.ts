@@ -1247,8 +1247,15 @@ export const useChatStore = defineStore('chat', {
                     // context_overflow, network error, or just a model
                     // that stopped emitting). Clear the pending question
                     // so the ClarificationPanel doesn't sit stuck above
-                    // the composer with no way to dismiss it.
-                    session.clarificationPending = null
+                    // the composer with no way to dismiss it — UNLESS
+                    // this same stream delivered a clarification_request:
+                    // the engine now ends clarify turns with CLARIFY →
+                    // DONE by design, and wiping the pending state here
+                    // made the chip dialog flash and vanish (empty reply).
+                    if (!(session as any)._clarifySeenThisStream) {
+                      session.clarificationPending = null
+                    }
+                    (session as any)._clarifySeenThisStream = false
                     _markUnansweredTurn(session)
                   } else if (event.type === 'skill_distilled' && (event.skillName || event.skill_name)) {
                     const skillName = event.skillName || event.skill_name
@@ -1537,6 +1544,10 @@ export const useChatStore = defineStore('chat', {
                     }
                   } else if (event.type === 'clarification_request') {
                     // Agent asked the user a clarifying question (ask_user tool).
+                    // Flag it so the done-handler doesn't wipe the pending
+                    // state when the engine ends the clarify turn with
+                    // CLARIFY → DONE (printed-clarify rescue).
+                    ;(session as any)._clarifySeenThisStream = true
                     const q = event.question || _t('chat.needMoreInfo', '需要你补充信息')
                     const opts = Array.isArray(event.options) ? event.options : []
                     session.clarificationPending = { question: q, options: opts }

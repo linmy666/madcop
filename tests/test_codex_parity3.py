@@ -199,3 +199,35 @@ def test_compact_messages_force(tmp_path):
     assert rec2.get("compacted") is True
     assert len(new_msgs) == 3  # summary + last 2
     assert new_msgs[-1]["content"] == "turn 5"
+
+
+# ── printed-clarify rescue (react_v4) ─────────────────────────────────────
+
+def test_extract_clarify_bare_object():
+    from madcop.agent.react_v4 import _extract_clarify
+    text = '{"clarify":true,"question":"你想查哪个城市的天气？ ","options":["北京","上海","深圳","杭州","自定义"]}'
+    out = _extract_clarify(text)
+    assert out is not None
+    q, opts, rest = out
+    assert "哪个城市" in q
+    assert "北京" in opts and "自定义" in opts
+    assert rest == ""
+
+
+def test_extract_clarify_wrapped_array():
+    from madcop.agent.react_v4 import _extract_clarify
+    text = '[{"clarify":true,"question":"查哪个城市？","options":["北京"]}]'
+    q, opts, rest = _extract_clarify(text)
+    assert q == "查哪个城市？" and opts == ["北京"] and rest == ""
+
+
+def test_extract_clarify_ignores_embedded_fragment():
+    from madcop.agent.react_v4 import _extract_clarify
+    long_prose = "这是一段很长的正常回答，讨论天气的形成机制。" * 20
+    text = long_prose + ' {"clarify":true,"question":"q","options":["a"]}'
+    assert _extract_clarify(text) is None
+
+
+def test_extract_clarify_no_blob():
+    from madcop.agent.react_v4 import _extract_clarify
+    assert _extract_clarify("普通回答，没有 JSON。") is None
