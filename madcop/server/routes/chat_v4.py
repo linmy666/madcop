@@ -571,10 +571,15 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             att_data = att.get("dataUrl") or att.get("data") or ""
             if att_path:
                 try:
-                    from pathlib import Path
-                    p = Path(att_path).expanduser()
-                    if p.is_file() and p.stat().st_size < 500_000:
-                        content = p.read_text(errors="ignore")[:8000]
+                    # NOTE: do NOT `from pathlib import Path` here — a
+                    # function-local import makes `Path` a local of
+                    # chat_v4(), which turns it into an UNBOUND free
+                    # variable inside the nested confirm_handler closure
+                    # (NameError → scope recording silently died).
+                    # Module-level Path (line 18) is the same object.
+                    _att_p = Path(att_path).expanduser()
+                    if _att_p.is_file() and _att_p.stat().st_size < 500_000:
+                        content = _att_p.read_text(errors="ignore")[:8000]
                         extra_parts.append(
                             f"--- ATTACHMENT: {att_name} ({att_type}) ---\n{content}\n--- END ---"
                         )
@@ -1323,6 +1328,8 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             # create mode, but in ANY mode that used web tools. This makes
             # "every conclusion carries citation traceability" true.
             _citations_holder: list[dict] = []
+            # use_id → {"path","ok"} for this turn's write-tool calls.
+            _written_files: dict[str, dict] = {}
 
             # Phase 2a: SessionLog is now the persistent record of the MAIN
             # chat path (not just MEA). run_id == session_id so all turns of
@@ -1430,6 +1437,23 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                                 from madcop.agent.compaction import is_overflow_error as _is_ovf
                                 if _is_ovf(Exception(step.content or "")):
                                     _overflowed = True
+                            # Turn-diff bookkeeping: remember mutating
+                            # write-tool calls so a non-git turn can still
+                            # report what it changed on disk.
+                            if step.kind == StepKind.TOOL_START and (step.tool_name or "") in (
+                                "write_file", "edit_file", "write_xlsx",
+                                "write_pptx", "apply_patch",
+                            ):
+                                _ti = step.tool_input or {}
+                                _wp = str(_ti.get("path")
+                                          or _ti.get("file_path") or "")
+                                if _wp:
+                                    _written_files[step.tool_use_id] = {
+                                        "path": _wp, "ok": False}
+                            if (step.kind == StepKind.TOOL_END
+                                    and step.tool_use_id in _written_files):
+                                _written_files[step.tool_use_id]["ok"] = (
+                                    not step.is_error)
                             # Resume-Claim-4: capture web tool results as citations
                             if step.kind == StepKind.TOOL_END and step.tool_name in ("web_search", "web_fetch"):
                                 try:
@@ -1590,6 +1614,24 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                     try:
                         from madcop.harness.turn_diff import summarize_turn_diff
                         _td = summarize_turn_diff(work_dir)
+                        if _td is None and _written_files:
+                            # Non-git workspace (e.g. /tmp scratch): fall
+                            # back to this turn's write-tool bookkeeping so
+                            # the UI still gets a "what changed" card.
+                            _ok_paths = [w["path"] for w in
+                                         _written_files.values() if w["ok"]]
+                            if _ok_paths:
+                                _td = {
+                                    "mode": "written",
+                                    "files": [
+                                        {"path": _p, "status": "A",
+                                         "insertions": 0, "deletions": 0}
+                                        for _p in _ok_paths[:30]
+                                    ],
+                                    "files_changed": len(_ok_paths),
+                                    "truncated": len(_ok_paths) > 30,
+                                    "insertions": 0, "deletions": 0,
+                                }
                         if _td and _td.get("files_changed"):
                             q.put(AgentStep(kind=StepKind.TURN_DIFF, metadata={"diff": _td}))
                     except Exception:
