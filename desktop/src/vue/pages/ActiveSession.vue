@@ -1069,7 +1069,7 @@ function openTerminalInTab() {
              composer tells the user how many steps the task has and where
              it is now — the single strongest "sense of safety" signal. -->
         <div
-          v-if="liveStep && liveStep.m > 0"
+          v-if="liveStep && liveStep.m > 1"
           class="pointer-events-none flex w-full shrink-0 justify-center"
           style="margin-bottom: 4px"
         >
@@ -1081,7 +1081,12 @@ function openTerminalInTab() {
               <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-brand)] opacity-40"></span>
               <span class="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-brand)]"></span>
             </span>
-            <span>{{ t('chat.stepProgress', '步骤') }} {{ liveStep.n }} / {{ liveStep.m }}</span>
+            <!-- Only show when there's actual breadth: single-step / direct
+                 answers (m<=1) never showed "step 1/1" or "step 1/40" —
+                 the step budget is the ENGINE's budget for a 12+ step
+                 build, not a UI promise. We report only the running
+                 count of tool calls made so far. -->
+            <span>{{ t('chat.toolCallsRunning', '已调用 {n} 个工具', { n: liveStep.n }) }}</span>
           </div>
         </div>
 
