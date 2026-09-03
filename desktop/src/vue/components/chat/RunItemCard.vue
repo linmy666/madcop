@@ -371,8 +371,28 @@ const errorText = computed(() => {
   color: var(--color-text-tertiary, #888);
   animation: run-item-spin 0.9s linear infinite;
 }
+/* Done state = quiet metadata line (product spec): no surface, no
+   green — green is reserved for real deliverables (tests passing),
+   not process. Hover restores the card affordance for expanding the
+   result. */
+.run-item--done {
+  border-color: transparent;
+  background: transparent;
+}
 .run-item--done .run-item__icon {
-  color: var(--color-success, #1f9d55);
+  color: var(--color-text-tertiary, #888);
+}
+.run-item--done .run-item__verb {
+  font-weight: 500;
+  color: var(--color-text-tertiary, #888);
+}
+.run-item--done .run-item__target,
+.run-item--done .run-item__meta {
+  color: var(--color-text-tertiary, #999);
+}
+.run-item--done:hover {
+  border-color: var(--color-border, rgba(128,128,128,0.18));
+  background: var(--color-surface-container-low, rgba(128,128,128,0.04));
 }
 .run-item--failed .run-item__icon {
   color: var(--color-error, #d44a4a);
