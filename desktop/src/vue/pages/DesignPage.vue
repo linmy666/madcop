@@ -1,759 +1,594 @@
 <script setup lang="ts">
 /**
- * Design tool — project list + AI page gen + DesignCanvas.
- * Script and template are aligned (rewired after v3.1 desync).
+ * DesignPage — 原型工坊 (Prototype Workshop), hybrid PM tool.
+ *
+ * Left rail:  generate-from-prompt + prototype file list
+ * Center:     live preview (iframe, phone frame)
+ * Right:      code editor for manual fixes
+ *
+ * The hybrid contract: natural language generates the first cut;
+ * the code editor is the hallucination antidote — PMs hand-tweak
+ * what the model got wrong, save hot, preview re-renders instantly.
+ * For bigger revisions, copy the file path into the main chat and
+ * ask the agent to edit it (same file, same preview).
  */
-import { ref, computed, watch, onMounted } from 'vue'
-import DesignCanvas from '../components/design/DesignCanvas.vue'
-import DesignPreview from '../components/design/DesignPreview.vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getApiUrl } from '../api/client'
-import {
-  type DesignData,
-  autoRepairDesignData,
-  emptyDesignData,
-  parseAndRepairDesignResponse,
-} from '../lib/designJson'
+import { useUIStore } from '../stores/uiStore'
 
-interface DesignPageData {
-  id: string
-  name: string
-  data: DesignData
-}
-interface DesignProject {
-  id: string
-  name: string
-  pages: DesignPageData[]
-  activePageId: string | null
-  createdAt: number
-}
+const uiStore = useUIStore()
 
-const PAGE_PRESETS = [
-  { label: '登录页', prompt: '一个简洁的登录页面，包含邮箱输入框、密码输入框、一个主要登录按钮，白色背景，居中布局' },
-  { label: '仪表盘', prompt: '一个数据仪表盘卡片布局，包含4张卡片：今日订单、收入、活跃用户、转化率，每张卡片有数字和标题，网格布局' },
-  { label: '个人中心', prompt: '用户个人中心页，顶部是头像和昵称，下面是设置项列表：个人信息、通知设置、隐私、关于' },
-  { label: '落地页', prompt: '产品落地页，包含大标题、副标题、行动号召按钮、功能特性列表（3列网格）' },
-]
-const FULL_APP_PROMPTS = [
-  { name: '电商 App', pages: ['首页轮播推荐', '商品列表页', '商品详情页', '购物车', '个人中心'] },
-  { name: 'SaaS 后台', pages: ['登录页', '仪表盘概览', '用户管理', '设置页'] },
-  { name: '社交 App', pages: ['登录页', '消息列表', '个人主页', '设置'] },
-]
+interface ProtoFile { name: string; size: number; mtime: number }
 
-const STORAGE_KEY = 'madcop_design_projects'
-function loadProjects(): DesignProject[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch { /* ignore */ }
-  return []
-}
-function saveProjects(list: DesignProject[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
-  } catch { /* ignore */ }
-}
-function genId() {
-  return `p${Date.now()}${Math.floor(Math.random() * 1000)}`
-}
-
-function emptyData(): DesignData {
-  return emptyDesignData()
-}
-
-const projects = ref<DesignProject[]>(loadProjects())
-const activeProject = ref<DesignProject | null>(null)
+// ── state ──────────────────────────────────────────────────────────────
+const files = ref<ProtoFile[]>([])
+const selected = ref('')
+const content = ref('')
+const savedContent = ref('')
+const loadingList = ref(false)
+const loadingFile = ref(false)
+const saving = ref(false)
+const generating = ref(false)
 const prompt = ref('')
-const loading = ref(false)
-const error = ref<string | null>(null)
-const statusMsg = ref<string | null>(null)
-const newProjectName = ref('')
-const newProjectNameInput = ref<HTMLInputElement | null>(null)
-const previewOpen = ref(true)
+const genError = ref('')
+const rightTab = ref<'code' | 'howto'>('code')
+const previewBust = ref(0)
 
-watch(projects, (val) => saveProjects(val), { deep: true })
+const PRESET_PROMPTS = [
+  { label: '登录页', prompt: '一个简洁的移动端登录页：手机号+验证码输入、登录按钮、第三方登录图标行、用户协议勾选。含验证码倒计时交互和输入校验错误示例。' },
+  { label: '订单列表', prompt: '移动端订单列表页：顶部状态 tab（全部/待支付/已完成），订单卡片（商家名、商品摘要、金额、操作按钮），含空态和加载占位。' },
+  { label: '表单页', prompt: '移动端收货地址编辑表单：姓名/手机/省市区选择器/详细地址/默认地址开关，保存按钮。含必填校验错误和保存成功 toast。' },
+  { label: '数据看板', prompt: '移动端数据看板：4 张指标卡（今日订单/收入/活跃/转化率）、一个 7 日趋势图（纯 CSS 柱状）、一个排行列表。' },
+]
 
-onMounted(() => {
-  newProjectNameInput.value?.focus()
-})
+const previewUrl = computed(() =>
+  selected.value ? `/preview/${encodeURIComponent(selected.value)}?t=${previewBust.value}` : '')
 
-function upsertProject(updated: DesignProject) {
-  activeProject.value = updated
-  projects.value = projects.value.map((p) => (p.id === updated.id ? updated : p))
-  if (!projects.value.find((p) => p.id === updated.id)) {
-    projects.value = [updated, ...projects.value]
-  }
+const isDirty = computed(() => content.value !== savedContent.value)
+const canSave = computed(() => isDirty.value && !!selected.value && !saving.value)
+
+const sizeLabel = (b: number) => b >= 1024 ? `${(b / 1024).toFixed(1)} KB` : `${b} B`
+const timeLabel = (ts: number) => {
+  const d = new Date(ts * 1000)
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function createProject(name: string) {
-  if (!name.trim()) return
-  const project: DesignProject = {
-    id: genId(),
-    name: name.trim(),
-    pages: [],
-    activePageId: null,
-    createdAt: Date.now(),
-  }
-  projects.value = [project, ...projects.value]
-  activeProject.value = project
-  newProjectName.value = ''
-  error.value = null
-  statusMsg.value = null
-}
-
-function deleteProject(id: string) {
-  if (!confirm('删除此项目？')) return
-  projects.value = projects.value.filter((p) => p.id !== id)
-  if (activeProject.value?.id === id) activeProject.value = null
-}
-
-function deleteCurrentProject() {
-  if (!activeProject.value) return
-  deleteProject(activeProject.value.id)
-}
-
-function saveProject() {
-  if (!activeProject.value) return
-  // deep watch already persists; give feedback
-  saveProjects(projects.value)
-  statusMsg.value = '已保存到本机'
-  setTimeout(() => {
-    if (statusMsg.value === '已保存到本机') statusMsg.value = null
-  }, 2000)
-}
-
-function addPage(name?: string) {
-  if (!activeProject.value) return
-  const n = (name && name.trim()) || `页面 ${activeProject.value.pages.length + 1}`
-  const page: DesignPageData = { id: genId(), name: n, data: emptyData() }
-  const updated: DesignProject = {
-    ...activeProject.value,
-    pages: [...activeProject.value.pages, page],
-    activePageId: page.id,
-  }
-  upsertProject(updated)
-}
-
-function deletePage(pageId: string) {
-  if (!activeProject.value) return
-  if (!confirm('删除此页面？')) return
-  const pages = activeProject.value.pages.filter((p) => p.id !== pageId)
-  const updated: DesignProject = {
-    ...activeProject.value,
-    pages,
-    activePageId:
-      activeProject.value.activePageId === pageId
-        ? (pages[0]?.id ?? null)
-        : activeProject.value.activePageId,
-  }
-  upsertProject(updated)
-}
-
-function selectPage(pageId: string) {
-  if (!activeProject.value) return
-  upsertProject({ ...activeProject.value, activePageId: pageId })
-}
-
-function updatePageData(pageId: string, data: DesignData) {
-  if (!activeProject.value) return
-  const updated: DesignProject = {
-    ...activeProject.value,
-    pages: activeProject.value.pages.map((p) =>
-      p.id === pageId
-        ? { ...p, data: autoRepairDesignData(JSON.parse(JSON.stringify(data))) }
-        : p,
-    ),
-  }
-  upsertProject(updated)
-}
-
-/** Call design generate API; does not own loading (callers do). */
-async function generatePage(genPrompt: string): Promise<DesignData | null> {
+// ── data ───────────────────────────────────────────────────────────────
+async function fetchFiles(selectFirst = false) {
+  loadingList.value = true
   try {
-    const r = await fetch(getApiUrl('/api/design/generate'), {
+    const res = await fetch(getApiUrl('/api/v4/design/files'))
+    const data = await res.json()
+    files.value = data.files || []
+    if (selectFirst && files.value.length && !selected.value) {
+      await selectFile(files.value[0].name)
+    }
+  } catch {
+    uiStore.addToast({ type: 'error', message: '原型列表加载失败' })
+  } finally {
+    loadingList.value = false
+  }
+}
+
+async function selectFile(name: string) {
+  if (isDirty.value && !confirm('当前有未保存的修改，切换会丢失。继续？')) return
+  loadingFile.value = true
+  try {
+    const res = await fetch(getApiUrl(`/api/v4/design/file?name=${encodeURIComponent(name)}`))
+    const data = await res.json()
+    if (!res.ok || !data.ok) throw new Error(data.detail || '读取失败')
+    selected.value = data.name
+    content.value = data.content
+    savedContent.value = data.content
+    previewBust.value = Date.now()
+  } catch (e: any) {
+    uiStore.addToast({ type: 'error', message: e?.message || '读取失败' })
+  } finally {
+    loadingFile.value = false
+  }
+}
+
+async function saveFile() {
+  if (!canSave.value) return
+  saving.value = true
+  try {
+    const res = await fetch(getApiUrl('/api/v4/design/file'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: selected.value, content: content.value }),
+    })
+    const data = await res.json()
+    if (!res.ok || !data.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+    savedContent.value = content.value
+    previewBust.value = Date.now()
+    uiStore.addToast({ type: 'success', message: '已保存，预览已更新' })
+    void fetchFiles()
+  } catch (e: any) {
+    uiStore.addToast({ type: 'error', message: e?.message || '保存失败' })
+  } finally {
+    saving.value = false
+  }
+}
+
+async function generate() {
+  const p = prompt.value.trim()
+  if (!p || generating.value) return
+  generating.value = true
+  genError.value = ''
+  try {
+    const res = await fetch(getApiUrl('/api/v4/design/generate'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: genPrompt }),
+      body: JSON.stringify({ prompt: p }),
     })
-    if (!r.ok) {
-      const errText = await r.text().catch(() => '')
-      throw new Error(errText || `HTTP ${r.status}`)
-    }
-    const resp = await r.json()
-    const text: string = resp.content || ''
-    const data = parseAndRepairDesignResponse(text)
-    if (data) return data
-    error.value = `AI 返回格式有误：${text.slice(0, 180).replace(/\s+/g, ' ')}…`
-    return null
+    const data = await res.json()
+    if (!res.ok || !data.ok) throw new Error(data.detail || `HTTP ${res.status}`)
+    await fetchFiles()
+    await selectFile(data.name)
+    prompt.value = ''
+    uiStore.addToast({
+      type: 'success',
+      message: `生成完成（${data.elapsed_s}s，${sizeLabel(data.bytes)}）——可在右侧代码里修正细节`,
+    })
   } catch (e: any) {
-    error.value = `生成失败: ${e?.message || e}`
-    return null
-  }
-}
-
-async function handleGenerate() {
-  if (!prompt.value.trim() || !activeProject.value || loading.value) return
-  loading.value = true
-  error.value = null
-  statusMsg.value = '正在调用 AI 生成…'
-  try {
-    const data = await generatePage(prompt.value)
-    if (data && activeProject.value) {
-      const pageName = prompt.value.trim().slice(0, 16) || '生成页'
-      const page: DesignPageData = { id: genId(), name: pageName, data }
-      upsertProject({
-        ...activeProject.value,
-        pages: [...activeProject.value.pages, page],
-        activePageId: page.id,
-      })
-      prompt.value = ''
-      statusMsg.value = '已生成页面'
-    } else {
-      statusMsg.value = null
-    }
+    genError.value = e?.message || '生成失败'
   } finally {
-    loading.value = false
+    generating.value = false
   }
 }
 
-async function handleGenerateApp(preset: (typeof FULL_APP_PROMPTS)[0]) {
-  if (!activeProject.value || loading.value) return
-  loading.value = true
-  error.value = null
-  const newPages: DesignPageData[] = []
+async function deleteFile(name: string) {
+  if (!confirm(`删除原型 ${name}？此操作不可恢复。`)) return
   try {
-    for (const pageName of preset.pages) {
-      statusMsg.value = `正在生成：${pageName}…`
-      const data = await generatePage(`${preset.name}的${pageName}，风格统一、简洁现代`)
-      if (data) newPages.push({ id: genId(), name: pageName, data })
+    const res = await fetch(
+      getApiUrl(`/api/v4/design/file?name=${encodeURIComponent(name)}`),
+      { method: 'DELETE' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (selected.value === name) {
+      selected.value = ''
+      content.value = ''
+      savedContent.value = ''
     }
-    if (newPages.length > 0 && activeProject.value) {
-      upsertProject({
-        ...activeProject.value,
-        pages: [...activeProject.value.pages, ...newPages],
-        activePageId: newPages[0].id,
-      })
-    }
-    statusMsg.value = newPages.length ? `已生成 ${newPages.length} 个页面` : null
-  } finally {
-    loading.value = false
+    await fetchFiles()
+  } catch (e: any) {
+    uiStore.addToast({ type: 'error', message: e?.message || '删除失败' })
   }
 }
 
-/** Home: create project then AI one page */
-async function createProjectAndApply(pagePrompt: string) {
-  if (loading.value) return
-  const name =
-    newProjectName.value.trim() ||
-    PAGE_PRESETS.find((p) => p.prompt === pagePrompt)?.label ||
-    '未命名项目'
-  createProject(name)
-  if (!activeProject.value) return
-  loading.value = true
-  error.value = null
-  statusMsg.value = '正在调用 AI 生成…'
-  try {
-    const data = await generatePage(pagePrompt)
-    if (data && activeProject.value) {
-      const page: DesignPageData = {
-        id: genId(),
-        name: PAGE_PRESETS.find((p) => p.prompt === pagePrompt)?.label || '生成页',
-        data,
-      }
-      upsertProject({
-        ...activeProject.value,
-        pages: [page],
-        activePageId: page.id,
-      })
-      statusMsg.value = '已生成页面'
-    } else {
-      statusMsg.value = null
-    }
-  } finally {
-    loading.value = false
+function onEditorKeydown(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+    e.preventDefault()
+    void saveFile()
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    const ta = e.target as HTMLTextAreaElement
+    const { selectionStart: a, selectionEnd: b, value } = ta
+    ta.value = value.slice(0, a) + '  ' + value.slice(b)
+    ta.selectionStart = ta.selectionEnd = a + 2
+    content.value = ta.value
   }
 }
 
-/** Home: create project then multi-page app */
-async function createProjectAndApplyApp(preset: (typeof FULL_APP_PROMPTS)[0]) {
-  if (loading.value) return
-  const name = newProjectName.value.trim() || preset.name
-  createProject(name)
-  await handleGenerateApp(preset)
+function copyPath() {
+  void navigator.clipboard?.writeText(selected.value || '')
 }
 
-const activePage = computed<DesignPageData | null>(() => {
-  if (!activeProject.value) return null
-  return (
-    activeProject.value.pages.find((p) => p.id === activeProject.value!.activePageId) || null
-  )
+let pollTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  void fetchFiles(true)
+  // Light poll so agent-written prototypes (from the main chat) appear.
+  pollTimer = setInterval(() => {
+    if (!generating.value && !isDirty.value) void fetchFiles()
+  }, 8000)
 })
-
-function formatRelative(ts: number): string {
-  const days = Math.floor((Date.now() - ts) / 86400000)
-  if (days === 0) return '今天'
-  if (days === 1) return '昨天'
-  if (days < 7) return `${days} 天前`
-  if (days < 30) return `${Math.floor(days / 7)} 周前`
-  return new Date(ts).toLocaleDateString('zh-CN')
-}
-
-function onCanvasSave(data: DesignData) {
-  if (!activePage.value) return
-  updatePageData(activePage.value.id, data)
-  statusMsg.value = '画布已保存'
-  setTimeout(() => {
-    if (statusMsg.value === '画布已保存') statusMsg.value = null
-  }, 1500)
-}
+onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
 </script>
 
 <template>
-  <!-- Project list -->
-  <div v-if="!activeProject" class="dp-page">
-    <div class="dp-page__inner">
-      <header class="dp-page__head">
-        <div>
-          <h1 class="dp-page__title">设计工具</h1>
-          <p class="dp-page__sub">用 AI 生成 UI 原型，拖拽组件、编辑属性、导出 .madcop</p>
+  <div class="proto-ws">
+    <!-- Left rail: generate + file list -->
+    <aside class="pw-rail">
+      <div class="pw-rail__sec">
+        <div class="pw-rail__title">生成原型</div>
+        <textarea
+          v-model="prompt"
+          class="pw-prompt"
+          rows="3"
+          :disabled="generating"
+          placeholder="描述你要的原型，如：外卖下单页，含地址卡、商品清单、备注和提交按钮…"
+          @keydown.enter.exact.prevent="generate"
+        ></textarea>
+        <div class="pw-presets">
+          <button
+            v-for="preset in PRESET_PROMPTS"
+            :key="preset.label"
+            type="button"
+            class="pw-preset"
+            :disabled="generating"
+            @click="prompt = preset.prompt"
+          >{{ preset.label }}</button>
         </div>
-      </header>
+        <button
+          type="button"
+          class="pw-generate"
+          :disabled="generating || !prompt.trim()"
+          @click="generate"
+        >
+          <span v-if="generating" class="material-symbols-outlined animate-spin text-[15px]">progress_activity</span>
+          <span v-else class="material-symbols-outlined text-[15px]">auto_awesome</span>
+          {{ generating ? '生成中…（约 1-2 分钟）' : '生成原型' }}
+        </button>
+        <p v-if="genError" class="pw-generr">{{ genError }}</p>
+      </div>
 
-      <section class="dp-hero">
-        <div class="dp-hero__inner">
-          <div class="dp-hero__icon">
-            <span class="material-symbols-outlined">auto_awesome</span>
-          </div>
-          <div class="dp-hero__body">
-            <h2 class="dp-hero__title">从一个提示词开始</h2>
-            <p class="dp-hero__sub">输入项目名，再选模板；AI 会生成可编辑的组件树</p>
-          </div>
-        </div>
-        <div class="dp-hero__form">
-          <input
-            ref="newProjectNameInput"
-            v-model="newProjectName"
-            type="text"
-            placeholder="项目名…"
-            class="dp-input"
-            :disabled="loading"
-            @keydown.enter="createProject(newProjectName)"
-          />
+      <div class="pw-rail__sec pw-rail__files">
+        <div class="pw-rail__title">我的原型 <span class="pw-count">{{ files.length }}</span></div>
+        <div v-if="loadingList && !files.length" class="pw-empty">加载中…</div>
+        <div v-else-if="!files.length" class="pw-empty">还没有原型——左侧描述一个试试</div>
+        <button
+          v-for="f in files"
+          :key="f.name"
+          type="button"
+          class="pw-file"
+          :class="{ 'pw-file--active': f.name === selected }"
+          @click="selectFile(f.name)"
+        >
+          <span class="material-symbols-outlined pw-file__icon">html</span>
+          <span class="pw-file__meta">
+            <span class="pw-file__name">{{ f.name }}</span>
+            <span class="pw-file__sub">{{ sizeLabel(f.size) }} · {{ timeLabel(f.mtime) }}</span>
+          </span>
+          <span
+            class="material-symbols-outlined pw-file__del"
+            title="删除"
+            @click.stop="deleteFile(f.name)"
+          >delete</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main: preview + editor -->
+    <main class="pw-main">
+      <div v-if="!selected" class="pw-noselect">
+        <span class="material-symbols-outlined pw-noselect__icon">design_services</span>
+        <p>选择或生成一个原型开始</p>
+        <p class="pw-noselect__sub">自然语言出初稿 → 代码编辑修正细节 → 保存即所见</p>
+      </div>
+      <template v-else>
+        <div class="pw-toolbar">
+          <span class="pw-toolbar__name">{{ selected }}</span>
+          <span v-if="isDirty" class="pw-toolbar__dirty">未保存</span>
+          <span class="pw-toolbar__spacer"></span>
           <button
             type="button"
-            class="dp-btn dp-btn--primary"
-            :disabled="!newProjectName.trim() || loading"
-            @click="createProject(newProjectName)"
-          >
-            创建项目
-          </button>
-        </div>
-        <p v-if="error" class="dp-error">{{ error }}</p>
-        <p v-if="statusMsg" class="dp-status">{{ statusMsg }}</p>
-        <p v-if="loading" class="dp-status">生成中，请稍候…</p>
-      </section>
-
-      <section class="dp-presets">
-        <header class="dp-section__head">
-          <div>
-            <h3 class="dp-section__title">页面模板</h3>
-            <p class="dp-section__sub">可先填项目名，再点模板（未填则用模板名）</p>
-          </div>
-        </header>
-        <div class="dp-presets-grid">
+            class="pw-toolbar__tab"
+            :class="{ 'pw-toolbar__tab--on': rightTab === 'code' }"
+            @click="rightTab = rightTab === 'code' ? 'howto' : 'code'"
+          >{{ rightTab === 'code' ? '切到说明' : '切到代码' }}</button>
           <button
-            v-for="(p, i) in PAGE_PRESETS"
-            :key="i"
             type="button"
-            class="dp-preset"
-            :disabled="loading"
-            @click="createProjectAndApply(p.prompt)"
+            class="pw-save"
+            :disabled="!canSave"
+            title="保存并刷新预览（⌘S）"
+            @click="saveFile"
           >
-            <span class="dp-preset__label">{{ p.label }}</span>
-            <span class="dp-preset__arrow material-symbols-outlined">arrow_forward</span>
+            <span v-if="saving" class="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>
+            <span v-else class="material-symbols-outlined text-[14px]">save</span>
+            保存
           </button>
         </div>
-      </section>
 
-      <section class="dp-presets">
-        <header class="dp-section__head">
-          <div>
-            <h3 class="dp-section__title">多页面 App 模板</h3>
-            <p class="dp-section__sub">依次生成多个页面（较慢）</p>
+        <div class="pw-split" :class="{ 'pw-split--editor': rightTab === 'code' }">
+          <!-- Preview: phone frame -->
+          <div class="pw-preview-pane">
+            <iframe
+              :key="previewBust"
+              :src="previewUrl"
+              class="pw-frame"
+              title="原型预览"
+              sandbox="allow-scripts allow-forms allow-modals"
+            ></iframe>
           </div>
-        </header>
-        <div class="dp-app-templates">
-          <button
-            v-for="(t, i) in FULL_APP_PROMPTS"
-            :key="i"
-            type="button"
-            class="dp-app-template"
-            :disabled="loading"
-            @click="createProjectAndApplyApp(t)"
-          >
-            <div class="dp-app-template__name">{{ t.name }}</div>
-            <div class="dp-app-template__pages">
-              {{ t.pages.length }} 个页面 · {{ t.pages.join(' · ') }}
-            </div>
-          </button>
-        </div>
-      </section>
-
-      <section class="dp-recent">
-        <header class="dp-section__head dp-section__head--row">
-          <h3 class="dp-section__title">最近的项目</h3>
-          <span class="dp-meta">{{ projects.length }} 个</span>
-        </header>
-
-        <div v-if="projects.length === 0" class="dp-empty">
-          <div class="dp-empty__icon">
-            <span class="material-symbols-outlined">draw</span>
-          </div>
-          <h4 class="dp-empty__title">还没有项目</h4>
-          <p class="dp-empty__sub">在上方输入项目名或点模板开始</p>
-        </div>
-
-        <div v-else class="dp-projects">
-          <article
-            v-for="proj in projects"
-            :key="proj.id"
-            class="dp-project"
-            @click="activeProject = proj; error = null"
-          >
-            <div class="dp-project__thumb">
-              <div
-                v-for="(p, i) in proj.pages.slice(0, 3)"
-                :key="p.id"
-                class="dp-project__page"
-                :style="{ width: 40 + i * 12 + '%', opacity: 0.6 + i * 0.13 }"
-              />
-              <div v-if="proj.pages.length === 0" class="dp-project__empty">空</div>
-            </div>
-            <div class="dp-project__body">
-              <h4 class="dp-project__name">{{ proj.name }}</h4>
-              <div class="dp-project__meta">
-                <span class="dp-meta">{{ proj.pages.length }} 个页面</span>
-                <span class="dp-meta">·</span>
-                <span class="dp-meta">{{ formatRelative(proj.createdAt) }}</span>
+          <!-- Editor pane -->
+          <div class="pw-editor-pane">
+            <textarea
+              v-if="rightTab === 'code'"
+              v-model="content"
+              class="pw-editor"
+              spellcheck="false"
+              wrap="off"
+              @keydown="onEditorKeydown"
+            ></textarea>
+            <div v-else class="pw-howto">
+              <h4>混合编辑工作流</h4>
+              <ol>
+                <li><b>自然语言出初稿</b>：左侧描述需求，生成可交互原型。</li>
+                <li><b>手动修正幻觉</b>：模型写错的文案、布局、逻辑，直接在代码页改，⌘S 保存即时生效。</li>
+                <li><b>大改动交给 agent</b>：把下面的文件路径复制到主会话，让 MadCop 用工具直接修改这个文件——改完这里会自动出现。</li>
+              </ol>
+              <div class="pw-path">
+                <code>{{ selected }}</code>
+                <button
+                  type="button"
+                  class="pw-path__copy"
+                  @click="copyPath"
+                >复制路径</button>
               </div>
+              <p class="pw-howto__tip">提示：主会话里说"把 {{ selected }} 的按钮改成主色、加一个地址联想"，MadCop 会用 edit_file 精准修改。</p>
             </div>
-            <button
-              type="button"
-              class="dp-project__del"
-              aria-label="删除"
-              @click.stop="deleteProject(proj.id)"
-            >
-              <span class="material-symbols-outlined" style="font-size: 16px">delete</span>
-            </button>
-          </article>
-        </div>
-      </section>
-    </div>
-  </div>
-
-  <!-- Editor -->
-  <div v-else class="dp-editor">
-    <header class="dp-editor__topbar">
-      <button type="button" class="dp-editor__back" @click="activeProject = null">
-        <span class="material-symbols-outlined" style="font-size: 18px">arrow_back</span>
-        项目
-      </button>
-      <div class="dp-editor__title-wrap">
-        <div class="dp-editor__title">{{ activeProject.name }}</div>
-        <div class="dp-editor__subtitle">
-          {{ activeProject.pages.length }} 页 · 本地保存
-        </div>
-      </div>
-      <div class="dp-editor__spacer" />
-      <span v-if="loading" class="dp-status">生成中…</span>
-      <span v-else-if="statusMsg" class="dp-status">{{ statusMsg }}</span>
-      <button
-        type="button"
-        class="dp-btn"
-        :class="{ 'dp-btn--on': previewOpen }"
-        @click="previewOpen = !previewOpen"
-      >
-        {{ previewOpen ? '收起预览' : '预览' }}
-      </button>
-      <button type="button" class="dp-btn dp-btn--primary" @click="saveProject">保存项目</button>
-      <button type="button" class="dp-btn dp-btn--danger" @click="deleteCurrentProject">删除</button>
-    </header>
-
-    <!-- AI generate bar -->
-    <div class="dp-ai-bar">
-      <span class="material-symbols-outlined dp-ai-bar__icon">auto_awesome</span>
-      <input
-        v-model="prompt"
-        type="text"
-        class="dp-input dp-ai-bar__input"
-        placeholder="描述一页 UI，例如：带搜索栏的商品列表，卡片网格…"
-        :disabled="loading"
-        @keydown.enter="handleGenerate"
-      />
-      <button
-        type="button"
-        class="dp-btn dp-btn--primary"
-        :disabled="loading || !prompt.trim()"
-        @click="handleGenerate"
-      >
-        {{ loading ? '生成中…' : 'AI 生成' }}
-      </button>
-      <button type="button" class="dp-btn" :disabled="loading" @click="addPage()">
-        空白页
-      </button>
-    </div>
-    <p v-if="error" class="dp-error dp-error--bar">{{ error }}</p>
-
-    <div class="dp-editor__main">
-      <div class="dp-editor__pages">
-        <div class="dp-section__head">
-          <h3 class="dp-section__title">页面</h3>
-          <button type="button" class="dp-btn dp-btn--sm" @click="addPage()">+</button>
-        </div>
-        <div v-if="activeProject.pages.length === 0" class="dp-props-empty">
-          <p>还没有页面。上方用 AI 生成，或点空白页手动画。</p>
-        </div>
-        <div class="dp-page-list">
-          <div v-for="(p, i) in activeProject.pages" :key="p.id" class="dp-page-row">
-            <button
-              type="button"
-              :class="[
-                'dp-page-tab',
-                { 'dp-page-tab--active': p.id === activeProject.activePageId },
-              ]"
-              @click="selectPage(p.id)"
-            >
-              <span class="dp-page-tab__idx">{{ i + 1 }}</span>
-              <span class="dp-page-tab__name">{{ p.name || '未命名' }}</span>
-            </button>
-            <button
-              type="button"
-              class="dp-page-del"
-              title="删除页面"
-              @click="deletePage(p.id)"
-            >
-              ×
-            </button>
           </div>
         </div>
-      </div>
-
-      <div class="dp-editor__workspace">
-        <div class="dp-editor__canvas">
-          <DesignCanvas
-            v-if="activePage"
-            :key="activePage.id"
-            :initial-data="activePage.data"
-            @save="onCanvasSave"
-          />
-          <div v-else class="dp-canvas-empty">
-            <p>选择或生成一个页面以开始编辑</p>
-            <p class="dp-meta">画布左侧添加组件；点保存写回项目</p>
-          </div>
-        </div>
-        <DesignPreview v-if="activePage && previewOpen" :data="activePage.data" />
-      </div>
-    </div>
+      </template>
+    </main>
   </div>
 </template>
 
 <style scoped>
-.dp-page { width: 100%; height: 100%; overflow-y: auto; background: var(--color-surface); }
-.dp-page__inner { max-width: 960px; margin: 0 auto; padding: 48px 32px 64px; }
-.dp-page__head { margin-bottom: 32px; }
-.dp-page__title { font-size: 28px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; color: var(--color-text-primary); }
-.dp-page__sub { margin: 0; font-size: 14px; color: var(--color-text-secondary); }
-
-.dp-section__head { margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.dp-section__head--row { justify-content: space-between; }
-.dp-section__title { font-size: 14px; font-weight: 600; margin: 0; color: var(--color-text-primary); }
-.dp-section__sub { margin: 4px 0 0; font-size: 12px; color: var(--color-text-secondary); }
-
-.dp-hero {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 32px;
+.proto-ws {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  background: var(--color-surface, #fff);
+}
+/* ── left rail ── */
+.pw-rail {
+  width: 264px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border, #e5e5e5);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  overflow: hidden;
 }
-.dp-hero__inner { display: flex; gap: 12px; align-items: center; }
-.dp-hero__icon {
-  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
-  border-radius: 10px; background: color-mix(in srgb, var(--color-brand) 12%, transparent);
-  color: var(--color-brand);
+.pw-rail__sec {
+  padding: 14px;
+  border-bottom: 1px solid var(--color-border, #ececec);
 }
-.dp-hero__title { margin: 0; font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
-.dp-hero__sub { margin: 4px 0 0; font-size: 13px; color: var(--color-text-secondary); }
-.dp-hero__form { display: flex; gap: 10px; }
-
-.dp-input {
-  flex: 1; padding: 10px 14px; border: 1px solid var(--color-border); border-radius: 10px;
-  background: var(--color-surface-container-lowest, var(--color-surface));
-  color: var(--color-text-primary); font-size: 13px; outline: none;
+.pw-rail__files {
+  flex: 1;
+  overflow-y: auto;
+  border-bottom: 0;
 }
-.dp-input:focus { border-color: var(--color-brand); }
-
-.dp-btn {
-  padding: 8px 14px; border-radius: 10px; border: 1px solid var(--color-border);
-  background: var(--color-surface); color: var(--color-text-primary); font-size: 13px;
-  cursor: pointer; font-weight: 500;
+.pw-rail__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #555);
+  margin-bottom: 8px;
 }
-.dp-btn:hover { background: var(--color-surface-hover, var(--color-surface-container)); }
-.dp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.dp-btn--primary {
-  background: var(--color-brand); color: #fff; border-color: transparent;
+.pw-count {
+  color: var(--color-text-tertiary, #999);
+  font-weight: 400;
 }
-.dp-btn--primary:hover { opacity: 0.92; }
-.dp-btn--danger { color: var(--color-error); border-color: color-mix(in srgb, var(--color-error) 30%, transparent); }
-.dp-btn--sm { padding: 4px 10px; font-size: 12px; }
-
-.dp-error { margin: 0; font-size: 12px; color: var(--color-error); }
-.dp-error--bar { padding: 0 16px 8px; }
-.dp-status { margin: 0; font-size: 12px; color: var(--color-text-tertiary); }
-.dp-meta { font-size: 12px; color: var(--color-text-tertiary); }
-
-.dp-presets { margin-bottom: 32px; }
-.dp-presets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-.dp-preset {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px; border: 1px solid var(--color-border); border-radius: 12px;
-  background: var(--color-surface); cursor: pointer; text-align: left;
-}
-.dp-preset:hover { border-color: var(--color-brand); }
-.dp-preset:disabled { opacity: 0.5; cursor: not-allowed; }
-.dp-preset__label { font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
-.dp-preset__arrow { font-size: 16px; color: var(--color-text-tertiary); }
-
-.dp-app-templates { display: flex; flex-direction: column; gap: 10px; }
-.dp-app-template {
-  text-align: left; padding: 14px 16px; border: 1px solid var(--color-border);
-  border-radius: 12px; background: var(--color-surface); cursor: pointer;
-}
-.dp-app-template:hover { border-color: var(--color-brand); }
-.dp-app-template:disabled { opacity: 0.5; cursor: not-allowed; }
-.dp-app-template__name { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
-.dp-app-template__pages { margin-top: 4px; font-size: 12px; color: var(--color-text-tertiary); }
-
-.dp-empty { text-align: center; padding: 40px 20px; border: 1px dashed var(--color-border); border-radius: 12px; }
-.dp-empty__icon { font-size: 36px; color: var(--color-text-tertiary); opacity: 0.5; }
-.dp-empty__title { margin: 8px 0 4px; font-size: 14px; color: var(--color-text-primary); }
-.dp-empty__sub { margin: 0; font-size: 12px; color: var(--color-text-tertiary); }
-
-.dp-projects { display: flex; flex-direction: column; gap: 10px; }
-.dp-project {
-  display: flex; align-items: center; gap: 14px; padding: 12px 14px;
-  border: 1px solid var(--color-border); border-radius: 12px; cursor: pointer;
-  background: var(--color-surface);
-}
-.dp-project:hover { border-color: var(--color-border-focus, var(--color-brand)); }
-.dp-project__thumb {
-  width: 72px; height: 48px; border-radius: 8px; background: var(--color-surface-container-low);
-  position: relative; overflow: hidden; flex-shrink: 0;
-}
-.dp-project__page {
-  position: absolute; bottom: 6px; left: 8px; height: 28px;
-  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px;
-}
-.dp-project__empty {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  font-size: 11px; color: var(--color-text-tertiary);
-}
-.dp-project__body { flex: 1; min-width: 0; }
-.dp-project__name { margin: 0; font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
-.dp-project__meta { display: flex; gap: 6px; margin-top: 4px; }
-.dp-project__del {
-  border: none; background: transparent; cursor: pointer; color: var(--color-text-tertiary);
-  opacity: 0; padding: 6px; border-radius: 8px;
-}
-.dp-project:hover .dp-project__del { opacity: 1; }
-.dp-project__del:hover { color: var(--color-error); }
-
-/* Editor */
-.dp-editor {
-  display: flex; flex-direction: column; height: 100%; width: 100%;
-  background: var(--color-surface); overflow: hidden;
-}
-.dp-editor__topbar {
-  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-  border-bottom: 1px solid var(--color-border); flex-shrink: 0;
-  background: var(--color-surface-container-lowest, var(--color-surface));
-}
-.dp-editor__back {
-  display: inline-flex; align-items: center; gap: 4px; border: none; background: transparent;
-  cursor: pointer; color: var(--color-text-secondary); font-size: 13px; padding: 6px 8px;
+.pw-prompt {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #ddd);
   border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-primary, #111);
+  background: var(--color-surface, #fff);
+  outline: none;
+  font-family: inherit;
 }
-.dp-editor__back:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
-.dp-editor__title-wrap { min-width: 0; }
-.dp-editor__title {
-  font-size: 14px; font-weight: 600; color: var(--color-text-primary);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
+.pw-prompt:focus { border-color: var(--color-brand, #4f46e5); }
+.pw-presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.pw-preset {
+  padding: 3px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, #ddd);
+  background: transparent;
+  color: var(--color-text-secondary, #555);
+  cursor: pointer;
 }
-.dp-editor__subtitle { font-size: 11px; color: var(--color-text-tertiary); margin-top: 1px; }
-.dp-editor__spacer { flex: 1; }
-.dp-btn--on {
-  border-color: color-mix(in srgb, var(--color-brand) 35%, var(--color-border));
-  color: var(--color-brand);
-  background: color-mix(in srgb, var(--color-brand) 8%, transparent);
+.pw-preset:hover { border-color: var(--color-brand, #4f46e5); color: var(--color-brand, #4f46e5); }
+.pw-generate {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0;
+  border-radius: 8px;
+  border: 0;
+  background: var(--color-primary, #4f46e5);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
+.pw-generate:disabled { opacity: 0.5; cursor: default; }
+.pw-generr { margin-top: 8px; font-size: 11px; color: var(--color-error, #dc2626); }
+.pw-empty { font-size: 12px; color: var(--color-text-tertiary, #999); padding: 8px 0; }
+.pw-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.pw-file:hover { background: var(--color-surface-hover, #f3f3f3); }
+.pw-file--active { background: var(--color-surface-container, #ececf1); }
+.pw-file__icon { font-size: 17px; color: var(--color-text-tertiary, #999); flex-shrink: 0; }
+.pw-file__meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pw-file__name {
+  font-size: 12px;
+  color: var(--color-text-primary, #111);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pw-file__sub { font-size: 10px; color: var(--color-text-tertiary, #999); }
+.pw-file__del {
+  font-size: 14px;
+  color: var(--color-text-tertiary, #bbb);
+  opacity: 0;
+  border-radius: 4px;
+  padding: 2px;
+}
+.pw-file:hover .pw-file__del { opacity: 1; }
+.pw-file__del:hover { color: var(--color-error, #dc2626); background: rgba(220,38,38,0.08); }
 
-.dp-ai-bar {
-  display: flex; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0; align-items: center;
-  background: color-mix(in srgb, var(--color-brand) 4%, var(--color-surface));
-}
-.dp-ai-bar__icon { font-size: 18px; color: var(--color-brand); flex-shrink: 0; }
-.dp-ai-bar__input { flex: 1; }
-
-.dp-editor__main {
-  flex: 1; min-height: 0; display: flex; overflow: hidden;
-}
-.dp-editor__pages {
-  width: 168px; flex-shrink: 0; border-right: 1px solid var(--color-border);
-  padding: 12px 10px; overflow-y: auto;
-  background: var(--color-surface-container-lowest, var(--color-surface));
-}
-.dp-page-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-.dp-page-row { display: flex; align-items: center; gap: 2px; }
-.dp-page-tab {
-  flex: 1; display: flex; align-items: center; gap: 8px;
-  text-align: left; padding: 8px 8px; border-radius: 8px; border: 1px solid transparent;
-  background: transparent; cursor: pointer; font-size: 12px; color: var(--color-text-secondary);
+/* ── main ── */
+.pw-main {
+  flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.dp-page-tab:hover { background: var(--color-surface-hover); }
-.dp-page-tab--active {
-  background: color-mix(in srgb, var(--color-brand) 10%, transparent);
-  color: var(--color-brand); font-weight: 600;
-  border-color: color-mix(in srgb, var(--color-brand) 20%, transparent);
+.pw-noselect {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--color-text-secondary, #555);
+  font-size: 14px;
 }
-.dp-page-tab__idx {
-  width: 18px; height: 18px; border-radius: 6px; font-size: 10px; font-weight: 700;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--color-surface-container-low, #f3f4f6); color: var(--color-text-tertiary);
+.pw-noselect__icon { font-size: 44px; color: var(--color-text-tertiary, #bbb); }
+.pw-noselect__sub { font-size: 12px; color: var(--color-text-tertiary, #999); }
+
+.pw-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--color-border, #ececec);
   flex-shrink: 0;
 }
-.dp-page-tab--active .dp-page-tab__idx {
-  background: color-mix(in srgb, var(--color-brand) 18%, transparent); color: var(--color-brand);
+.pw-toolbar__name {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  color: var(--color-text-primary, #111);
 }
-.dp-page-tab__name {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.pw-toolbar__dirty {
+  font-size: 11px;
+  color: #b45309;
+  background: rgba(180,83,9,0.1);
+  padding: 1px 8px;
+  border-radius: 999px;
 }
-.dp-page-del {
-  border: none; background: transparent; cursor: pointer; color: var(--color-text-tertiary);
-  width: 24px; height: 24px; border-radius: 6px; font-size: 14px; flex-shrink: 0;
+.pw-toolbar__spacer { flex: 1; }
+.pw-toolbar__tab {
+  font-size: 11px;
+  border: 1px solid var(--color-border, #ddd);
+  background: transparent;
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  color: var(--color-text-secondary, #555);
 }
-.dp-page-del:hover { color: var(--color-error); background: var(--color-surface-hover); }
+.pw-toolbar__tab--on { border-color: var(--color-brand, #4f46e5); color: var(--color-brand, #4f46e5); }
+.pw-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  border-radius: 7px;
+  border: 0;
+  background: var(--color-primary, #4f46e5);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pw-save:disabled { opacity: 0.45; cursor: default; }
 
-.dp-editor__workspace {
-  flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+.pw-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
 }
-.dp-editor__canvas { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
-.dp-canvas-empty {
-  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  color: var(--color-text-tertiary); font-size: 13px; gap: 6px;
+/* Preview: phone-width frame centered on a quiet bg */
+.pw-preview-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 20px;
+  overflow: auto;
+  background: var(--color-surface-container-lowest, #fafafa);
 }
-.dp-props-empty { font-size: 12px; color: var(--color-text-tertiary); line-height: 1.45; padding: 8px 0; }
+.pw-frame {
+  width: 390px;
+  height: 100%;
+  min-height: 480px;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 18px;
+  background: #fff;
+}
+/* Editor pane: slides in when the code tab is on */
+.pw-editor-pane {
+  width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--color-border, #ececec);
+  transition: width 160ms ease-out;
+  display: flex;
+  flex-direction: column;
+}
+.pw-split--editor .pw-editor-pane { width: 46%; }
+.pw-editor {
+  flex: 1;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: var(--color-surface-container-lowest, #fafafa);
+  color: var(--color-text-primary, #111);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 2;
+  white-space: pre;
+}
+.pw-howto {
+  flex: 1;
+  padding: 16px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-text-secondary, #555);
+  overflow: auto;
+}
+.pw-howto h4 { font-size: 13px; color: var(--color-text-primary, #111); margin: 0 0 8px; }
+.pw-howto ol { padding-left: 18px; margin: 0 0 12px; }
+.pw-howto li { margin-bottom: 6px; }
+.pw-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 8px;
+  background: var(--color-surface-container-low, #f7f7f8);
+}
+.pw-path code { flex: 1; font-size: 11px; color: var(--color-text-primary, #111); word-break: break-all; }
+.pw-path__copy {
+  font-size: 11px;
+  border: 1px solid var(--color-border, #ddd);
+  background: #fff;
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  color: var(--color-text-secondary, #555);
+}
+.pw-howto__tip { margin-top: 10px; font-size: 11px; color: var(--color-text-tertiary, #999); }
+
+@media (max-width: 900px) {
+  .pw-split--editor .pw-editor-pane { width: 60%; }
+  .pw-preview-pane { padding: 10px; }
+}
 </style>

@@ -22,3 +22,7 @@ def include_all_routers(app: FastAPI) -> None:
     # Sprint 5 — Proactive Observer: file/terminal nudge endpoint
     from madcop.server.routes.proactive_routes import router as proactive_router
     app.include_router(proactive_router)
+
+    # Design workshop: hybrid PM prototype tool (NL generate + manual edit)
+    from madcop.server.routes.design_routes import router as design_router
+    app.include_router(design_router)
