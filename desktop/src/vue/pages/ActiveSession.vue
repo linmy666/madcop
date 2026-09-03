@@ -1065,30 +1065,15 @@ function openTerminalInTab() {
           </div>
         </div>
 
-        <!-- Codex-style global progress capsule: one quiet pill above the
-             composer tells the user how many steps the task has and where
-             it is now — the single strongest "sense of safety" signal. -->
-        <div
-          v-if="liveStep && liveStep.m > 1"
-          class="pointer-events-none flex w-full shrink-0 justify-center"
-          style="margin-bottom: 4px"
-        >
-          <div
-            class="flex items-center gap-2 rounded-full border border-[var(--color-border)]/70 bg-[var(--color-surface)] px-3.5 py-1 text-[12px] text-[var(--color-text-tertiary)] shadow-[var(--shadow-dropdown)]"
-            role="status"
-          >
-            <span class="relative flex h-2 w-2">
-              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-brand)] opacity-40"></span>
-              <span class="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-brand)]"></span>
-            </span>
-            <!-- Only show when there's actual breadth: single-step / direct
-                 answers (m<=1) never showed "step 1/1" or "step 1/40" —
-                 the step budget is the ENGINE's budget for a 12+ step
-                 build, not a UI promise. We report only the running
-                 count of tool calls made so far. -->
-            <span>{{ t('chat.toolCallsRunning', '已调用 {n} 个工具', { n: liveStep.n }) }}</span>
-          </div>
-        </div>
+        <!-- Step-progress capsule removed by product request. The "已调用
+             N 个工具" pill was leaking the engine's step budget into the
+             UI even for trivial queries (the previous "步骤 1 / 40" was
+             the engine's max_steps, not a real plan), and the {n} i18n
+             interpolation regressed to a literal in the template. Plan
+             progress already shows up per-tool in the RunItem rows
+             (step / maxSteps chips on each card) — that is the right
+             place to surface it. -->
+        <div v-if="false" class="hidden" aria-hidden="true" />
 
         <ChatInput
           :variant="isEmpty && !isMemberSession && !showRightPanel ? 'hero' : 'default'"
