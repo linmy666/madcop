@@ -1279,8 +1279,28 @@ function renderItemContent(item: RenderItem) {
   }
   if (msg.type === 'turn_diff') {
     // Codex turn_diff_tracker — end-of-turn disk-change summary card.
+    // Three shapes: 'written' (non-git), git numstat, or 'noop' (every
+    // tool failed → nothing landed → "why is nothing here?" card).
     const d: any = (msg as any).diff || {}
     const files: any[] = d.files || []
+    if (d.mode === 'noop') {
+      const sum = d.summary || { attempted: 0, succeeded: 0, failed: 0 }
+      return h('div', {
+        class: 'mb-3 rounded-xl border border-dashed border-[var(--color-error)]/30 bg-[var(--color-error-container)]/30 px-4 py-3',
+        'data-testid': 'turn-diff-card',
+      }, [
+        h('div', { class: 'flex items-center gap-2 text-[13px] font-medium text-[var(--color-error)]' }, [
+          h('span', { class: 'material-symbols-outlined text-[16px]' }, 'error_outline'),
+          h('span', null, t('chat.turnDiffEmpty', '本回合没有文件落地')),
+        ]),
+        h('div', { class: 'mt-1 text-[12px] text-[var(--color-text-secondary)]' }, [
+          `尝试 ${sum.attempted} 次写入 / 成功 ${sum.succeeded} / 失败 ${sum.failed}`,
+          (sum.failed_paths && sum.failed_paths.length)
+            ? `：${sum.failed_paths.slice(0, 3).join('，')}${sum.failed_paths.length > 3 ? ' 等' : ''}`
+            : '',
+        ]),
+      ])
+    }
     const summary = t('chat.turnDiff', '本回合修改')
     return h('div', {
       class: 'mb-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-4 py-3',

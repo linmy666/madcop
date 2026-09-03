@@ -33,6 +33,38 @@ const detail = computed(() => {
   return keys.join(', ')
 })
 
+/** bash/run_command: long command preview with monospace formatting +
+ *  a simple risk tag (network / destructive / read-only). User asked
+ *  for this after seeing plain "mkdir && ls" cards sit next to
+ *  "rm -rf /" cards with no visual distinction. */
+const isShell = computed(() => ['bash', 'run_command'].includes(props.toolName))
+const cmdText = computed(() => {
+  if (!isShell.value) return ''
+  const inp = props.input || {}
+  return String(inp.command || inp.cmd || '')
+})
+const cmdExpanded = ref(false)
+/** Cheap risk heuristic: destructive (rm -rf, dd to /dev, mkfs),
+ *  network (curl|wget|ssh), read-only (ls/cat/grep). Keeps the
+ *  card consistent across bash invocations without depending on the
+ *  backend's exec_policy engine. */
+const cmdRisk = computed<{ level: 'destructive' | 'network' | 'safe'; label: string } | null>(() => {
+  if (!isShell.value) return null
+  const cmd = cmdText.value.toLowerCase()
+  if (/\brm\s+-rf?\b|\bmkfs\b|\bdd\s+if=.+of=\/dev\//.test(cmd)) {
+    return { level: 'destructive', label: '高危' }
+  }
+  if (/\b(curl|wget|ssh|scp|rsync|nc|netcat)\b/.test(cmd)) {
+    return { level: 'network', label: '联网' }
+  }
+  if (/\b(ls|cat|head|tail|grep|find|pwd|echo|which|file)\b/.test(cmd)) {
+    return { level: 'safe', label: '只读' }
+  }
+  return null
+})
+
+const showCmdPreview = computed(() => cmdText.value.length > 60)
+
 /** File tools whose target path can carry a directory scope. */
 const FILE_TOOLS = new Set(['write_file', 'edit_file', 'write_xlsx', 'write_pptx', 'apply_patch'])
 
@@ -88,6 +120,26 @@ const sizeHint = computed(() => {
       <span v-if="sizeHint" class="tcc__size">{{ sizeHint }}</span>
     </div>
     <div v-if="detail" class="tcc__detail">{{ detail }}</div>
+    <div v-if="isShell" class="tcc__cmd">
+      <div class="tcc__cmd-meta">
+        <span
+          v-if="cmdRisk"
+          :class="[
+            'tcc__risk',
+            cmdRisk.level === 'destructive' ? 'tcc__risk--destructive'
+              : cmdRisk.level === 'network' ? 'tcc__risk--network'
+              : 'tcc__risk--safe'
+          ]"
+        >{{ cmdRisk.label }}</span>
+        <button
+          v-if="showCmdPreview"
+          type="button"
+          class="tcc__cmd-toggle"
+          @click="cmdExpanded = !cmdExpanded"
+        >{{ cmdExpanded ? '折叠' : '展开' }}</button>
+      </div>
+      <pre class="tcc__cmd-pre" :class="{ 'tcc__cmd-pre--clamp': !cmdExpanded }">{{ cmdText }}</pre>
+    </div>
     <pre v-if="patchLines.length" class="tcc__patch"><code
       v-for="(ln, i) in patchLines"
       :key="i"
@@ -185,8 +237,74 @@ const sizeHint = computed(() => {
   color: var(--color-text-secondary, #555);
 }
 .tcc__btn--scope:hover {
+  background: var(--color-surface-hover);
   border-color: var(--color-text-primary, #111);
   color: var(--color-text-primary, #111);
+}
+.tcc__cmd {
+  margin: 8px 0 0;
+  border: 1px solid var(--color-border, rgba(128,128,128,0.25));
+  border-radius: 6px;
+  overflow: hidden;
+}
+.tcc__cmd-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: var(--color-surface-container-low, #f4f4f4);
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+.tcc__risk {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+.tcc__risk--destructive {
+  color: var(--color-error, #dc2626);
+  background: rgba(220, 38, 38, 0.12);
+}
+.tcc__risk--network {
+  color: #b45309;
+  background: rgba(180, 83, 9, 0.12);
+}
+.tcc__risk--safe {
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-container);
+}
+.tcc__cmd-toggle {
+  background: transparent;
+  border: 0;
+  color: var(--color-brand);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.tcc__cmd-toggle:hover {
+  background: var(--color-surface-hover);
+}
+.tcc__cmd-pre {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--color-surface-container-lowest, #fafafa);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--color-text-primary);
+}
+.tcc__cmd-pre--clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .tcc__btn--approve {
   background: var(--color-text-primary, #111);

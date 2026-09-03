@@ -23,7 +23,9 @@ Design (Qian control theory):
 from __future__ import annotations
 
 import logging
+import os
 import re
+import time
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -459,7 +461,8 @@ class WebSearchTool(Tool):
     # no value in retrying a 15s-timeout subprocess mid-conversation.)
     _visitproject_fail_count: int = 0
     _visitproject_dead: bool = False
-    _VISITPROJECT_MAX_FAILURES = 1
+    _VISITPROJECT_MAX_FAILURES = 3
+    _VISITPROJECT_DEAD_COOLDOWN_S = 60  # sticky-dead duration
 
     def _search_visitproject(self, query: str, max_results: int) -> list[dict[str, str]]:
         """Search via visitproject (agentic MCP server — best quality).
@@ -479,11 +482,17 @@ class WebSearchTool(Tool):
             return []
 
         cls = self.__class__
-        # Circuit breaker: if visitproject has failed too many times, skip
-        # it instantly for the rest of the process. Avoids re-burning 15s
-        # on every web_search call when the subprocess is broken.
-        if cls._visitproject_dead:
+        # Cooldown circuit breaker: skip when DEAD and the cooldown
+        # hasn't elapsed. Auto-recovers once time.time() > dead_until.
+        if (cls._visitproject_dead_until
+                and time.time() < cls._visitproject_dead_until):
             return []
+        # Cooldown elapsed — give the engine another chance.
+        if cls._visitproject_dead_until and time.time() >= cls._visitproject_dead_until:
+            cls._visitproject_dead_until = 0.0
+            cls._visitproject_fail_count = 0
+            cls._visitproject_client = None  # force a fresh subprocess
+            logger.info("visitproject cooldown elapsed; retrying")
 
         # Build subprocess env once (cached on class).
         if cls._visitproject_env is None:
@@ -500,7 +509,7 @@ class WebSearchTool(Tool):
                     client = MCPClient(
                         command=["node", bin_path],
                         env=cls._visitproject_env,
-                        timeout_s=15.0,
+                        timeout_s=30.0,
                     )
                     client.connect()
                     atexit.register(client.close)
@@ -509,11 +518,10 @@ class WebSearchTool(Tool):
                     logger.warning("visitproject connect failed: %s", e)
                     cls._visitproject_fail_count += 1
                     if cls._visitproject_fail_count >= cls._VISITPROJECT_MAX_FAILURES:
-                        cls._visitproject_dead = True
+                        cls._visitproject_dead_until = time.time() + cls._VISITPROJECT_DEAD_COOLDOWN_S
                         logger.warning(
-                            "visitproject marked DEAD after %d failures; "
-                            "skipping for rest of process",
-                            cls._visitproject_fail_count,
+                            "visitproject unreachable; skipping for %ds",
+                            cls._VISITPROJECT_DEAD_COOLDOWN_S,
                         )
                     return []
 
@@ -533,11 +541,10 @@ class WebSearchTool(Tool):
             cls._visitproject_client = None
             cls._visitproject_fail_count += 1
             if cls._visitproject_fail_count >= cls._VISITPROJECT_MAX_FAILURES:
-                cls._visitproject_dead = True
+                cls._visitproject_dead_until = time.time() + cls._VISITPROJECT_DEAD_COOLDOWN_S
                 logger.warning(
-                    "visitproject marked DEAD after %d failures; "
-                    "skipping for rest of process",
-                    cls._visitproject_fail_count,
+                    "visitproject unreachable; skipping for %ds",
+                    cls._VISITPROJECT_DEAD_COOLDOWN_S,
                 )
             return []
 

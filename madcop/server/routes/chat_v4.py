@@ -1634,6 +1634,30 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                                 }
                         if _td and _td.get("files_changed"):
                             q.put(AgentStep(kind=StepKind.TURN_DIFF, metadata={"diff": _td}))
+                        elif _written_files:
+                            # Fail-mode: tools ran but EVERY write/errored
+                            # (or no git + no writes). Don't stay silent —
+                            # emit a summary card so the user sees why
+                            # nothing landed instead of staring at "done"
+                            # with no visible outcome.
+                            _total = len(_written_files)
+                            _ok = sum(1 for w in _written_files.values() if w["ok"])
+                            _fail = _total - _ok
+                            _fail_paths = [w["path"] for w in
+                                           _written_files.values() if not w["ok"]]
+                            q.put(AgentStep(kind=StepKind.TURN_DIFF, metadata={
+                                "diff": {
+                                    "mode": "noop",
+                                    "files": [],
+                                    "files_changed": 0,
+                                    "summary": {
+                                        "attempted": _total,
+                                        "succeeded": _ok,
+                                        "failed": _fail,
+                                        "failed_paths": _fail_paths[:10],
+                                    },
+                                },
+                            }))
                     except Exception:
                         pass
 
