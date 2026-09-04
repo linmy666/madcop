@@ -1126,6 +1126,12 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             yield {"type": "plan_step", "step": _step.to_dict()}
 
             # Handle ask_user / clarify surfaced by the executor.
+            # CRITICAL: the loop must stop here — the model is waiting
+            # on the user's answer. Previously the flow continued into
+            # Phase 3 (synthesize) and emitted a "plan_done" stream, so
+            # the user saw both the chip dialog AND a synthesized reply
+            # racing each other. ask_user is a real pause, not a step
+            # in the plan.
             if _plan_clarify_queue:
                 for _c in _plan_clarify_queue:
                     yield {
@@ -1136,6 +1142,10 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                         "tool_use_id": f"plan-{_step.step}",
                     }
                 _plan_clarify_queue.clear()
+                # ack that the turn ended — without done, the front-end
+                # keeps chatState='busy' and the composer stays disabled.
+                yield {"type": "done", "model": ctx.model or ""}
+                return
 
         # Phase 3: synthesize a final text from successful steps.
         _synth = (
