@@ -25,7 +25,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _PREVIEW_DIR = Path.home() / ".madcop" / "preview"
+_VERSIONS_DIR = _PREVIEW_DIR / ".versions"
 _MAX_HTML_BYTES = 1_500_000
+_MAX_VERSIONS_PER_FILE = 20
+
+
+def _versions_dir_for(fname: str) -> Path:
+    d = _VERSIONS_DIR / fname
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _snapshot_version(fname: str) -> None:
+    """Snapshot the CURRENT on-disk content before an overwrite (save /
+    rollback). Keeps the newest _MAX_VERSIONS_PER_FILE snapshots."""
+    p = _PREVIEW_DIR / fname
+    if not p.exists():
+        return
+    vdir = _versions_dir_for(fname)
+    dest = vdir / f"{int(time.time() * 1000)}.html"
+    dest.write_bytes(p.read_bytes())
+    versions = sorted(vdir.glob("*.html"))
+    for old in versions[:-_MAX_VERSIONS_PER_FILE]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
 
 
 def _safe_name(name: str) -> str:
@@ -93,9 +118,112 @@ async def design_file_put(body: DesignFileBody) -> dict[str, Any]:
         raise HTTPException(413, "文件过大（>1.5MB）")
     _PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
     p = _PREVIEW_DIR / fname
+    if p.exists():
+        _snapshot_version(fname)
     p.write_text(content, encoding="utf-8")
     return {"ok": True, "name": fname, "size": p.stat().st_size,
             "preview_url": f"/preview/{fname}"}
+
+
+@router.get("/api/v4/design/versions")
+async def design_versions(name: str = "") -> dict[str, Any]:
+    """List snapshots for a prototype (newest first)."""
+    fname = _safe_name(name)
+    vdir = _VERSIONS_DIR / fname
+    out = []
+    if vdir.exists():
+        for v in sorted(vdir.glob("*.html"), key=lambda f: f.stat().st_mtime,
+                        reverse=True):
+            out.append({"ts": int(v.stat().st_mtime * 1000),
+                        "size": v.stat().st_size,
+                        "version_id": v.stem})
+    return {"ok": True, "name": fname, "versions": out}
+
+
+@router.get("/api/v4/design/version")
+async def design_version_get(name: str = "", version_id: str = "") -> dict[str, Any]:
+    fname = _safe_name(name)
+    vid = re.sub(r"[^0-9]", "", version_id) or "0"
+    v = _VERSIONS_DIR / fname / f"{vid}.html"
+    if not v.exists():
+        raise HTTPException(404, f"version not found: {vid}")
+    return {"ok": True, "name": fname, "version_id": vid,
+            "content": v.read_text(encoding="utf-8", errors="replace")}
+
+
+class DesignRollbackBody(BaseModel):
+    name: str
+    version_id: str
+
+
+@router.post("/api/v4/design/rollback")
+async def design_rollback(body: DesignRollbackBody) -> dict[str, Any]:
+    """Restore a snapshot: snapshot-current-first, then copy the version
+    back. Rollback itself is versioned, so it is undoable too."""
+    fname = _safe_name(body.name)
+    vid = re.sub(r"[^0-9]", "", body.version_id) or "0"
+    v = _VERSIONS_DIR / fname / f"{vid}.html"
+    p = _PREVIEW_DIR / fname
+    if not v.exists():
+        raise HTTPException(404, f"version not found: {vid}")
+    if p.exists():
+        _snapshot_version(fname)
+    p.write_text(v.read_text(encoding="utf-8"), encoding="utf-8")
+    return {"ok": True, "name": fname, "restored": vid,
+            "size": p.stat().st_size}
+
+
+# ─── Point-to-edit preview (v0 Design Mode / Figma Make parity) ───────────────
+# The app UI and /preview are cross-origin, so the parent can't reach into
+# the iframe DOM. Instead we serve the HTML with a tiny injected selector
+# script: hover outlines elements, click computes a CSS selector + element
+# HTML and postMessages it to the parent. The parent composes a pinpoint
+# edit prompt — selection = precise anchor, so the agent's edit_file patch
+# hallucinates nothing about location.
+_INJECT_SCRIPT = (
+    '<script>(function(){'
+    "var s=document.createElement('style');"
+    "s.textContent='[data-mc-hov]{outline:2px solid #6366f1!important;"
+    "outline-offset:1px;cursor:pointer!important}';"
+    "document.head.appendChild(s);"
+    "var last=null;"
+    "document.addEventListener('mouseover',function(e){"
+    "if(last){last.removeAttribute('data-mc-hov');}"
+    "var el=e.target;"
+    "if(el&&el!==document.body&&el!==document.documentElement){"
+    "el.setAttribute('data-mc-hov','1');last=el;}},true);"
+    "function sel(el){var parts=[];"
+    "while(el&&el.nodeType===1&&el!==document.body){"
+    "var seg=el.tagName.toLowerCase();"
+    "if(el.id){parts.unshift('#'+el.id);break;}"
+    "var i=1,s=el;while((s=s.previousElementSibling)){if(s.tagName===el.tagName)i++;}"
+    "seg+=':nth-of-type('+i+')';parts.unshift(seg);el=el.parentElement;}"
+    "return parts.join(' > ');}"
+    "document.addEventListener('click',function(e){"
+    "e.preventDefault();e.stopPropagation();"
+    "var el=e.target;"
+    "if(!el||el===document.body)return;"
+    "var html=el.outerHTML;if(html.length>1500)html=html.slice(0,1500)+'…';"
+    "parent.postMessage({type:'madcop-select',selector:sel(el),"
+    "html:html,text:(el.innerText||'').slice(0,120)},'*');},true);"
+    '})();</script></body>'
+)
+
+
+@router.get("/api/v4/design/preview")
+async def design_preview(name: str = "") -> Any:
+    """Serve a prototype HTML with the point-to-edit selector injected."""
+    from fastapi.responses import HTMLResponse
+    fname = _safe_name(name)
+    p = _PREVIEW_DIR / fname
+    if not p.exists():
+        raise HTTPException(404, f"prototype not found: {fname}")
+    html = p.read_text(encoding="utf-8", errors="replace")
+    if "</body>" in html:
+        html = html.replace("</body>", _INJECT_SCRIPT, 1)
+    else:
+        html += _INJECT_SCRIPT
+    return HTMLResponse(content=html, media_type="text/html")
 
 
 # ─── Generation ───────────────────────────────────────────────────────────────

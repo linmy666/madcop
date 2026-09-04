@@ -42,7 +42,49 @@ const PRESET_PROMPTS = [
 ]
 
 const previewUrl = computed(() =>
-  selected.value ? `/preview/${encodeURIComponent(selected.value)}?t=${previewBust.value}` : '')
+  selected.value
+    ? `${getApiUrl(`/api/v4/design/preview?name=${encodeURIComponent(selected.value)}`)}&t=${previewBust.value}`
+    : '')
+
+// ── point-to-edit (v0 Design Mode / Figma Make parity) ────────────────
+const selection = ref<{ selector: string; html: string; text: string } | null>(null)
+const editInstruction = ref('')
+
+function onSelectMessage(e: MessageEvent) {
+  const d = e.data
+  if (!d || d.type !== 'madcop-select') return
+  selection.value = { selector: String(d.selector || ''), html: String(d.html || ''), text: String(d.text || '') }
+  editInstruction.value = ''
+}
+
+function composePointEditPrompt(): string {
+  const sel = selection.value
+  if (!sel) return ''
+  const req = editInstruction.value.trim() || '按用户接下来的描述修改'
+  return (
+    `请修改原型文件 ${selected.value} 中选中的元素。\n` +
+    `选择器：${sel.selector}\n` +
+    `元素 HTML：\n${sel.html}\n` +
+    `修改要求：${req}\n` +
+    '请用 edit_file 精准修改该元素，不要改动文件其他部分。'
+  )
+}
+
+async function copyPointEdit() {
+  const promptText = composePointEditPrompt()
+  if (!promptText) return
+  try {
+    await navigator.clipboard.writeText(promptText)
+    uiStore.addToast({ type: 'success', message: '点选修改提示词已复制——粘贴到主会话发送即可' })
+  } catch {
+    uiStore.addToast({ type: 'error', message: '复制失败，请手动选择文本' })
+  }
+}
+
+function clearSelection() {
+  selection.value = null
+  editInstruction.value = ''
+}
 
 const isDirty = computed(() => content.value !== savedContent.value)
 const canSave = computed(() => isDirty.value && !!selected.value && !saving.value)
@@ -81,6 +123,8 @@ async function selectFile(name: string) {
     content.value = data.content
     savedContent.value = data.content
     previewBust.value = Date.now()
+    showVersions.value = false
+    void fetchVersions()
   } catch (e: any) {
     uiStore.addToast({ type: 'error', message: e?.message || '读取失败' })
   } finally {
@@ -174,15 +218,66 @@ function copyPath() {
   void navigator.clipboard?.writeText(selected.value || '')
 }
 
+// ── version history ────────────────────────────────────────────────────
+interface ProtoVersion { ts: number; size: number; version_id: string }
+const versions = ref<ProtoVersion[]>([])
+const showVersions = ref(false)
+const loadingVersions = ref(false)
+
+const vLabel = (ts: number) => {
+  const d = new Date(ts)
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+}
+
+async function fetchVersions() {
+  if (!selected.value) return
+  loadingVersions.value = true
+  try {
+    const res = await fetch(getApiUrl(`/api/v4/design/versions?name=${encodeURIComponent(selected.value)}`))
+    const data = await res.json()
+    versions.value = data.versions || []
+  } catch {
+    versions.value = []
+  } finally {
+    loadingVersions.value = false
+  }
+}
+
+function toggleVersions() {
+  showVersions.value = !showVersions.value
+  if (showVersions.value) void fetchVersions()
+}
+
+async function loadVersion(versionId: string) {
+  if (!selected.value) return
+  if (isDirty.value && !confirm('加载旧版本会丢弃未保存的修改。继续？')) return
+  try {
+    const res = await fetch(getApiUrl(`/api/v4/design/version?name=${encodeURIComponent(selected.value)}&version_id=${versionId}`))
+    const data = await res.json()
+    if (!res.ok || !data.ok) throw new Error(data.detail || '读取失败')
+    content.value = data.content
+    savedContent.value = data.content
+    previewBust.value = Date.now()
+    showVersions.value = false
+    uiStore.addToast({ type: 'success', message: '已载入历史版本——点保存即可回滚到该版本' })
+  } catch (e: any) {
+    uiStore.addToast({ type: 'error', message: e?.message || '载入失败' })
+  }
+}
+
 let pollTimer: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
+  window.addEventListener('message', onSelectMessage)
   void fetchFiles(true)
   // Light poll so agent-written prototypes (from the main chat) appear.
   pollTimer = setInterval(() => {
     if (!generating.value && !isDirty.value) void fetchFiles()
   }, 8000)
 })
-onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
+onBeforeUnmount(() => {
+  if (pollTimer) clearInterval(pollTimer)
+  window.removeEventListener('message', onSelectMessage)
+})
 </script>
 
 <template>
@@ -263,6 +358,30 @@ onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
           <button
             type="button"
             class="pw-toolbar__tab"
+            data-testid="history-btn"
+            @click="toggleVersions"
+          >
+            <span class="material-symbols-outlined text-[13px] align-middle">history</span>
+            历史{{ versions.length ? ` (${versions.length})` : '' }}
+          </button>
+          <div v-if="showVersions" class="pw-versions">
+            <div v-if="loadingVersions" class="pw-versions__empty">加载中…</div>
+            <div v-else-if="!versions.length" class="pw-versions__empty">暂无历史版本——每次保存都会自动留一个快照</div>
+            <button
+              v-for="v in versions"
+              :key="v.version_id"
+              type="button"
+              class="pw-versions__row"
+              @click="loadVersion(v.version_id)"
+            >
+              <span class="material-symbols-outlined text-[14px]">restore</span>
+              <span class="pw-versions__time">{{ vLabel(v.ts) }}</span>
+              <span class="pw-versions__size">{{ sizeLabel(v.size) }}</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            class="pw-toolbar__tab"
             :class="{ 'pw-toolbar__tab--on': rightTab === 'code' }"
             @click="rightTab = rightTab === 'code' ? 'howto' : 'code'"
           >{{ rightTab === 'code' ? '切到说明' : '切到代码' }}</button>
@@ -289,6 +408,28 @@ onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
               title="原型预览"
               sandbox="allow-scripts allow-forms allow-modals"
             ></iframe>
+            <!-- Point-to-edit bar: click an element in the preview to
+                 select it; compose a pinpoint edit prompt anchored to the
+                 element's exact selector (v0 Design Mode parity). -->
+            <div v-if="selection" class="pw-selectbar" data-testid="point-edit-bar">
+              <div class="pw-selectbar__sel">
+                <span class="material-symbols-outlined text-[13px]">ads_click</span>
+                <code class="pw-selectbar__selector">{{ selection.selector }}</code>
+                <button type="button" class="pw-selectbar__close" aria-label="清除选择" @click="clearSelection">
+                  <span class="material-symbols-outlined text-[14px]">close</span>
+                </button>
+              </div>
+              <input
+                v-model="editInstruction"
+                class="pw-selectbar__input"
+                placeholder="想让它怎么改？如：文字改成「立即下单」并加大内边距"
+                @keydown.enter="copyPointEdit"
+              />
+              <button type="button" class="pw-selectbar__copy" @click="copyPointEdit">
+                <span class="material-symbols-outlined text-[14px]">content_copy</span>
+                复制给 MadCop
+              </button>
+            </div>
           </div>
           <!-- Editor pane -->
           <div class="pw-editor-pane">
@@ -459,6 +600,7 @@ onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
 .pw-noselect__sub { font-size: 12px; color: var(--color-text-tertiary, #999); }
 
 .pw-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -512,6 +654,7 @@ onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
 }
 /* Preview: phone-width frame centered on a quiet bg */
 .pw-preview-pane {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -586,6 +729,96 @@ onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
   color: var(--color-text-secondary, #555);
 }
 .pw-howto__tip { margin-top: 10px; font-size: 11px; color: var(--color-text-tertiary, #999); }
+
+.pw-versions {
+  position: absolute;
+  top: 44px;
+  right: 60px;
+  z-index: 30;
+  min-width: 230px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  padding: 4px;
+}
+.pw-versions__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-text-secondary, #555);
+  text-align: left;
+}
+.pw-versions__row:hover { background: var(--color-surface-hover, #f3f3f3); }
+.pw-versions__time { flex: 1; font-variant-numeric: tabular-nums; }
+.pw-versions__size { color: var(--color-text-tertiary, #999); font-size: 11px; }
+.pw-versions__empty { padding: 10px; font-size: 12px; color: var(--color-text-tertiary, #999); }
+
+.pw-selectbar {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 16px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-brand, #4f46e5);
+  border-radius: 12px;
+  background: var(--color-surface, #fff);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.14);
+}
+.pw-selectbar__sel { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pw-selectbar__selector {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  color: var(--color-brand, #4f46e5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pw-selectbar__close {
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--color-text-tertiary, #999); border-radius: 4px; padding: 1px;
+}
+.pw-selectbar__input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: 8px;
+  font-size: 12px;
+  outline: none;
+  color: var(--color-text-primary, #111);
+  background: var(--color-surface, #fff);
+  font-family: inherit;
+}
+.pw-selectbar__input:focus { border-color: var(--color-brand, #4f46e5); }
+.pw-selectbar__copy {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 0;
+  background: var(--color-primary, #4f46e5);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
 
 @media (max-width: 900px) {
   .pw-split--editor .pw-editor-pane { width: 60%; }
