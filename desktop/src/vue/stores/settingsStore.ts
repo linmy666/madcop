@@ -74,11 +74,10 @@ const SETTINGS_STORAGE_KEY = 'madcop-agent-settings'
  *  Otherwise default to opt-in (everything off) so we don't fire
  *  out of the blue at first-time users. */
 function _initialProactiveState(): { enabled: boolean; observeFiles: boolean; observeTerminal: boolean } {
-  try {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('madcop_workspace_dir')) {
-      return { enabled: true, observeFiles: true, observeTerminal: true }
-    }
-  } catch { /* SSR / restricted storage */ }
+  // Product decision: the Proactive Observer defaults to OFF. Picking a
+  // workspace no longer auto-enables background monitoring — the user
+  // turns it on explicitly in 设置 → 观察器与学习. Persisted user
+  // preferences (initPersistedState) still override this default.
   return { enabled: false, observeFiles: false, observeTerminal: false }
 }
 
@@ -152,7 +151,21 @@ export const useSettingsStore = defineStore('settings', {
     // so the "open MadCop and it works" experience matches the resume.
     proactive: _initialProactiveState() as { enabled: boolean; observeFiles: boolean; observeTerminal: boolean },
     // P0-3 — restore persisted user preferences over the defaults above.
-    ...initPersistedState(),
+    ...(() => {
+      const persisted = initPersistedState()
+      // One-time migration (2026-09): the observer used to AUTO-enable
+      // whenever a workspace was set, so persisted {enabled:true} may
+      // reflect the old implicit default rather than a user choice.
+      // Wipe it once so the observer defaults to OFF; users who re-enable
+      // explicitly keep their choice going forward.
+      try {
+        if (!localStorage.getItem('madcop_proactive_migrated_v1')) {
+          delete persisted.proactive
+          localStorage.setItem('madcop_proactive_migrated_v1', '1')
+        }
+      } catch { /* restricted storage */ }
+      return persisted
+    })(),
   }),
 
   actions: {

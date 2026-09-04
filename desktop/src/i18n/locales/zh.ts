@@ -111,6 +111,7 @@ export const zh: Record<TranslationKey, string> = {
   'settings.nav.adapters': '适配器',
   'settings.nav.h5Access': 'H5 访问',
   'settings.nav.terminal': '终端',
+  'settings.nav.continuousLearning': '观察器与学习',
   'settings.nav.execPolicy': '命令策略',
   'settings.nav.computerUse': '计算机使用',
   'settings.nav.activity': '活动统计',

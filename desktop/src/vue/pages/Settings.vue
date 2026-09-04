@@ -18,6 +18,7 @@ const GeneralSettings = defineAsyncComponent(() => import('./settings/GeneralSet
 const H5AccessSettings = defineAsyncComponent(() => import('./H5AccessSettings.vue'))
 const AdapterSettings = defineAsyncComponent(() => import('./AdapterSettings.vue'))
 const TerminalSettings = defineAsyncComponent(() => import('./TerminalSettings.vue'))
+const ContinuousLearningSettings = defineAsyncComponent(() => import('./settings/ContinuousLearningSettings.vue'))
 const ExecPolicySettings = defineAsyncComponent(() => import('./ExecPolicySettings.vue'))
 const McpSettings = defineAsyncComponent(() => import('./McpSettings.vue'))
 const AgentsSettingsPage = defineAsyncComponent(() => import('./AgentsSettings.vue'))
@@ -73,6 +74,7 @@ const navItems: NavItem[] = [
   { id: 'h5Access',    labelKey: 'settings.nav.h5Access',    icon: 'qr_code_2',      group: 'ai' },
   { id: 'plugins',     labelKey: 'settings.nav.plugins',     icon: 'extension',      group: 'system' },
   { id: 'terminal',    labelKey: 'settings.nav.terminal',    icon: 'terminal',       group: 'system' },
+  { id: 'continuousLearning', labelKey: 'settings.nav.continuousLearning', icon: 'visibility', group: 'system' },
   { id: 'execPolicy',  labelKey: 'settings.nav.execPolicy',  icon: 'gavel',          group: 'system' },
   { id: 'computerUse', labelKey: 'settings.nav.computerUse', icon: 'mouse',          group: 'system' },
   { id: 'activity',    labelKey: 'settings.nav.activity',    icon: 'monitoring',     group: 'system' },
@@ -437,6 +439,10 @@ onMounted(loadLearning)
         <!-- ═══ Terminal ═══ -->
         <div v-else-if="activeTab === 'terminal'" class="settings-section settings-section--fullbleed">
           <TerminalSettings />
+        </div>
+        <!-- ═══ 观察器与学习（持续学习 + 主动观察器） ═══ -->
+        <div v-else-if="activeTab === 'continuousLearning'" class="settings-section settings-section--fullbleed">
+          <ContinuousLearningSettings />
         </div>
         <!-- ═══ Exec policy ═══ -->
         <div v-else-if="activeTab === 'execPolicy'" class="settings-section settings-section--fullbleed">

@@ -1304,23 +1304,7 @@ const projectMenuData = computed(() => {
         <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.agentHub') }}</span>
       </button>
 
-      <!-- A-1: Observer — flagship differentiator, promoted to primary nav.
-           Shows a green status dot when actively monitoring, gray when off. -->
-      <button
-        type="button"
-        :class="primaryNavClass(activeTabType === 'observer')"
-        :aria-label="t('sidebar.observer', '观察器')"
-        @click="() => { tabStore.openTab('__observer__', t('sidebar.observer', '观察器'), 'observer' as any); closeMobileDrawer() }"
-      >
-        <span class="material-symbols-outlined text-[18px] shrink-0">visibility</span>
-        <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.observer', '观察器') }}</span>
-        <span
-          v-if="expanded"
-          class="ml-auto w-2 h-2 rounded-full shrink-0"
-          :class="observerActive ? 'bg-[var(--color-text-secondary)] animate-pulse' : 'bg-[var(--color-border)]'"
-          :title="observerActive ? '观察器运行中' : '观察器未开启'"
-        ></span>
-      </button>
+
 
       <!-- B-2: Memory — promoted from buried Settings sub-page to primary nav -->
       <button
@@ -1369,7 +1353,7 @@ const projectMenuData = computed(() => {
       >
         <span class="inline-block w-3 text-center text-[9px]">{{ navMoreOpen ? '−' : '+' }}</span>
         <span>{{ navMoreOpen ? t('sidebar.less') : t('sidebar.more') }}</span>
-        <span class="ml-1 tabular-nums text-[var(--color-text-tertiary)] opacity-50">4</span>
+        <span class="ml-1 tabular-nums text-[var(--color-text-tertiary)] opacity-50">3</span>
       </button>
 
       <!-- Tiny status dot when collapsed: a hint that there's more -->
@@ -1406,14 +1390,6 @@ const projectMenuData = computed(() => {
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 opacity-60"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
           <span class="flex-1 text-left text-[12px]">{{ t('sidebar.designTool') }}</span>
-        </button>
-        <button
-          type="button"
-          :class="secondaryNavClass(activeTabType === 'skill-builder')"
-          @click="() => { tabStore.openSkillBuilderTab(); closeMobileDrawer() }"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 opacity-60"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-          <span class="flex-1 text-left text-[12px]">{{ t('sidebar.skillBuilder') }}</span>
         </button>
 
       </template>
