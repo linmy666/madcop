@@ -838,23 +838,33 @@ export const useChatStore = defineStore('chat', {
             assistantPushed = true
             assistantMsgObj = {
               type: 'assistant_text',
-              // v3.8.7 — use a space placeholder instead of empty string.
-              // buildRenderModel (messageListUtils.ts:509) skips
-              // assistant_text messages whose content.trim() is empty.
-              // When this object is first pushed, assistantMsg is usually
-              // empty (the first text token hasn't arrived yet), so the
-              // message gets filtered out and never appears even after
-              // content is updated later — because Vue's computed cache
-              // for `messages` doesn't re-evaluate when only a nested
-              // object property changes (the array reference is stable).
-              // A space placeholder ensures trim() returns non-empty,
-              // so the message is never skipped.
+              // Seed non-empty (space) so the renderer (which filters
+              // assistant_text with .trim()==='') never skips the row
+              // mid-stream. _requestFlush below rewrites content to the
+              // live accumulated text every frame; the placeholder is
+              // never visible because chunks arrive faster than 16ms.
               content: assistantMsg || ' ',
               id: assistantId,
               transcriptMessageId: assistantId,
               timestamp: Date.now(),
             }
             session.messages.push(assistantMsgObj)
+          }
+
+          // Write the live accumulator directly into the pushed
+          // assistantMsgObj on every text chunk so the timeline updates
+          // in the same Vue tick the chunk arrives. Without this, the
+          // bubble is invisible (content is the single-space seed) until
+          // the next requestAnimationFrame fires _flushNow — which can
+          // be up to 16ms later, and gets dropped entirely if the run
+          // is paused/cancelled mid-render.
+          const _writeAccumulated = () => {
+            if (!assistantMsgObj) return
+            if (assistantMsgObj.content === assistantMsg) return
+            assistantMsgObj.content = assistantMsg
+            // Force Pinia to re-publish the messages array so any computed
+            // keyed on it (AssistantMessage render path) re-evaluates.
+            session.messages = [...session.messages]
           }
           
           while (true) {
@@ -1125,6 +1135,11 @@ export const useChatStore = defineStore('chat', {
                     }
                     // Keep rawText for debugging/compaction, but don't filter it.
                     sess2._rawText = (sess2._rawText || '') + chunk
+                    // Sync the pushed assistant object NOW (not on rAF): a
+                    // pending rAF can be cancelled by a quick done, and
+                    // the timeline needs to show the latest chunk in the
+                    // same Vue tick it arrives.
+                    _writeAccumulated()
                     _requestFlush()
                     // The final answer is now streaming in. Switch out of the
                     // "thinking" state so the hand-drawn planning animation is
