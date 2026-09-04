@@ -449,6 +449,15 @@ export const useChatStore = defineStore('chat', {
       _options?: { displayContent?: string; displayAttachments?: AttachmentRef[]; hideDisplayContent?: boolean, model?: string },
     ) {
       const session = this.getSession(sessionId)
+      // Codex semantics: sending while the agent is running = STEER, not
+      // a second concurrent turn. Two turns on one session race on the
+      // same log/SSE — double user bubbles, aborted streams, stuck 停止.
+      // (Reproduced via a single welcome-chip click whose handler fired
+      // sendMessage twice in a mid-render re-render window.)
+      if (['busy', 'streaming', 'tool_executing'].includes(session.chatState)) {
+        void this.steerMessage(sessionId, content)
+        return
+      }
       session.chatState = 'busy'
       // Sync to liveState so PlanTasksPanel shows "思考中" immediately
       resetLiveState(sessionId)
