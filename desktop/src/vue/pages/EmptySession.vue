@@ -51,7 +51,6 @@ import { useMobileViewport } from '../hooks/useMobileViewport'
 
 
 import { isDesktopRuntime } from '../lib/desktopRuntime'
-import MadCopLoader from '../components/common/MadCopLoader.vue'
 import {
   filesToComposerAttachments,
   selectNativeFileAttachments,
@@ -756,7 +755,7 @@ const insertSlashCommand = () => {
 <template>
   <div class="relative flex flex-1 flex-col overflow-hidden bg-[var(--color-surface)]">
     <!-- ═══════════════════════════════════════════════════════════════
-         Centered intro (MadCopLoader + title + subtitle)
+         Centered intro (title + subtitle)
          ═══════════════════════════════════════════════════════════════ -->
     <div
       class="flex flex-1 flex-col items-center justify-center overflow-y-auto"
@@ -766,15 +765,11 @@ const insertSlashCommand = () => {
         class="relative z-10 flex flex-col items-center text-center"
         :class="isMobileComposer ? 'max-w-[300px]' : 'max-w-md'"
       >
-        <!-- Soft radial brand glow behind the mascot (matches ActiveSession) -->
-        <div
-          class="pointer-events-none absolute left-1/2 top-16 h-[320px] w-[320px] -translate-x-1/2 rounded-full blur-3xl"
-          style="background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%); opacity: 0.12;"
-        ></div>
-        <MadCopLoader state="'ready'" :size="isMobileComposer ? 96 : 128" class="relative z-10 mb-4" />
+        <!-- Codex-style empty state: one big headline, no mascot — the
+             suggestion chips below carry the visual interest. -->
         <h1
           class="mb-3 font-bold tracking-tight text-[var(--color-text-primary)]"
-          :class="isMobileComposer ? 'text-2xl' : 'text-[2rem]'"
+          :class="isMobileComposer ? 'text-2xl' : 'text-[1.75rem]'"
           :style="{ fontFamily: 'var(--font-headline)' }"
         >
           {{ heroState === 'no_provider' ? '欢迎来到 MadCop' : t('empty.title') }}
@@ -839,7 +834,7 @@ const insertSlashCommand = () => {
           data-testid="empty-session-composer-panel"
           class="glass-panel relative flex flex-col gap-3 overflow-visible"
           :class="[
-            isMobileComposer ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl p-0 shadow-[var(--shadow-composer)]',
+            isMobileComposer ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(0,0,0,0.10)]' : 'rounded-xl p-0 shadow-[var(--shadow-composer)]',
             { 'composer-drop-target-active': isDragActive },
           ]"
         >

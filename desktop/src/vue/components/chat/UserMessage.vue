@@ -101,11 +101,11 @@ function retry() {
 }
 .user-message__bubble {
   max-width: 100%;
-  background: var(--color-surface-container-low, #efefef);
+  /* ChatGPT-style bubble: solid fill, no border/shadow — the surface
+     tone alone separates it from the canvas. */
+  background: var(--color-surface-user-msg, var(--color-surface-container));
   padding: 10px 16px;
   border-radius: 18px;
-  border: 1px solid var(--color-border-separator, rgba(0,0,0,0.08));
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 
 .user-message__actions {

@@ -10,7 +10,7 @@
  * "仅此一次" and "本会话始终允许此目录" — the latter records a dir-prefix
  * approval server-side so a 20-file build doesn't pop 20 identical cards.
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps<{
   toolName: string

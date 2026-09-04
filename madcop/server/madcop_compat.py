@@ -2493,6 +2493,24 @@ def register(app: FastAPI) -> None:
 
     # ---- MCP (server definitions) ------------------------------- #
 
+    def _live_mcp_status(name: str, enabled: bool, stored: str) -> str:
+        """Truth-first status: the app-level MCP manager knows whether the
+        server is actually connected right now (tools loaded). The stored
+        status field is only a creation-time placeholder (often needs-auth)
+        and goes stale the moment the loader succeeds."""
+        if not enabled:
+            return "disabled"
+        try:
+            from madcop.server import app as _app_mod
+            _mgr = getattr(_app_mod, "_mcp_manager", None)
+            if _mgr is not None:
+                by_server = getattr(_mgr, "_tools_by_server", {})
+                if name in getattr(_mgr, "_clients", {}):
+                    return "connected" if len(by_server.get(name, [])) > 0 else stored or "disconnected"
+        except Exception:  # noqa: BLE001
+            pass
+        return stored or "needs-auth"
+
     @app.get("/api/mcp", include_in_schema=False)
     async def cc_mcp_list(
         q: str = Query(default=""),
@@ -2511,14 +2529,8 @@ def register(app: FastAPI) -> None:
                 "args": s.get("args", []),
                 "env": s.get("env", {}),
             }
-            status = s.get("status", "disconnected")
             enabled = s.get("enabled", True)
-            if not enabled:
-                status_str = "disabled"
-            elif status == "connected":
-                status_str = "connected"
-            else:
-                status_str = "needs-auth"
+            status_str = _live_mcp_status(s["name"], enabled, s.get("status", "disconnected"))
             records.append({
                 "name": s["name"],
                 "scope": s.get("scope", "user"),
@@ -2551,14 +2563,8 @@ def register(app: FastAPI) -> None:
                     "args": s.get("args", []),
                     "env": s.get("env", {}),
                 }
-                status = s.get("status", "disconnected")
                 enabled = s.get("enabled", True)
-                if not enabled:
-                    status_str = "disabled"
-                elif status == "connected":
-                    status_str = "connected"
-                else:
-                    status_str = "needs-auth"
+                status_str = _live_mcp_status(name, enabled, s.get("status", "disconnected"))
                 return {"server": {
                     "name": name,
                     "scope": s.get("scope", "user"),

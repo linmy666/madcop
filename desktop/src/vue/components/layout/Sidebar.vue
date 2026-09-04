@@ -350,7 +350,6 @@ function _loadNavMoreOpen(): boolean {
 }
 const navMoreOpen = ref(_loadNavMoreOpen())
 watch(navMoreOpen, (v) => { try { localStorage.setItem('madcop_nav_more_open_v2', String(v)) } catch { /* noop */ } })
-const activeSessionCount = computed(() => sessionStore.sessions?.length ?? 0)
 const runningSessionCount = computed(() => (tabStore.tabs ?? []).filter((tb: any) => tb.status === 'running').length)
 
 // === v3.1 — Nav item class generators (no icons, typography-driven) ===
@@ -1274,11 +1273,6 @@ const projectMenuData = computed(() => {
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         <span v-if="expanded" class="flex-1 text-left">{{ t('sidebar.newSession') }}</span>
-        <span
-          v-if="expanded && activeSessionCount > 0"
-          class="ml-auto text-[10px] tabular-nums text-[var(--color-text-tertiary)]"
-          style="fontFamily: var(--font-mono)"
-        >{{ activeSessionCount }}</span>
       </button>
 
 

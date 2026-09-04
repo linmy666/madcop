@@ -670,7 +670,17 @@ const handleLaunchWorkDirChange = async (newWorkDir: string) => {
 
 // ─── Submit handler ────────────────────────────────────────────
 
+// Dedupe submits: the SAME handleKeydown runs twice for one Enter
+// (textarea target phase + document bubble phase; see handleKeydown's
+// dedup note), and a fast double-Enter does the same. After the first
+// submit the input is cleared and the session goes busy, so the second
+// call evaluated "empty submit while active" = Stop and instantly
+// aborted the turn it just started (review_10: ABORT fetch aborted).
+let _lastSubmitAt = 0
 const handleSubmit = async () => {
+  const _now = Date.now()
+  if (_now - _lastSubmitAt < 400) return
+  _lastSubmitAt = _now
   const text = input.value.trim()
   // While generating: empty submit = Stop; non-empty = Codex-style Steer.
   if (!isMemberSession.value && isActive.value && activeTabId.value) {
@@ -1254,8 +1264,8 @@ watch(input, (v) => {
           isHeroComposer
             ? `glass-panel relative flex flex-col gap-3 overflow-visible rounded-[24px] p-4 shadow-[var(--shadow-composer)] transition-colors ${isDragActive ? 'composer-drop-target-active' : ''}`
             : compact
-              ? `glass-panel relative overflow-visible p-3 transition-colors ${isMobileViewport() ? 'rounded-2xl shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl'} ${isDragActive ? 'composer-drop-target-active' : ''}`
-              : `glass-panel relative overflow-visible transition-colors ${isMobileViewport() ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(54,35,28,0.12)]' : 'rounded-xl p-4'} ${isDragActive ? 'composer-drop-target-active' : ''}`,
+              ? `glass-panel relative overflow-visible p-3 transition-colors ${isMobileViewport() ? 'rounded-2xl shadow-[0_-12px_36px_rgba(0,0,0,0.10)]' : 'rounded-xl'} ${isDragActive ? 'composer-drop-target-active' : ''}`
+              : `glass-panel relative overflow-visible transition-colors ${isMobileViewport() ? 'rounded-2xl p-3 shadow-[0_-12px_36px_rgba(0,0,0,0.10)]' : 'rounded-xl p-4'} ${isDragActive ? 'composer-drop-target-active' : ''}`,
         ]"
         @dragenter="onDragEnter"
         @dragover="onDragOver"

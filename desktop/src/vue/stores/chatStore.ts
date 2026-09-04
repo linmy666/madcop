@@ -1432,7 +1432,7 @@ export const useChatStore = defineStore('chat', {
                     if (!session.agentStreams[aid]) {
                       session.agentStreams[aid] = {
                         name: aName || aid,
-                        color: event.c || event.color || '#7C3AED',
+                        color: event.c || event.color || '#8F8F8F',
                         text: '',
                         status: 'running',
                       }
@@ -1450,7 +1450,7 @@ export const useChatStore = defineStore('chat', {
                     const aid = event.id || event.agent_id
                     const text = event.x !== undefined ? event.x : event.text
                     if (!session.agentStreams[aid]) {
-                      session.agentStreams[aid] = { name: aid, color: '#7C3AED', text: '', status: 'running' }
+                      session.agentStreams[aid] = { name: aid, color: '#8F8F8F', text: '', status: 'running' }
                     }
                     session.agentStreams[aid].text += (text || '')
                   } else if (

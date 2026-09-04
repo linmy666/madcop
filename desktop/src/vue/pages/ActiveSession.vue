@@ -753,11 +753,6 @@ function openTerminalInTab() {
         >
           <!-- Subtle gradient background -->
           <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-[var(--color-surface)] via-transparent to-[var(--color-surface)] opacity-40" />
-          <!-- Soft radial brand glow behind the mascot -->
-          <div
-            class="pointer-events-none absolute left-1/2 top-1/2 h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-            style="background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%); opacity: 0.12;"
-          />
 
           <div class="relative z-10 flex max-w-md flex-col items-center text-center px-6">
             <!-- Member session empty -->
@@ -770,15 +765,10 @@ function openTerminalInTab() {
               </p>
             </template>
 
-            <!-- Normal session empty -->
+            <!-- Normal session empty — Codex-style headline, no mascot -->
             <template v-else>
-              <MadCopLoader
-                state="'ready'"
-                :size="compactEmptyHero ? 120 : 160"
-                class="mb-5"
-              />
               <h1
-                class="mb-2 text-[22px] font-bold tracking-tight text-[var(--color-text-primary)]"
+                class="mb-2 text-[26px] font-bold tracking-tight text-[var(--color-text-primary)]"
                 style="font-family: var(--font-headline)"
               >
                 {{ t('empty.title') }}
