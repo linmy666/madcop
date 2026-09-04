@@ -17,7 +17,6 @@ import { desktopHost } from '../../lib/desktopHost'
 import type { ProactiveObservation } from '../../lib/desktopHost/types'
 import { useSettingsStore } from '../stores/settingsStore'
 import { getCurrentLocale } from '../i18n'
-import { useUIStore } from '../stores/uiStore'
 
 const currentObservation = ref<ProactiveObservation | null>(null)
 let installed = false
@@ -69,24 +68,12 @@ export function useProactive() {
       }
     }
     await pushConfig()
-    // P2-NS — show a one-time welcome toast the first time we actually
-    // start monitoring. If the user picked a workspace and we auto-
-    // enabled Observer (改进 1), tell them so they know it's running.
-    // If they didn't pick a workspace yet, surface the onboarding CTA
-    // so the empty Sidebar card isn't a surprise.
-    const ui = useUIStore()
-    const ws = getWorkspace()
-    if (ws && settings.proactive.enabled) {
-      ui.addToast({
-        type: 'success',
-        message: `已自动开始监控 ${ws.split('/').pop() || ws}`,
-      })
-    } else if (!ws) {
-      ui.addToast({
-        type: 'info',
-        message: '请在左侧选择项目文件夹，开始使用 MadCop',
-      })
-    }
+    // Welcome toasts removed by product decision: "已自动开始监控" fired
+    // on every useProactive() mount (AppShell + Observer page each mount
+    // it) AND on every app launch — the sidebar's 观察器运行中 dot already
+    // carries the running state. A background service starting is not
+    // toast-worthy news; the onboarding CTA lives on the empty session
+    // hero instead.
   })
 
   // Re-push whenever toggles change.
