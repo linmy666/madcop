@@ -1633,24 +1633,32 @@ function renderItemContent(item: RenderItem) {
   padding: 0 8px;
   font-variant-numeric: tabular-nums;
 }
+/* Tool-group summary: multi-tool call aggregates to one quiet line.
+   Same recede rules as RunItemCard's done state — transparent at
+   rest, gray ✓, hover restores the affordance. */
 .run-group-summary {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 10px;
-  margin: 4px 0;
-  border: 1px solid var(--color-border);
+  padding: 4px 8px;
+  margin: 2px 0;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--color-surface-container-low);
-  color: var(--color-text-secondary);
+  background: transparent;
+  color: var(--color-text-tertiary, #999);
   font-size: 12px;
   cursor: pointer;
   text-align: left;
+  transition: background 120ms, border-color 120ms, color 120ms;
 }
-.run-group-summary:hover { background: var(--color-surface-hover); }
-.run-group-summary__check { color: var(--color-success, #1f9d55); font-weight: 700; }
-.run-group-summary__label { font-weight: 600; color: var(--color-text-primary); }
+.run-group-summary:hover {
+  background: var(--color-surface-container-low, rgba(128,128,128,0.04));
+  border-color: var(--color-border, rgba(128,128,128,0.18));
+  color: var(--color-text-secondary, #555);
+}
+.run-group-summary__check { color: var(--color-text-tertiary, #999); font-weight: 700; }
+.run-group-summary__label { font-weight: 500; }
 .turn-status {
   display: inline-flex;
   align-items: center;
