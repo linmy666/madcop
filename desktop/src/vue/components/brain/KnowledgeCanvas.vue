@@ -58,12 +58,15 @@ const allNodeSlugs = ref<{ slug: string; title: string }[]>([])
 let cy: Core | null = null
 const POS_KEY = 'madcop_brain_positions_v1'
 
+// Muted palette aligned with the neutral design language: ink/zinc for
+// the common types, semantic green/amber/red reserved for project/person/
+// event. (skill nodes previously dominated the canvas in violet.)
 const TYPE_COLORS: Record<string, string> = {
-  concept: '#2563eb',
-  skill: '#7c3aed',
-  project: '#059669',
-  person: '#d97706',
-  event: '#dc2626',
+  concept: '#3F3F46',
+  skill: '#71717A',
+  project: '#16A34A',
+  person: '#CA8A04',
+  event: '#BA1A1A',
 }
 
 function loadPositions(): Record<string, { x: number; y: number }> {
@@ -88,6 +91,12 @@ async function loadGraph() {
     const graph = await brainApi.graph(props.workspace)
     nodeCount.value = graph.nodes.length
     empty.value = graph.nodes.length === 0
+    // The container div lives in the v-else branch of `loading` — drop the
+    // spinner and let the DOM render BEFORE creating cytoscape, or
+    // containerRef is null and the graph mounts into nothing (blank
+    // canvas with no error).
+    loading.value = false
+    await nextTick()
     renderGraph(graph)
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
@@ -97,6 +106,7 @@ async function loadGraph() {
 }
 
 function renderGraph(graph: { nodes: BrainNode[]; edges: BrainEdge[] }) {
+  if (!cy) initCytoscape()
   if (!cy) return
   const positions = loadPositions()
 
@@ -141,7 +151,13 @@ function runLayout() {
   // (async chunk load, version drift) — a dead layout left 21 nodes
   // positioned at (0,0) inside a blank canvas. Fall back to the built-in
   // 'grid' if fcose isn't registered, so the graph ALWAYS becomes visible.
+  // grid FIRST: it always succeeds, guaranteeing a readable spread even
+  // when the fcose extension silently no-ops (unregistered layout does
+  // not throw — the old fcose-then-break order left the grid fallback
+  // unreachable and nodes stacked in their stale positions).
   const layouts: object[] = [
+    { name: 'grid', animate: true, animationDuration: 400, fit: true, padding: 60,
+      sort: (a: any, b: any) => String(a.id()).localeCompare(String(b.id())) },
     {
       name: 'fcose',
       animate: true,
@@ -151,7 +167,6 @@ function runLayout() {
       nodeSeparation: 90,
       randomize: true,
     },
-    { name: 'grid', animate: true, animationDuration: 400, fit: true, padding: 60 },
   ]
   for (const opts of layouts) {
     try {
@@ -188,6 +203,15 @@ function persistPositions() {
 
 function initCytoscape() {
   if (!containerRef.value) return
+  // Cytoscape paints to <canvas>, so CSS var() does NOT resolve there —
+  // the tokens must be read from the computed theme and passed as real
+  // values (var() left every label the fallback huge black smear).
+  const cs = getComputedStyle(document.documentElement)
+  const tok = (name: string, fb: string) => cs.getPropertyValue(name).trim() || fb
+  const INK = tok('--color-text-primary', '#0D0D0D')
+  const MUTED = tok('--color-text-tertiary', '#8F8F8F')
+  const SURFACE = tok('--color-surface', '#FFFFFF')
+  const BORDER = tok('--color-border', '#E5E5E5')
   cy = cytoscape({
     container: containerRef.value,
     wheelSensitivity: 0.25,
@@ -195,26 +219,28 @@ function initCytoscape() {
       {
         selector: 'node',
         style: {
-          'background-color': (ele) => TYPE_COLORS[ele.data('type')] ?? '#6b7280',
+          'background-color': (ele: any) => TYPE_COLORS[ele.data('type')] ?? '#8F8F8F',
           label: 'data(label)',
-          color: 'var(--color-text-primary)',
+          color: INK,
           'text-valign': 'bottom',
           'text-halign': 'center',
           'text-margin-y': 6,
-          'font-size': '11px',
-          'text-outline-color': 'var(--color-surface)',
-          'text-outline-width': '2px',
+          'font-size': 11,
+          'text-wrap': 'wrap',
+          'text-max-width': 150,
+          'text-outline-color': SURFACE,
+          'text-outline-width': 2,
           width: 36,
           height: 36,
           'border-width': 2,
-          'border-color': 'var(--color-surface)',
+          'border-color': SURFACE,
         },
       },
       {
         selector: 'node:selected',
         style: {
           'border-width': 3,
-          'border-color': '#2563eb',
+          'border-color': '#52525B',
           width: 42,
           height: 42,
         },
@@ -223,20 +249,20 @@ function initCytoscape() {
         selector: 'edge',
         style: {
           width: 1.5,
-          'line-color': 'var(--color-border)',
-          'target-arrow-color': 'var(--color-border)',
+          'line-color': BORDER,
+          'target-arrow-color': BORDER,
           'target-arrow-shape': 'triangle',
           'curve-style': 'bezier',
           label: 'data(label)',
-          'font-size': '9px',
-          color: 'var(--color-text-tertiary)',
-          'text-background-color': 'var(--color-surface)',
+          'font-size': 9,
+          color: MUTED,
+          'text-background-color': SURFACE,
           'text-background-opacity': 0.9,
-          'text-background-padding': '1px',
+          'text-background-padding': 1,
           'text-rotation': 'autorotate',
         },
       },
-    ] as cytoscape.Stylesheet[],
+    ] as unknown as cytoscape.Stylesheet[],
     elements: [],
   })
 
@@ -348,7 +374,6 @@ async function confirmLink(toSlug: string) {
 }
 
 onMounted(async () => {
-  initCytoscape()
   await loadGraph()
 })
 

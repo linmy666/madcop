@@ -439,12 +439,12 @@ onMounted(loadAll)
           class="shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums"
           :class="r.layer === 'semantic' ? 'bg-[var(--color-primary-container)] text-[var(--color-primary)]' : 'bg-[var(--color-surface-container-low)] text-[var(--color-text-tertiary)]'"
         >
-          { r.confidence != null ? Math.round((r.confidence ?? 0.5) * 100) + '%' : '50%' }
+          {{ r.confidence != null ? Math.round((r.confidence ?? 0.5) * 100) + '%' : '50%' }}
         </span>
         <div class="min-w-0 flex-1">
-          <p class="text-[13px] text-[var(--color-text-primary)]">{ humanizeFact(r.content) }</p>
+          <p class="text-[13px] text-[var(--color-text-primary)]">{{ humanizeFact(r.content) }}</p>
           <div class="mt-1 flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]" style="font-family: var(--font-mono)">
-            <span>{ formatRelative(r.createdAt) }</span>
+            <span>{{ formatRelative(r.createdAt) }}</span>
           </div>
         </div>
         <button
@@ -479,12 +479,12 @@ onMounted(loadAll)
           class="shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums"
           :class="r.layer === 'semantic' ? 'bg-[var(--color-primary-container)] text-[var(--color-primary)]' : 'bg-[var(--color-surface-container-low)] text-[var(--color-text-tertiary)]'"
         >
-          { r.confidence != null ? Math.round((r.confidence ?? 0.5) * 100) + '%' : '50%' }
+          {{ r.confidence != null ? Math.round((r.confidence ?? 0.5) * 100) + '%' : '50%' }}
         </span>
         <div class="min-w-0 flex-1">
-          <p class="text-[13px] text-[var(--color-text-primary)]">{ humanizeFact(r.content) }</p>
+          <p class="text-[13px] text-[var(--color-text-primary)]">{{ humanizeFact(r.content) }}</p>
           <div class="mt-1 flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]" style="font-family: var(--font-mono)">
-            <span>{ formatRelative(r.createdAt) }</span>
+            <span>{{ formatRelative(r.createdAt) }}</span>
           </div>
         </div>
         <button
@@ -519,12 +519,12 @@ onMounted(loadAll)
           class="shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums"
           :class="r.layer === 'semantic' ? 'bg-[var(--color-primary-container)] text-[var(--color-primary)]' : 'bg-[var(--color-surface-container-low)] text-[var(--color-text-tertiary)]'"
         >
-          { r.confidence != null ? Math.round((r.confidence ?? 0.5) * 100) + '%' : '50%' }
+          {{ r.confidence != null ? Math.round((r.confidence ?? 0.5) * 100) + '%' : '50%' }}
         </span>
         <div class="min-w-0 flex-1">
-          <p class="text-[13px] text-[var(--color-text-primary)]">{ humanizeFact(r.content) }</p>
+          <p class="text-[13px] text-[var(--color-text-primary)]">{{ humanizeFact(r.content) }}</p>
           <div class="mt-1 flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]" style="font-family: var(--font-mono)">
-            <span>{ formatRelative(r.createdAt) }</span>
+            <span>{{ formatRelative(r.createdAt) }}</span>
           </div>
         </div>
         <button

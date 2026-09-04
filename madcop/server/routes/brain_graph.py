@@ -11,6 +11,7 @@ the rest of the system writes.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -91,9 +92,19 @@ class NodeSave(BaseModel):
 
 
 def _db(workspace: str = "") -> PageDB:
-    """Resolve the PageDB instance. A non-empty workspace is treated as a
-    custom DB path; otherwise the canonical default is used."""
-    return PageDB(workspace) if workspace else PageDB.default()
+    """Resolve the PageDB instance. The canvas passes the active workspace
+    DIRECTORY, not a file — only an existing *.db file is honored as a
+    custom DB location; anything else falls back to the canonical DB
+    (~/.madcop/brain.db). Previously a directory hit sqlite3.connect and
+    500'd the whole graph endpoint."""
+    if workspace:
+        try:
+            p = Path(workspace).expanduser()
+            if p.suffix == ".db" and p.is_file():
+                return PageDB(str(p))
+        except Exception:  # noqa: BLE001
+            pass
+    return PageDB.default()
 
 
 # --------------------------------------------------------------------------- #

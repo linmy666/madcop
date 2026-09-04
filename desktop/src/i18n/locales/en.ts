@@ -803,6 +803,11 @@ export const en = {
 
   // Settings > Skills
   'settings.skills.title': 'Installed Skills',
+  'settings.skills.distill': 'Distill skill from chat',
+  'settings.skills.distillHint': 'Turn a "teach me / how do I" Q&A into a SKILL.md so similar questions cite it automatically.',
+  'settings.skills.distillNeedBoth': 'Please fill in both question and answer',
+  'settings.skills.distillSuccess': 'Skill distilled: {name}',
+  'settings.skills.distillFailed': 'Distillation failed',
   'settings.skills.description': 'Skills extend MadCop with specialized capabilities. Manage skills in ~/.madcop/skills',
   'settings.skills.browserTitle': 'Browse installed skills',
   'settings.skills.browserEyebrow': 'Skill Browser',

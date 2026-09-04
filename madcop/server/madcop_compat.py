@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Body
 from fastapi.responses import FileResponse, JSONResponse
 from madcop.config import settings as settings_store
 
@@ -1764,6 +1764,43 @@ def register(app: FastAPI) -> None:
     @app.post("/api/adapters/whatsapp/unbind", include_in_schema=False)
     async def cc_whatsapp_unbind() -> dict[str, Any]:
         return {"ok": True}
+
+    # ---- Adapter config (IM credentials + pairing) ------------------- #
+    @app.get("/api/adapters/config", include_in_schema=False)
+    async def cc_adapters_config_get() -> dict[str, Any]:
+        return {"config": _load_adapters_config()}
+
+    @app.post("/api/adapters/config", include_in_schema=False)
+    async def cc_adapters_config_post(body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        cfg = _load_adapters_config()
+        for k, v in (body or {}).items():
+            if isinstance(v, dict) and isinstance(cfg.get(k), dict):
+                cfg[k].update(v)
+            else:
+                cfg[k] = v
+        _save_adapters_config(cfg)
+        return {"ok": True, "config": cfg}
+
+    @app.post("/api/adapters/pairing", include_in_schema=False)
+    async def cc_adapters_pairing() -> dict[str, Any]:
+        import random as _random
+        import time as _time
+        cfg = _load_adapters_config()
+        code = f"{_random.randint(0, 999999):06d}"
+        cfg["pairing"] = {"code": code, "expiresAt": _time.time() * 1000 + 10 * 60 * 1000}
+        _save_adapters_config(cfg)
+        return {"ok": True, "code": code}
+
+    @app.post("/api/adapters/paired-users/remove", include_in_schema=False)
+    async def cc_adapters_paired_remove(body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        platform = str((body or {}).get("platform", ""))
+        user_id = (body or {}).get("userId", "")
+        cfg = _load_adapters_config()
+        block = cfg.get(platform)
+        if isinstance(block, dict) and isinstance(block.get("pairedUsers"), list):
+            block["pairedUsers"] = [u for u in block["pairedUsers"] if str(u.get("id", u.get("userId", ""))) != str(user_id)]
+            _save_adapters_config(cfg)
+        return {"ok": True, "config": cfg}
 
     # ---- Desktop UI preferences (real implementation at end of file) ---- #
 
@@ -3790,6 +3827,22 @@ def register(app: FastAPI) -> None:
 # ---- MCP server storage helpers ------------------------------- #
 
 _MCP_FILE = Path.home() / ".madcop" / "mcp_servers.json"
+
+_ADAPTERS_CONFIG_FILE = Path.home() / ".madcop" / "adapters_config.json"
+
+
+def _load_adapters_config() -> dict[str, Any]:
+    try:
+        return json.loads(_ADAPTERS_CONFIG_FILE.read_text() or "{}")
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _save_adapters_config(cfg: dict[str, Any]) -> None:
+    try:
+        _ADAPTERS_CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _load_mcp_servers() -> list[dict[str, Any]]:
