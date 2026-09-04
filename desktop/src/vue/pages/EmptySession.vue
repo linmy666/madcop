@@ -28,7 +28,7 @@ import {
 /* ────────────────────────────────────────────────────────────────────
    Imports (APIs, stores, hooks, components)
    ──────────────────────────────────────────────────────────────────── */
-import { ApiError } from '../api/client'
+import { ApiError, getApiUrl } from '../api/client'
 import { agentsApi } from '../api/agents'
 import { skillsApi } from '../api/skills'
 import { useTranslation } from '../i18n'
@@ -483,29 +483,54 @@ const handleSubmit = async () => {
 
 // Example prompt chips shown on the empty ("new chat") screen.
 // Clicking one prefills the composer and submits immediately.
-// #9: Dynamic suggestions — adapt to workspace + installed skills
-// instead of 4 hardcoded chips that feel static.
-const suggestions = computed(() => {
+// v2 — suggestions are built from the WORKSPACE'S REAL CONTENT
+// (via /api/workspace/ls): code files get code suggestions, document
+// folders get summary suggestions, anything else gets generic agent
+// starters. The old version hardcoded "分析 X 项目的代码结构" even when
+// the workspace had no code at all. Skill count comes from the skills
+// API instead of a stale localStorage key.
+const suggestions = ref<string[]>(['搜一下最新的技术动态'])
+
+const CODE_EXTS = new Set(['py', 'js', 'ts', 'tsx', 'jsx', 'html', 'css', 'go', 'rs', 'java', 'vue', 'sh'])
+const DOC_EXTS = new Set(['xlsx', 'docx', 'pptx', 'csv', 'pdf', 'md'])
+
+async function rebuildSuggestions() {
+  const out: string[] = []
   const ws = (() => { try { return localStorage.getItem('madcop_workspace_dir') || '' } catch { return '' } })()
-  const projectName = ws ? ws.split('/').pop() : ''
-  const list: string[] = []
-  if (projectName) {
-    list.push(`分析 ${projectName} 项目的代码结构`)
-    list.push(`给 ${projectName} 写一份单元测试`)
-  } else {
-    list.push('帮我分析一段代码')
-    list.push('给这段代码写单元测试')
-  }
-  // Add skill-based suggestions
+  const projectName = ws ? (ws.split('/').pop() || '项目') : ''
   try {
-    const skillCount = localStorage.getItem('madcop_skill_count')
-    if (skillCount && parseInt(skillCount) > 0) {
-      list.push(`查看我已保存的 ${skillCount} 个技能`)
+    const res = await fetch(getApiUrl(`/api/workspace/ls?dir=${encodeURIComponent(ws)}`))
+    const data = await res.json()
+    const entries: { name: string; is_dir: boolean }[] = data.entries || []
+    const exts = entries
+      .filter((e: any) => !e.is_dir)
+      .map((e: any) => (e.name.split('.').pop() || '').toLowerCase())
+    const hasCode = exts.some((e: string) => CODE_EXTS.has(e))
+    const docCount = exts.filter((e: string) => DOC_EXTS.has(e)).length
+    if (hasCode) {
+      out.push(`分析 ${projectName} 项目的代码结构`)
+      out.push(`给 ${projectName} 写一份单元测试`)
     }
-  } catch {}
-  list.push('搜一下最新的技术动态')
-  return list.slice(0, 5)
-})
+    if (docCount >= 2) {
+      out.push(`汇总 ${projectName} 目录里 ${docCount} 份文档的要点`)
+    }
+  } catch { /* workspace unreachable — fall through to generic starters */ }
+  if (!out.length) {
+    out.push('帮我把一个想法变成可交互的网页原型')
+    out.push('帮我研究一个课题，整理成带来源的报告')
+  }
+  // Real skill count from the skills API (not a stale localStorage key).
+  try {
+    const res = await fetch(getApiUrl('/api/agents/skills'))
+    const data = await res.json()
+    const n = Array.isArray(data) ? data.length : (Array.isArray(data.skills) ? data.skills.length : 0)
+    if (n > 0) out.push(`查看我已保存的 ${n} 个技能`)
+  } catch { /* skills optional */ }
+  out.push('搜一下最新的技术动态')
+  suggestions.value = out.slice(0, 5)
+}
+
+void rebuildSuggestions()
 function useSuggestion(text: string) {
   input.value = text
   void handleSubmit()
