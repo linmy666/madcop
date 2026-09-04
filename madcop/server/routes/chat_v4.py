@@ -650,6 +650,10 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
                 _key = f"mcp:{_srv}"
                 if _coeffects.get(_key) is None:
                     _coeffects.provide(_key, {"server": _srv})
+                # _bound was snapshotted BEFORE this merge; without this
+                # the coeffect gate would hide every MCP tool from the
+                # model even though the server is connected.
+                _bound.add(_key)
                 for _t in _tools or []:
                     reg.register(ToolPlugin(
                         name=_t.name,

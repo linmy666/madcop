@@ -136,13 +136,20 @@ class MCPClient:
         if self._proc is not None:
             return
         logger.info("[mcp] starting: %s", self._command)
+        # env vars are layered ON TOP of the inherited OS environment
+        # (MCP convention): a bare {API_KEY: ...} must not strip PATH.
+        sub_env: dict[str, str] | None = None
+        if self._env:
+            import os as _os
+            sub_env = dict(_os.environ)
+            sub_env.update(self._env)
         try:
             self._proc = subprocess.Popen(
                 self._command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                env=self._env,
+                env=sub_env,
                 text=True,
                 bufsize=1,             # line-buffered
             )

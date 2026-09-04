@@ -128,6 +128,12 @@ class ToolRegistry:
             raise ValueError(f"tool already registered: {tool.name}")
         self._tools[tool.name] = tool
 
+    def unregister(self, name: str) -> Tool | None:
+        """Remove a tool by name (returns the removed tool, or None).
+        Used by the MCP loader so a user-configured server tool can
+        override a same-named built-in."""
+        return self._tools.pop(name, None)
+
     def get(self, name: str) -> Tool:
         if name not in self._tools:
             raise KeyError(f"unknown tool: {name}")

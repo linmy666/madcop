@@ -1113,12 +1113,17 @@ def create_app() -> FastAPI:
             for s in servers:
                 if not s.get("enabled", True):
                     continue
-                cmd = s.get("command", "")
-                args = s.get("args", []) or []
+                # Two on-disk formats: the vue settings UI writes a nested
+                # `config` block ({command, args, env}); the import API and
+                # hand-edited files use flat fields. Accept both.
+                cfg = s.get("config") if isinstance(s.get("config"), dict) else s
+                cmd = str(cfg.get("command") or "").strip()
+                args = cfg.get("args") or []
+                env = cfg.get("env") or {}
                 if not cmd:
                     continue
                 try:
-                    mgr.add(s.get("name", "unnamed"), [cmd] + list(args))
+                    mgr.add(s.get("name", "unnamed"), [cmd] + list(args), env=env or None)
                 except Exception:
                     continue
             mgr.connect_all()
@@ -1128,20 +1133,28 @@ def create_app() -> FastAPI:
             # gates availability without an RPC per request.
             tools: list = []
             mgr._tools_by_server = {}
-            for client in mgr._clients.values():
+            for _sv_name, client in mgr._clients.items():
                 try:
                     _sv_tools = client.list_tools()
                     tools.extend(_sv_tools)
-                    mgr._tools_by_server[client.name] = _sv_tools
+                    mgr._tools_by_server[_sv_name] = _sv_tools
                 except Exception as e:
                     logger.debug("swallowed: %s", e)
-                    mgr._tools_by_server[client.name] = []
+                    mgr._tools_by_server[_sv_name] = []
+            # One shared instance: default_registry() is a factory, so a
+            # fresh call would re-load the same built-ins and re-raise
+            # every collision. MCP tools override same-named built-ins.
+            _reg = default_registry()
             for t in tools:
                 try:
-                    default_registry().register(t)
+                    if t.name in _reg:
+                        _reg.unregister(t.name)
+                        logger.info("mcp: tool %s overrode same-named built-in", t.name)
+                    _reg.register(t)
                     registered += 1
                 except Exception as e:
                     logger.warning("mcp: register tool failed: %s", e)
+            _mcp_global_registry = _reg
             _mcp_manager = mgr
             print(f"[mcp] Loaded {registered} tools from {len(servers)} servers")
         except Exception as e:
