@@ -741,6 +741,12 @@ const insertSlashCommand = () => {
         class="relative z-10 flex flex-col items-center text-center"
         :class="isMobileComposer ? 'max-w-[300px]' : 'max-w-md'"
       >
+        <!-- Soft radial brand glow behind the mascot (matches ActiveSession) -->
+        <div
+          class="pointer-events-none absolute left-1/2 top-16 h-[320px] w-[320px] -translate-x-1/2 rounded-full blur-3xl"
+          style="background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%); opacity: 0.12;"
+        ></div>
+        <MadCopLoader state="'ready'" :size="isMobileComposer ? 96 : 128" class="relative z-10 mb-4" />
         <h1
           class="mb-3 font-bold tracking-tight text-[var(--color-text-primary)]"
           :class="isMobileComposer ? 'text-2xl' : 'text-[2rem]'"
