@@ -62,7 +62,7 @@ defineProps<{
 }
 .page-hero__subtitle {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--color-text-secondary);
 }
 .page-hero__actions {

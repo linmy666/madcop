@@ -330,7 +330,7 @@ const defaultModelLabel = computed(() => props.agent.modelDisplay || props.agent
 
         <div class="min-h-0 flex-1 overflow-y-auto bg-[var(--color-surface-container-lowest)]">
           <div v-if="props.agent.systemPrompt" class="px-6 py-5 lg:px-8">
-            <pre class="mx-auto max-w-[78ch] whitespace-pre-wrap break-words font-mono text-[12.5px] leading-6 text-[var(--color-text-secondary)]">{{ props.agent.systemPrompt }}</pre>
+            <pre class="mx-auto max-w-[78ch] whitespace-pre-wrap break-words font-mono text-[12px] leading-6 text-[var(--color-text-secondary)]">{{ props.agent.systemPrompt }}</pre>
           </div>
           <div v-else class="px-6 py-12 text-center">
             <span class="material-symbols-outlined mb-2 block text-[36px] text-[var(--color-text-tertiary)]" style="fontVariationSettings: 'FILL' 1">article</span>

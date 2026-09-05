@@ -248,7 +248,7 @@ function formatUpdatedAt(value: string | null): string {
             <span>{{ t('trace.list.eyebrow') }}</span>
           </div>
           <div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
-            <h1 class="text-lg font-semibold tracking-tight text-[var(--color-text-primary)]">{{ t('trace.list.title') }}</h1>
+            <h1 class="text-[18px] font-bold tracking-tight tracking-tight text-[var(--color-text-primary)]">{{ t('trace.list.title') }}</h1>
             <span
               v-if="state.status === 'ready'"
               :class="[

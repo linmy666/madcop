@@ -526,8 +526,10 @@ function onOverlayClick() {
   gap: 10px;
 }
 .kc-title {
-  font-size: 17px;
-  font-weight: 600;
+  font-family: var(--font-headline);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   margin: 0;
   color: var(--color-text-primary);
 }
@@ -547,7 +549,7 @@ function onOverlayClick() {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--color-text-primary);
   cursor: pointer;

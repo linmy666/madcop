@@ -729,10 +729,11 @@ function loadNetwork(net: any) {
   gap: 24px;
 }
 .ao-page__title {
-  font-size: 28px;
-  font-weight: 600;
+  font-family: var(--font-headline);
+  font-size: 26px;
+  font-weight: 700;
   margin: 0 0 4px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 .ao-page__sub { margin: 0; font-size: 14px; color: var(--color-text-secondary); }
 .ao-page__actions { display: flex; gap: 8px; flex-shrink: 0; }
@@ -823,7 +824,7 @@ function loadNetwork(net: any) {
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   max-height: 100px;
   overflow: auto;
 }

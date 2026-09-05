@@ -367,7 +367,7 @@ async function distillAsSkill() {
 }
 .reasoning-block__text {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.65;
   font-style: italic;
   color: var(--color-text-secondary);

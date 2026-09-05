@@ -58,7 +58,7 @@ async function runDistill() {
             </div>
             <div class="mb-2 flex items-center gap-2">
               <span class="material-symbols-outlined text-[20px] text-[var(--color-brand)]" style="fontVariationSettings: 'FILL' 1">auto_awesome</span>
-              <h2 class="text-lg font-semibold text-[var(--color-text-primary)]">
+              <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]">
                 {{ t('settings.skills.title') }}
               </h2>
             </div>

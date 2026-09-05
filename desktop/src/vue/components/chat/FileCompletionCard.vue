@@ -179,7 +179,7 @@ function revealInFinder() {
   margin-bottom: 8px;
 }
 .fc__icon { display: inline-flex; }
-.fc__title { font-size: 12.5px; }
+.fc__title { font-size: 12px; }
 .fc__list {
   list-style: none;
   margin: 0;

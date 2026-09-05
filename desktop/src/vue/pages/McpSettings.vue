@@ -674,7 +674,7 @@ async function handleImportJson() {
 
     <div class="flex items-start justify-between gap-4 mb-8">
       <div>
-        <h2 class="text-[2.2rem] font-semibold tracking-[-0.03em] text-[var(--color-text-primary)]">
+        <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]" style="font-family: var(--font-headline)">
           {{ detailsServer.name }}
         </h2>
         <p class="mt-3 text-base text-[var(--color-text-secondary)]">
@@ -767,7 +767,7 @@ async function handleImportJson() {
 
     <div class="flex items-start justify-between gap-4 mb-8">
       <div>
-        <h2 class="text-[2.2rem] font-semibold tracking-[-0.03em] text-[var(--color-text-primary)]">
+        <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]" style="font-family: var(--font-headline)">
           {{ currentViewType === 'edit'
             ? t('settings.mcp.form.editTitle', { name: editServer.name })
             : t('settings.mcp.form.createTitle') }}
@@ -1105,7 +1105,7 @@ async function handleImportJson() {
   <div v-else class="max-w-5xl min-w-0">
     <div class="flex items-start justify-between gap-6 mb-8">
       <div>
-        <h2 class="text-[2.2rem] font-semibold tracking-[-0.03em] text-[var(--color-text-primary)]">
+        <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]" style="font-family: var(--font-headline)">
           {{ t('settings.mcp.title') }}
         </h2>
         <p class="mt-3 text-base text-[var(--color-text-secondary)]">

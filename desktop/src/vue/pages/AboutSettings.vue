@@ -185,7 +185,7 @@ const updateDescription = computed(() => {
       alt="MadCop Agent"
       class="w-20 h-20 mb-4"
     />
-    <h1 class="text-xl font-bold text-[var(--color-text-primary)]">MadCop Agent</h1>
+    <h1 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]" style="font-family: var(--font-headline)">MadCop Agent</h1>
     <div v-if="version" class="mt-1 flex items-center gap-2 text-xs text-[var(--color-text-tertiary)]">
       <span>{{ t('settings.about.version') }} {{ version }}</span>
       <span class="text-[var(--color-border)]">·</span>

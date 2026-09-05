@@ -327,7 +327,7 @@ function thisMonthCount(count: string) {
           <div class="mt-12 flex flex-col md:flex-row gap-8 items-start">
             <!-- Recent Output Logs -->
             <div class="flex-1 space-y-6">
-              <h2 class="font-[Manrope,sans-serif] text-lg font-bold text-[var(--color-text-primary)]">{{ t('scheduledPage.recentLogs') }}</h2>
+              <h2 class="font-[Manrope,sans-serif] text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]">{{ t('scheduledPage.recentLogs') }}</h2>
               <div class="bg-[var(--color-surface-container-high)] rounded-xl p-6 font-[JetBrains_Mono,monospace] text-[13px] leading-relaxed text-[var(--color-text-secondary)] overflow-x-auto shadow-inner">
                 <div class="flex gap-4 opacity-50 mb-1">
                   <span class="w-32 shrink-0">2023-11-10 23:01</span>

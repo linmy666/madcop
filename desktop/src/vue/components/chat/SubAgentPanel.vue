@@ -175,7 +175,7 @@ function toggleCollapsed() {
 /* Markdown content inside a card — shrink the renderer's default sizes
    so it fits a compact panel without the ** markers leaking through. */
 .sub-agent-card__text {
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.6;
   color: var(--color-text-secondary);
   word-break: break-word;

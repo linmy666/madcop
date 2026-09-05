@@ -195,7 +195,7 @@ onMounted(refreshStats)
   <div class="mx-auto max-w-2xl space-y-6 px-6 py-8">
     <!-- Title -->
     <div>
-      <h2 class="text-[20px] font-semibold tracking-tight text-[var(--color-text-primary)]">
+      <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]">
         持续学习
       </h2>
       <p class="mt-1 text-[13px] text-[var(--color-text-secondary)]">

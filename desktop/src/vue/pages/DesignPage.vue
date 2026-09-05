@@ -692,7 +692,7 @@ onBeforeUnmount(() => {
   resize: none;
   background: var(--color-surface-container-lowest, #fafafa);
   color: var(--color-text-primary, #111);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 12px;
   line-height: 1.6;
   tab-size: 2;

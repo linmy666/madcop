@@ -222,7 +222,7 @@ const isStale = computed(() => {
 .nd-body-text {
   margin: 0;
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.6;
   color: var(--color-text-primary);
   white-space: pre-wrap;
@@ -245,7 +245,7 @@ const isStale = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 .nd-link {
   display: inline-flex;

@@ -801,7 +801,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
         />
       </div>
       <div class="group/activity-profile mt-4 flex max-w-full items-center justify-center gap-2">
-        <h1 class="max-w-[min(720px,calc(100%-2.25rem))] truncate text-[28px] font-semibold tracking-tight text-[var(--color-text-primary)] sm:text-[34px]">
+        <h1 class="max-w-[min(720px,calc(100%-2.25rem))] truncate text-[26px] font-bold tracking-tight text-[var(--color-text-primary)] sm:text-[34px]">
           {{ profile.displayName }}
         </h1>
         <button
@@ -1151,7 +1151,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
       :class="topPluginItems.length > 0 ? 'lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)]' : 'lg:max-w-[520px]'"
     >
       <section class="min-w-0">
-        <h2 class="text-lg font-semibold text-[var(--color-text-primary)]">
+        <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]">
           {{ t('settings.activity.activityInsights') }}
         </h2>
         <dl class="mt-5 grid gap-3">
@@ -1177,7 +1177,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
       </section>
 
       <section v-if="topPluginItems.length > 0" class="min-w-0">
-        <h2 class="text-lg font-semibold text-[var(--color-text-primary)]">
+        <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]">
           {{ t('settings.activity.mostUsedPluginsAndSkills') }}
         </h2>
         <div class="mt-5 grid gap-3">

@@ -324,7 +324,8 @@ onMounted(() => {
         <div class="min-w-0">
           <h2
             id="h5-access-title"
-            class="text-base font-semibold text-[var(--color-text-primary)] mb-1"
+            class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)] mb-1"
+            style="font-family: var(--font-headline)"
           >
             {{ t('settings.general.h5AccessTitle') }}
           </h2>

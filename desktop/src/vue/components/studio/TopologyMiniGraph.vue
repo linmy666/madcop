@@ -21,7 +21,7 @@ const props = defineProps<{
     <g v-if="kind === 'single'">
       <circle cx="100" cy="44" r="18" fill="#52525B"/>
       <circle cx="100" cy="44" r="18" fill="none" stroke="#D4D4D8" stroke-width="3" opacity="0.6"/>
-      <text x="100" y="48" text-anchor="middle" fill="#fff" font-size="11" font-weight="700" font-family="system-ui">A</text>
+      <text x="100" y="48" text-anchor="middle" fill="#fff" font-size="11" font-weight="700" font-family="Inter, system-ui, sans-serif">A</text>
     </g>
 
     <!-- chain -->
@@ -30,9 +30,9 @@ const props = defineProps<{
       <circle cx="40" cy="44" r="14" fill="#52525B"/>
       <circle cx="100" cy="44" r="14" fill="#3F3F46"/>
       <circle cx="160" cy="44" r="14" fill="#A1A1AA"/>
-      <text x="40" y="48" text-anchor="middle" fill="#fff" font-size="10" font-weight="700" font-family="system-ui">1</text>
-      <text x="100" y="48" text-anchor="middle" fill="#fff" font-size="10" font-weight="700" font-family="system-ui">2</text>
-      <text x="160" y="48" text-anchor="middle" fill="#fff" font-size="10" font-weight="700" font-family="system-ui">3</text>
+      <text x="40" y="48" text-anchor="middle" fill="#fff" font-size="10" font-weight="700" font-family="Inter, system-ui, sans-serif">1</text>
+      <text x="100" y="48" text-anchor="middle" fill="#fff" font-size="10" font-weight="700" font-family="Inter, system-ui, sans-serif">2</text>
+      <text x="160" y="48" text-anchor="middle" fill="#fff" font-size="10" font-weight="700" font-family="Inter, system-ui, sans-serif">3</text>
     </g>
 
     <!-- parallel -->
@@ -59,9 +59,9 @@ const props = defineProps<{
       <circle cx="55" cy="44" r="14" fill="#52525B"/>
       <circle cx="145" cy="44" r="14" fill="#52525B"/>
       <circle cx="100" cy="72" r="11" fill="#A1A1AA"/>
-      <text x="55" y="48" text-anchor="middle" fill="#fff" font-size="9" font-weight="700" font-family="system-ui">提</text>
-      <text x="145" y="48" text-anchor="middle" fill="#fff" font-size="9" font-weight="700" font-family="system-ui">驳</text>
-      <text x="100" y="76" text-anchor="middle" fill="#fff" font-size="9" font-weight="700" font-family="system-ui">判</text>
+      <text x="55" y="48" text-anchor="middle" fill="#fff" font-size="9" font-weight="700" font-family="Inter, system-ui, sans-serif">提</text>
+      <text x="145" y="48" text-anchor="middle" fill="#fff" font-size="9" font-weight="700" font-family="Inter, system-ui, sans-serif">驳</text>
+      <text x="100" y="76" text-anchor="middle" fill="#fff" font-size="9" font-weight="700" font-family="Inter, system-ui, sans-serif">判</text>
     </g>
 
     <!-- ensemble / default -->

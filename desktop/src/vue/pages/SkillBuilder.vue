@@ -294,7 +294,7 @@ async function createSkill() {
 }
 .skill-cat {
   padding: 4px 12px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-family: inherit;
   color: var(--color-text-secondary);
   background: var(--color-surface-container-low);

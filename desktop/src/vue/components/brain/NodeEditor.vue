@@ -260,7 +260,7 @@ const TYPE_OPTIONS = [
   min-height: 120px;
   line-height: 1.55;
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 .ne-error {
   margin: 0;
@@ -268,7 +268,7 @@ const TYPE_OPTIONS = [
   background: #fee2e2;
   color: #b91c1c;
   border-radius: 6px;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 .ne-actions {
   display: flex;

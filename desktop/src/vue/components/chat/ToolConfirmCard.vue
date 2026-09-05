@@ -293,7 +293,7 @@ const sizeHint = computed(() => {
   margin: 0;
   padding: 8px 10px;
   background: var(--color-surface-container-lowest, #fafafa);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -322,7 +322,7 @@ const sizeHint = computed(() => {
   border: 1px solid var(--color-border, rgba(128,128,128,0.25));
   border-radius: 6px;
   background: var(--color-surface-container-low, #f4f4f4);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   line-height: 1.5;
   white-space: pre;

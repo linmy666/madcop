@@ -194,7 +194,7 @@ function getSeverityClass(severity: string): string {
         <div class="mb-2 text-[11px] font-semibold tracking-wide text-[var(--color-text-tertiary)]">{{ t('settings.nav.system') || '系统' }}</div>
         <div class="mb-1 flex items-center gap-2">
           <span class="material-symbols-outlined text-[20px] text-[var(--color-brand)]" style="fontVariationSettings: 'FILL' 1">monitor_heart</span>
-          <h2 class="text-lg font-semibold text-[var(--color-text-primary)]">{{ t('settings.diagnostics.title') }}</h2>
+          <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]">{{ t('settings.diagnostics.title') }}</h2>
         </div>
         <p class="text-sm leading-6 text-[var(--color-text-secondary)]">{{ t('settings.diagnostics.description') }}</p>
       </div>

@@ -806,7 +806,7 @@ const insertSlashCommand = () => {
             v-for="s in suggestions"
             :key="s"
             type="button"
-            class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-3.5 py-1.5 text-[12.5px] leading-snug text-[var(--color-text-secondary)] transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)] hover:text-[var(--color-text-primary)] hover:shadow-sm"
+            class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-3.5 py-1.5 text-[12px] leading-snug text-[var(--color-text-secondary)] transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)] hover:text-[var(--color-text-primary)] hover:shadow-sm"
             @click="useSuggestion(s)"
           >
             {{ s }}

@@ -1613,7 +1613,7 @@ function renderItemContent(item: RenderItem) {
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   color: var(--color-text-primary);
 }
 .sprite-island-detail__empty {

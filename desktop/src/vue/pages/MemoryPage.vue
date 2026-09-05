@@ -458,7 +458,7 @@ onMounted(loadAll)
           </svg>
         </button>
       </div>
-      <div v-if="relevant.filter(x => ['semantic'].includes(x.layer)).length === 0" class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12.5px] text-[var(--color-text-tertiary)]">
+      <div v-if="relevant.filter(x => ['semantic'].includes(x.layer)).length === 0" class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
         暂无此类记忆 — 长期记忆会随着你和 Agent 的对话自动积累。
       </div>
     </section>
@@ -498,7 +498,7 @@ onMounted(loadAll)
           </svg>
         </button>
       </div>
-      <div v-if="relevant.filter(x => ['episodic'].includes(x.layer)).length === 0" class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12.5px] text-[var(--color-text-tertiary)]">
+      <div v-if="relevant.filter(x => ['episodic'].includes(x.layer)).length === 0" class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
         暂无此类记忆 — 会话事件会随着你和 Agent 的对话自动积累。
       </div>
     </section>
@@ -538,7 +538,7 @@ onMounted(loadAll)
           </svg>
         </button>
       </div>
-      <div v-if="relevant.filter(x => ['scenario', 'insight'].includes(x.layer)).length === 0" class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12.5px] text-[var(--color-text-tertiary)]">
+      <div v-if="relevant.filter(x => ['scenario', 'insight'].includes(x.layer)).length === 0" class="rounded-lg border border-dashed border-[var(--color-border)] p-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
         暂无此类记忆 — 洞察会随着你和 Agent 的对话自动积累。
       </div>
     </section>
@@ -655,7 +655,7 @@ onMounted(loadAll)
   gap: 10px;
 }
 .mem-learn-toggle__label {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--color-text-secondary);
 }
 .mem-toggle {

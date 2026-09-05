@@ -452,7 +452,7 @@ const handleBack = async () => {
             v-else-if="invokeResult"
             style="
               margin: 16px 0 0; padding: 10px 12px; white-space: pre-wrap;
-              word-break: break-word; font-size: 12.5px; line-height: 1.6; max-height: 280px; overflow: auto;
+              word-break: break-word; font-size: 12px; line-height: 1.6; max-height: 280px; overflow: auto;
               background: var(--color-surface-container-low, #f7f7f7);
               border: 1px solid var(--color-border); border-radius: 6px;
               color: var(--color-text-primary);
@@ -484,10 +484,11 @@ const handleBack = async () => {
 }
 
 .wf-page__title {
-  font-size: 28px;
-  font-weight: 600;
+  font-family: var(--font-headline);
+  font-size: 26px;
+  font-weight: 700;
   margin: 0 0 4px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .wf-page__sub {

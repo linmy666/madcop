@@ -529,7 +529,7 @@ function truncate(s: string | null, max = 36): string {
 /* Live state rows (tool call / thinking) */
 .tp__live-row {
   display: flex; align-items: flex-start; gap: 10px;
-  padding: 8px 16px; font-size: 12.5px;
+  padding: 8px 16px; font-size: 12px;
 }
 .tp__live-label {
   display: inline-block; font-size: 10px; font-weight: 600;

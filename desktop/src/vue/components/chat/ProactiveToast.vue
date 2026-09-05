@@ -146,7 +146,7 @@ function onAdopt() {
 }
 .pt-suggestion {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--color-text-secondary);
   line-height: 1.5;
 }
@@ -161,7 +161,7 @@ function onAdopt() {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   border-radius: var(--radius-md, 8px);
   cursor: pointer;

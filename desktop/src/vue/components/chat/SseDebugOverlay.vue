@@ -82,7 +82,7 @@ function clearLog() {
   background: var(--color-surface, #fff);
   border: 1px solid var(--color-border, #e5e5e7);
   border-radius: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   color: var(--color-text-primary, #111);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);

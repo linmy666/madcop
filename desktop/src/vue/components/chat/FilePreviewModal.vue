@@ -133,7 +133,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 .fpm__icon { display: flex; color: var(--color-text-tertiary, #8f8f8f); }
 .fpm__name {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--color-text-primary, #0d0d0d);
   overflow: hidden;
@@ -171,7 +171,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 .fpm__state {
   padding: 40px 0;
   text-align: center;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--color-text-tertiary, #8f8f8f);
 }
 .fpm__state--err { color: var(--color-error, #dc2626); }
