@@ -581,8 +581,10 @@ class ReActEngineV4(AgentEngine):
                     import os as _os
                     for _cm in _ARTIFACT_CLAIM_RE.finditer(_buf_all):
                         _claim = _cm.group(0)
-                        if _cm.group(1).lower() not in ('pptx', 'xlsx', 'docx', 'pdf'):
-                            continue  # code snippets discussing .html/.py are fine
+                        # No extension exemption: .md/.txt were the exact
+                        # hallucination targets of "调研并写文档" tasks —
+                        # the model narrated a successful write that never
+                        # happened and the old exemption waved it through.
                         _cand = _os.path.expanduser(str(_claim))
                         if _os.path.isabs(_cand):
                             _exists = _os.path.exists(_cand)
@@ -870,13 +872,22 @@ class ReActEngineV4(AgentEngine):
                 len(recent) >= 3
                 and all(a == recent[0] for a in recent[-3:])
             )
+            # Research tasks legitimately alternate search→fetch→search…
+            # Only stop when the SAME research tool repeats 4+ times in a
+            # row — the old rule (any 4 research-class steps) broke
+            # "调研并写文档" style tasks: the 3rd search got blocked, and
+            # the model then fabricated a write_file without executing it.
             is_research_loop = (
                 len(recent) >= 4
                 and all(a in ("web_search", "web_fetch", "query_rag", "recall_memory")
                         for a in recent)
+                and all(a == recent[0] for a in recent[-4:])
             )
             if is_same_loop or is_research_loop:
-                reflection = "你已经连续调用了多次同一类工具。请停止，换工具或直接 FINAL_ANSWER。"
+                reflection = (
+                    "同一工具已连续执行 4 次以上且未推进任务。请换一个工具、"
+                    "基于已有结果继续（如写入文件），或直接给出最终答案。"
+                )
                 messages.append(Message(role="assistant", content=_context_clean(raw)))
                 messages.append(Message(role="user", content=f"Observation: {reflection}"))
                 continue

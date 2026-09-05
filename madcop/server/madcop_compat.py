@@ -3581,7 +3581,11 @@ def register(app: FastAPI) -> None:
                 }}
             base = body.get("baseUrl") or getattr(p, "base_url", "")
             model = body.get("modelId") or getattr(p, "model", "")
-            api_key = getattr(p, "api_key", "")
+            # p.api_key is stored ENCRYPTED (fernet:) — decrypt before use,
+            # otherwise the test posts the ciphertext and every provider
+            # reports 401/failed regardless of key validity.
+            from madcop.config.settings import _decrypt
+            api_key = _decrypt(getattr(p, "api_key", ""))
             if not base or not model or not api_key:
                 return {"result": {
                     "connectivity": {"success": False, "latencyMs": 0,
