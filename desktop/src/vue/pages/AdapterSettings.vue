@@ -698,14 +698,14 @@ function getTabButtonClass(active: boolean): string {
           <Input
             :label="t('settings.adapters.appId')"
             :value="fsAppId"
-            @update:value="fsAppId = $event"
+            @update:modelValue="fsAppId = $event"
             :placeholder="t('settings.adapters.appIdPlaceholder')"
           />
           <Input
             :label="t('settings.adapters.appSecret')"
             type="password"
             :value="fsAppSecret"
-            @update:value="fsAppSecret = $event"
+            @update:modelValue="fsAppSecret = $event"
             :placeholder="t('settings.adapters.appSecretPlaceholder')"
           />
         </div>
@@ -714,14 +714,14 @@ function getTabButtonClass(active: boolean): string {
             :label="t('settings.adapters.encryptKey')"
             type="password"
             :value="fsEncryptKey"
-            @update:value="fsEncryptKey = $event"
+            @update:modelValue="fsEncryptKey = $event"
             :placeholder="t('settings.adapters.encryptKeyPlaceholder')"
           />
           <Input
             :label="t('settings.adapters.verificationToken')"
             type="password"
             :value="fsVerificationToken"
-            @update:value="fsVerificationToken = $event"
+            @update:modelValue="fsVerificationToken = $event"
             :placeholder="t('settings.adapters.verificationTokenPlaceholder')"
           />
         </div>
@@ -729,7 +729,7 @@ function getTabButtonClass(active: boolean): string {
           <Input
             :label="t('settings.adapters.allowedUsers')"
             :value="fsAllowedUsers"
-            @update:value="fsAllowedUsers = $event"
+            @update:modelValue="fsAllowedUsers = $event"
             :placeholder="t('settings.adapters.fsAllowedUsersPlaceholder')"
           />
           <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.adapters.allowedUsersHint') }}</p>
@@ -794,7 +794,7 @@ function getTabButtonClass(active: boolean): string {
           <Input
             :label="t('settings.adapters.allowedUsers')"
             :value="wcAllowedUsers"
-            @update:value="wcAllowedUsers = $event"
+            @update:modelValue="wcAllowedUsers = $event"
             :placeholder="t('settings.adapters.wcAllowedUsersPlaceholder')"
           />
           <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.adapters.wechatAllowedUsersHint') }}</p>
@@ -853,28 +853,28 @@ function getTabButtonClass(active: boolean): string {
           <Input
             :label="t('settings.adapters.dingtalkClientId')"
             :value="dtClientId"
-            @update:value="dtClientId = $event"
+            @update:modelValue="dtClientId = $event"
             :placeholder="t('settings.adapters.dingtalkClientIdPlaceholder')"
           />
           <Input
             :label="t('settings.adapters.dingtalkClientSecret')"
             type="password"
             :value="dtClientSecret"
-            @update:value="dtClientSecret = $event"
+            @update:modelValue="dtClientSecret = $event"
             :placeholder="t('settings.adapters.dingtalkClientSecretPlaceholder')"
           />
         </div>
         <Input
           :label="t('settings.adapters.dingtalkEndpoint')"
           :value="dtEndpoint"
-          @update:value="dtEndpoint = $event"
+          @update:modelValue="dtEndpoint = $event"
           :placeholder="t('settings.adapters.dingtalkEndpointPlaceholder')"
         />
         <div class="flex flex-col gap-1">
           <Input
             :label="t('settings.adapters.dingtalkPermissionCardTemplateId')"
             :value="dtPermissionCardTemplateId"
-            @update:value="dtPermissionCardTemplateId = $event"
+            @update:modelValue="dtPermissionCardTemplateId = $event"
             :placeholder="t('settings.adapters.dingtalkPermissionCardTemplateIdPlaceholder')"
           />
           <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.adapters.dingtalkPermissionCardTemplateIdHint') }}</p>
@@ -883,7 +883,7 @@ function getTabButtonClass(active: boolean): string {
           <Input
             :label="t('settings.adapters.allowedUsers')"
             :value="dtAllowedUsers"
-            @update:value="dtAllowedUsers = $event"
+            @update:modelValue="dtAllowedUsers = $event"
             :placeholder="t('settings.adapters.dtAllowedUsersPlaceholder')"
           />
           <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.adapters.allowedUsersHint') }}</p>
@@ -896,14 +896,14 @@ function getTabButtonClass(active: boolean): string {
           :label="t('settings.adapters.botToken')"
           type="password"
           :value="tgBotToken"
-          @update:value="tgBotToken = $event"
+          @update:modelValue="tgBotToken = $event"
           :placeholder="t('settings.adapters.botTokenPlaceholder')"
         />
         <div class="flex flex-col gap-1">
           <Input
             :label="t('settings.adapters.allowedUsers')"
             :value="tgAllowedUsers"
-            @update:value="tgAllowedUsers = $event"
+            @update:modelValue="tgAllowedUsers = $event"
             :placeholder="t('settings.adapters.tgAllowedUsersPlaceholder')"
           />
           <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.adapters.allowedUsersHint') }}</p>
@@ -960,7 +960,7 @@ function getTabButtonClass(active: boolean): string {
           <Input
             :label="t('settings.adapters.allowedUsers')"
             :value="waAllowedUsers"
-            @update:value="waAllowedUsers = $event"
+            @update:modelValue="waAllowedUsers = $event"
             :placeholder="t('settings.adapters.waAllowedUsersPlaceholder')"
           />
           <p class="text-xs text-[var(--color-text-tertiary)]">{{ t('settings.adapters.whatsappAllowedUsersHint') }}</p>

@@ -3088,7 +3088,12 @@ def register(app: FastAPI) -> None:
     @app.get("/api/settings/user", include_in_schema=False)
     async def cc_settings_user() -> dict[str, Any]:
         prefs = _load_prefs()
-        return {"user": prefs.get("profile", {})}
+        # Flat-merge the profile so GeneralSettings.vue's `data.locale`
+        # style reads work alongside the cc legacy `{"user": …}` shape.
+        profile = prefs.get("profile", {}) or {}
+        payload = {k: v for k, v in profile.items()}
+        payload["user"] = profile
+        return payload
 
     @app.put("/api/settings/user", include_in_schema=False)
     async def cc_settings_user_update(request: Request) -> dict[str, Any]:
@@ -3100,6 +3105,25 @@ def register(app: FastAPI) -> None:
         prefs["profile"] = body
         _save_prefs(prefs)
         return {"ok": True, "user": body}
+
+    # GeneralSettings.vue persists via POST with per-key patches and reads
+    # flat keys (locale / networkTimeout / webSearchEnabled / theme / …).
+    # Only PUT existed before, so every save from the 通用设置 page 404'd
+    # silently. POST merges keys; GET merges the flat keys over the
+    # cc-legacy payload so nothing is lost either way.
+    @app.post("/api/settings/user", include_in_schema=False)
+    async def cc_settings_user_patch(request: Request) -> dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict) or not body:
+            return {"ok": True}
+        prefs = _load_prefs()
+        profile = prefs.setdefault("profile", {})
+        profile.update(body)
+        _save_prefs(prefs)
+        return {"ok": True, "user": profile}
 
     @app.get("/api/settings/output-styles", include_in_schema=False)
     async def cc_settings_output_styles() -> dict[str, Any]:

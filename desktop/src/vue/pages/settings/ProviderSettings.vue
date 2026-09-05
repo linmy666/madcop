@@ -412,7 +412,7 @@ async function executeDelete() {
   if (!pendingDelete.value) return
   isDeleting.value = true
   try {
-    await fetch(`/api/settings/${pendingDelete.value.provider_id}`, { method: 'DELETE' })
+    await fetch(getApiUrl(`/api/settings/${pendingDelete.value.provider_id}`), { method: 'DELETE' })
     pendingDelete.value = null
     await loadData()
   } catch (e) {
@@ -458,7 +458,7 @@ async function loadCapabilities(live = false) {
 async function testProvider(providerId: string) {
   testResults.value = { ...testResults.value, [providerId]: { loading: true } }
   try {
-    const res = await fetch(getApiUrl(`/api/settings/providers/${providerId}/test`), { method: 'POST' })
+    const res = await fetch(getApiUrl(`/api/providers/${providerId}/test`), { method: 'POST' })
     if (res.ok) {
       const result = await res.json()
       testResults.value = { ...testResults.value, [providerId]: { loading: false, result } }

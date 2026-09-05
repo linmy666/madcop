@@ -1544,8 +1544,15 @@ def create_app() -> FastAPI:
 
     @app.get("/api/settings/user")
     async def get_user_settings_madcop() -> dict[str, Any]:
-        """cc-haha React 客户端期望的 user settings 端点"""
-        return {
+        """cc-haha React 客户端期望的 user settings 端点.
+
+        GeneralSettings.vue persists per-key patches via POST and reads
+        flat keys (locale / networkTimeout / webSearchEnabled / …) from
+        this endpoint, so the persisted profile is flat-merged over the
+        cc-legacy defaults. (Previously POST didn't exist and the saved
+        profile was never returned — every 通用设置 change 404'd silently
+        and reset on reload.)"""
+        payload: dict[str, Any] = {
             # UI theme lives in the renderer (useAppearance/localStorage);
             # returning a fixed value here desynced the General settings
             # select (theme:"white" matched no option -> blank dropdown).
@@ -1561,6 +1568,41 @@ def create_app() -> FastAPI:
             "updateProxy": {"mode": "system", "url": ""},
             "language": "zh",
         }
+        try:
+            import json as _json
+            from pathlib import Path as _P
+            _prefs_file = _P.home() / ".madcop" / "desktop_prefs.json"
+            if _prefs_file.exists():
+                profile = (_json.loads(_prefs_file.read_text() or "{}") or {}).get("profile", {}) or {}
+                payload.update(profile)
+        except Exception:  # noqa: BLE001
+            pass
+        return payload
+
+    @app.post("/api/settings/user")
+    async def post_user_settings_madcop(request: Request) -> dict[str, Any]:
+        """Merge per-key patches from GeneralSettings.vue into the
+        desktop-ui prefs profile (PUT/GET already exist for cc legacy)."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict) or not body:
+            return {"ok": True}
+        try:
+            import json as _json
+            from pathlib import Path as _P
+            _prefs_file = _P.home() / ".madcop" / "desktop_prefs.json"
+            _prefs_file.parent.mkdir(parents=True, exist_ok=True)
+            prefs: dict[str, Any] = {}
+            if _prefs_file.exists():
+                prefs = _json.loads(_prefs_file.read_text() or "{}") or {}
+            profile = prefs.setdefault("profile", {})
+            profile.update(body)
+            _prefs_file.write_text(_json.dumps(prefs, ensure_ascii=False, indent=2))
+            return {"ok": True, "user": profile}
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e))
 
     # Settings routes → madcop.server.routes.settings_routes
 
