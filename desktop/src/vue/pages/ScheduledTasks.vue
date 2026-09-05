@@ -127,7 +127,40 @@ function formatTs(v: string | number | undefined) {
 
       <div v-if="loading" class="scheduled__loading">加载中…</div>
 
-      <div v-else-if="tasks.length === 0" class="scheduled__empty">
+      <!-- Create form — the script always had draft/templates/createTask,
+           but the form UI was never rendered: 新建任务 flipped to 取消 with
+           nothing to fill. -->
+      <form v-if="showCreate && !loading" class="scheduled__create" @submit.prevent="createTask">
+        <div class="scheduled__templates">
+          <button
+            v-for="tpl in TEMPLATES"
+            :key="tpl.name"
+            type="button"
+            class="scheduled__template"
+            @click="applyTemplate(tpl)"
+          >{{ tpl.name }}</button>
+        </div>
+        <label class="scheduled__field">
+          <span>任务名称</span>
+          <input v-model="draft.name" placeholder="例如：每日新闻摘要" />
+        </label>
+        <label class="scheduled__field">
+          <span>执行计划 (cron)</span>
+          <input v-model="draft.cron" class="mono" placeholder="0 9 * * *" />
+        </label>
+        <label class="scheduled__field">
+          <span>Prompt</span>
+          <textarea v-model="draft.prompt" rows="3" placeholder="到点后让 Agent 做什么…" />
+        </label>
+        <div class="scheduled__create-actions">
+          <button type="button" class="ghost" @click="showCreate = false">取消</button>
+          <button type="submit" class="scheduled__btn" :disabled="creating || !draft.name.trim() || !draft.prompt.trim()">
+            {{ creating ? '创建中…' : '创建任务' }}
+          </button>
+        </div>
+      </form>
+
+      <div v-else-if="!loading && tasks.length === 0" class="scheduled__empty">
         <p>暂无计划任务。点「新建任务」或在聊天中用 <code>/schedule</code> 创建。</p>
       </div>
 
@@ -192,12 +225,44 @@ function formatTs(v: string | number | undefined) {
 }
 .scheduled__btn {
   padding: 6px 14px;
-  background: var(--color-brand, var(--madcop-accent)); color: #fff;
+  background: var(--color-brand, var(--madcop-accent)); color: var(--color-on-primary, #fff);
   border: 1px solid transparent;
   border-radius: 8px;
   font-size: 13px; cursor: pointer;
 }
 .scheduled__btn:disabled { opacity: 0.6; cursor: wait; }
+.scheduled__create {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.scheduled__templates { display: flex; flex-wrap: wrap; gap: 8px; }
+.scheduled__template {
+  padding: 5px 12px; font-size: 12px; cursor: pointer; font-family: inherit;
+  background: var(--color-surface-container-low); color: var(--color-text-secondary);
+  border: 1px solid var(--color-border); border-radius: 999px;
+  transition: background 120ms, color 120ms;
+}
+.scheduled__template:hover { background: var(--color-surface-container); color: var(--color-text-primary); }
+.scheduled__field { display: flex; flex-direction: column; gap: 6px; }
+.scheduled__field span { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); }
+.scheduled__field input, .scheduled__field textarea {
+  padding: 8px 12px; font-size: 13px; font-family: inherit;
+  color: var(--color-text-primary); background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-border); border-radius: 8px; outline: none;
+  caret-color: var(--color-text-primary);
+}
+.scheduled__field input:focus, .scheduled__field textarea:focus { border-color: var(--color-border-focus); }
+.scheduled__create-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.scheduled__create-actions .ghost {
+  padding: 6px 14px; font-size: 13px; cursor: pointer; font-family: inherit;
+  background: transparent; color: var(--color-text-secondary);
+  border: 1px solid var(--color-border); border-radius: 8px;
+}
+.scheduled__create-actions .ghost:hover { color: var(--color-text-primary); background: var(--color-surface-hover); }
 .scheduled__notice {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; margin-bottom: 20px;

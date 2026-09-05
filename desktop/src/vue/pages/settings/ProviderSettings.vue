@@ -519,7 +519,7 @@ function fmtContext(n: number | null | undefined) {
       <div v-if="quickResult" class="mb-2 text-[11px]" :class="quickResult.ok ? 'text-green-500' : 'text-red-400'">{{ quickResult.msg }}</div>
       <button
         type="button"
-        class="w-full rounded-lg bg-[var(--color-brand)] py-2 text-[13px] font-medium text-white transition hover:brightness-110 disabled:opacity-40"
+        class="w-full rounded-lg bg-[var(--color-brand)] py-2 text-[13px] font-medium text-[var(--color-on-primary)] transition hover:brightness-110 disabled:opacity-40"
         :disabled="!quickKey.trim() || quickTesting"
         @click="doQuickConnect"
       >{{ quickTesting ? '连接中…' : '连接并设为默认' }}</button>
@@ -596,7 +596,7 @@ function fmtContext(n: number | null | undefined) {
         </button>
         <button
           type="button"
-          class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-brand)] px-3.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+          class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-brand)] px-3.5 text-[13px] font-medium text-[var(--color-on-primary)] transition-opacity hover:opacity-90"
           @click="showCreateModal = true"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -963,7 +963,7 @@ function fmtContext(n: number | null | undefined) {
   padding: 1px 6px;
   border-radius: 8px;
   background: var(--color-brand);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   font-weight: 600;
 }
 .provider-card__model {
@@ -1076,7 +1076,7 @@ function fmtContext(n: number | null | undefined) {
   font-weight: 500;
 }
 .modal-btn--small { padding: 4px 10px; font-size: 11px; }
-.modal-btn--primary { background: var(--color-brand); color: #fff; border-color: var(--color-brand); }
+.modal-btn--primary { background: var(--color-brand); color: var(--color-on-primary, #fff); border-color: var(--color-brand); }
 .modal-btn--danger { color: var(--color-error); border-color: var(--color-error); }
 .modal-btn--disabled { opacity: 0.4; cursor: not-allowed; }
 .modal-chip {
@@ -1088,5 +1088,5 @@ function fmtContext(n: number | null | undefined) {
   color: var(--color-text-secondary);
   cursor: pointer;
 }
-.modal-chip--active { background: var(--color-brand); color: #fff; border-color: var(--color-brand); }
+.modal-chip--active { background: var(--color-brand); color: var(--color-on-primary, #fff); border-color: var(--color-brand); }
 </style>

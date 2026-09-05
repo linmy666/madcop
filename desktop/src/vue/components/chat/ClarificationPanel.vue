@@ -119,7 +119,7 @@ function clear() {
 }
 .clarify__chip:hover {
   background: var(--color-brand, #7c3aed);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
 }
 .clarify__chip--ghost {
   background: transparent;
@@ -152,7 +152,7 @@ function clear() {
   font-weight: 500;
   cursor: pointer;
   background: var(--color-brand, #7c3aed);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border: none;
   border-radius: 10px;
 }

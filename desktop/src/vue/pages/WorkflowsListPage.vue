@@ -432,7 +432,7 @@ const handleBack = async () => {
               @click="confirmInvoke"
               :disabled="invokeRunning || !invokeInput.trim()"
               :style="
-                'padding: 8px 16px; background: var(--color-brand); color: #fff; border: none;'
+                'padding: 8px 16px; background: var(--color-brand); color: var(--color-on-primary, #fff); border: none;'
                 + ' border-radius: 4px; cursor: pointer; font-weight: 500;'
                 + ' opacity: ' + ((invokeRunning || !invokeInput.trim()) ? '0.5' : '1')
               "
@@ -516,7 +516,7 @@ const handleBack = async () => {
 .wf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .wf-btn--primary {
   background: var(--color-brand, #0a0a0a);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border-color: var(--color-brand, #0a0a0a);
 }
 .wf-btn--primary:hover { background: #1f2937; border-color: #1f2937; }
@@ -682,7 +682,7 @@ const handleBack = async () => {
 }
 .wf-card__action:hover { background: var(--color-surface-container); color: var(--color-text-primary); }
 .wf-card__action--accent { color: var(--color-brand, #0a0a0a); font-weight: 600; }
-.wf-card__action--accent:hover { background: var(--color-brand, #0a0a0a); color: #fff; }
+.wf-card__action--accent:hover { background: var(--color-brand, #0a0a0a); color: var(--color-on-primary, #fff); }
 .wf-card__action--danger { color: #b91c1c; }
 .wf-card__action--danger:hover { background: #fee2e2; color: #b91c1c; }
 

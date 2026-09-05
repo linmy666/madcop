@@ -340,7 +340,7 @@ const TYPE_FILTERS: Array<'all' | KnowledgeItem['type']> = [
 .kb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .kb-btn--primary {
   background: var(--color-brand, #0a0a0a);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border-color: var(--color-brand, #0a0a0a);
 }
 .kb-btn--primary:hover { background: #1f2937; border-color: #1f2937; }

@@ -394,7 +394,7 @@ watch(() => props.selectedModel, (val) => {
   margin-top: 8px;
   padding: 6px 16px;
   background: var(--color-brand);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border: none;
   border-radius: 4px;
   font-size: 12px;

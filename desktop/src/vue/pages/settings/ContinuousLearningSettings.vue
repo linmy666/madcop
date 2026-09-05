@@ -320,7 +320,7 @@ onMounted(refreshStats)
             trainingStatus === 'starting' || trainingStatus === 'running'
               ? 'cursor-not-allowed bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'
               : mode === 'local' && stats.total - stats.used >= 10
-                ? 'bg-[var(--color-brand)] text-white hover:opacity-90'
+                ? 'bg-[var(--color-brand)] text-[var(--color-on-primary)] hover:opacity-90'
                 : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container)]',
           ]"
           @click="triggerTraining"

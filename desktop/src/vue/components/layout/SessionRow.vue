@@ -64,7 +64,7 @@ const rowClass = computed(() => {
           v-if="batchMode"
           :class="`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-[5px] border transition-colors ${
             selected
-              ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-white'
+              ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-[var(--color-on-primary)]'
               : 'border-[var(--color-border)] bg-[var(--color-surface)]'
           }`"
           aria-hidden="true"

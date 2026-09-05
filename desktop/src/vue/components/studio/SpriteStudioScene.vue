@@ -699,7 +699,7 @@ function setSkin(id: StudioSkinId) {
   font-weight: 600;
   cursor: pointer;
   background: var(--color-brand, #7c3aed);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
 }
 .ss__assign:disabled {
   opacity: 0.65;

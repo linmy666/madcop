@@ -172,7 +172,7 @@ function handleSubmit() {
     <div v-if="!hasSubmitted" class="flex items-center gap-2 px-4 py-3 border-t border-[var(--color-outline-variant)]/20 bg-[var(--color-surface-container-low)]">
       <button @click="handleSubmit" :disabled="!allAnswered"
         :class="['inline-flex items-center gap-1 rounded-[var(--radius-md)] px-3 py-1.5 text-[12px] font-medium transition-colors',
-          allAnswered ? 'bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand)]/85' : 'bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)] cursor-not-allowed']">
+          allAnswered ? 'bg-[var(--color-brand)] text-[var(--color-on-primary)] hover:bg-[var(--color-brand)]/85' : 'bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)] cursor-not-allowed']">
         <span class="material-symbols-outlined text-[14px]">send</span>
         {{ t('question.submit') }}
       </button>

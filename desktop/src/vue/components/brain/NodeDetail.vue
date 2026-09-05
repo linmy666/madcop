@@ -341,7 +341,7 @@ const isStale = computed(() => {
 }
 .nd-action--edit {
   background: var(--color-brand, #0a0a0a);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border-color: var(--color-brand, #0a0a0a);
 }
 .nd-action--edit:hover {

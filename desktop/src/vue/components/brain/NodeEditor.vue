@@ -294,7 +294,7 @@ const TYPE_OPTIONS = [
 }
 .ne-btn--primary {
   background: var(--color-brand, #0a0a0a);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border-color: var(--color-brand, #0a0a0a);
 }
 .ne-btn--primary:hover {

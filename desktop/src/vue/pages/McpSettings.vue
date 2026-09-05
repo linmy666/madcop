@@ -1200,7 +1200,7 @@ async function handleImportJson() {
             />
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded-lg bg-[var(--color-brand)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              class="inline-flex items-center gap-1 rounded-lg bg-[var(--color-brand)] px-3 py-1.5 text-xs font-semibold text-[var(--color-on-primary)] disabled:opacity-50"
               :disabled="importBusy"
               @click="handleImportJson"
             >

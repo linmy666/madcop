@@ -562,7 +562,7 @@ function onOverlayClick() {
 }
 .kc-btn--primary {
   background: var(--color-brand, #0a0a0a);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border-color: var(--color-brand, #0a0a0a);
 }
 .kc-btn--primary:hover {

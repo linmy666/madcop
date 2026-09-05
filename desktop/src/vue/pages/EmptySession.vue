@@ -789,13 +789,13 @@ const insertSlashCommand = () => {
           <button
             v-if="heroState === 'no_provider'"
             type="button"
-            class="rounded-lg bg-[var(--color-brand)] px-5 py-2.5 text-sm font-medium text-white transition hover:brightness-110"
+            class="rounded-lg bg-[var(--color-brand)] px-5 py-2.5 text-sm font-medium text-[var(--color-on-primary)] transition hover:brightness-110"
             @click="() => { useUIStore().setPendingSettingsTab('providers'); useTabStore().openTab(SETTINGS_TAB_ID, '设置', 'settings') }"
           >配置模型供应商 →</button>
           <button
             v-if="heroState === 'no_workspace'"
             type="button"
-            class="rounded-lg bg-[var(--color-brand)] px-5 py-2.5 text-sm font-medium text-white transition hover:brightness-110"
+            class="rounded-lg bg-[var(--color-brand)] px-5 py-2.5 text-sm font-medium text-[var(--color-on-primary)] transition hover:brightness-110"
             @click="() => useTabStore().openTab('__observer__', '观察器', 'observer' as any)"
           >选择项目文件夹 →</button>
         </div>

@@ -10,7 +10,7 @@ export const SettingsCheckboxMark = defineComponent({
     return () => {
       const baseClass = 'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--color-brand)]/40'
       const checkedClass = props.checked
-        ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow-[var(--shadow-button-primary)]'
+        ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-[var(--color-on-primary)] shadow-[var(--shadow-button-primary)]'
         : 'border-[var(--color-border-focus)] bg-[var(--color-surface)] text-transparent'
       const disabledClass = props.disabled ? 'opacity-50' : ''
       return h(

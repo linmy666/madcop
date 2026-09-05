@@ -182,7 +182,7 @@ function onAdopt() {
 .pt-btn--primary {
   background: var(--color-brand, #0a0a0a);
   border: 1px solid var(--color-brand, #0a0a0a);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
 }
 .pt-btn--primary:hover {
   filter: brightness(1.08);

@@ -186,7 +186,7 @@ function copyText(text: string) {
             'ml-auto rounded-lg px-4 py-1.5 text-[12px] font-medium transition-opacity',
             isRunning || !userInput.trim() || selectedModels.length === 0
               ? 'cursor-not-allowed bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'
-              : 'bg-[var(--color-brand)] text-white hover:opacity-90',
+              : 'bg-[var(--color-brand)] text-[var(--color-on-primary)] hover:opacity-90',
           ]"
           @click="runArena"
         >
@@ -278,7 +278,7 @@ function copyText(text: string) {
               :class="[
                 'ml-auto rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors',
                 r.chosen
-                  ? 'bg-[var(--color-brand)] text-white'
+                  ? 'bg-[var(--color-brand)] text-[var(--color-on-primary)]'
                   : 'border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-brand)]',
               ]"
               @click="chooseResult(idx)"

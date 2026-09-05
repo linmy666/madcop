@@ -93,7 +93,7 @@ const t = (key: string) => key // identity translation for demo
               <p class="text-[var(--color-text-secondary)] font-[Inter,sans-serif] text-lg max-w-sm mx-auto leading-relaxed mb-12">
                 You don't have any scheduled tasks yet. Create your first one to automate your workflow.
               </p>
-              <button class="group relative px-8 py-4 bg-[var(--color-brand)] text-white rounded-xl font-[Manrope,sans-serif] font-bold text-sm tracking-wide shadow-lg hover:shadow-[var(--color-brand)]/20 transition-all flex items-center gap-3 overflow-hidden">
+              <button class="group relative px-8 py-4 bg-[var(--color-brand)] text-[var(--color-on-primary)] rounded-xl font-[Manrope,sans-serif] font-bold text-sm tracking-wide shadow-lg hover:shadow-[var(--color-brand)]/20 transition-all flex items-center gap-3 overflow-hidden">
                 <div class="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent opacity-30"></div>
                 <span class="material-symbols-outlined text-lg">add_task</span>
                 <span>Create Task</span>

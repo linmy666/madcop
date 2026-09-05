@@ -265,7 +265,7 @@ const defaultModelLabel = computed(() => props.agent.modelDisplay || props.agent
         </div>
         <button
           type="button"
-          class="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--color-brand)] px-4 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          class="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--color-brand)] px-4 text-xs font-semibold text-[var(--color-on-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
           :disabled="modelSaving"
           @click="saveModel"
         >

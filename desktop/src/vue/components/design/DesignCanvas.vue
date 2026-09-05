@@ -1337,7 +1337,7 @@ function zoomReset() {
 .dc-tool--primary {
   background: var(--color-brand, #7c3aed);
   border-color: transparent;
-  color: #fff;
+  color: var(--color-on-primary, #fff);
 }
 .dc-tool--primary:hover:not(:disabled) {
   color: #fff;

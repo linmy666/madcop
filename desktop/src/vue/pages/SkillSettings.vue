@@ -120,7 +120,7 @@ async function runDistill() {
         <div class="flex items-center gap-2">
           <button
             type="button"
-            class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-brand)] px-3 text-xs font-medium text-white disabled:opacity-50"
+            class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-brand)] px-3 text-xs font-medium text-[var(--color-on-primary)] disabled:opacity-50"
             :disabled="skillStore.isDistilling"
             @click="runDistill"
           >

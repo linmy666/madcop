@@ -858,7 +858,7 @@ export default { methods: { getModelLabel, getNodeDescription, getNodeConfig, ha
   border-color: var(--color-border-focus);
 }
 .workflow-btn--primary {
-  background: var(--color-brand); color: #fff; border-color: var(--color-brand);
+  background: var(--color-brand); color: var(--color-on-primary, #fff); border-color: var(--color-brand);
 }
 .workflow-btn--primary:hover { opacity: 0.9; }
 .workflow-btn--disabled { opacity: 0.5; cursor: not-allowed; }

@@ -90,7 +90,7 @@ defineProps({
   align-items: center;
   justify-content: center;
   background: var(--color-brand, #0a0a0a);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border-radius: 50%;
   font-size: 11px;
   font-weight: 600;

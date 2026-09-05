@@ -103,7 +103,7 @@ function extractToolDetails(): { primary: string; secondary?: string } {
     </div>
 
     <div v-if="isPending" class="flex items-center gap-2 border-t border-[var(--color-outline-variant)]/20 bg-[var(--color-surface-container-low)] px-4 py-3">
-      <button @click="$emit('allow', '')" class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-brand)] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-[var(--color-brand)]/85">
+      <button @click="$emit('allow', '')" class="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-brand)] px-3 py-1.5 text-[12px] font-medium text-[var(--color-on-primary)] hover:bg-[var(--color-brand)]/85">
         <span class="material-symbols-outlined text-[14px]">check</span> {{ t('permission.allow') }}
       </button>
       <button @click="$emit('allowForSession', '')" class="inline-flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-1.5 text-[12px] font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-surface-container)]">

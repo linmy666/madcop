@@ -876,7 +876,7 @@ function loadNetwork(net: any) {
 .ao-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .ao-btn--primary {
   background: var(--color-brand, #0a0a0a);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border-color: var(--color-brand, #0a0a0a);
 }
 .ao-btn--primary:hover:not(:disabled) { background: #1f2937; border-color: #1f2937; }

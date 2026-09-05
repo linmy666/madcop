@@ -282,7 +282,7 @@ onMounted(loadStatus)
   cursor: pointer; color: var(--color-text-primary); flex-shrink: 0;
 }
 .mh-btn:hover { background: var(--color-surface-hover); }
-.mh-btn--primary { background: var(--color-brand); color: #fff; border-color: transparent; }
+.mh-btn--primary { background: var(--color-brand); color: var(--color-on-primary, #fff); border-color: transparent; }
 .mh-btn--primary:hover { opacity: 0.92; background: var(--color-brand); }
 .mh-btn--ghost { background: transparent; }
 .mh-btn--sm { padding: 4px 10px; font-size: 11px; border-radius: 8px; }
