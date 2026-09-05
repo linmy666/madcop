@@ -127,7 +127,7 @@ export const useSettingsStore = defineStore('settings', {
     /** True once /api/settings has answered (even on error) — gates the
      *  empty-state hero so it never flashes the setup CTA prematurely. */
     settingsLoaded: false,
-    locale: 'en' as string,
+    locale: 'zh' as string,
     chatSendBehavior: 'enter' as string,
     outputStyle: 'Learning' as string,
     // Desktop terminal settings

@@ -462,6 +462,8 @@ export const en = {
   'settings.providers.title': 'Providers',
   'settings.providers.description': 'Manage API providers for model access.',
   'settings.providers.addProvider': 'Add Provider',
+  'settings.providers.quickConnect': '⚡ Quick connect',
+  'settings.providers.quickConnectHint': 'Pick a provider and paste your Key. Advanced options live in Edit.',
   'settings.providers.officialName': '默认模型',
   'settings.providers.officialDesc': 'Anthropic native — no API key required',
   'settings.providers.openaiOfficialName': 'ChatGPT Official',
@@ -802,6 +804,7 @@ export const en = {
   'settings.agents.source.built-in': 'Built-in',
 
   // Settings > Skills
+  'settings.execPolicy.title': 'Exec Policy',
   'settings.skills.title': 'Installed Skills',
   'settings.skills.distill': 'Distill skill from chat',
   'settings.skills.distillHint': 'Turn a "teach me / how do I" Q&A into a SKILL.md so similar questions cite it automatically.',

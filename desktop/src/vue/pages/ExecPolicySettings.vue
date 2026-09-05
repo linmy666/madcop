@@ -96,7 +96,7 @@ onMounted(load)
           </div>
           <div class="mb-2 flex items-center gap-2">
             <span class="material-symbols-outlined text-[20px] text-[var(--color-brand)]" style="fontVariationSettings: 'FILL' 1">gavel</span>
-            <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]" style="font-family: var(--font-headline)">命令策略</h2>
+            <h2 class="text-[18px] font-bold tracking-tight text-[var(--color-text-primary)]" style="font-family: var(--font-headline)">{{ t('settings.execPolicy.title') || '命令策略' }}</h2>
           </div>
           <p class="max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
             {{ doc || 'bash 命令在执行前按规则匹配：deny 直接拒绝，warn 放行但提示模型，allow 显式放行。' }}

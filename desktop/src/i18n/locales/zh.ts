@@ -464,6 +464,8 @@ export const zh: Record<TranslationKey, string> = {
   'settings.providers.title': '服务商',
   'settings.providers.description': '管理 API 服务商以访问模型。',
   'settings.providers.addProvider': '添加服务商',
+  'settings.providers.quickConnect': '⚡ 快速连接',
+  'settings.providers.quickConnectHint': '选择供应商,粘贴 Key 即可。高级设置可在编辑里调整。',
   'settings.providers.officialName': '默认模型',
   'settings.providers.officialDesc': 'Anthropic 原生接入 — 无需 API 密钥',
   'settings.providers.openaiOfficialName': 'ChatGPT 官方',
@@ -804,6 +806,7 @@ export const zh: Record<TranslationKey, string> = {
   'settings.agents.source.built-in': '内置',
 
   // Settings > Skills
+  'settings.execPolicy.title': '命令策略',
   'settings.skills.title': '已安装技能',
   'settings.skills.description': '技能扩展 MadCop 的能力。在 ~/.madcop/skills/ 中管理技能。',
   'settings.skills.browserTitle': '浏览已安装技能',

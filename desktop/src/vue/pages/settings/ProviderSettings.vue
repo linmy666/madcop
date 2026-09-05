@@ -495,8 +495,8 @@ function fmtContext(n: number | null | undefined) {
   <div style="max-width: 720px;">
     <!-- B-3: Quick Connect card — 2-field fast path before the full list -->
     <div v-if="!quickPreset" class="mb-5 rounded-xl border border-[var(--color-brand)]/30 bg-gradient-to-br from-[var(--color-brand)]/5 to-transparent p-4">
-      <div class="mb-2 text-[13px] font-semibold text-[var(--color-text-primary)]">⚡ 快速连接</div>
-      <div class="mb-3 text-[11px] text-[var(--color-text-tertiary)]">选择供应商,粘贴 Key 即可。高级设置可在编辑里调整。</div>
+      <div class="mb-2 text-[13px] font-semibold text-[var(--color-text-primary)]">{{ t('settings.providers.quickConnect') || '⚡ 快速连接' }}</div>
+      <div class="mb-3 text-[11px] text-[var(--color-text-tertiary)]">{{ t('settings.providers.quickConnectHint') || '选择供应商,粘贴 Key 即可。' }}</div>
       <div class="flex flex-wrap gap-2">
         <button
           v-for="p in presetOptions.slice(0, 6)" :key="p.id"
