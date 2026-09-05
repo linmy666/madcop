@@ -1,6 +1,7 @@
 """v1.6.0 — Tests for web search/fetch tools."""
 from __future__ import annotations
 
+import json
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -38,9 +39,69 @@ class TestWebSearchTool:
             results = tool(query="test query", max_results=5)
 
         assert len(results) == 2
-        assert results[0]["title"] == "Example Page"
-        assert "example.com" in results[0]["url"]
-        assert "snippet" in results[0]["snippet"].lower()
+        assert {item["title"] for item in results} == {"Example Page", "Test Site"}
+        assert any("example.com" in item["url"] for item in results)
+        assert any("snippet" in item["snippet"].lower() for item in results)
+
+    def test_search_uses_youcom_when_key_set(self, monkeypatch):
+        monkeypatch.setenv("YDC_API_KEY", "youcom-test-key")
+        tool = WebSearchTool()
+        captured: list[tuple[str, dict, dict | None]] = []
+
+        def fake_post_json(url, payload, timeout=10, headers=None):
+            captured.append((url, payload, headers))
+            return json.dumps(
+                {
+                    "results": {
+                        "web": [
+                            {
+                                "title": "You Result",
+                                "url": "https://example.com",
+                                "description": "You.com snippet",
+                                "snippets": ["snippet one", "snippet two"],
+                            }
+                        ],
+                        "news": [
+                            {
+                                "title": "News Result",
+                                "url": "https://news.example.com",
+                                "description": "News description",
+                            }
+                        ],
+                    }
+                }
+            ).encode()
+
+        with patch("madcop.tools.web._http_post_json", side_effect=fake_post_json), \
+             patch("madcop.tools.web.WebSearchTool._search_bing",
+                   side_effect=Exception("bing should not run")), \
+             patch("madcop.tools.web.WebSearchTool._search_ddg",
+                   side_effect=Exception("ddg should not run")), \
+             patch("madcop.tools.web.WebSearchTool._search_baidu_playwright",
+                   side_effect=Exception("baidu should not run")):
+            results = tool(query="latest news", max_results=5)
+
+        assert len(captured) == 1
+        assert captured[0][0] == "https://ydc-index.io/v1/search"
+        assert captured[0][2]["X-API-Key"] == "youcom-test-key"
+        assert {item["title"] for item in results} == {"You Result", "News Result"}
+        assert any(item["url"] == "https://example.com" for item in results)
+
+    def test_search_falls_back_when_youcom_fails(self, monkeypatch):
+        monkeypatch.setenv("YDC_API_KEY", "youcom-test-key")
+        tool = WebSearchTool()
+
+        with patch("madcop.tools.web._http_post_json", side_effect=Exception("youcom down")), \
+             patch("madcop.tools.web.WebSearchTool._search_bing",
+                   return_value=[{"title": "Fallback Please Result", "url": "https://bing.example.com", "snippet": "fallback please snippet"}]), \
+             patch("madcop.tools.web.WebSearchTool._search_ddg",
+                   side_effect=Exception("ddg should not run")), \
+             patch("madcop.tools.web.WebSearchTool._search_baidu_playwright",
+                   side_effect=Exception("baidu should not run")):
+            results = tool(query="fallback please", max_results=5)
+
+        assert len(results) == 1
+        assert results[0]["title"] == "Fallback Please Result"
 
     def test_search_error_returns_error_dict(self):
         tool = WebSearchTool()
@@ -205,7 +266,12 @@ class TestWebFetchTool:
     def test_fetch_html_with_mock(self):
         mock_html = """
         <html><head><script>bad()</script><style>body{}</style></head>
-        <body><h1>Hello World</h1><p>This is a test page.</p></body></html>
+        <body><h1>Hello World</h1>
+        <p>This is a test page with enough content to avoid the SPA detector. It includes several sentences so the
+        stripped text remains well above the fallback threshold.</p>
+        <p>Another paragraph keeps the meaningful text above the fallback threshold, and a third sentence makes the
+        example behave like a normal article instead of a JS shell.</p>
+        <p>Final paragraph with extra words for good measure.</p></body></html>
         """
         tool = WebFetchTool()
         with patch("madcop.tools.web._http_get", return_value=mock_html.encode()):
