@@ -713,7 +713,7 @@ class WritePptxTool(Tool):
 
     name = "write_pptx"
     description = (
-        "Generate a new .pptx presentation file. Provide `title` (deck title) and `slides`: a list where each item has `title` and a `layout`: bullets (default), table (headers+rows), chart (column/line/pie via series), or two_col (left+right columns). PREFER table/chart layouts over bullet-only slides when the content is data-heavy. Path must be inside allowed dirs. Renders a clean 16:9 deck with consistent typography."
+        "Generate a new .pptx presentation file. Provide `title` (deck title) and `slides`: a list where each item has `title` and a `layout`: bullets (default), table (headers+rows), chart (column/line/pie via series), or two_col (left+right columns). PREFER table/chart layouts over bullet-only slides when the content is data-heavy. DECK RHYTHM: 5-7 pages following cover → context/evidence → data (table or chart) → risks/actions → closing; alternate layout kinds so adjacent pages differ. TYPOGRAPHY & PALETTE are locked by the engine (ink-on-light, title 30pt / body 17pt / table 13-14pt, zinc-grey secondary); do not ask for or invent colors or fonts.content is data-heavy. Path must be inside allowed dirs. Renders a clean 16:9 deck with consistent typography."
     )
 
     def __init__(self, allowed_dirs: Sequence[str | Path] | None = None) -> None:
@@ -750,7 +750,7 @@ class WritePptxTool(Tool):
                             "title": {"type": "string"},
                             "layout": {
                                 "type": "string",
-                                "enum": ["bullets", "table", "chart", "two_col"],
+                                "enum": ["bullets", "table", "chart", "two_col", "kpi", "divider"],
                                 "description": "Slide layout (default bullets).",
                             },
                             "bullets": {"type": "array", "items": {"type": "string"}},
@@ -782,6 +782,22 @@ class WritePptxTool(Tool):
                             "right": {
                                 "type": "array", "items": {"type": "string"},
                                 "description": "two_col layout: right bullets.",
+                            },
+                            "kpis": {
+                                "type": "array",
+                                "description": ("kpi layout: list of "
+                                    "{value, label} big-number tiles."),
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": {"type": "string"},
+                                        "label": {"type": "string"},
+                                    },
+                                },
+                            },
+                            "text": {
+                                "type": "string",
+                                "description": "divider layout: section title text.",
                             },
                             "notes": {"type": "string"},
                         },
@@ -877,6 +893,35 @@ class WritePptxTool(Tool):
                 slide.shapes.add_chart(ct, Inches(2.2), Inches(1.95),
                                        Inches(8.9), Inches(4.7), cd)
 
+            def _add_kpi(slide, kpis):
+                # KPI tiles — big number + label in a row (evidence-first)
+                n = max(1, len(kpis))
+                w = min(2.7, 11.4 / n - 0.3)
+                for ki, k in enumerate(kpis[:4]):
+                    x = 0.95 + ki * (w + 0.3)
+                    value = str(k.get("value", ""))
+                    label = str(k.get("label", ""))
+                    box = slide.shapes.add_textbox(Inches(x), Inches(2.3), Inches(w), Inches(1.4))
+                    tf = box.text_frame
+                    run = tf.paragraphs[0].add_run()
+                    run.text = value
+                    run.font.size = Pt(40); run.font.bold = True
+                    run.font.color.rgb = INK
+                    lbox = slide.shapes.add_textbox(Inches(x + 0.05), Inches(3.75), Inches(w), Inches(0.6))
+                    lrun = lbox.text_frame.paragraphs[0].add_run()
+                    lrun.text = label
+                    lrun.font.size = Pt(13); lrun.font.color.rgb = GREY
+
+            def _add_section_divider(slide, text):
+                big = slide.shapes.add_textbox(Inches(1.4), Inches(3.0), Inches(10.5), Inches(1.2))
+                run = big.text_frame.paragraphs[0].add_run()
+                run.text = text
+                run.font.size = Pt(36); run.font.bold = True
+                run.font.color.rgb = INK
+                bar = slide.shapes.add_shape(1, Inches(1.45), Inches(2.75), Inches(0.9), Pt(4))
+                bar.fill.solid(); bar.fill.fore_color.rgb = INK
+                bar.line.fill.background()
+
             def _add_two_col(slide, left, right):
                 for x, items in ((0.95, left), (6.85, right)):
                     box = slide.shapes.add_textbox(Inches(x), Inches(1.95), Inches(5.4), Inches(4.8))
@@ -921,6 +966,16 @@ class WritePptxTool(Tool):
                     if notes:
                         slide.notes_slide.notes_text_frame.text = notes
                     continue
+                if layout == "kpi" and sl.get("kpis"):
+                    _add_kpi(slide, sl["kpis"])
+                    if notes:
+                        slide.notes_slide.notes_text_frame.text = notes
+                    continue
+                if layout == "divider" and sl.get("text"):
+                    _add_section_divider(slide, sl["text"])
+                    if notes:
+                        slide.notes_slide.notes_text_frame.text = notes
+                    continue
                 if layout == "two_col" and (sl.get("left") or sl.get("right")):
                     _add_two_col(slide, sl.get("left", []), sl.get("right", []))
                     if notes:
@@ -951,11 +1006,25 @@ class WritePptxTool(Tool):
                 nrun.font.color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0x8A, 0x8A, 0x93)
 
             prs.save(str(p))
+            # quality gate — report the deck's layout census back to the
+            # model so it can verify structure without a second read call.
+            census = []
+            for idx, sl in enumerate(prs.slides):
+                kinds = [str(sh.shape_type) for sh in sl.shapes]
+                marks = []
+                if any("TABLE" in k for k in kinds):
+                    marks.append("table")
+                if any("CHART" in k for k in kinds):
+                    marks.append("chart")
+                if len(kinds) >= 6:
+                    marks.append("rich")
+                census.append(f"p{idx}: {'+'.join(marks) if marks else 'text'}")
             return {
                 "path": str(p),
                 "status": "ok",
                 "slides": len(slides) + 1,
                 "bytes": p.stat().st_size,
+                "layout_census": " | ".join(census),
             }
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
