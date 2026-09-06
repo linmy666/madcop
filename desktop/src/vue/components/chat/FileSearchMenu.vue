@@ -292,7 +292,7 @@ const breadcrumbs = computed((): string[] => {
           >
             <span
               :class="[
-                'material-symbols-outlined shrink-0 text-[17px]',
+                'material-symbols-outlined shrink-0 text-[18px]',
                 entry.isDirectory ? 'text-[var(--color-brand)]' : 'text-[var(--color-text-secondary)]',
               ]"
             >

@@ -87,7 +87,7 @@ const inputValue = ref('')
             <!-- Team label -->
             <div class="flex items-center gap-3 pr-4 md:border-r border-[var(--color-border-separator)]">
               <div class="p-2 bg-[var(--color-primary-fixed)]/20 rounded-lg">
-                <span class="material-symbols-outlined text-[var(--color-brand)] text-xl">
+                <span class="material-symbols-outlined text-[var(--color-brand)] text-[18px]">
                   groups
                 </span>
               </div>
@@ -171,7 +171,7 @@ const inputValue = ref('')
             />
             <button class="bg-[var(--color-primary)] text-[var(--color-btn-primary-fg)] shadow-[var(--shadow-button-primary)] w-9 h-9 rounded-lg flex items-center justify-center transition-all hover:brightness-105 active:scale-95">
               <span
-                class="material-symbols-outlined text-lg"
+                class="material-symbols-outlined text-[16px]"
                 :style="{ fontVariationSettings: \"'FILL' 1\" }"
               >send</span>
             </button>

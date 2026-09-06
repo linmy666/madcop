@@ -83,7 +83,7 @@ const t = (key: string) => key // identity translation for demo
         <div class="max-w-2xl w-full text-center">
           <h1 class="text-3xl font-[Manrope,sans-serif] font-extrabold text-[var(--color-text-primary)] tracking-tight mb-16">Scheduled Tasks</h1>
           <div class="relative group">
-            <div class="absolute -inset-4 bg-[var(--color-surface-container-low)] rounded-[32px] -z-10 transition-all"></div>
+            <div class="absolute -inset-4 bg-[var(--color-surface-container-low)] rounded-[24px] -z-10 transition-all"></div>
             <div class="flex flex-col items-center py-20 px-8">
               <div class="w-32 h-32 rounded-full bg-[var(--color-surface-container-high)] flex items-center justify-center mb-10 shadow-sm">
                 <div class="w-20 h-20 rounded-full bg-[var(--color-surface-container-lowest)] flex items-center justify-center border border-[var(--color-border)]/10">
@@ -95,7 +95,7 @@ const t = (key: string) => key // identity translation for demo
               </p>
               <button class="group relative px-8 py-4 bg-[var(--color-brand)] text-[var(--color-on-primary)] rounded-xl font-[Manrope,sans-serif] font-bold text-sm tracking-wide shadow-lg hover:shadow-[var(--color-brand)]/20 transition-all flex items-center gap-3 overflow-hidden">
                 <div class="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent opacity-30"></div>
-                <span class="material-symbols-outlined text-lg">add_task</span>
+                <span class="material-symbols-outlined text-[16px]">add_task</span>
                 <span>Create Task</span>
               </button>
             </div>

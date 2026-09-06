@@ -898,7 +898,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
               @click="cancelEditProfile"
               :aria-label="t('settings.activity.cancelEdit')"
             >
-              <span class="material-symbols-outlined text-[17px]" aria-hidden="true">close</span>
+              <span class="material-symbols-outlined text-[18px]" aria-hidden="true">close</span>
             </button>
           </div>
 
@@ -945,7 +945,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
                   class="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-border)] px-2.5 text-xs font-medium text-[var(--color-text-secondary)] transition-[background-color,transform] hover:bg-[var(--color-surface-hover)] active:translate-y-[1px]"
                   @click="triggerAvatarInput"
                 >
-                  <span class="material-symbols-outlined text-[15px]" aria-hidden="true">upload</span>
+                  <span class="material-symbols-outlined text-[16px]" aria-hidden="true">upload</span>
                   {{ t('settings.activity.changeAvatar') }}
                 </button>
                 <button
@@ -1014,7 +1014,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
         <div class="h-4 w-1/4 animate-pulse rounded bg-[var(--color-surface-container)]" />
         <div class="grid grid-flow-col gap-[3px]">
           <div v-for="col in 52" :key="col" class="grid grid-rows-7 gap-[3px]">
-            <div v-for="row in 7" :key="row" class="h-2.5 w-2.5 animate-pulse rounded-[3px] bg-[var(--color-surface-container)]" />
+            <div v-for="row in 7" :key="row" class="h-2.5 w-2.5 animate-pulse rounded-[4px] bg-[var(--color-surface-container)]" />
           </div>
         </div>
       </div>
@@ -1093,7 +1093,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
                   role="gridcell"
                   :aria-label="`${getHeatmapCellTitle(day, settingsStore.locale, t)}: ${getHeatmapCellDetail(day, t)}`"
                   :aria-describedby="activeTooltipDate === day.date ? `activity-day-tooltip-${day.date}` : undefined"
-                  class="activity-heat-cell rounded-[3px] border focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:ring-offset-2 focus:ring-offset-[var(--color-surface)]"
+                  class="activity-heat-cell rounded-[4px] border focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:ring-offset-2 focus:ring-offset-[var(--color-surface)]"
                   :class="
                     activeTooltipDate === day.date
                       ? 'is-active border-[var(--color-activity-cell-border-active)]'
@@ -1136,7 +1136,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
             v-for="color in HEAT_COLORS"
             :key="color"
             aria-hidden="true"
-            class="rounded-[3px] border border-[var(--color-activity-cell-border)]"
+            class="rounded-[4px] border border-[var(--color-activity-cell-border)]"
             :style="{ width: heatCellSize, height: heatCellSize, backgroundColor: color }"
           />
           <span>{{ t('settings.activity.more') }}</span>

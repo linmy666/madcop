@@ -295,11 +295,11 @@ function agentCardDerived(tc: ToolCall) {
           class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--color-surface-hover)]/50"
         >
           <span
-            class="material-symbols-outlined text-[15px] shrink-0 text-[var(--color-text-tertiary)]"
+            class="material-symbols-outlined text-[16px] shrink-0 text-[var(--color-text-tertiary)]"
             aria-hidden="true"
           >{{ memExpanded ? 'expand_more' : 'chevron_right' }}</span>
           <span
-            class="material-symbols-outlined text-[15px] shrink-0 text-[var(--color-memory-accent)]"
+            class="material-symbols-outlined text-[16px] shrink-0 text-[var(--color-memory-accent)]"
             aria-hidden="true"
           >bookmarks</span>
           <span
@@ -358,7 +358,7 @@ function agentCardDerived(tc: ToolCall) {
             @click="memDetailsExpanded = !memDetailsExpanded"
             class="mt-2 inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--color-border)] px-2 text-[11px] font-medium text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
           >
-            <span class="material-symbols-outlined text-[13px]">
+            <span class="material-symbols-outlined text-[14px]">
               {{ memDetailsExpanded ? 'expand_more' : 'chevron_right' }}
             </span>
             {{ t('chat.memoryTechnicalDetails') }}
@@ -782,11 +782,11 @@ function agentCardDerived(tc: ToolCall) {
         class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--color-surface-hover)]/50"
       >
         <span
-          class="material-symbols-outlined text-[15px] shrink-0 text-[var(--color-text-tertiary)]"
+          class="material-symbols-outlined text-[16px] shrink-0 text-[var(--color-text-tertiary)]"
           aria-hidden="true"
         >{{ memExpanded ? 'expand_more' : 'chevron_right' }}</span>
         <span
-          class="material-symbols-outlined text-[15px] shrink-0 text-[var(--color-memory-accent)]"
+          class="material-symbols-outlined text-[16px] shrink-0 text-[var(--color-memory-accent)]"
           aria-hidden="true"
         >bookmarks</span>
         <span
@@ -845,7 +845,7 @@ function agentCardDerived(tc: ToolCall) {
           @click="memDetailsExpanded = !memDetailsExpanded"
           class="mt-2 inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--color-border)] px-2 text-[11px] font-medium text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
         >
-          <span class="material-symbols-outlined text-[13px]">
+          <span class="material-symbols-outlined text-[14px]">
             {{ memDetailsExpanded ? 'expand_more' : 'chevron_right' }}
           </span>
           {{ t('chat.memoryTechnicalDetails') }}

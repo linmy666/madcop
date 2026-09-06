@@ -164,7 +164,7 @@ function clearLog() {
 .sse-t-text { background: color-mix(in srgb, #22c55e 18%, transparent); color: #166534; }
 .sse-t-done { background: color-mix(in srgb, #3b82f6 18%, transparent); color: #1d4ed8; }
 .sse-t-err { background: color-mix(in srgb, #ef4444 18%, transparent); color: #b91c1c; }
-.sse-t-warn { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #b45309; }
+.sse-t-warn { background: color-mix(in srgb, var(--color-warning) 18%, transparent); color: var(--color-warning); }
 .sse-t-tool { background: color-mix(in srgb, #8b5cf6 18%, transparent); color: #6d28d9; }
 .sse-t-misc { background: var(--color-surface-container-low, #f5f5f7); color: var(--color-text-secondary, #555); }
 .sse-overlay__id {

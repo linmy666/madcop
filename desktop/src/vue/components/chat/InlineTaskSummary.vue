@@ -35,7 +35,7 @@ const statusColor: Record<string, string> = {
     <div class="flex items-center gap-3 px-4 py-2 bg-[var(--color-surface-container)]">
       <div class="flex items-center justify-center w-5 h-5 rounded-[var(--radius-md)] bg-[var(--color-success)]/10">
         <span
-          class="material-symbols-outlined text-[13px] text-[var(--color-success)]"
+          class="material-symbols-outlined text-[14px] text-[var(--color-success)]"
           :style="{ 'font-variation-settings': FILL_FONT_VAR }"
         >
           task_alt

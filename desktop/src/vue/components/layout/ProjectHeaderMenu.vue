@@ -153,7 +153,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
 <template>
   <div
     role="menu"
-    class="project-header-menu fixed z-50 min-w-[230px] overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2"
+    class="project-header-menu fixed z-50 min-w-[230px] overflow-hidden rounded-[16px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2"
     :style="menuStyle"
     @click.stop
   >
@@ -206,7 +206,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
         <span class="flex-1 text-left">{{ t(o.labelKey) }}</span>
         <span
           v-if="organization === o.value"
-          class="material-symbols-outlined text-[17px] text-[var(--color-text-secondary)]"
+          class="material-symbols-outlined text-[18px] text-[var(--color-text-secondary)]"
           aria-hidden="true"
         >check</span>
       </button>
@@ -226,7 +226,7 @@ const triggerRestoreHidden = () => emit('restore-hidden-projects')
         <span class="flex-1 text-left">{{ t(s.labelKey) }}</span>
         <span
           v-if="sortBy === s.value"
-          class="material-symbols-outlined text-[17px] text-[var(--color-text-secondary)]"
+          class="material-symbols-outlined text-[18px] text-[var(--color-text-secondary)]"
           aria-hidden="true"
         >check</span>
       </button>

@@ -80,7 +80,7 @@ function lineLabel(attachment: AttachmentPreview): string {
           <template v-if="!isComposer && attachment.note?.trim()">
             <span :aria-label="'Selection note: ' + (attachment.note || '')" :title="attachment.note || ''"
               class="inline-flex h-7 max-w-[260px] items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-2.5 text-[12px] font-medium leading-none text-[var(--color-text-primary)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:border-[var(--color-brand)]/45 hover:bg-[var(--color-surface-container)]">
-              <span class="material-symbols-outlined text-[15px] text-[var(--color-text-tertiary)]">ads_click</span>
+              <span class="material-symbols-outlined text-[16px] text-[var(--color-text-tertiary)]">ads_click</span>
               <span class="min-w-0 truncate">{{ attachment.name }}</span>
             </span>
           </template>
@@ -94,7 +94,7 @@ function lineLabel(attachment: AttachmentPreview): string {
         <div v-else
           :class="['group/file inline-flex max-w-full min-w-0 border border-[var(--color-border)] bg-[var(--color-surface-container-low)] text-[var(--color-text-secondary)] shadow-[0_1px_2px_rgba(0,0,0,0.04)]',
             hasQuotePreview(attachment) ? 'items-start gap-2 rounded-[8px] px-2.5 py-2' : 'h-9 items-center gap-2 rounded-full px-3']">
-          <span class="material-symbols-outlined shrink-0 text-[17px] text-[var(--color-text-tertiary)]"
+          <span class="material-symbols-outlined shrink-0 text-[18px] text-[var(--color-text-tertiary)]"
             :class="hasQuotePreview(attachment) ? 'mt-0.5' : ''">
             {{ hasQuotePreview(attachment) ? 'chat_bubble' : attachment.isDirectory ? 'folder' : 'description' }}
           </span>
@@ -111,7 +111,7 @@ function lineLabel(attachment: AttachmentPreview): string {
             :class="hasQuotePreview(attachment) ? 'mt-0.5' : 'ml-0.5'"
             class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-primary)]"
             :aria-label="'Remove ' + attachment.name">
-            <span class="material-symbols-outlined text-[17px]">close</span>
+            <span class="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
       </template>

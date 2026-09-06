@@ -107,7 +107,7 @@ const MODE_ITEMS = [
               : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]'
           ]"
         >
-          <span class="material-symbols-outlined text-[15px] shrink-0" aria-hidden="true">{{ item.icon }}</span>
+          <span class="material-symbols-outlined text-[16px] shrink-0" aria-hidden="true">{{ item.icon }}</span>
           <span>{{ t(item.labelKey) }}</span>
         </button>
       </div>
@@ -119,15 +119,15 @@ const MODE_ITEMS = [
           :aria-label="t('workbench.expand')"
           :title="t('workbench.expand')"
           @click="handleExpand"
-          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35"
+          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35"
         >
-          <span class="material-symbols-outlined text-[15px]" aria-hidden="true">open_in_full</span>
+          <span class="material-symbols-outlined text-[16px]" aria-hidden="true">open_in_full</span>
         </button>
         <button
           type="button"
           :aria-label="t('workbench.close')"
           @click="handleClose"
-          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35"
+          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35"
         >
           <span class="material-symbols-outlined text-[16px]" aria-hidden="true">close</span>
         </button>

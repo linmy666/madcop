@@ -211,7 +211,7 @@ watch(openWith, (val) => {
         :aria-label="undoAria"
         class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-brand)]/40 hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <span class="material-symbols-outlined text-[15px]">undo</span>
+        <span class="material-symbols-outlined text-[16px]">undo</span>
         {{ props.isUndoing ? t('chat.turnChangesUndoing') : undoLabel }}
       </button>
     </div>
@@ -226,7 +226,7 @@ watch(openWith, (val) => {
           :title="fileEntry.displayPath"
           class="flex min-h-[52px] min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-md)] px-4 text-left transition-colors hover:bg-[var(--color-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-brand)]/35"
         >
-          <span class="material-symbols-outlined shrink-0 text-[22px] text-[var(--color-text-tertiary)]">
+          <span class="material-symbols-outlined shrink-0 text-[20px] text-[var(--color-text-tertiary)]">
             {{ describeFileType(fileEntry.displayPath).icon }}
           </span>
           <span class="min-w-0 flex-1">

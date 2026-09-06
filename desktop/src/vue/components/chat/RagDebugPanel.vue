@@ -276,7 +276,7 @@ watch(
 }
 .rag-debug__tier[data-tier='1'] { background: color-mix(in srgb, #22c55e 18%, transparent); color: #166534; }
 .rag-debug__tier[data-tier='2'] { background: color-mix(in srgb, #3b82f6 18%, transparent); color: #1d4ed8; }
-.rag-debug__tier[data-tier='3'] { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #b45309; }
+.rag-debug__tier[data-tier='3'] { background: color-mix(in srgb, var(--color-warning) 18%, transparent); color: var(--color-warning); }
 .rag-debug__conf {
   margin-left: auto;
   font-weight: 600;

@@ -54,7 +54,7 @@ function toggleCollapsed() {
       :aria-expanded="!collapsed"
       @click="toggleCollapsed"
     >
-      <span class="material-symbols-outlined text-[15px]">hub</span>
+      <span class="material-symbols-outlined text-[16px]">hub</span>
       <span class="sub-agent-panel__title">
         {{ activeCount > 0 ? `${activeCount} 个智能体协作中` : '协作完成' }}
       </span>
@@ -74,7 +74,7 @@ function toggleCollapsed() {
           <span class="sub-agent-card__name" :style="{ color: agent.color }">{{ agent.name }}</span>
           <span
             v-if="agent.status === 'running'"
-            class="material-symbols-outlined text-[13px] sub-agent-card__spin"
+            class="material-symbols-outlined text-[14px] sub-agent-card__spin"
           >progress_activity</span>
           <span v-else-if="agent.status === 'error'" class="sub-agent-card__badge sub-agent-card__badge--err">失败</span>
           <span v-else class="sub-agent-card__badge">完成</span>

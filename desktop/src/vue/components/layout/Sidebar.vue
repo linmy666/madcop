@@ -1463,7 +1463,7 @@ const projectMenuData = computed(() => {
               :aria-label="t('sidebar.batchExit')"
               :title="t('sidebar.batchExit')"
             >
-              <span class="material-symbols-outlined text-[17px]">close</span>
+              <span class="material-symbols-outlined text-[18px]">close</span>
             </button>
           </div>
           <div class="mt-2 grid grid-cols-2 gap-1.5">
@@ -1629,7 +1629,7 @@ const projectMenuData = computed(() => {
                       :aria-label="t('sidebar.projectActions', { project: project.title })"
                       :title="t('sidebar.projectActions', { project: project.title })"
                     >
-                      <span class="material-symbols-outlined text-[17px]">more_horiz</span>
+                      <span class="material-symbols-outlined text-[18px]">more_horiz</span>
                     </button>
                     <!-- New session in project -->
                     <button
@@ -1801,7 +1801,7 @@ const projectMenuData = computed(() => {
     <template v-if="projectMenuData">
       <div
         role="menu"
-        class="fixed z-50 min-w-[230px] overflow-hidden rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2 shadow-[var(--shadow-dropdown)]"
+        class="fixed z-50 min-w-[230px] overflow-hidden rounded-[16px] border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] py-2 shadow-[var(--shadow-dropdown)]"
         :style="{ left: (projectContextMenu ? projectContextMenu.x : 0) + 'px', top: (projectContextMenu ? projectContextMenu.y : 0) + 'px' }"
         @click.stop
         @mousedown.stop

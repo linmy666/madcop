@@ -94,7 +94,7 @@ function copyDiffPath() {
       </div>
       <button type="button" @click="copyDiffPath" aria-label="Copy path"
         class="rounded-md border border-[var(--color-outline-variant)]/40 bg-[var(--color-surface-container-lowest)] px-2 py-1 text-[11px] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-container-high)] hover:text-[var(--color-text-primary)]">
-        <span class="material-symbols-outlined text-[13px] mr-1">content_copy</span>
+        <span class="material-symbols-outlined text-[14px] mr-1">content_copy</span>
         Copy path
       </button>
     </div>

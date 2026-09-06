@@ -310,8 +310,8 @@ onBeforeUnmount(() => {
           :disabled="generating || !prompt.trim()"
           @click="generate"
         >
-          <span v-if="generating" class="material-symbols-outlined animate-spin text-[15px]">progress_activity</span>
-          <span v-else class="material-symbols-outlined text-[15px]">auto_awesome</span>
+          <span v-if="generating" class="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
+          <span v-else class="material-symbols-outlined text-[16px]">auto_awesome</span>
           {{ generating ? '生成中…（约 1-2 分钟）' : '生成原型' }}
         </button>
         <p v-if="genError" class="pw-generr">{{ genError }}</p>
@@ -361,7 +361,7 @@ onBeforeUnmount(() => {
             data-testid="history-btn"
             @click="toggleVersions"
           >
-            <span class="material-symbols-outlined text-[13px] align-middle">history</span>
+            <span class="material-symbols-outlined text-[14px] align-middle">history</span>
             历史{{ versions.length ? ` (${versions.length})` : '' }}
           </button>
           <div v-if="showVersions" class="pw-versions">
@@ -413,7 +413,7 @@ onBeforeUnmount(() => {
                  element's exact selector (v0 Design Mode parity). -->
             <div v-if="selection" class="pw-selectbar" data-testid="point-edit-bar">
               <div class="pw-selectbar__sel">
-                <span class="material-symbols-outlined text-[13px]">ads_click</span>
+                <span class="material-symbols-outlined text-[14px]">ads_click</span>
                 <code class="pw-selectbar__selector">{{ selection.selector }}</code>
                 <button type="button" class="pw-selectbar__close" aria-label="清除选择" @click="clearSelection">
                   <span class="material-symbols-outlined text-[14px]">close</span>
@@ -615,7 +615,7 @@ onBeforeUnmount(() => {
 }
 .pw-toolbar__dirty {
   font-size: 11px;
-  color: #b45309;
+  color: var(--color-warning);
   background: rgba(180,83,9,0.1);
   padding: 1px 8px;
   border-radius: 999px;

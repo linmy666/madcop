@@ -110,7 +110,7 @@ onMounted(fetchSkills)
                 tool.danger === 'safe'
                   ? 'bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'
                   : tool.danger === 'mutating'
-                    ? 'bg-[#b45309]/10 text-[#b45309]'
+                    ? 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]'
                     : 'bg-[var(--color-error)]/10 text-[var(--color-error)]'
               ]"
             >{{ (dangerLabel as any)[tool.danger] || tool.danger }}</span>

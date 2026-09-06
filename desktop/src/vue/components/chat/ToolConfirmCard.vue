@@ -270,7 +270,7 @@ const sizeHint = computed(() => {
   background: rgba(220, 38, 38, 0.12);
 }
 .tcc__risk--network {
-  color: #b45309;
+  color: var(--color-warning);
   background: rgba(180, 83, 9, 0.12);
 }
 .tcc__risk--safe {

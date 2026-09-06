@@ -416,7 +416,7 @@ const RoleBadge = {
                   >
                     <mark
                       v-if="part.highlighted"
-                      class="rounded-[3px] bg-[var(--color-brand)]/25 px-0.5 text-[var(--color-text-primary)]"
+                      class="rounded-[4px] bg-[var(--color-brand)]/25 px-0.5 text-[var(--color-text-primary)]"
                     >
                       {{ part.text }}
                     </mark>

@@ -386,7 +386,7 @@ onUnmounted(() => {
 
 // ─── Shared CSS classes ────────────────────────────────────────────
 const workbarButtonClassName =
-  'group inline-flex h-9 min-w-0 items-center gap-1.5 rounded-[7px] border border-transparent px-2.5 text-[13px] font-medium leading-none text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-container-lowest)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35 disabled:cursor-not-allowed disabled:opacity-50'
+  'group inline-flex h-9 min-w-0 items-center gap-1.5 rounded-[8px] border border-transparent px-2.5 text-[13px] font-medium leading-none text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-container-lowest)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35 disabled:cursor-not-allowed disabled:opacity-50'
 
 // These MUST be computed (not static) because isMobileBrowser is reactive
 const branchMenuClassName = computed(() =>
@@ -467,7 +467,7 @@ const worktreeMenuStyle = computed(() =>
 
       <div
         v-if="loading && props.workDir && !isMobileBrowser"
-        class="inline-flex h-9 items-center gap-1.5 rounded-[7px] px-2.5 text-[13px] text-[var(--color-text-secondary)]"
+        class="inline-flex h-9 items-center gap-1.5 rounded-[8px] px-2.5 text-[13px] text-[var(--color-text-secondary)]"
       >
         <span class="material-symbols-outlined text-[14px] animate-spin">sync</span>
         <span>{{ t('common.loading') }}</span>
@@ -493,7 +493,7 @@ const worktreeMenuStyle = computed(() =>
             isMobileBrowser ? 'max-w-[160px] shrink-0 bg-[var(--color-surface-container)]' : 'max-w-[260px] shrink'
           ]"
         >
-          <span class="material-symbols-outlined text-[17px] shrink-0 text-[var(--color-text-tertiary)] group-hover:text-[var(--color-text-secondary)]">git_branch</span>
+          <span class="material-symbols-outlined text-[18px] shrink-0 text-[var(--color-text-tertiary)] group-hover:text-[var(--color-text-secondary)]">git_branch</span>
           <span class="min-w-0 flex-1 truncate text-[var(--color-text-primary)]">
             {{ selectedBranch?.name || t('repoLaunch.noBranch') }}
           </span>
@@ -517,7 +517,7 @@ const worktreeMenuStyle = computed(() =>
             props.useWorktree ? 'bg-[var(--color-surface-container-lowest)] text-[var(--color-text-primary)]' : ''
           ]"
         >
-          <span class="material-symbols-outlined text-[17px] shrink-0 text-[var(--color-text-tertiary)]">git_pull_request</span>
+          <span class="material-symbols-outlined text-[18px] shrink-0 text-[var(--color-text-tertiary)]">git_pull_request</span>
           <span class="min-w-0 truncate">{{ worktreeLabel }}</span>
           <span class="material-symbols-outlined text-[16px] shrink-0 text-[var(--color-text-tertiary)]">expand_more</span>
         </button>
@@ -529,7 +529,7 @@ const worktreeMenuStyle = computed(() =>
       v-if="message && props.workDir"
       class="flex items-center gap-2 px-1 text-[11px] text-[var(--color-text-tertiary)]"
     >
-      <span class="material-symbols-outlined text-[13px] shrink-0">error_outline</span>
+      <span class="material-symbols-outlined text-[14px] shrink-0">error_outline</span>
       <span>{{ message === 'missing' ? t('repoLaunch.missingWorkdir') : message }}</span>
     </div>
 
@@ -538,7 +538,7 @@ const worktreeMenuStyle = computed(() =>
       v-if="warningMessage"
       class="flex items-center gap-2 px-1 text-[11px] text-[var(--color-warning)]"
     >
-      <span class="material-symbols-outlined text-[13px] shrink-0">error_outline</span>
+      <span class="material-symbols-outlined text-[14px] shrink-0">error_outline</span>
       <span>{{ warningMessage }}</span>
     </div>
 
@@ -554,7 +554,7 @@ const worktreeMenuStyle = computed(() =>
       >
         <template #header-extra>
           <div class="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3 py-2">
-            <span class="material-symbols-outlined text-[15px] shrink-0 text-[var(--color-text-tertiary)]">search</span>
+            <span class="material-symbols-outlined text-[16px] shrink-0 text-[var(--color-text-tertiary)]">search</span>
             <input
               :id="searchInputId"
               ref="searchRef"
@@ -594,7 +594,7 @@ const worktreeMenuStyle = computed(() =>
             ]"
           >
             <span :class="['h-8 w-1 rounded-full', candidate.name === selectedBranch?.name ? 'bg-[var(--color-brand)]' : 'bg-transparent']" />
-            <span class="material-symbols-outlined text-[17px] shrink-0 text-[var(--color-text-secondary)]">git_branch</span>
+            <span class="material-symbols-outlined text-[18px] shrink-0 text-[var(--color-text-secondary)]">git_branch</span>
             <span class="min-w-0 flex-1">
               <span class="block truncate text-sm font-semibold text-[var(--color-text-primary)]">{{ candidate.name }}</span>
               <span class="block truncate text-[11px] text-[var(--color-text-tertiary)]">
@@ -609,7 +609,7 @@ const worktreeMenuStyle = computed(() =>
                 }}
               </span>
             </span>
-            <span v-if="candidate.name === selectedBranch?.name" class="material-symbols-outlined text-[17px] shrink-0 text-[var(--color-brand)]">check</span>
+            <span v-if="candidate.name === selectedBranch?.name" class="material-symbols-outlined text-[18px] shrink-0 text-[var(--color-brand)]">check</span>
           </button>
         </div>
       </MobileBottomSheet>
@@ -626,7 +626,7 @@ const worktreeMenuStyle = computed(() =>
               {{ t('repoLaunch.selectBranch') }}
             </label>
             <div class="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3 py-2">
-              <span class="material-symbols-outlined text-[15px] shrink-0 text-[var(--color-text-tertiary)]">search</span>
+              <span class="material-symbols-outlined text-[16px] shrink-0 text-[var(--color-text-tertiary)]">search</span>
               <input
                 :id="searchInputId"
                 ref="searchRef"
@@ -666,7 +666,7 @@ const worktreeMenuStyle = computed(() =>
               ]"
             >
               <span :class="['h-8 w-1 rounded-full', candidate.name === selectedBranch?.name ? 'bg-[var(--color-brand)]' : 'bg-transparent']" />
-              <span class="material-symbols-outlined text-[17px] shrink-0 text-[var(--color-text-secondary)]">git_branch</span>
+              <span class="material-symbols-outlined text-[18px] shrink-0 text-[var(--color-text-secondary)]">git_branch</span>
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-sm font-semibold text-[var(--color-text-primary)]">{{ candidate.name }}</span>
                 <span class="block truncate text-[11px] text-[var(--color-text-tertiary)]">
@@ -681,7 +681,7 @@ const worktreeMenuStyle = computed(() =>
                   }}
                 </span>
               </span>
-              <span v-if="candidate.name === selectedBranch?.name" class="material-symbols-outlined text-[17px] shrink-0 text-[var(--color-brand)]">check</span>
+              <span v-if="candidate.name === selectedBranch?.name" class="material-symbols-outlined text-[18px] shrink-0 text-[var(--color-brand)]">check</span>
             </button>
           </div>
         </div>

@@ -302,7 +302,7 @@ const isStale = computed(() => {
   border-top: 1px solid var(--color-border);
 }
 .nd-stale {
-  color: #b45309;
+  color: var(--color-warning);
   font-weight: 600;
   margin-top: 2px;
 }

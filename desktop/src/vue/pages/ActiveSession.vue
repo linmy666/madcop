@@ -858,7 +858,7 @@ function openTerminalInTab() {
                           : 'bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]'
                     ]"
                   >
-                    <span class="material-symbols-outlined text-[13px] leading-none">data_usage</span>
+                    <span class="material-symbols-outlined text-[14px] leading-none">data_usage</span>
                     上下文 {{ contextUsagePct }}%
                   </span>
                   <!-- Manual context compaction (codex Op::Compact) -->

@@ -1402,7 +1402,7 @@ watch(input, (v) => {
                 :title="t('chat.pendingMessageGuideNow')"
                 class="inline-flex h-7 shrink-0 items-center gap-1 rounded-[6px] px-2 font-semibold text-[var(--color-text-secondary)] transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
-                <span class="material-symbols-outlined text-[15px]" aria-hidden="true">subdirectory_arrow_right</span>
+                <span class="material-symbols-outlined text-[16px]" aria-hidden="true">subdirectory_arrow_right</span>
                 <span>{{ t('chat.pendingMessageGuide') }}</span>
               </button>
               <button
@@ -1412,7 +1412,7 @@ watch(input, (v) => {
                 :title="t('chat.pendingMessageEdit')"
                 class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
-                <span class="material-symbols-outlined text-[15px]" aria-hidden="true">edit</span>
+                <span class="material-symbols-outlined text-[16px]" aria-hidden="true">edit</span>
               </button>
               <button
                 type="button"
@@ -1421,7 +1421,7 @@ watch(input, (v) => {
                 :title="t('chat.pendingMessageDelete')"
                 class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--color-text-tertiary)] transition-colors duration-150 ease-out hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-error)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
-                <span class="material-symbols-outlined text-[15px]" aria-hidden="true">delete</span>
+                <span class="material-symbols-outlined text-[16px]" aria-hidden="true">delete</span>
               </button>
             </template>
           </div>

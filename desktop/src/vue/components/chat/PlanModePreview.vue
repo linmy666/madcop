@@ -37,7 +37,7 @@ const hasPermissions = computed(() => props.allowedPrompts.length > 0 && props.r
 <template>
   <div data-testid="plan-preview-card" class="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
     <div class="flex items-start gap-2 border-b border-[var(--color-border)]/65 bg-[var(--color-surface-container-low)] px-3 py-2.5">
-      <span class="material-symbols-outlined mt-0.5 shrink-0 text-[15px] text-[var(--color-brand)]" aria-hidden="true">description</span>
+      <span class="material-symbols-outlined mt-0.5 shrink-0 text-[16px] text-[var(--color-brand)]" aria-hidden="true">description</span>
       <div class="min-w-0 flex-1">
         <div class="text-[12px] font-semibold text-[var(--color-text-primary)]">{{ title }}</div>
         <div v-if="filePath" class="mt-0.5 truncate font-[var(--font-mono)] text-[11px] text-[var(--color-text-tertiary)]">
@@ -55,7 +55,7 @@ const hasPermissions = computed(() => props.allowedPrompts.length > 0 && props.r
 
     <div v-if="hasPermissions" class="border-t border-[var(--color-border)]/65 bg-[var(--color-surface-container-low)] px-3 py-2.5">
       <div class="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase text-[var(--color-outline)]">
-        <span class="material-symbols-outlined text-[13px]" aria-hidden="true">shield_check</span>
+        <span class="material-symbols-outlined text-[14px]" aria-hidden="true">shield_check</span>
         {{ requestedPermissionsTitle }}
       </div>
       <div class="space-y-1">

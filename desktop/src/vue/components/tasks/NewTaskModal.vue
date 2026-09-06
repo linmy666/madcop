@@ -67,7 +67,7 @@ watch(() => props.open, (v) => {
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-[var(--color-brand)] text-lg">{{ props.editTask ? 'edit_note' : 'add_task' }}</span>
+              <span class="material-symbols-outlined text-[var(--color-brand)] text-[16px]">{{ props.editTask ? 'edit_note' : 'add_task' }}</span>
               <h2 class="text-base font-bold text-[var(--color-text-primary)]">{{ props.editTask ? 'Edit Task' : 'New Task' }}</h2>
             </div>
             <button @click="cancel" class="p-1 hover:bg-[var(--color-surface-hover)] rounded text-[var(--color-text-tertiary)]">

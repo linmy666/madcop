@@ -1227,7 +1227,7 @@ async function handleImportJson() {
             </div>
           </div>
 
-          <div class="rounded-[28px] border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+          <div class="rounded-[24px] border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
             <div
               v-for="server in groupedServers[group] || []"
               :key="getServerIdentityKey(server)"

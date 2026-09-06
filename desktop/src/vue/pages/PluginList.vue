@@ -268,7 +268,7 @@ function getGroupTitleKey(bucket: PluginBucket): string {
               {{ t('settings.plugins.browserEyebrow') }}
             </div>
             <div class="flex items-center gap-3 mb-2">
-              <span class="material-symbols-outlined text-[22px] text-[var(--color-brand)]">
+              <span class="material-symbols-outlined text-[20px] text-[var(--color-brand)]">
                 extension
               </span>
               <h3 class="text-[16px] font-semibold text-[var(--color-text-primary)]">

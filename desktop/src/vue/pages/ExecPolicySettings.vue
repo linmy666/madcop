@@ -29,7 +29,7 @@ const actionLabel: Record<string, string> = {
 }
 const actionClass = computed(() => ({
   deny: 'bg-[var(--color-error)]/10 text-[var(--color-error)]',
-  warn: 'bg-[#b45309]/10 text-[#b45309]',
+  warn: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
   allow: 'bg-[var(--color-surface-container)] text-[var(--color-text-tertiary)]',
 }))
 
@@ -110,7 +110,7 @@ onMounted(load)
             :disabled="loading"
             @click="load"
           >
-            <span class="material-symbols-outlined text-[15px]">refresh</span>
+            <span class="material-symbols-outlined text-[16px]">refresh</span>
             重新加载
           </button>
           <button
@@ -119,7 +119,7 @@ onMounted(load)
             :disabled="saving || loading || !dirty"
             @click="save"
           >
-            <span v-if="saving" class="material-symbols-outlined animate-spin text-[15px]">progress_activity</span>
+            <span v-if="saving" class="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
             保存并热生效
           </button>
         </div>

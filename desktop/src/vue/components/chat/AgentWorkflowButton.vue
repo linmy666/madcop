@@ -120,7 +120,7 @@ onMounted(loadWorkflows)
     >
       <div class="agent-picker__title">
         选择工作流
-        <button @click="loadWorkflows" class="agent-picker__refresh" title="刷新"><span class="material-symbols-outlined text-[15px]">refresh</span></button>
+        <button @click="loadWorkflows" class="agent-picker__refresh" title="刷新"><span class="material-symbols-outlined text-[16px]">refresh</span></button>
       </div>
 
       <div v-if="loading" class="agent-picker__loading">加载中…</div>

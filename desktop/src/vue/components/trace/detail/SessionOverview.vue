@@ -88,7 +88,7 @@ function formatDuration(ms?: number): string {
           <span class="material-symbols-outlined text-[14px] text-[var(--color-brand)] shrink-0">{{ iconForSpan(child) }}</span>
           <span class="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--color-text-secondary)]">{{ displayTitle(child) }}</span>
           <span v-if="child.durationMs" class="shrink-0 font-mono text-[10px] text-[var(--color-text-tertiary)]">{{ formatDuration(child.durationMs) }}</span>
-          <span v-if="statusIcon(child)" class="material-symbols-outlined text-[13px] text-[var(--color-error)] shrink-0">{{ statusIcon(child) }}</span>
+          <span v-if="statusIcon(child)" class="material-symbols-outlined text-[14px] text-[var(--color-error)] shrink-0">{{ statusIcon(child) }}</span>
         </button>
       </div>
     </div>

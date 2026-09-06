@@ -363,7 +363,7 @@ function formatUpdatedAt(value: string | null): string {
         class="flex flex-1 items-start justify-center px-6 py-10"
       >
         <div class="w-full max-w-md rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-6 py-12 text-center">
-          <span class="material-symbols-outlined mx-auto text-2xl text-[var(--color-text-tertiary)]" aria-hidden="true">workflow</span>
+          <span class="material-symbols-outlined mx-auto text-[24px] text-[var(--color-text-tertiary)]" aria-hidden="true">workflow</span>
           <h2 class="mt-3 text-sm font-semibold text-[var(--color-text-primary)]">{{ t('trace.list.emptyTitle') }}</h2>
           <p class="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">{{ t('trace.list.emptyBody') }}</p>
         </div>

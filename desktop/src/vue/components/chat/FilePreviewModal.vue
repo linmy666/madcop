@@ -142,7 +142,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 }
 .fpm__size {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--color-text-tertiary, #8f8f8f);
 }
 .fpm__close {

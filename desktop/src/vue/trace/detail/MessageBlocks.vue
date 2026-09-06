@@ -104,7 +104,7 @@ function extractPlainText(content: unknown): string | null {
         <!-- Tool use block -->
         <div v-else-if="block.type === 'tool_use'" class="min-w-0">
           <div class="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)]">
-            <span class="material-symbols-outlined text-[13px] shrink-0 text-[var(--color-warning)]">build</span>
+            <span class="material-symbols-outlined text-[14px] shrink-0 text-[var(--color-warning)]">build</span>
             <span class="truncate">{{ block.name }}</span>
             <span v-if="block.id" class="truncate font-mono text-[10px] font-normal text-[var(--color-text-tertiary)]">{{ block.id }}</span>
           </div>

@@ -474,7 +474,7 @@ const toggleModelConfig = () => { showModelConfig.value  = !showModelConfig.valu
                 @click="togglePermissions"
                 class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-low border border-[var(--color-border)] text-xs font-medium hover:bg-surface-container-high transition-all"
               >
-                <span class="material-symbols-outlined text-base">
+                <span class="material-symbols-outlined text-[14px]">
                   {{ permissionIcons[selectedPermission]?.icon || 'verified_user' }}
                 </span>
                 {{
@@ -488,7 +488,7 @@ const toggleModelConfig = () => { showModelConfig.value  = !showModelConfig.valu
                 @click="toggleModelConfig"
                 class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-low border border-[var(--color-border)] text-xs font-medium hover:bg-surface-container-high transition-all"
               >
-                <span class="material-symbols-outlined text-base">
+                <span class="material-symbols-outlined text-[14px]">
                   {{ modelIcons[selectedModel] || 'smart_toy' }}
                 </span>
                 {{ activeModel()?.name || 'Sonnet 4.6' }}
@@ -507,7 +507,7 @@ const toggleModelConfig = () => { showModelConfig.value  = !showModelConfig.valu
               class="bg-primary text-on-primary px-4 py-1.5 rounded-lg font-semibold text-sm flex items-center gap-2 hover:opacity-90 transition-opacity"
             >
               Run
-              <span class="material-symbols-outlined text-base">send</span>
+              <span class="material-symbols-outlined text-[14px]">send</span>
             </button>
           </div>
         </div>

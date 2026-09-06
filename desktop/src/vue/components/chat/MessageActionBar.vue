@@ -51,8 +51,8 @@ const tsFull = computed(() => {
         class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent bg-transparent text-[var(--color-text-tertiary)] transition-colors hover:border-[var(--color-brand)]/30 hover:bg-[var(--color-surface-container-low)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35"
       >
         <template #default="{ copied }">
-          <span v-if="copied" class="material-symbols-outlined text-[13px]">check</span>
-          <span v-else class="material-symbols-outlined text-[13px]">content_copy</span>
+          <span v-if="copied" class="material-symbols-outlined text-[14px]">check</span>
+          <span v-else class="material-symbols-outlined text-[14px]">content_copy</span>
         </template>
       </CopyButton>
       <button
@@ -64,7 +64,7 @@ const tsFull = computed(() => {
         class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent bg-transparent text-[var(--color-text-tertiary)] transition-colors hover:border-[var(--color-brand)]/30 hover:bg-[var(--color-surface-container-low)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]/35 disabled:cursor-wait disabled:opacity-60"
         @click="emit('branch')"
       >
-        <span class="material-symbols-outlined text-[13px]">git_fork</span>
+        <span class="material-symbols-outlined text-[14px]">git_fork</span>
       </button>
       <span
         v-if="ts"

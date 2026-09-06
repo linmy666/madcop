@@ -186,7 +186,7 @@ function toggleExpanded() {
         "
       >
         <template #default="{ copied, label }">
-          <span class="material-symbols-outlined text-[13px] mr-1">{{
+          <span class="material-symbols-outlined text-[14px] mr-1">{{
             copied ? 'check' : 'content_copy'
           }}</span>
           {{ label }}
