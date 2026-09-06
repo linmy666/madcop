@@ -713,11 +713,7 @@ class WritePptxTool(Tool):
 
     name = "write_pptx"
     description = (
-        "Generate a new .pptx presentation file. Provide `title` (deck "
-        "title) and `slides`: a list where each item has `title` and "
-        "`bullets` (a list of strings; optionally `notes`). Path must be "
-        "inside allowed dirs. Renders a clean 16:9 deck with consistent "
-        "typography."
+        "Generate a new .pptx presentation file. Provide `title` (deck title) and `slides`: a list where each item has `title` and a `layout`: bullets (default), table (headers+rows), chart (column/line/pie via series), or two_col (left+right columns). PREFER table/chart layouts over bullet-only slides when the content is data-heavy. Path must be inside allowed dirs. Renders a clean 16:9 deck with consistent typography."
     )
 
     def __init__(self, allowed_dirs: Sequence[str | Path] | None = None) -> None:
@@ -738,13 +734,55 @@ class WritePptxTool(Tool):
                     "type": "array",
                     "description": (
                         "Slide outline. Each item: {'title': str, "
-                        "'bullets': list[str], 'notes': str (optional)}."
+                        "'bullets': list[str], 'notes': str (optional), "
+                        "'layout': 'bullets'|'table'|'chart'|'two_col' "
+                        "(optional, default bullets)}. For layout='table': "
+                        "add 'headers': list[str] and 'rows': list[list]. "
+                        "For layout='chart': add 'chart_type': "
+                        "'column'|'line'|'pie' and 'series': "
+                        "{'name': str, 'categories': list, 'values': list}. "
+                        "For layout='two_col': 'left': list[str], "
+                        "'right': list[str]."
                     ),
                     "items": {
                         "type": "object",
                         "properties": {
                             "title": {"type": "string"},
+                            "layout": {
+                                "type": "string",
+                                "enum": ["bullets", "table", "chart", "two_col"],
+                                "description": "Slide layout (default bullets).",
+                            },
                             "bullets": {"type": "array", "items": {"type": "string"}},
+                            "headers": {
+                                "type": "array", "items": {"type": "string"},
+                                "description": "table layout: column headers.",
+                            },
+                            "rows": {
+                                "type": "array",
+                                "items": {"type": "array", "items": {"type": "string"}},
+                                "description": "table layout: data rows.",
+                            },
+                            "chart_type": {
+                                "type": "string",
+                                "enum": ["column", "line", "pie"],
+                                "description": "chart layout: chart type.",
+                            },
+                            "series": {
+                                "type": "object",
+                                "description": (
+                                    "chart layout: {name, categories: "
+                                    "list[str], values: list[number]}."
+                                ),
+                            },
+                            "left": {
+                                "type": "array", "items": {"type": "string"},
+                                "description": "two_col layout: left bullets.",
+                            },
+                            "right": {
+                                "type": "array", "items": {"type": "string"},
+                                "description": "two_col layout: right bullets.",
+                            },
                             "notes": {"type": "string"},
                         },
                         "required": ["title"],
@@ -800,21 +838,94 @@ class WritePptxTool(Tool):
                 srun.font.color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0x5B, 0x5B, 0x66)
 
             # ── Content slides ──
+            RGB = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor
+            INK = RGB(0x1A, 0x1A, 0x1E)
+            GREY = RGB(0x55, 0x55, 0x66)
+            RULE = RGB(0xE4, 0xE4, 0xE7)
+
+            def _add_table(slide, headers, rows):
+                n_rows, n_cols = len(rows) + 1, len(headers)
+                tbl = slide.shapes.add_table(
+                    n_rows, n_cols, Inches(0.95), Inches(1.95),
+                    Inches(11.4), Inches(min(0.55 * n_rows, 4.6)),
+                ).table
+                for ci, h in enumerate(headers):
+                    cell = tbl.cell(0, ci)
+                    cell.text = str(h)
+                    para0 = cell.text_frame.paragraphs[0]
+                    run = para0.runs[0] if para0.runs else para0.add_run()
+                    run.font.bold = True
+                    run.font.size = Pt(14)
+                    run.font.color.rgb = INK
+                for ri, row in enumerate(rows, start=1):
+                    for ci, val in enumerate(row[:n_cols]):
+                        cell = tbl.cell(ri, ci)
+                        cell.text = str(val)
+                        para0 = cell.text_frame.paragraphs[0]
+                        run = para0.runs[0] if para0.runs else para0.add_run()
+                        run.font.size = Pt(13)
+                        run.font.color.rgb = GREY
+                return tbl
+
+            def _add_chart(slide, chart_type, series):
+                from pptx.chart.data import CategoryChartData
+                cd = CategoryChartData()
+                cd.categories = [str(c) for c in series.get("categories", [])]
+                cd.add_series(str(series.get("name", "Series 1")),
+                              [float(v) for v in series.get("values", [])])
+                ct = {"column": 51, "line": 4, "pie": 19}.get(chart_type, 51)
+                slide.shapes.add_chart(ct, Inches(2.2), Inches(1.95),
+                                       Inches(8.9), Inches(4.7), cd)
+
+            def _add_two_col(slide, left, right):
+                for x, items in ((0.95, left), (6.85, right)):
+                    box = slide.shapes.add_textbox(Inches(x), Inches(1.95), Inches(5.4), Inches(4.8))
+                    tf = box.text_frame
+                    tf.word_wrap = True
+                    for bi, b in enumerate(items):
+                        para = tf.paragraphs[0] if bi == 0 else tf.add_paragraph()
+                        run = para.add_run()
+                        run.text = f"•  {b}" if not str(b).startswith(("•", "-", "数字")) else str(b)
+                        run.font.size = Pt(15)
+                        run.font.color.rgb = RGB(0x27, 0x27, 0x2A)
+                        para.space_after = Pt(8)
+
             for i, sl in enumerate(slides, start=1):
                 if not isinstance(sl, dict):
                     sl = {"title": str(sl)}
                 stitle = str(sl.get("title", f"Slide {i}"))
                 bullets = sl.get("bullets", []) or []
                 notes = str(sl.get("notes", "") or "")
+                layout = str(sl.get("layout", "bullets") or "bullets").lower()
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
                 tbox = slide.shapes.add_textbox(Inches(0.9), Inches(0.55), Inches(11.5), Inches(1.0))
                 tp = tbox.text_frame.paragraphs[0]
                 trun = tp.add_run(); trun.text = stitle
                 trun.font.size = Pt(30); trun.font.bold = True
-                trun.font.color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0x1A, 0x1A, 0x1E)
+                trun.font.color.rgb = INK
                 rule = slide.shapes.add_shape(1, Inches(0.93), Inches(1.55), Inches(12.0), Pt(2))
-                rule.fill.solid(); rule.fill.fore_color.rgb = __import__("pptx.dml.color", fromlist=["RGBColor"]).RGBColor(0xE4, 0xE4, 0xE7)
+                rule.fill.solid(); rule.fill.fore_color.rgb = RULE
                 rule.line.fill.background()
+
+                # layout dispatch — table/chart/two_col are structured
+                # layouts rendered by the tool itself (template-inlined
+                # style: the model picks a layout, the engine guarantees
+                # correct rendering); bullets stays default for back-compat.
+                if layout == "table" and (sl.get("rows") or sl.get("headers")):
+                    _add_table(slide, sl.get("headers", []), sl.get("rows", []))
+                    if notes:
+                        slide.notes_slide.notes_text_frame.text = notes
+                    continue
+                if layout == "chart" and sl.get("series"):
+                    _add_chart(slide, sl.get("chart_type", "column"), sl["series"])
+                    if notes:
+                        slide.notes_slide.notes_text_frame.text = notes
+                    continue
+                if layout == "two_col" and (sl.get("left") or sl.get("right")):
+                    _add_two_col(slide, sl.get("left", []), sl.get("right", []))
+                    if notes:
+                        slide.notes_slide.notes_text_frame.text = notes
+                    continue
                 if bullets:
                     bbox = slide.shapes.add_textbox(Inches(0.95), Inches(1.9), Inches(11.4), Inches(5.0))
                     tf = bbox.text_frame
