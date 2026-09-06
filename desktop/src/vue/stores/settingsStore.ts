@@ -91,6 +91,7 @@ const PERSIST_KEYS = [
   'chatSendBehavior',
   'outputStyle',
   'desktopTerminal',
+  'updateProxy',
   'proactive',
 ] as const
 
@@ -352,6 +353,9 @@ export const useSettingsStore = defineStore('settings', {
         mode: settings.mode,
         url: settings.url.trim(),
       }
+      // Same as setProactive — without _persist() the saved proxy silently
+      // vanished on app restart.
+      this._persist()
     },
     /** Sprint 5 — toggle the proactive observer on/off + per-source. */
     setProactive(settings: { enabled?: boolean; observeFiles?: boolean; observeTerminal?: boolean }): void {

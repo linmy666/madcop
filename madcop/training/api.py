@@ -257,3 +257,26 @@ async def trigger_training() -> dict:
     conn.close()
 
     return {"ok": True, "run_id": run_id, "samples": pending}
+
+
+@router.get("/status")
+async def training_status() -> dict:
+    """Latest training-run status.
+
+    The frontend polls this after /trigger. The current trigger is a
+    synchronous stub that records a 'completed' run immediately, so this
+    returns 'completed' right away; when real async training lands, this
+    is where its live status should be reported.
+    """
+    conn = _get_db()
+    last_run = conn.execute(
+        "SELECT * FROM training_runs ORDER BY date DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    if last_run is None:
+        return {"status": "idle"}
+    status = last_run["status"] if last_run["status"] in ("completed", "failed") else "running"
+    result: dict[str, Any] = {"status": status, "run_id": last_run["id"]}
+    if status == "failed":
+        result["message"] = "微调失败"
+    return result

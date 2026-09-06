@@ -9,7 +9,7 @@ import { tracesApi } from '../api/traces'
 import { SETTINGS_TAB_ID, useTabStore } from '../stores/tabStore'
 import { useUIStore } from '../stores/uiStore'
 import { useTranslation } from '../i18n'
-import { getDesktopHost } from '../lib/desktopHost'
+import { getDesktopHost } from '../../lib/desktopHost'
 import type { TraceSessionList, TraceSessionListItem } from '../types/trace'
 
 const POLL_MS = 10_000

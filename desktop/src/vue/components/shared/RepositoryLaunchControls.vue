@@ -12,7 +12,7 @@ import { sessionsApi, type RepositoryBranchInfo, type RepositoryContextResult } 
 import { useTranslation } from '../../i18n'
 import DirectoryPicker from './DirectoryPicker.vue'
 import MobileBottomSheet from './MobileBottomSheet.vue'
-import { getDesktopHost } from '../../lib/desktopHost'
+import { getDesktopHost } from '../../../lib/desktopHost'
 
 // ─── Props / Emits ──────────────────────────────────────────────────
 interface Props {

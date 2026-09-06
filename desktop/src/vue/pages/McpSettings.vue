@@ -22,6 +22,10 @@ import type { McpServerRecord, McpWritableScope, McpUpsertPayload } from '../typ
 import { useTranslation } from "../i18n"
 import { useMcpStore } from "../stores/mcpStore"
 import { useSessionStore } from '../stores/sessionStore'
+// Real API clients — the previous inline stubs always returned empty arrays,
+// so the import dialog's project-path suggestions were permanently blank.
+import { sessionsApi } from '../api/sessions'
+import { mcpApi } from '../api/mcp'
 
 import {
   ref,
@@ -117,8 +121,6 @@ const props = defineProps<{
 const t = useTranslation()
 const mcpStore = useMcpStore()
 const sessionStore = useSessionStore()
-const sessionsApi = { getRecentProjects: async () => ({ projects: [] }) }
-const mcpApi = { projectPaths: async () => ({ projectPaths: [] }) }
 
 // ─── Constants ────────────────────────────────────────────────────
 const MCP_GROUP_ORDER: McpGroupKey[] = [

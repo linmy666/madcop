@@ -1,10 +1,11 @@
-/** Stub for desktop host — desktop-only API not available in Vue build.
- * We auto-detect Electron by checking `window.electronApi` (injected by
- * the Electron preload) so file pickers, IPC, and other desktop features
- * work inside the Electron wrapper. */
-export interface DesktopHost {
-  isDesktop: boolean
-}
+/** Vue-side re-export of the real desktop host bridge.
+ * Historically this was a stub exposing only `isDesktop`, which silently broke
+ * every caller that touched `host.capabilities` / `host.notifications` / `host.zoom`
+ * (undefined on the stub → runtime TypeError). The real host lives in
+ * `src/lib/desktopHost/` (electron preload injects `window.desktopHost`), so this
+ * module now just re-exports it — all `./desktopHost` importers inside vue/lib
+ * get the full bridge. */
+export * from '../../lib/desktopHost'
 
 declare global {
   interface Window {
@@ -12,14 +13,4 @@ declare global {
     madcopDesktop?: unknown
     desktopHost?: unknown
   }
-}
-
-export function getDesktopHost(): DesktopHost {
-  if (typeof window === 'undefined') return { isDesktop: false }
-  if (window.electronApi || window.madcopDesktop || window.desktopHost) return { isDesktop: true }
-  // Fallback: detect by user agent (Electron's UA contains "Electron/x.y.z")
-  if (typeof navigator !== 'undefined' && /Electron\//.test(navigator.userAgent)) {
-    return { isDesktop: true }
-  }
-  return { isDesktop: false }
 }

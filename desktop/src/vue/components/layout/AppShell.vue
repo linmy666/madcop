@@ -16,6 +16,7 @@ import ProactiveToast from '../chat/ProactiveToast.vue'
 import OnboardingWizard from '../onboarding/OnboardingWizard.vue'
 import ShortcutHelp from '../command/ShortcutHelp.vue'
 import { useProactive } from '../../composables/useProactive'
+import { applyAppZoomLevel } from '../../lib/appZoom'
 
 // Sprint 5 — start the proactive observer coordinator (subscribes to
 // IPC events + pushes config to main). Safe to call at setup time.
@@ -138,6 +139,16 @@ onMounted(() => {
     .then(() => { ready.value = true })
     .catch(() => { /* backend may be slow or unreachable, don't block the app */ })
     .finally(() => { ready.value = true })
+
+  // Apply the persisted UI zoom (backend user setting) at startup so the
+  // 50%–150% slider survives app restarts, not just the settings session.
+  fetch('/api/settings/user')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      const zoom = Number(data?.uiZoom)
+      if (Number.isFinite(zoom) && zoom > 0) void applyAppZoomLevel(zoom, { persist: false })
+    })
+    .catch(() => { /* zoom stays at default if settings are unreachable */ })
 
   // Mirror the current workspace dir to localStorage so the
   // sessionStore can attribute loaded sessions to it. This must run

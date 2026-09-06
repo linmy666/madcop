@@ -11,7 +11,7 @@
 
 import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { getDesktopHost } from '../../lib/desktopHost'
+import { getDesktopHost } from '../../../lib/desktopHost'
 
 // Sprint 5 — Proactive Observer toggles.
 const settingsStore = useSettingsStore()
@@ -154,7 +154,9 @@ async function triggerTraining() {
 
 async function pollTrainingStatus() {
   for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 30000)) // 30s intervals
+    // Check first, then wait — the backend trigger completes synchronously,
+    // so the first immediate check usually resolves the run without the
+    // old "30s of fake running + 404 loop" the missing /status route caused.
     try {
       const res = await fetch('/api/training/status')
       if (res.ok) {
@@ -173,6 +175,7 @@ async function pollTrainingStatus() {
     } catch {
       // Network error — keep polling
     }
+    await new Promise((r) => setTimeout(r, 30000)) // 30s intervals
   }
   // Timeout
   trainingStatus.value = 'failed'

@@ -8,6 +8,7 @@ import { ref, onMounted } from 'vue'
 import { useAppearance } from '../../composables/useAppearance'
 import { getApiUrl } from '../../api/client'
 import { useTranslation } from '../../i18n'
+import { applyAppZoomLevel } from '../../lib/appZoom'
 import LanguageSwitcher from '../../components/controls/LanguageSwitcher.vue'
 
 const t = useTranslation()
@@ -36,7 +37,12 @@ async function loadSettings() {
       setAppearance(theme.value as 'light' | 'dark' | 'sepia')
       if (data.chatSendBehavior) chatSendBehavior.value = data.chatSendBehavior
       if (data.responseLanguage) responseLanguage.value = data.responseLanguage
-      if (data.uiZoom) uiZoom.value = data.uiZoom
+      if (data.uiZoom) {
+        uiZoom.value = data.uiZoom
+        // The backend value is the source of truth — re-apply it in case the
+        // app started before this page was ever opened.
+        void applyAppZoomLevel(uiZoom.value, { persist: false })
+      }
       if (data.webSearchEnabled !== undefined) webSearchEnabled.value = data.webSearchEnabled
       if (data.networkTimeout) networkTimeout.value = data.networkTimeout
     }
@@ -74,6 +80,7 @@ function onThemeChange(e: Event) {
 function onZoomChange(e: Event) {
   uiZoom.value = Number((e.target as HTMLInputElement).value)
   saveSetting('uiZoom', uiZoom.value)
+  void applyAppZoomLevel(uiZoom.value, { persist: false })
 }
 function onTimeoutChange(e: Event) {
   networkTimeout.value = Number((e.target as HTMLInputElement).value)
