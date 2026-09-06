@@ -115,7 +115,7 @@ onMounted(load)
           </button>
           <button
             type="button"
-            class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[var(--color-primary)] px-4 text-xs font-medium text-white disabled:opacity-50"
+            class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[var(--color-primary)] px-4 text-xs font-medium text-[var(--color-on-primary)] disabled:opacity-50"
             :disabled="saving || loading || !dirty"
             @click="save"
           >

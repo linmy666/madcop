@@ -156,7 +156,7 @@ function handleSkillClick(
             <span class="material-symbols-outlined text-[22px] text-[var(--color-brand)]">
               auto_awesome
             </span>
-            <h3 class="text-lg font-semibold text-[var(--color-text-primary)]">
+            <h3 class="text-[16px] font-semibold text-[var(--color-text-primary)]">
               {{ t('settings.skills.browserTitle') }}
             </h3>
           </div>

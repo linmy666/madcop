@@ -30,7 +30,7 @@ function toggle() {
     :class="[
       'flex h-9 w-9 items-center justify-center rounded-full transition-all',
       isListening
-        ? 'bg-red-500 text-white animate-pulse'
+        ? 'bg-[var(--color-error)] text-white animate-pulse'
         : 'bg-[var(--color-surface-container)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-container-high)]',
     ]"
     @click="toggle"

@@ -212,7 +212,7 @@ function renderPanelShell(
         { class: 'flex items-start justify-between gap-4 border-b border-[var(--color-border)] px-5 py-4' },
         [
           h('div', undefined, [
-            h('h3', { class: 'text-lg font-semibold text-[var(--color-text-primary)]' }, title),
+            h('h3', { class: 'text-[16px] font-semibold text-[var(--color-text-primary)]' }, title),
             h('p', { class: 'mt-1 text-sm text-[var(--color-text-tertiary)]' }, subtitle),
           ]),
           h(

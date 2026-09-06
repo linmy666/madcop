@@ -34,7 +34,7 @@ function thisMonthCount(count: string) {
       <div class="mb-6 px-2 flex items-center gap-3">
         <div class="w-8 h-8 rounded-lg bg-[var(--color-primary-container)] flex items-center justify-center">
           <span
-            class="material-symbols-outlined text-white"
+            class="material-symbols-outlined text-[var(--color-text-primary)]"
             :style="{ fontVariationSettings: \"'FILL' 1\" }"
           >folder_managed</span>
         </div>
@@ -154,7 +154,7 @@ function thisMonthCount(count: string) {
                 <span class="text-xs font-bold uppercase tracking-widest text-[var(--color-text-tertiary)]">{{ t('scheduledPage.nextRun') }}</span>
                 <span class="material-symbols-outlined text-[var(--color-secondary)]">schedule</span>
               </div>
-              <div class="text-xl font-[Manrope,sans-serif] font-bold text-[var(--color-text-primary)]">{{ stats.nextRun.name }}</div>
+              <div class="text-[18px] font-[Manrope,sans-serif] font-bold text-[var(--color-text-primary)]">{{ stats.nextRun.name }}</div>
               <p class="text-sm font-[JetBrains_Mono,monospace] text-[var(--color-secondary)] mt-1">{{ stats.nextRun.time }}</p>
             </div>
 

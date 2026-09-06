@@ -38,7 +38,7 @@ watch(() => props.open, (v) => {
           :aria-label="title"
         >
           <div v-if="title" class="flex items-start justify-between gap-4 px-6 pt-6 pb-0">
-            <h2 class="text-xl font-bold text-[var(--color-text-primary)]">{{ title }}</h2>
+            <h2 class="text-[18px] font-bold text-[var(--color-text-primary)]">{{ title }}</h2>
             <button
               type="button"
               class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"

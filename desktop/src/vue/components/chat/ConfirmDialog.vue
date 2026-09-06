@@ -53,10 +53,10 @@ const emit = defineEmits<{
             @click="emit('confirm')"
             :disabled="loading"
             :class="[
-              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white transition-colors',
+              'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               confirmVariant === 'danger'
-                ? 'bg-[var(--color-error)] hover:bg-[var(--color-error)]/90'
-                : 'bg-[var(--color-brand)] hover:bg-[var(--color-brand)]/90',
+                ? 'text-white bg-[var(--color-error)] hover:bg-[var(--color-error)]/90'
+                : 'text-[var(--color-on-primary)] bg-[var(--color-brand)] hover:bg-[var(--color-brand)]/90',
               loading && 'opacity-60 cursor-wait',
             ]"
           >

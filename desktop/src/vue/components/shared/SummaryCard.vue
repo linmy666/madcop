@@ -13,7 +13,7 @@ defineProps<{
       <span v-if="icon" class="material-symbols-outlined text-[14px] flex-shrink-0">{{ icon }}</span>
       <span class="truncate">{{ label }}</span>
     </div>
-    <div class="mt-2 text-lg font-semibold text-[var(--color-text-primary)] truncate">
+    <div class="mt-2 text-[16px] font-semibold text-[var(--color-text-primary)] truncate">
       {{ value }}
     </div>
   </div>

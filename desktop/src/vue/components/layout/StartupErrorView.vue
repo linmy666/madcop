@@ -34,7 +34,7 @@ async function handleCopy() {
     <section class="w-full max-w-3xl rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-6 shadow-md">
       <div class="flex flex-col gap-4">
         <div>
-          <h1 class="text-lg font-semibold text-[var(--color-text-primary)]">后端服务启动失败</h1>
+          <h1 class="text-[18px] font-semibold text-[var(--color-text-primary)]">后端服务启动失败</h1>
           <p class="mt-2 text-sm text-[var(--color-text-secondary)]">MadCop 后端服务未能正确启动。请检查下方错误信息。</p>
         </div>
 

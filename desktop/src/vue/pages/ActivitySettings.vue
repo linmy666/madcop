@@ -989,7 +989,7 @@ const WEEKDAY_KEYS = WEEKDAY_LABEL_KEYS
     <div class="mt-10">
       <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 class="text-xl font-semibold text-[var(--color-text-primary)]">
+          <h2 class="text-[18px] font-semibold text-[var(--color-text-primary)]">
             {{ t('settings.activity.tokenActivity') }}
           </h2>
         </div>

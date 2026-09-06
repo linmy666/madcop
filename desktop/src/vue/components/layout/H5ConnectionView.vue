@@ -43,7 +43,7 @@ async function handleSubmit(e: Event) {
   <div class="h-screen flex items-center justify-center bg-[var(--color-surface)] px-6">
     <section class="w-full max-w-md rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-container-low)] p-6 shadow-md">
       <div class="mb-5">
-        <h1 class="text-lg font-semibold text-[var(--color-text-primary)]">连接 H5 远程访问</h1>
+        <h1 class="text-[18px] font-semibold text-[var(--color-text-primary)]">连接 H5 远程访问</h1>
         <p class="mt-2 text-sm text-[var(--color-text-secondary)]">输入桌面端提供的服务器 URL 和 H5 访问令牌。</p>
       </div>
       <form class="space-y-4" @submit="handleSubmit">
