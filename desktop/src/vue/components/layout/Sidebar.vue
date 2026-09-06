@@ -15,6 +15,7 @@ import { translate, useI18nStore, type TranslationKey } from '../../i18n'
 import type { SessionListItem } from '../../../types/session'
 import { desktopUiPreferencesApi, type SidebarProjectPreferences } from '../../api/desktopUiPreferences'
 import { getDesktopHost } from '../../../lib/desktopHost'
+import { getApiUrl } from '../../api/client'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import ProjectHeaderMenu from './ProjectHeaderMenu.vue'
 import MascotAvatar from '../common/MascotAvatar.vue'
@@ -225,7 +226,7 @@ onMounted(async () => {
     let dir = ''
     try { dir = localStorage.getItem('madcop_workspace_dir') || '' } catch {}
     if (!dir) {
-      const res = await fetch('/api/workspace/dir')
+      const res = await fetch(getApiUrl('/api/workspace/dir'))
       if (res.ok) {
         const data = await res.json()
         dir = data?.dir || ''
@@ -843,7 +844,6 @@ const handleForkSession = async (id: string) => {
     )
     if (!created) return
 
-    const { getApiUrl } = await import('../../api/client')
     const res = await fetch(getApiUrl(`/api/v4/sessions/${id}/fork`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -12,6 +12,7 @@
  */
 
 import { ref, computed, onMounted } from 'vue'
+import { getApiUrl } from '../api/client'
 
 interface AvailableModel {
   model: string
@@ -46,7 +47,7 @@ const sysPromptSize = ref(0)
 
 async function loadModels() {
   try {
-    const res = await fetch('/api/arena/available-models')
+    const res = await fetch(getApiUrl('/api/arena/available-models'))
     if (res.ok) {
       const data = await res.json()
       availableModels.value = data.models || []
@@ -71,7 +72,7 @@ async function runArena() {
   isRunning.value = true
   results.value = []
   try {
-    const res = await fetch('/api/arena/run', {
+    const res = await fetch(getApiUrl('/api/arena/run'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -105,7 +106,7 @@ async function rateResult(idx: number, score: number) {
   r.score = score
   // Send to training feedback
   try {
-    await fetch('/api/training/feedback', {
+    await fetch(getApiUrl('/api/training/feedback'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

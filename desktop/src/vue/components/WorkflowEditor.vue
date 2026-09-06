@@ -9,6 +9,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { listNodeTypes, listWorkflows, runWorkflow as runWorkflowApi, type NodeTypeMeta } from '../api/workflow'
+import { getApiUrl } from '../api/client'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface NodeData extends Record<string, unknown> {
@@ -151,7 +152,7 @@ onMounted(async () => {
 
   // Load available models from settings
   try {
-    const res = await fetch('/api/settings')
+    const res = await fetch(getApiUrl('/api/settings'))
     if (res.ok) {
       const data = await res.json()
       const providers = data.providers || []
@@ -167,7 +168,7 @@ onMounted(async () => {
 
   // Load workflow modes (templates)
   try {
-    const res = await fetch('/api/workflows/modes')
+    const res = await fetch(getApiUrl('/api/workflows/modes'))
     if (res.ok) {
       const data = await res.json()
       availableModes.value = data.modes || []
@@ -283,7 +284,7 @@ function clientToWorld(clientX: number, clientY: number): { x: number; y: number
 // ── Workflow templates (pre-built for business users) ──────────────────────
 function loadTemplate(modeId: string) {
   // Find the mode in the backend list, then fetch its detail
-  fetch(`/api/workflows/modes/${modeId}`)
+  fetch(getApiUrl(`/api/workflows/modes/${modeId}`))
     .then((r) => r.ok ? r.json() : null)
     .then((data) => {
       if (!data) return

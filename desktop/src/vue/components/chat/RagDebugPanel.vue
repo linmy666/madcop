@@ -12,6 +12,7 @@
  * by the slowest endpoint, not the sum of all three.
  */
 import { ref, computed, watch } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 interface RagItem {
   layer: string
@@ -69,12 +70,12 @@ async function refresh(q: string) {
   error.value = null
   try {
     const [retrieveRes, routeRes] = await Promise.all([
-      fetch('/api/rag/retrieve', {
+      fetch(getApiUrl('/api/rag/retrieve'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, limit: 5, format: 'prompt' }),
       }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`retrieve ${r.status}`)))),
-      fetch('/api/rag/route', {
+      fetch(getApiUrl('/api/rag/route'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),

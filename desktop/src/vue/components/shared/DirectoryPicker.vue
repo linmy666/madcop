@@ -2,6 +2,7 @@
 // v3.0 — DirectoryPicker (Vue 3, ref-tdz-fixed)
 // CRITICAL: no variable named 'ref' — shadows Vue's import
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 interface RecentProject {
   name: string
@@ -105,7 +106,7 @@ async function loadRecent() {
   try {
     // Use /api/sessions/recent-projects — the same endpoint the
     // sidebar uses to discover recent workspaces.
-    const res = await fetch('/api/sessions/recent-projects')
+    const res = await fetch(getApiUrl('/api/sessions/recent-projects'))
     if (res.ok) {
       const data = await res.json()
       const list = Array.isArray(data?.projects) ? data.projects : Array.isArray(data) ? data : []
@@ -137,7 +138,7 @@ async function switchToBrowse() {
 
 async function getCurrentWorkspaceDir(): Promise<string> {
   try {
-    const res = await fetch('/api/workspace/dir')
+    const res = await fetch(getApiUrl('/api/workspace/dir'))
     if (res.ok) {
       const data = await res.json()
       return data?.dir || ''
@@ -149,7 +150,7 @@ async function getCurrentWorkspaceDir(): Promise<string> {
 async function loadBrowse(dir: string) {
   loading.value = true
   try {
-    const res = await fetch(`/api/workspace/ls?dir=${encodeURIComponent(dir)}`)
+    const res = await fetch(getApiUrl(`/api/workspace/ls?dir=${encodeURIComponent(dir)}`))
     if (res.ok) {
       const data = await res.json()
       browsePath.value = data.dir || dir

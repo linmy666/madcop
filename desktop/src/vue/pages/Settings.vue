@@ -164,7 +164,7 @@ async function triggerTraining() {
   learningTrainingStatus.value = 'running'
   learningTrainingMessage.value = '正在准备 LoRA 微调...'
   try {
-    const res = await fetch('/api/training/trigger', { method: 'POST' })
+    const res = await fetch(getApiUrl('/api/training/trigger'), { method: 'POST' })
     if (res.ok) {
       const d = await res.json()
       learningTrainingMessage.value = `微调已启动，使用 ${d.samples} 条样本`
@@ -186,7 +186,7 @@ async function pollTrainingStatus() {
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 30000))
     try {
-      const res = await fetch('/api/training/status')
+      const res = await fetch(getApiUrl('/api/training/status'))
       if (res.ok) {
         const d = await res.json()
         if (d.status === 'completed') {
@@ -211,7 +211,7 @@ async function pollTrainingStatus() {
 
 async function exportDataset() {
   try {
-    const res = await fetch('/api/training/export')
+    const res = await fetch(getApiUrl('/api/training/export'))
     if (!res.ok) return
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
@@ -227,7 +227,7 @@ async function exportDataset() {
 
 async function clearLearningData() {
   if (!confirm('确定清除所有反馈数据？此操作不可恢复。')) return
-  await fetch('/api/training/clear', { method: 'POST' })
+  await fetch(getApiUrl('/api/training/clear'), { method: 'POST' })
   await loadLearning()
 }
 

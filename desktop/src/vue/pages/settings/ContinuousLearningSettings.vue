@@ -12,6 +12,7 @@
 import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { getDesktopHost } from '../../../lib/desktopHost'
+import { getApiUrl } from '../../api/client'
 
 // Sprint 5 — Proactive Observer toggles.
 const settingsStore = useSettingsStore()
@@ -70,7 +71,7 @@ interface TrainingRecord {
 async function saveMode(newMode: LearningMode) {
   mode.value = newMode
   try {
-    await fetch('/api/training/mode', {
+    await fetch(getApiUrl('/api/training/mode'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: newMode }),
@@ -82,7 +83,7 @@ async function saveMode(newMode: LearningMode) {
 
 async function refreshStats() {
   try {
-    const res = await fetch('/api/training/stats')
+    const res = await fetch(getApiUrl('/api/training/stats'))
     if (res.ok) {
       const data = await res.json()
       stats.value = data.stats ?? stats.value
@@ -95,7 +96,7 @@ async function refreshStats() {
 
 async function exportDataset() {
   try {
-    const res = await fetch('/api/training/export')
+    const res = await fetch(getApiUrl('/api/training/export'))
     if (!res.ok) return
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
@@ -115,7 +116,7 @@ async function clearAll() {
   if (!confirm('确定清除所有反馈数据？此操作不可恢复。')) return
   loading.value = true
   try {
-    await fetch('/api/training/clear', { method: 'POST' })
+    await fetch(getApiUrl('/api/training/clear'), { method: 'POST' })
     await refreshStats()
   } finally {
     loading.value = false
@@ -134,7 +135,7 @@ async function triggerTraining() {
   trainingStatus.value = 'starting'
   trainingMessage.value = '正在准备 LoRA 微调...'
   try {
-    const res = await fetch('/api/training/trigger', { method: 'POST' })
+    const res = await fetch(getApiUrl('/api/training/trigger'), { method: 'POST' })
     if (res.ok) {
       const data = await res.json()
       trainingStatus.value = 'running'
@@ -158,7 +159,7 @@ async function pollTrainingStatus() {
     // so the first immediate check usually resolves the run without the
     // old "30s of fake running + 404 loop" the missing /status route caused.
     try {
-      const res = await fetch('/api/training/status')
+      const res = await fetch(getApiUrl('/api/training/status'))
       if (res.ok) {
         const data = await res.json()
         if (data.status === 'completed') {

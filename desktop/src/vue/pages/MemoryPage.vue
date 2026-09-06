@@ -179,7 +179,7 @@ async function loadAll() {
 async function toggleLearning(enabled: boolean) {
   learningEnabled.value = enabled
   try {
-    await fetch('/api/training/mode', {
+    await fetch(getApiUrl('/api/training/mode'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: enabled ? 'local' : 'none' }),
@@ -194,7 +194,7 @@ async function deleteItem(layer: MemoryLayer, id: string) {
   }
   if (layer === 'preferences') preferences.value = preferences.value.filter((x) => x.id !== id)
   if (layer === 'skills') skills.value = skills.value.filter((x) => x.id !== id)
-  // await fetch(`/api/memory/${layer}/${id}`, { method: 'DELETE' })
+  // await fetch(getApiUrl(`/api/memory/${layer}/${id}`), { method: 'DELETE' })
 }
 
 async function addProfileFact() {

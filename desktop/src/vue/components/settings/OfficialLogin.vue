@@ -4,6 +4,7 @@
 // single generic component. Same Tailwind classes, same OAuth flow.
 // The store name 'hahaOAuthStore' is renamed to 'oauthStore'.
 import { ref, onMounted, onUnmounted } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 const props = defineProps<{
   providerName: string  // 'MadCop' or 'OpenAI'
@@ -21,7 +22,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 
 async function fetchStatus() {
   try {
-    const r = await fetch('/api/auth/oauth/status')
+    const r = await fetch(getApiUrl('/api/auth/oauth/status'))
     const data = await r.json()
     status.value = data.authenticated ? 'logged_in' : 'logged_out'
     userName.value = data.userName || ''
@@ -34,7 +35,7 @@ async function handleLogin() {
   status.value = 'pending'
   error.value = ''
   try {
-    const r = await fetch('/api/auth/oauth/login', { method: 'POST' })
+    const r = await fetch(getApiUrl('/api/auth/oauth/login'), { method: 'POST' })
     const data = await r.json()
     if (data.authorizeUrl) {
       globalThis.window.open(data.authorizeUrl, '_blank')
@@ -48,7 +49,7 @@ async function handleLogin() {
 
 async function handleLogout() {
   try {
-    await fetch('/api/auth/oauth/logout', { method: 'POST' })
+    await fetch(getApiUrl('/api/auth/oauth/logout'), { method: 'POST' })
     status.value = 'logged_out'
     userName.value = ''
   } catch {}

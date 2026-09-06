@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { getApiUrl } from '../api/client'
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ const previewRequestIds = new Map<string, number>()
 
 async function getWorkspaceStatus(sessionId: string): Promise<WorkspaceStatusResult> {
   try {
-    const res = await fetch(`/api/sessions/${sessionId}/workspace/status`)
+    const res = await fetch(getApiUrl(`/api/sessions/${sessionId}/workspace/status`))
     if (!res.ok) {
       throw new Error(`Workspace status request failed: ${res.status}`)
     }
@@ -193,7 +194,7 @@ async function getWorkspaceStatus(sessionId: string): Promise<WorkspaceStatusRes
 
 async function getWorkspaceTree(sessionId: string, path = ''): Promise<WorkspaceTreeResult> {
   try {
-    const res = await fetch(`/api/sessions/${sessionId}/workspace/tree${path ? '/' + encodeURIComponent(path) : ''}`)
+    const res = await fetch(getApiUrl(`/api/sessions/${sessionId}/workspace/tree${path ? '/' + encodeURIComponent(path) : ''}`))
     if (!res.ok) {
       throw new Error(`Workspace tree request failed: ${res.status}`)
     }
@@ -205,7 +206,7 @@ async function getWorkspaceTree(sessionId: string, path = ''): Promise<Workspace
 
 async function getWorkspaceFile(sessionId: string, path: string): Promise<WorkspaceReadFileResult> {
   try {
-    const res = await fetch(`/api/sessions/${sessionId}/workspace/file/${encodeURIComponent(path)}`)
+    const res = await fetch(getApiUrl(`/api/sessions/${sessionId}/workspace/file/${encodeURIComponent(path)}`))
     if (!res.ok) {
       throw new Error(`Workspace file request failed: ${res.status}`)
     }
@@ -217,7 +218,7 @@ async function getWorkspaceFile(sessionId: string, path: string): Promise<Worksp
 
 async function getWorkspaceDiff(sessionId: string, path: string): Promise<WorkspaceDiffResult> {
   try {
-    const res = await fetch(`/api/sessions/${sessionId}/workspace/diff/${encodeURIComponent(path)}`)
+    const res = await fetch(getApiUrl(`/api/sessions/${sessionId}/workspace/diff/${encodeURIComponent(path)}`))
     if (!res.ok) {
       throw new Error(`Workspace diff request failed: ${res.status}`)
     }
@@ -434,7 +435,7 @@ export const useWorkspacePanelStore = defineStore('workspacePanel', {
           // If it's an image, try to get data URL
           if (result.mimeType?.startsWith('image/')) {
             try {
-              const imgRes = await fetch(`/api/sessions/${sessionId}/workspace/file/${encodeURIComponent(path)}/data`)
+              const imgRes = await fetch(getApiUrl(`/api/sessions/${sessionId}/workspace/file/${encodeURIComponent(path)}/data`))
               if (imgRes.ok) {
                 const blob = await imgRes.blob()
                 tabUpdate.dataUrl = await new Promise<string>((resolve) => {

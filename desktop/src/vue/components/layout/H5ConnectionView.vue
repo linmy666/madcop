@@ -4,6 +4,7 @@
 import { ref } from 'vue'
 import Input from '../shared/Input.vue'
 import Button from '../shared/Button.vue'
+import { getApiUrl } from '../../api/client'
 
 const props = defineProps<{
   initialServerUrl?: string | null
@@ -23,7 +24,7 @@ async function handleSubmit(e: Event) {
   error.value = ''
   try {
     // Call the API to verify the H5 connection
-    const r = await fetch('/api/h5-access', {
+    const r = await fetch(getApiUrl('/api/h5-access'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ serverUrl: serverUrl.value, token: token.value }),

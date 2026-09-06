@@ -39,6 +39,7 @@ function onProactiveAdopt(suggestion: string) {
 void _proactive
 void _chatStoreForProactive
 import { watch } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 const ready = ref(false)
 const paletteOpen = ref(false)
@@ -135,14 +136,14 @@ const sidebarOpen = ref(true)
 
 onMounted(() => {
   // Backend health check (silent — don't block app on transient failures)
-  fetch('/api/health')
+  fetch(getApiUrl('/api/health'))
     .then(() => { ready.value = true })
     .catch(() => { /* backend may be slow or unreachable, don't block the app */ })
     .finally(() => { ready.value = true })
 
   // Apply the persisted UI zoom (backend user setting) at startup so the
   // 50%–150% slider survives app restarts, not just the settings session.
-  fetch('/api/settings/user')
+  fetch(getApiUrl('/api/settings/user'))
     .then(r => r.ok ? r.json() : null)
     .then(data => {
       const zoom = Number(data?.uiZoom)
@@ -154,7 +155,7 @@ onMounted(() => {
   // sessionStore can attribute loaded sessions to it. This must run
   // synchronously (well, before any session is rendered) so the
   // sidebar doesn't briefly show "unknown".
-  fetch('/api/workspace/dir')
+  fetch(getApiUrl('/api/workspace/dir'))
     .then(r => r.ok ? r.json() : null)
     .then(data => {
       if (data?.dir) {

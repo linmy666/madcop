@@ -8,6 +8,7 @@
  */
 
 import { ref, onMounted } from 'vue'
+import { getApiUrl } from '../../api/client'
 
 interface Workflow {
   id: string
@@ -34,7 +35,7 @@ const error = ref<string | null>(null)
 async function loadWorkflows() {
   loading.value = true
   try {
-    const res = await fetch('/api/workflows')
+    const res = await fetch(getApiUrl('/api/workflows'))
     if (res.ok) {
       const data = await res.json()
       workflows.value = data.workflows || []
@@ -54,7 +55,7 @@ async function runWorkflow(wf: Workflow) {
   running.value = wf.id
   error.value = null
   try {
-    const res = await fetch(`/api/workflows/${wf.id}/run`, {
+    const res = await fetch(getApiUrl(`/api/workflows/${wf.id}/run`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ input: { input: props.currentInput } }),
