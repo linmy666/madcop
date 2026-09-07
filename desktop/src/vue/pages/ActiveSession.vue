@@ -18,6 +18,7 @@ import {
 } from '../stores/tabs'
 import { useSessionStore } from '../stores/sessionStore'
 import { useChatStore } from '../stores/chatStore'
+import { useEmptySuggestions } from '../composables/useEmptySuggestions'
 import { useUIStore } from '../stores/uiStore'
 import { useCLITaskStore } from '../stores/cliTaskStore'
 import { useTeamStore } from '../stores/teamStore'
@@ -490,6 +491,18 @@ const isEmpty = computed(() =>
   (session.value?.messageCount ?? 0) === 0
 )
 
+// Empty-session suggestion chips (shared builder, same as EmptySession
+// page). Clicking one prefills the composer via the session's
+// composerPrefill channel — the flow the onboarding wizard already uses.
+const { suggestions: emptySuggestions } = useEmptySuggestions()
+
+function pickEmptySuggestion(text: string) {
+  const sid = activeTabId.value
+  if (!sid) return
+  if (!chatStore.sessions[sid]) return
+  chatStore.queueComposerPrefill(sid, { text, mode: 'replace' })
+}
+
 const compactEmptyHero = computed(() => isEmpty.value && showTerminalPanel.value)
 
 const isHistoryLoading = computed(() =>
@@ -778,6 +791,18 @@ function openTerminalInTab() {
               >
                 {{ t('empty.subtitle') }}
               </p>
+              <!-- Suggestion chips — same workspace-aware builders as the
+                   EmptySession page, so an empty conversation never feels
+                   like a dead end. Click prefills the composer. -->
+              <div class="mt-5 flex flex-wrap justify-center gap-2">
+                <button
+                  v-for="sg in emptySuggestions"
+                  :key="sg"
+                  type="button"
+                  class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] px-3.5 py-1.5 text-[12px] leading-snug text-[var(--color-text-secondary)] transition-all hover:-translate-y-0.5 hover:border-[var(--color-brand)] hover:text-[var(--color-text-primary)] hover:shadow-sm"
+                  @click="pickEmptySuggestion(sg)"
+                >{{ sg }}</button>
+              </div>
             </template>
           </div>
         </div>
