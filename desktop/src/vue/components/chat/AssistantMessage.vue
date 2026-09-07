@@ -503,15 +503,21 @@ async function distillAsSkill() {
   height: 15px;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: var(--color-text-tertiary, #999);
-  animation: stream-caret-blink 1s step-end infinite;
+  background: var(--color-text-secondary, #555);
+  animation: stream-caret-breathe 1.1s ease-in-out infinite;
   border-radius: 1px;
 }
-@keyframes stream-caret-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.15; }
+@keyframes stream-caret-breathe {
+  0%, 100% { opacity: 0.35; transform: scaleY(0.78); }
+  50% { opacity: 1; transform: scaleY(1); }
 }
+/* Reduced motion: keep a slow opacity fade (no scale) so the caret still
+   reads as "working" — a fully static block read as a dead/stuck cursor. */
 @media (prefers-reduced-motion: reduce) {
-  .stream-caret { animation: none; opacity: 0.4; }
+  .stream-caret { animation: stream-caret-fade 2.4s ease-in-out infinite; }
+}
+@keyframes stream-caret-fade {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
 }
 </style>

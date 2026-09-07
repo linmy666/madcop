@@ -1874,6 +1874,12 @@ export const useChatStore = defineStore('chat', {
           if (err && err.name === 'AbortError') {
             if (!session.debugSSELog) session.debugSSELog = []
             session.debugSSELog.push({ t: Date.now(), type: 'ABORT', preview: 'fetch aborted' })
+            // Cleanup parity with the normal stream-end path: without this
+            // the last assistant row kept isStreaming=true → the blinking
+            // caret stayed on screen forever after a stop/abort.
+            if (typeof assistantMsgObj !== 'undefined' && assistantMsgObj) assistantMsgObj.isStreaming = false
+            session.streamingText = ''
+            session.chatState = 'stopped'
             return
           }
           // Network-level failure (backend down, connection refused, etc.).
@@ -1902,6 +1908,11 @@ export const useChatStore = defineStore('chat', {
       session.chatState = 'stopped'
       session.streamingText = ''
       session.streamingToolInput = ''
+      // Clear per-message streaming flags so no caret keeps blinking on a
+      // message whose stream was just stopped.
+      for (const m of session.messages || []) {
+        if (m && (m as any).isStreaming) (m as any).isStreaming = false
+      }
       session.activeToolUseId = null
       session.activeToolName = null
       session.activeThinkingId = null
