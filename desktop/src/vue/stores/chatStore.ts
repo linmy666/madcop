@@ -1470,6 +1470,24 @@ export const useChatStore = defineStore('chat', {
                     // AI is calling a tool — show it transparently under the
                     // thinking indicator so the user can see what's happening.
                     session.activeToolName = event.name
+                    // The early-announce TOOL_START (tool args still
+                    // streaming) and the execution TOOL_START share one id —
+                    // the second one must UPDATE the existing pending card,
+                    // not push a duplicate.
+                    const _existingPending = session.messages.find(
+                      (m: any) => m.type === 'tool_use' && m.isPending === true &&
+                        m.toolUseId === (event.tool_use_id || ''))
+                    if (_existingPending) {
+                      session.activeToolUseId = _existingPending.toolUseId
+                      syncLiveState({
+                        isStreaming: true,
+                        thoughts: (session.thoughtBlocks || []).map(tb => ({ id: tb.id, text: tb.text, done: tb.done })),
+                        tools: _merge_tools(useLiveState().tools, [{ id: _existingPending.toolUseId, name: event.name, done: false, isError: false }]),
+                        answerLength: (assistantMsg || '').length,
+                        sessionId,
+                      })
+                      // fall through to the shared debug-log below via a no-op tool path
+                    } else {
                     session.activeToolUseId = event.tool_use_id || `tool-${Date.now()}-${Math.random()}`
                     // Sync live state so AgentPulse shows "调用 <tool>..."
                     syncLiveState({
@@ -1565,6 +1583,7 @@ export const useChatStore = defineStore('chat', {
                       else session.messages.push(toolMsg)
                     } else {
                       session.messages.push(toolMsg)
+                    }
                     }
                   } else if (event.type === 'clarification_request') {
                     // Agent asked the user a clarifying question (ask_user tool).

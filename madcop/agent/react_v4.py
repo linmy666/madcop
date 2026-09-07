@@ -338,8 +338,9 @@ class ReActEngineV4(AgentEngine):
                         for d in (getattr(chunk, "tool_call_deltas", None) or ()):
                             if not isinstance(d, dict):
                                 continue
+                            _tc_index = d.get("index", 0) or 0
                             _slot = oa_calls.setdefault(
-                                d.get("index", 0) or 0,
+                                _tc_index,
                                 {"id": None, "name": None, "args": ""},
                             )
                             if d.get("id"):
@@ -347,6 +348,28 @@ class ReActEngineV4(AgentEngine):
                                 oa_tc_id = d["id"]
                             if d.get("name"):
                                 _slot["name"] = d["name"]
+                            if d.get("name") and not _slot.get("_announced"):
+                                # Announce the pending card the moment the
+                                # tool NAME streams in — not after the full
+                                # payload finishes. A huge write_file (the
+                                # tank-game HTML ≈ minutes of silent
+                                # argument streaming) otherwise shows only
+                                # a frozen caret. The id matches the
+                                # execution card (single call → tool-N,
+                                # parallel → tool-N-i) so the frontend
+                                # dedupes instead of double-carding.
+                                _slot["_announced"] = True
+                                _announce_id = (
+                                    f"tool-{step_num}" if _tc_index == 0
+                                    else f"tool-{step_num}-{_tc_index + 1}"
+                                )
+                                yield AgentStep(
+                                    kind=StepKind.TOOL_START,
+                                    tool_name=_slot["name"],
+                                    tool_input={},
+                                    tool_use_id=_announce_id,
+                                    metadata={"is_pending_args": True},
+                                )
                             if d.get("arguments"):
                                 _slot["args"] += d["arguments"]
                                 # Long-task liveness (P0-UX): while the model
@@ -362,6 +385,15 @@ class ReActEngineV4(AgentEngine):
                                         tool_use_id=f"tool-{step_num}",
                                         content=str(len(_slot["args"])),
                                         metadata={"chars": len(_slot["args"]), "step": step_num},
+                                    )
+                                # Runaway guard: a repetition loop inside
+                                # tool arguments once streamed for 11
+                                # minutes (hundreds of KB of garbage).
+                                # Hard-cap a single call's arguments.
+                                if len(_slot["args"]) > 1_048_576:
+                                    raise RuntimeError(
+                                        f"工具 {_slot.get('name') or '?'} 的参数流异常膨胀"
+                                        f"（已超过 1MB），疑似模型重复循环，已中断本次生成。"
                                     )
                         # Non-streaming fallback (some clients only emit
                         # the full tool_call at the end).
