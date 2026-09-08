@@ -37,6 +37,12 @@ _PROTOCOL_RE = re.compile(
     re.IGNORECASE,
 )
 _AI_MARKER = re.compile(r"Action\s*Input\s*[:：]", re.IGNORECASE)
+# No-progress watchdog for a single LLM step: the provider's SSE
+# keepalives reset HTTP read timeouts, so a stalled stream can hang a
+# turn forever (observed: 11 minutes of silent tool-arg buffering).
+# If NO payload chunk arrives within this window, abort the turn.
+_STEP_IDLE_TIMEOUT_S = float(os.environ.get("MADCOP_STEP_IDLE_S", "240"))
+
 _BARE_FA_RE = re.compile(r"FINAL_ANSWER\s*[:：]\s*(.*)", re.DOTALL | re.IGNORECASE)
 
 # ReAct markers incl. the bare (colon-less) form CJK models emit:
@@ -327,8 +333,44 @@ class ReActEngineV4(AgentEngine):
                         _stream_factory,
                         label=f"react-step-{step_num}",
                     )
+                    _cancel_ev = getattr(ctx, "cancel_event", None)
+                    _last_progress_t = time.time()
+
                     for chunk in _chunk_iter:
+                        # In-flight cancel: checked per chunk so Stop
+                        # interrupts a long generation immediately (the
+                        # old between-steps check couldn't reach inside
+                        # a multi-minute stream).
+                        if _cancel_ev is not None and _cancel_ev.is_set():
+                            try:
+                                _chunk_iter.close()
+                            except Exception:
+                                pass
+                            return
                         _fr_chunk = getattr(chunk, "finish_reason", None)
+                        _payload = (
+                            getattr(chunk, "text", "") or ""
+                        ) or getattr(chunk, "tool_call_deltas", None) or ""
+                        if _payload:
+                            _last_progress_t = time.time()
+                        elif time.time() - _last_progress_t > _STEP_IDLE_TIMEOUT_S:
+                            # No chunk payload for the whole window while
+                            # the stream stayed open (provider keepalives
+                            # defeat HTTP read timeouts). Treat as a stall
+                            # and fail the turn loudly instead of hanging.
+                            try:
+                                _chunk_iter.close()
+                            except Exception:
+                                pass
+                            yield AgentStep(
+                                kind=StepKind.ERROR,
+                                content=(
+                                    f"模型流式输出超过 {_STEP_IDLE_TIMEOUT_S}s "
+                                    "无任何进展（疑似服务端停滞），已自动中断。"
+                                    "请重试或换一个模型。"
+                                ),
+                            )
+                            return
                         if _fr_chunk:
                             _finish_reason = _fr_chunk
                         # Capture OpenAI-style tool_call deltas if any.

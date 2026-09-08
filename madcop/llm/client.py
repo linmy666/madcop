@@ -231,6 +231,50 @@ class MockClient(ChatClient):
         yield StreamChunk(finish_reason="stop", model=mod)
 
 
+class _StreamEventQueue:
+    """Timeout-aware wrapper over the pump queue.
+
+    Yields events as the raw iterator would; if no event arrives within
+    ``idle_s`` the underlying stream is CLOSED (unblocking the pump) and
+    a RuntimeError surfaces so the engine can end the turn loudly
+    instead of hanging on a provider stall.
+    """
+
+    def __init__(self, q, idle_s: float, stream_obj, sent) -> None:
+        self._q = q
+        self._idle_s = idle_s
+        self._stream = stream_obj
+        self._sent = sent
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            kind, payload = self._q.get(timeout=self._idle_s)
+        except Exception:  # queue.Empty
+            try:
+                self._stream.close()
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"LLM stream idle > {self._idle_s:.0f}s (provider stall; "
+                "keepalives kept the connection open but no tokens "
+                "arrived). Aborting this turn."
+            )
+        if kind == "e":
+            return payload
+        if kind == "x":
+            raise payload
+        raise StopIteration
+
+    def close(self):
+        try:
+            self._stream.close()
+        except Exception:
+            pass
+
+
 # --------------------------------------------------------------------------- #
 # OpenAI-compatible client
 # --------------------------------------------------------------------------- #
@@ -489,7 +533,34 @@ class OpenAICompatClient(ChatClient):
         emitted_model = ""
         saw_finish = False
         final_usage: dict[str, int] = {}
-        for event in stream_obj:
+        # Idle watchdog: providers send SSE keepalive COMMENTS that reset
+        # httpx read timeouts while the OpenAI SDK surfaces NOTHING to the
+        # caller (tool-arg buffering observed at 40+ s, stalls at minutes).
+        # A pump thread + queue timeout detects "stream open but silent";
+        # closing the stream unblocks the SDK iterator immediately.
+        import os as _os
+        _idle_s = float(_os.environ.get("MADCOP_STREAM_IDLE_S", "180"))
+        import queue as _q
+        import threading as _th
+        _q_: "._Q" = _q.Queue()
+        class _Sentinel:
+            pass
+        _SENT = _Sentinel()
+
+        def _pump() -> None:
+            try:
+                for _ev in stream_obj:
+                    _q_.put(("e", _ev))
+            except BaseException as _ex:  # noqa: BLE001 — forward all
+                _q_.put(("x", _ex))
+                return
+            _q_.put(("d", _SENT))
+
+        _pump_t = _th.Thread(target=_pump, daemon=True, name="llm-stream-pump")
+        _pump_t.start()
+
+        _events = _StreamEventQueue(_q_, _idle_s, stream_obj, _SENT)
+        for event in _events:
             # Usage chunk (OpenAI sends it last, with empty choices).
             ev_usage = getattr(event, "usage", None)
             if ev_usage is not None:

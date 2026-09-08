@@ -313,6 +313,12 @@ class RunContext:
     # through it. None = legacy per-piece behavior (tests, old paths).
     realm: Any = None
 
+    # In-flight cancellation: a threading.Event the engine checks INSIDE
+    # the LLM chunk loop (not just between steps). Set by the SSE route on
+    # client disconnect/stop so a long generation actually stops in
+    # milliseconds instead of draining for minutes. None = never cancelled.
+    cancel_event: Any = None
+
     # Guardian (codex parity): optional LLM command reviewer consulted
     # in Phase C before a HITL card is popped. None = HITL-only.
     guardian: Any = None

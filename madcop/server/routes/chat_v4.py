@@ -1434,6 +1434,11 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
             # P2-9: engines parent their llm/tool spans to this turn's
             # user_input root node.
             ctx._trace_root_id = _trace_root_id
+            # In-flight cancellation (engine reads this INSIDE the LLM
+            # chunk loop): client stop/disconnect sets turn_cancelled
+            # below, and the engine aborts within one chunk instead of
+            # draining the stream.
+            ctx.cancel_event = turn_cancelled
 
             def worker():
                 # P1-6: the overflow-retry path below REBINDS `engine`
@@ -1805,9 +1810,16 @@ async def chat_v4(body: dict[str, Any]) -> StreamingResponse:
         finally:
             # Signal the worker to stop and wait briefly so tool
             # side-effects don't continue after the client disconnects.
+            # join runs in a thread pool — a blocking join inside the
+            # async generator's finally would freeze the event loop for
+            # up to 2s per disconnect.
             if thread is not None:
                 cancel_flag.set()
-                thread.join(timeout=2.0)
+                try:
+                    await asyncio.get_running_loop().run_in_executor(
+                        None, lambda: thread.join(timeout=2.0))
+                except Exception:
+                    pass
 
     return StreamingResponse(
         event_stream(),
