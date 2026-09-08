@@ -442,7 +442,24 @@
   --sidebar-rail-width: 72px;
   --titlebar-height: 40px;
   --statusbar-height: 36px;
-  --motion-sidebar-duration: 280ms;
+  /* Motion system tokens — the three duration tiers + the house easing.
+   New UI motion should use these instead of raw values. */
+--motion-fast: 120ms;
+--motion-base: 200ms;
+--motion-slow: 280ms;
+--ease-out-house: cubic-bezier(0.22, 1, 0.36, 1);
+
+/* New-message entrance: fade + 8px rise, once per message. */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.msg-in { animation: msg-in var(--motion-base) var(--ease-out-house) both; }
+@media (prefers-reduced-motion: reduce) {
+  .msg-in { animation-duration: 0.01ms; }
+}
+
+--motion-sidebar-duration: 280ms;
   --motion-sidebar-easing: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* Surface aliases */

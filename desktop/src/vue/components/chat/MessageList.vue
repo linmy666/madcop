@@ -993,9 +993,32 @@ const MemoryEventCard = defineComponent({
 })
 
 // ─── Measured Render Item ─────────────────────────────────────
+// Entrance decision is made ONCE per message id and cached forever —
+// re-evaluating on every render would strip the class mid-animation
+// (any streaming re-render re-runs the template) and replay nothing.
+const ENTRANCE_DECIDED = new Map<string, boolean>()
+const MSG_ANIM_WINDOW_MS = 8000
+function entranceClassFor(item: any): string {
+  try {
+    const id = item?.message?.id || item?.id
+    if (!id) return CHAT_RENDER_ITEM_CLASS
+    const decided = ENTRANCE_DECIDED.get(id)
+    if (decided !== undefined) {
+      return decided ? CHAT_RENDER_ITEM_CLASS + ' msg-in' : CHAT_RENDER_ITEM_CLASS
+    }
+    const ts = item?.message?.timestamp || 0
+    const fresh = Date.now() - ts < MSG_ANIM_WINDOW_MS
+    ENTRANCE_DECIDED.set(id, fresh)
+    return fresh ? CHAT_RENDER_ITEM_CLASS + ' msg-in' : CHAT_RENDER_ITEM_CLASS
+  } catch {
+    return CHAT_RENDER_ITEM_CLASS
+  }
+}
+
 const MeasuredRenderItem = defineComponent({
   props: {
     itemKey: { type: String, required: true },
+    enterClass: { type: String, default: CHAT_RENDER_ITEM_CLASS },
   },
   setup(props, { slots }) {
     const itemRef = ref<HTMLElement | null>(null)
@@ -1016,7 +1039,7 @@ const MeasuredRenderItem = defineComponent({
       return h('div', {
         ref: itemRef,
         'data-virtual-message-item': props.itemKey,
-        class: CHAT_RENDER_ITEM_CLASS,
+        class: props.enterClass,
       }, slots.default?.())
     }
   },
@@ -1423,8 +1446,13 @@ function renderItemContent(item: RenderItem) {
             <CurrentTurnChangeCard :card="card" />
           </template>
 
-          <!-- Render item with height measurement -->
-          <MeasuredRenderItem :item-key="itemKeys[renderedItem.index]">
+          <!-- Render item with height measurement. Entrance animation only
+              for freshly-arrived items (timestamp guard + one-shot id set)
+              so virtual-scroll remounts never replay it. -->
+          <MeasuredRenderItem
+            :item-key="itemKeys[renderedItem.index]"
+            :enter-class="entranceClassFor(renderedItem.item)"
+          >
             <component :is="renderItemContent(renderedItem.item)" />
           </MeasuredRenderItem>
         </template>
