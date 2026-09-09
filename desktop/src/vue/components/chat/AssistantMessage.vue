@@ -40,8 +40,15 @@
             class="reasoning-block__toggle"
             @click.stop="toggleReasoning"
           >
-            <span class="reasoning-block__label">
-              {{ isStreaming && !cleanContent ? 'Thinking…' : t('chat.thoughtProcess', '思考过程') }}
+            <span
+              class="reasoning-block__label"
+              :class="{ 'shimmer-text': isStreaming && !cleanContent }"
+            >
+              {{
+                isStreaming && !cleanContent
+                  ? 'Thinking…'
+                  : t('chat.thoughtProcess', '思考过程') + (thoughtDuration ? ` · ${thoughtDuration}s` : '')
+              }}
             </span>
           </button>
           <div v-if="reasoningExpanded" class="reasoning-block__body">
@@ -149,6 +156,7 @@ const props = withDefaults(defineProps<{
   isStreaming?: boolean
   sessionId?: string
   reasoningContent?: string | null
+  thoughtDuration?: number
   canBranch?: boolean
   branchLoading?: boolean
   branchLabel?: string

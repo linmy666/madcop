@@ -258,6 +258,16 @@ const isAIThinking = computed(() => {
   return false
 })
 const reasoningContent = computed(() => sessionState.value?.reasoningContent ?? null)
+
+// ai-chatbot-style: show "思考过程 · Ns" once reasoning settles.
+const thoughtDurationSeconds = computed(() => {
+  const blocks = (sessionState.value?.thoughtBlocks || []) as any[]
+  const timed = blocks.filter(b => b.startedAt)
+  if (!timed.length) return 0
+  const start = timed[0].startedAt
+  const end = timed[timed.length - 1].endedAt || timed[timed.length - 1].startedAt
+  return Math.max(1, Math.round((end - start) / 1000))
+})
 const agentStreams = computed(() => sessionState.value?.agentStreams ?? {})
 // Live "what is the AI doing right now" context for the thinking indicator.
 const liveToolName = computed(() => sessionState.value?.activeToolName ?? null)
@@ -1229,6 +1239,7 @@ function renderItemContent(item: RenderItem) {
     return h(AssistantMessage, {
       content: assistantContent,
       isStreaming: msg.isStreaming,
+      thoughtDuration: thoughtDurationSeconds.value,
       sessionId: msg.sessionId,
       timestamp: msg.timestamp,
       compact: props.compact,

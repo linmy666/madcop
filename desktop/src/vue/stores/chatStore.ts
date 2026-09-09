@@ -204,7 +204,7 @@ export type PerSessionState = {
    *  reasoning is an independent block (not one big accumulated
    *  string). Tool calls between thoughts create natural
    *  boundaries. Rendered as gray inline text without frames. */
-  thoughtBlocks?: { id: string; text: string; done: boolean }[]
+  thoughtBlocks?: { id: string; text: string; done: boolean; startedAt?: number; endedAt?: number }[]
   /** Temporary SSE event log for in-UI debugging (no DevTools needed).
    *  Each entry is { t, type, id, preview }. Capped at 200 entries. */
   debugSSELog?: { t: number; type, string; id?: number; preview?: string }[]
@@ -1357,6 +1357,7 @@ export const useChatStore = defineStore('chat', {
                         id: sess._curThoughtId,
                         text: filtered,
                         done: false,
+                        startedAt: Date.now(),
                       })
                       // ZCode-style inline timeline line (kept in arrival
                       // order so it interleaves with tool cards).
@@ -1370,7 +1371,11 @@ export const useChatStore = defineStore('chat', {
                     } else {
                       if (!session.thoughtBlocks) session.thoughtBlocks = []
                       const block = session.thoughtBlocks[session.thoughtBlocks.length - 1]
-                      if (block) block.text = filtered
+                      if (block) {
+                        block.text = filtered
+                        if (!block.startedAt) block.startedAt = Date.now()
+                        block.endedAt = Date.now()
+                      }
                     }
                     // Force Vue reactivity
                     session.thoughtBlocks = [...(session.thoughtBlocks || [])]
